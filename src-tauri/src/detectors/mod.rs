@@ -56,11 +56,22 @@ fn extract_description(content: &str) -> Option<String> {
         let end = lines[1..].iter().position(|l| l.trim() == "---");
         if let Some(end_idx) = end {
             let frontmatter = &lines[1..=end_idx];
-            for line in frontmatter {
+            for (i, line) in frontmatter.iter().enumerate() {
                 let trimmed = line.trim();
                 if let Some(rest) = trimmed.strip_prefix("description:") {
                     let val = rest.trim().trim_matches('"').trim_matches('\'').to_string();
-                    if !val.is_empty() {
+                    // YAML block scalar: >-, >, |-, | — actual value is on indented lines below
+                    if matches!(val.as_str(), ">" | ">-" | "|" | "|-") {
+                        let block: String = frontmatter[i + 1..]
+                            .iter()
+                            .take_while(|l| l.starts_with(' ') || l.starts_with('\t'))
+                            .map(|l| l.trim())
+                            .collect::<Vec<_>>()
+                            .join(" ");
+                        if !block.is_empty() {
+                            return Some(truncate(block, 120));
+                        }
+                    } else if !val.is_empty() {
                         return Some(truncate(val, 120));
                     }
                 }
@@ -180,6 +191,20 @@ mod tests {
         let skill_dir = dir.path().join("nonexistent");
         let desc = parse_skill_description(&skill_dir);
         assert!(desc.is_none());
+    }
+
+    #[test]
+    fn test_parse_skill_description_block_scalar() {
+        let dir = TempDir::new().unwrap();
+        let skill_dir = dir.path().join("cursor_skill");
+        fs::create_dir(&skill_dir).unwrap();
+        fs::write(
+            skill_dir.join("SKILL.md"),
+            "---\nname: babysit\ndescription: >-\n  Keep a PR merge-ready by triaging comments.\n---\n# Content",
+        )
+        .unwrap();
+        let desc = parse_skill_description(&skill_dir);
+        assert_eq!(desc, Some("Keep a PR merge-ready by triaging comments.".to_string()));
     }
 
     #[test]

@@ -1,5 +1,5 @@
-mod detectors;
-mod models;
+pub(crate) mod detectors;
+pub(crate) mod models;
 
 use crate::models::AiTool;
 use tauri::{
