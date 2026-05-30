@@ -8,19 +8,21 @@ interface McpRowProps {
 function McpTooltipContent({ mcp }: { mcp: McpServer }) {
   const commandStr = [mcp.command, ...mcp.args].join(' ');
   return (
-    <div className="space-y-1">
-      <p className="font-medium text-zinc-100">{mcp.name}</p>
-      <p className="text-zinc-300 font-mono break-all">{commandStr}</p>
+    <div className="space-y-1.5">
+      <p className="text-[11px] font-semibold text-zinc-200">{mcp.name}</p>
+      <p className="text-[10px] text-zinc-400 font-mono break-all leading-relaxed">{commandStr}</p>
       {mcp.hasSecrets && mcp.secretKeyNames.length > 0 && (
-        <p className="text-zinc-400">
-          Secrets: {mcp.secretKeyNames.join(', ')}
-        </p>
+        <div className="pt-0.5 border-t border-zinc-800">
+          <p className="text-[10px] text-zinc-500">
+            env: {mcp.secretKeyNames.join(', ')}
+          </p>
+        </div>
       )}
     </div>
   );
 }
 
-function KeyIcon() {
+function LockIcon() {
   return (
     <svg
       xmlns="http://www.w3.org/2000/svg"
@@ -30,10 +32,11 @@ function KeyIcon() {
       strokeWidth="2"
       strokeLinecap="round"
       strokeLinejoin="round"
-      className="w-3 h-3 text-zinc-400"
-      aria-label="has secrets"
+      className="w-2.5 h-2.5 text-zinc-600"
+      aria-label="has env secrets"
     >
-      <path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4" />
+      <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+      <path d="M7 11V7a5 5 0 0 1 10 0v4" />
     </svg>
   );
 }
@@ -41,16 +44,14 @@ function KeyIcon() {
 export default function McpRow({ mcp }: McpRowProps) {
   return (
     <Tooltip content={<McpTooltipContent mcp={mcp} />}>
-      <div className="flex items-center gap-2 py-1 px-2 rounded hover:bg-zinc-800/50 w-full cursor-default">
-        <span className="text-xs text-zinc-200 truncate max-w-[180px]">{mcp.name}</span>
-        <div className="ml-auto flex items-center gap-1.5 flex-shrink-0">
-          {mcp.hasSecrets && <KeyIcon />}
-          {mcp.active && (
-            <span className="text-[10px] bg-green-500/20 text-green-400 border border-green-500/30 rounded-full px-1.5 py-0.5 leading-none">
-              active
-            </span>
-          )}
-        </div>
+      <div className="flex items-center gap-2 py-[3px] px-2 rounded-sm hover:bg-white/[0.03] w-full cursor-default transition-colors">
+        <span className="w-[3px] h-[3px] rounded-full bg-violet-500/50 flex-shrink-0" aria-hidden="true" />
+        <span className="text-[12px] text-zinc-400 truncate flex-1 leading-5">{mcp.name}</span>
+        {mcp.hasSecrets && (
+          <span className="flex-shrink-0">
+            <LockIcon />
+          </span>
+        )}
       </div>
     </Tooltip>
   );

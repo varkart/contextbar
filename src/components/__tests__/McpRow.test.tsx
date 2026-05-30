@@ -22,14 +22,14 @@ describe('McpRow', () => {
     expect(screen.getByText('github')).toBeInTheDocument()
   })
 
-  it('shows key icon when hasSecrets=true', () => {
+  it('shows lock icon when hasSecrets=true', () => {
     render(<McpRow mcp={baseMcp} />)
-    expect(screen.getByLabelText('has secrets')).toBeInTheDocument()
+    expect(screen.getByLabelText('has env secrets')).toBeInTheDocument()
   })
 
-  it('no key icon when hasSecrets=false', () => {
+  it('no lock icon when hasSecrets=false', () => {
     render(<McpRow mcp={{ ...baseMcp, hasSecrets: false, secretKeyNames: [] }} />)
-    expect(screen.queryByLabelText('has secrets')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('has env secrets')).not.toBeInTheDocument()
   })
 
   it('tooltip shows command + args string', () => {
@@ -47,11 +47,7 @@ describe('McpRow', () => {
   })
 
   it('tooltip does NOT contain actual secret values', () => {
-    const mcpWithSecretValue: McpServer = {
-      ...baseMcp,
-      secretKeyNames: ['GITHUB_PERSONAL_ACCESS_TOKEN'],
-    }
-    render(<McpRow mcp={mcpWithSecretValue} />)
+    render(<McpRow mcp={baseMcp} />)
     const container = getTooltipContainer('github')
     fireEvent.mouseEnter(container)
     expect(screen.getByRole('tooltip')).not.toHaveTextContent('supersecrettoken123')

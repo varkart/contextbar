@@ -8,9 +8,13 @@ interface SkillRowProps {
 function SkillTooltipContent({ skill }: { skill: Skill }) {
   return (
     <div className="space-y-1">
-      <p className="font-medium text-zinc-100">{skill.name}</p>
-      {skill.description && <p className="text-zinc-300">{skill.description}</p>}
-      <p className="text-zinc-400 break-all">{skill.path}</p>
+      <p className="text-[11px] font-semibold text-zinc-200">{skill.name}</p>
+      {skill.description && (
+        <p className="text-[11px] text-zinc-400 leading-relaxed">{skill.description}</p>
+      )}
+      <p className="text-[10px] text-zinc-600 font-mono break-all leading-relaxed">
+        {skill.path}
+      </p>
     </div>
   );
 }
@@ -18,13 +22,9 @@ function SkillTooltipContent({ skill }: { skill: Skill }) {
 export default function SkillRow({ skill }: SkillRowProps) {
   return (
     <Tooltip content={<SkillTooltipContent skill={skill} />}>
-      <div className="flex items-center gap-2 py-1 px-2 rounded hover:bg-zinc-800/50 w-full cursor-default">
-        <span className="text-xs text-zinc-200 truncate max-w-[180px]">{skill.name}</span>
-        {skill.active && (
-          <span className="ml-auto flex-shrink-0 text-[10px] bg-green-500/20 text-green-400 border border-green-500/30 rounded-full px-1.5 py-0.5 leading-none">
-            active
-          </span>
-        )}
+      <div className="flex items-center gap-2 py-[3px] px-2 rounded-sm hover:bg-white/[0.03] w-full cursor-default transition-colors">
+        <span className="w-[3px] h-[3px] rounded-full bg-indigo-500/50 flex-shrink-0" aria-hidden="true" />
+        <span className="text-[12px] text-zinc-400 truncate leading-5">{skill.name}</span>
       </div>
     </Tooltip>
   );

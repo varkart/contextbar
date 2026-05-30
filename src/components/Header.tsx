@@ -1,8 +1,10 @@
 export default function Header() {
   return (
-    <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-800 flex-shrink-0">
-      <span className="text-sm font-semibold tracking-tight text-zinc-100">agentbar</span>
-      <span className="text-xs text-zinc-500">AI Tools</span>
+    <div className="flex items-center justify-between px-4 py-2.5 border-b border-zinc-800/80 flex-shrink-0">
+      <span className="text-[13px] font-semibold text-zinc-200 tracking-[-0.01em]">
+        agentbar
+      </span>
+      <span className="text-[11px] text-zinc-600 font-medium">AI Tools</span>
     </div>
   );
 }

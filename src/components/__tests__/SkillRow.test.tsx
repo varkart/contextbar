@@ -16,14 +16,9 @@ describe('SkillRow', () => {
     expect(screen.getByText('impeccable')).toBeInTheDocument()
   })
 
-  it('renders active badge when active=true', () => {
-    render(<SkillRow skill={baseSkill} />)
-    expect(screen.getByText('active')).toBeInTheDocument()
-  })
-
-  it('no active badge when active=false', () => {
+  it('renders without error when active=false', () => {
     render(<SkillRow skill={{ ...baseSkill, active: false }} />)
-    expect(screen.queryByText('active')).not.toBeInTheDocument()
+    expect(screen.getByText('impeccable')).toBeInTheDocument()
   })
 
   it('tooltip content includes description when present', async () => {

@@ -8,12 +8,11 @@ interface ToolDetailsProps {
 
 export default function ToolDetails({ tool }: ToolDetailsProps) {
   return (
-    <div className="px-3 pb-3 pt-2">
+    <div className="px-2 pt-1 pb-3 space-y-3">
       {tool.error && (
-        <p className="text-xs text-red-400 mb-2 px-1">{tool.error}</p>
+        <p className="text-[11px] text-red-400/80 px-2 font-mono">{tool.error}</p>
       )}
       <SkillSection skills={tool.skills} />
-      <div className="border-t border-zinc-800 my-2" />
       <McpSection mcps={tool.mcps} />
     </div>
   );
