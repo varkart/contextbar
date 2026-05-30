@@ -1,3 +1,7 @@
+mod detectors;
+mod models;
+
+use crate::models::AiTool;
 use tauri::{
     Manager,
     menu::{Menu, MenuItem},
@@ -5,6 +9,16 @@ use tauri::{
     WebviewUrl, WebviewWindowBuilder,
 };
 use tauri_plugin_positioner::{Position, WindowExt};
+
+#[tauri::command]
+fn get_tools() -> Vec<AiTool> {
+    detectors::detect_all()
+}
+
+#[tauri::command]
+fn hide_window(window: tauri::WebviewWindow) {
+    let _ = window.hide();
+}
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -54,6 +68,13 @@ pub fn run() {
                             .skip_taskbar(true)
                             .build()
                             .unwrap();
+                            // Hide on focus loss — attach once at creation time
+                            let win_blur = window.clone();
+                            window.on_window_event(move |event| {
+                                if let tauri::WindowEvent::Focused(false) = event {
+                                    let _ = win_blur.hide();
+                                }
+                            });
                             let _ = window.move_window(Position::TrayCenter);
                             let _ = window.show();
                             let _ = window.set_focus();
@@ -69,6 +90,7 @@ pub fn run() {
 
             Ok(())
         })
+        .invoke_handler(tauri::generate_handler![get_tools, hide_window])
         .run(tauri::generate_context!())
         .expect("error running agentbar");
 }
