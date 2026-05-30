@@ -4,18 +4,20 @@ interface StatusDotProps {
   state: StatusState;
 }
 
-const stateColors: Record<StatusState, string> = {
-  installed: 'bg-green-500',
-  'no-config': 'bg-yellow-500',
-  'not-installed': 'bg-zinc-600',
-  error: 'bg-red-500',
+const stateConfig: Record<StatusState, { color: string; label: string }> = {
+  installed:       { color: 'bg-indigo-400',    label: 'installed' },
+  'no-config':     { color: 'bg-amber-400/70',  label: 'no config found' },
+  'not-installed': { color: 'bg-zinc-700',       label: 'not installed' },
+  error:           { color: 'bg-red-400',        label: 'error' },
 };
 
 export default function StatusDot({ state }: StatusDotProps) {
+  const { color, label } = stateConfig[state];
   return (
     <span
-      className={`inline-block w-2 h-2 rounded-full flex-shrink-0 ${stateColors[state]}`}
-      aria-label={state}
+      className={`inline-block w-[7px] h-[7px] rounded-full flex-shrink-0 ${color}`}
+      aria-label={label}
+      role="img"
     />
   );
 }

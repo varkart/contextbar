@@ -7,12 +7,11 @@ interface FooterProps {
 }
 
 function formatAgo(date: Date | null): string {
-  if (!date) return 'Never';
-  const diffMs = Date.now() - date.getTime();
-  const seconds = Math.floor(diffMs / 1000);
-  if (seconds < 60) return `Updated ${seconds}s ago`;
-  const minutes = Math.floor(seconds / 60);
-  return `Updated ${minutes}m ago`;
+  if (!date) return 'Never synced';
+  const s = Math.floor((Date.now() - date.getTime()) / 1000);
+  if (s < 5) return 'Just now';
+  if (s < 60) return `${s}s ago`;
+  return `${Math.floor(s / 60)}m ago`;
 }
 
 function RefreshIcon({ spinning }: { spinning: boolean }) {
@@ -22,10 +21,10 @@ function RefreshIcon({ spinning }: { spinning: boolean }) {
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
-      strokeWidth="2"
+      strokeWidth="2.5"
       strokeLinecap="round"
       strokeLinejoin="round"
-      className={`w-3.5 h-3.5 ${spinning ? 'animate-spin' : ''}`}
+      className={`w-3 h-3 ${spinning ? 'animate-spin' : ''}`}
     >
       <polyline points="23 4 23 10 17 10" />
       <polyline points="1 20 1 14 7 14" />
@@ -43,13 +42,15 @@ export default function Footer({ lastUpdated, onRefresh, loading }: FooterProps)
   }, []);
 
   return (
-    <div className="flex items-center justify-between px-4 py-2 border-t border-zinc-800 flex-shrink-0">
-      <span className="text-xs text-zinc-500">{formatAgo(lastUpdated)}</span>
+    <div className="flex items-center justify-between px-4 py-2 border-t border-zinc-800/80 flex-shrink-0">
+      <span className="text-[11px] text-zinc-600 tabular-nums">
+        {formatAgo(lastUpdated)}
+      </span>
       <button
         onClick={onRefresh}
         disabled={loading}
-        className="text-zinc-400 hover:text-zinc-200 disabled:opacity-40 disabled:cursor-not-allowed transition-colors p-1 rounded"
-        aria-label="Refresh"
+        className="text-zinc-600 hover:text-zinc-400 disabled:opacity-30 disabled:cursor-not-allowed transition-colors p-1 -mr-1 rounded"
+        aria-label="Refresh tools"
       >
         <RefreshIcon spinning={loading} />
       </button>

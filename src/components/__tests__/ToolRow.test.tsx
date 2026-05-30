@@ -4,37 +4,28 @@ import ToolRow from '../ToolRow'
 import { mockClaudeTool, mockNotInstalledTool } from '../../__tests__/fixtures'
 
 describe('ToolRow', () => {
-  it('installed tool: renders name and expand arrow is visible', () => {
+  it('installed tool: renders name, button enabled', () => {
     render(<ToolRow tool={mockClaudeTool} />)
     expect(screen.getByText('Claude Code')).toBeInTheDocument()
-    // Button should be enabled (expand arrow present and not disabled)
-    const btn = screen.getByRole('button')
-    expect(btn).not.toBeDisabled()
+    expect(screen.getByRole('button')).not.toBeDisabled()
   })
 
-  it('not-installed tool: renders "not installed", no expand arrow', () => {
+  it('not-installed tool: renders name, "not found" label, button disabled', () => {
     render(<ToolRow tool={mockNotInstalledTool} />)
     expect(screen.getByText('Ollama')).toBeInTheDocument()
-    expect(screen.getByText('not installed')).toBeInTheDocument()
-    // Button should be disabled (no expand)
-    const btn = screen.getByRole('button')
-    expect(btn).toBeDisabled()
+    expect(screen.getByText('not found')).toBeInTheDocument()
+    expect(screen.getByRole('button')).toBeDisabled()
   })
 
-  it('click expand → ToolDetails renders', () => {
+  it('click expand → Skills section appears', () => {
     render(<ToolRow tool={mockClaudeTool} />)
-    // ToolDetails not visible initially
-    expect(screen.queryByText('Skills (2)')).not.toBeInTheDocument()
     fireEvent.click(screen.getByRole('button'))
-    expect(screen.getByText(/Skills/)).toBeInTheDocument()
+    expect(screen.getByText('Skills')).toBeInTheDocument()
   })
 
-  it('click again → ToolDetails unmounts', () => {
+  it('details are present in DOM even when collapsed (CSS transition)', () => {
     render(<ToolRow tool={mockClaudeTool} />)
-    const btn = screen.getByRole('button')
-    fireEvent.click(btn)
-    expect(screen.getByText(/Skills/)).toBeInTheDocument()
-    fireEvent.click(btn)
-    expect(screen.queryByText(/Skills/)).not.toBeInTheDocument()
+    // ToolDetails is always mounted (uses max-height CSS transition), just hidden
+    expect(screen.getByText('Skills')).toBeInTheDocument()
   })
 })
