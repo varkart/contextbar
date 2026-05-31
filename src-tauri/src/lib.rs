@@ -1,5 +1,6 @@
 pub(crate) mod detectors;
 pub(crate) mod models;
+mod watcher;
 
 use crate::models::AiTool;
 use tauri::{
@@ -191,6 +192,9 @@ pub fn run() {
                     );
                 }
             }
+
+            // Start FSEvents file watcher — emits "tools-changed" to frontend
+            watcher::start(app.handle().clone());
 
             Ok(())
         })

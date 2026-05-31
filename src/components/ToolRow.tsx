@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import StatusDot from './StatusDot';
 import ToolDetails from './ToolDetails';
 import type { AiTool } from '../types';
@@ -50,20 +49,31 @@ function getStatusState(tool: AiTool): 'installed' | 'no-config' | 'not-installe
   return 'installed';
 }
 
-export default function ToolRow({ tool }: { tool: AiTool }) {
-  const [expanded, setExpanded] = useState(false);
+interface ToolRowProps {
+  tool: AiTool;
+  query?: string;
+  isExpanded: boolean;
+  onToggle: () => void;
+  matchedSkills?: Set<string>;
+  matchedMcps?: Set<string>;
+}
+
+export default function ToolRow({ tool, query, isExpanded, onToggle, matchedSkills, matchedMcps }: ToolRowProps) {
   const statusState = getStatusState(tool);
   const canExpand = tool.installed;
+
+  const isSearching = Boolean(query?.trim())
+  const showDetails = isSearching || isExpanded
 
   return (
     <div>
       <button
-        onClick={() => canExpand && setExpanded((v) => !v)}
+        onClick={() => canExpand && onToggle()}
         disabled={!canExpand}
         className={`w-full flex items-center gap-2.5 px-4 py-2.5 text-left transition-colors duration-100 ${
           canExpand ? 'hover:bg-white/[0.025] cursor-pointer' : 'cursor-default'
         }`}
-        aria-expanded={canExpand ? expanded : undefined}
+        aria-expanded={canExpand ? showDetails : undefined}
       >
         <StatusDot state={statusState} />
         <ToolIcon tool={tool} />
@@ -93,17 +103,17 @@ export default function ToolRow({ tool }: { tool: AiTool }) {
           <span className="text-[10px] text-zinc-700">not found</span>
         )}
 
-        {canExpand && <ChevronIcon expanded={expanded} />}
+        {canExpand && <ChevronIcon expanded={showDetails} />}
       </button>
 
       {/* CSS max-height transition — no mount/unmount snap */}
       <div
         className={`overflow-hidden transition-all duration-200 ease-out ${
-          expanded && canExpand ? 'max-h-[480px] opacity-100' : 'max-h-0 opacity-0'
+          showDetails && canExpand ? 'max-h-[480px] opacity-100' : 'max-h-0 opacity-0'
         }`}
-        aria-hidden={!expanded}
+        aria-hidden={!showDetails}
       >
-        <ToolDetails tool={tool} />
+        <ToolDetails tool={tool} query={query} matchedSkills={matchedSkills} matchedMcps={matchedMcps} />
       </div>
     </div>
   );

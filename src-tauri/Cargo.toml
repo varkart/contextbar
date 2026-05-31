@@ -1,6 +1,6 @@
 [package]
 name = "agentbar"
-version = "0.2.0"
+version = "0.3.0"
 description = "macOS menu bar app — unified view of installed LLMs, agents, skills, and MCPs"
 authors = ["varkart"]
 edition = "2021"
@@ -27,6 +27,8 @@ window-vibrancy = "0.6"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 dirs = "6"
+notify = { version = "7", features = ["macos_fsevent"] }
+notify-debouncer-mini = "0.5"
 
 [dev-dependencies]
 tempfile = "3"

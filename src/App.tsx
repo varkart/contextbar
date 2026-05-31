@@ -1,7 +1,11 @@
 import { useState, useEffect, useCallback } from 'react'
 import { invoke } from '@tauri-apps/api/core'
+import { listen } from '@tauri-apps/api/event'
 import type { AiTool } from './types'
+import { searchTools } from './search'
+import { useExpandedState } from './useExpandedState'
 import Header from './components/Header'
+import SearchBar from './components/SearchBar'
 import ToolRow from './components/ToolRow'
 import Footer from './components/Footer'
 import Settings from './components/Settings'
@@ -40,6 +44,8 @@ export default function App() {
   const [tools, setTools] = useState<AiTool[]>([])
   const [loading, setLoading] = useState(true)
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
+  const [query, setQuery] = useState('')
+  const { expanded, toggle } = useExpandedState()
 
   const fetchTools = useCallback(async () => {
     setLoading(true)
@@ -56,6 +62,14 @@ export default function App() {
 
   useEffect(() => { fetchTools() }, [fetchTools])
 
+  // Auto-refresh on file watcher event
+  useEffect(() => {
+    const unlisten = listen('tools-changed', () => {
+      fetchTools()
+    })
+    return () => { unlisten.then(fn => fn()) }
+  }, [fetchTools])
+
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
@@ -70,6 +84,8 @@ export default function App() {
     return () => window.removeEventListener('keydown', handler)
   }, [view, setView])
 
+  const searchResults = searchTools(tools, query)
+
   return (
     <div className="w-[380px] h-[520px] bg-zinc-950 text-white flex flex-col overflow-hidden select-none">
       {view === 'settings' ? (
@@ -77,11 +93,26 @@ export default function App() {
       ) : (
         <>
           <Header onSettingsClick={() => setView('settings')} />
+          <SearchBar value={query} onChange={setQuery} />
           <div className="flex-1 overflow-y-auto divide-y divide-zinc-800/50">
             {loading && tools.length === 0 ? (
               <SkeletonRows />
+            ) : searchResults.length === 0 && query ? (
+              <div className="px-4 py-8 text-center">
+                <p className="text-[12px] text-zinc-600">No results for "{query}"</p>
+              </div>
             ) : (
-              tools.map((tool) => <ToolRow key={tool.id} tool={tool} />)
+              searchResults.map(({ tool, matchedSkills, matchedMcps }) => (
+                <ToolRow
+                  key={tool.id}
+                  tool={tool}
+                  query={query}
+                  isExpanded={expanded.has(tool.id)}
+                  onToggle={() => toggle(tool.id)}
+                  matchedSkills={matchedSkills}
+                  matchedMcps={matchedMcps}
+                />
+              ))
             )}
           </div>
           <Footer lastUpdated={lastUpdated} onRefresh={fetchTools} loading={loading} />
