@@ -10,47 +10,65 @@ interface SkillSectionProps {
   matchedPaths?: Set<string>;
 }
 
-export default function SkillSection({ skills, query, matchedPaths }: SkillSectionProps) {
-  const [expanded, setExpanded] = useState(false);
+function ChevronIcon({ open }: { open: boolean }) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+      stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
+      className={`w-2.5 h-2.5 transition-transform duration-150 ${open ? 'rotate-90' : 'rotate-0'}`}>
+      <polyline points="9 18 15 12 9 6" />
+    </svg>
+  );
+}
 
-  // When filtering by matchedPaths, only show matched skills
+export default function SkillSection({ skills, query, matchedPaths }: SkillSectionProps) {
+  const [sectionOpen, setSectionOpen] = useState(true);
+  const [listExpanded, setListExpanded] = useState(false);
+
   const filtered = matchedPaths && matchedPaths.size > 0
     ? skills.filter(s => matchedPaths.has(s.path))
     : skills;
 
-  const visible = (query || expanded) ? filtered : filtered.slice(0, INITIAL_LIMIT);
+  const visible = (query || listExpanded) ? filtered : filtered.slice(0, INITIAL_LIMIT);
   const hiddenCount = filtered.length - INITIAL_LIMIT;
 
   return (
     <div>
-      <div className="flex items-center gap-1.5 px-2 mb-0.5">
+      <button
+        onClick={() => setSectionOpen(v => !v)}
+        className="flex items-center gap-1 px-2 mb-0.5 w-full text-left hover:opacity-80 transition-opacity"
+        aria-expanded={sectionOpen}
+      >
+        <span className="text-zinc-700"><ChevronIcon open={sectionOpen} /></span>
         <span className="text-[11px] text-zinc-600 font-medium">Skills</span>
         <span className="text-[11px] text-zinc-700">{filtered.length}</span>
-      </div>
-      {filtered.length === 0 ? (
-        <p className="text-[11px] text-zinc-700 px-2 py-1 italic">None detected</p>
-      ) : (
-        <>
-          {visible.map((skill) => (
-            <SkillRow key={skill.path} skill={skill} query={query} />
-          ))}
-          {!query && !expanded && hiddenCount > 0 && (
-            <button
-              onClick={() => setExpanded(true)}
-              className="text-[11px] text-zinc-700 hover:text-zinc-500 px-2 py-[3px] transition-colors leading-5"
-            >
-              +{hiddenCount} more
-            </button>
-          )}
-          {!query && expanded && hiddenCount > 0 && (
-            <button
-              onClick={() => setExpanded(false)}
-              className="text-[11px] text-zinc-700 hover:text-zinc-500 px-2 py-[3px] transition-colors leading-5"
-            >
-              Show less
-            </button>
-          )}
-        </>
+      </button>
+
+      {sectionOpen && (
+        filtered.length === 0 ? (
+          <p className="text-[11px] text-zinc-700 px-2 py-1 italic">None detected</p>
+        ) : (
+          <>
+            {visible.map((skill) => (
+              <SkillRow key={skill.path} skill={skill} query={query} />
+            ))}
+            {!query && !listExpanded && hiddenCount > 0 && (
+              <button
+                onClick={() => setListExpanded(true)}
+                className="text-[11px] text-zinc-700 hover:text-zinc-500 px-2 py-[3px] transition-colors leading-5"
+              >
+                +{hiddenCount} more
+              </button>
+            )}
+            {!query && listExpanded && hiddenCount > 0 && (
+              <button
+                onClick={() => setListExpanded(false)}
+                className="text-[11px] text-zinc-700 hover:text-zinc-500 px-2 py-[3px] transition-colors leading-5"
+              >
+                Show less
+              </button>
+            )}
+          </>
+        )
       )}
     </div>
   );

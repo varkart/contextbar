@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, type ReactNode } from 'react';
+import { useState, useRef, useEffect, type ReactNode, type CSSProperties } from 'react';
 
 interface TooltipProps {
   content: ReactNode;
@@ -7,14 +7,22 @@ interface TooltipProps {
 
 export default function Tooltip({ content, children }: TooltipProps) {
   const [visible, setVisible] = useState(false);
-  const [above, setAbove] = useState(true);
+  const [tooltipStyle, setTooltipStyle] = useState<CSSProperties>({});
   const containerRef = useRef<HTMLDivElement>(null);
-  const tooltipRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (visible && containerRef.current && tooltipRef.current) {
+    if (visible && containerRef.current) {
       const rect = containerRef.current.getBoundingClientRect();
-      setAbove(rect.top > 80);
+      // 180px threshold: header(36) + search(44) + tool header(40) + section label(24) + 2 rows(36)
+      const showAbove = rect.top > 180;
+      setTooltipStyle({
+        position: 'fixed',
+        left: Math.max(8, rect.left + 8),
+        ...(showAbove
+          ? { bottom: window.innerHeight - rect.top + 6 }
+          : { top: rect.bottom + 6 }
+        ),
+      });
     }
   }, [visible]);
 
@@ -28,18 +36,17 @@ export default function Tooltip({ content, children }: TooltipProps) {
       {children}
       {visible && (
         <div
-          ref={tooltipRef}
           role="tooltip"
-          className={`
-            absolute left-2 z-50 max-w-[260px] min-w-[160px]
+          style={tooltipStyle}
+          className="
+            z-50 max-w-[260px] min-w-[160px]
             bg-zinc-900 border border-zinc-700/80
             rounded-md px-2.5 py-2
             text-[11px] text-zinc-300
             pointer-events-none
             shadow-xl shadow-black/40
             animate-tooltip-in
-            ${above ? 'bottom-full mb-1.5' : 'top-full mt-1.5'}
-          `}
+          "
         >
           {content}
         </div>

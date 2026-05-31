@@ -5,10 +5,10 @@ interface StatusDotProps {
 }
 
 const stateConfig: Record<StatusState, { color: string; label: string }> = {
-  installed:       { color: 'bg-indigo-400',    label: 'installed' },
-  'no-config':     { color: 'bg-amber-400/70',  label: 'no config found' },
-  'not-installed': { color: 'bg-zinc-700',       label: 'not installed' },
-  error:           { color: 'bg-red-400',        label: 'error' },
+  installed:       { color: 'bg-emerald-500',  label: 'installed' },
+  'no-config':     { color: 'bg-amber-400',    label: 'no config found' },
+  'not-installed': { color: 'bg-zinc-600',      label: 'not installed' },
+  error:           { color: 'bg-red-500',       label: 'error' },
 };
 
 export default function StatusDot({ state }: StatusDotProps) {
