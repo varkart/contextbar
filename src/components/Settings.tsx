@@ -51,16 +51,37 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
   )
 }
 
+function formatShortcut(raw: string): string {
+  return raw
+    .replace('CommandOrControl', '⌘')
+    .replace('Command', '⌘')
+    .replace('Control', '⌃')
+    .replace('Shift', '⇧')
+    .replace('Alt', '⌥')
+    .replace(/\+/g, '')
+    .replace('Space', 'Space')
+}
+
 export default function Settings({ onBack }: SettingsProps) {
   const [autostart, setAutostart] = useState(false)
   const [autostartLoading, setAutostartLoading] = useState(true)
+  const [shortcut, setShortcut] = useState('CommandOrControl+Shift+Space')
+  const [shortcutLoading, setShortcutLoading] = useState(true)
+  const [vibrancy, setVibrancy] = useState(true)
+  const [vibrancyLoading, setVibrancyLoading] = useState(true)
   const [version, setVersion] = useState('')
 
   useEffect(() => {
     Promise.all([
       invoke<boolean>('get_autostart').then(setAutostart).catch(() => {}),
       invoke<string>('get_version').then(setVersion).catch(() => setVersion('0.2.0')),
-    ]).finally(() => setAutostartLoading(false))
+      invoke<string>('get_shortcut').then(setShortcut).catch(() => {}),
+      invoke<boolean>('get_vibrancy').then(setVibrancy).catch(() => {}),
+    ]).finally(() => {
+      setAutostartLoading(false)
+      setShortcutLoading(false)
+      setVibrancyLoading(false)
+    })
   }, [])
 
   const handleAutostart = async (enabled: boolean) => {
@@ -69,6 +90,15 @@ export default function Settings({ onBack }: SettingsProps) {
       await invoke('set_autostart', { enabled })
     } catch {
       setAutostart(!enabled) // revert on error
+    }
+  }
+
+  const handleVibrancy = async (enabled: boolean) => {
+    setVibrancy(enabled)
+    try {
+      await invoke('set_vibrancy', { enabled })
+    } catch {
+      setVibrancy(!enabled) // revert
     }
   }
 
@@ -109,9 +139,15 @@ export default function Settings({ onBack }: SettingsProps) {
             label="Global shortcut"
             description="Open agentbar from anywhere"
           >
-            <span className="text-[11px] text-zinc-600 font-mono bg-zinc-800 px-1.5 py-0.5 rounded">
-              coming soon
-            </span>
+            {shortcutLoading ? (
+              <span className="text-[11px] text-zinc-600 font-mono bg-zinc-800 px-1.5 py-0.5 rounded">
+                —
+              </span>
+            ) : (
+              <span className="text-[11px] text-zinc-400 font-mono bg-zinc-800 border border-zinc-700 px-1.5 py-0.5 rounded tabular-nums">
+                {formatShortcut(shortcut)}
+              </span>
+            )}
           </SettingRow>
         </div>
 
@@ -119,11 +155,9 @@ export default function Settings({ onBack }: SettingsProps) {
         <div className="divide-y divide-zinc-800/60">
           <SettingRow
             label="Window vibrancy"
-            description="Frosted glass background"
+            description="Takes effect when panel reopens"
           >
-            <span className="text-[11px] text-zinc-600 font-mono bg-zinc-800 px-1.5 py-0.5 rounded">
-              coming soon
-            </span>
+            <Toggle checked={vibrancy} onChange={handleVibrancy} disabled={vibrancyLoading} />
           </SettingRow>
         </div>
 

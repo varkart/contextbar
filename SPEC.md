@@ -609,9 +609,10 @@ Requires: `npm run tauri build` first, or `tauri dev` running.
 
 | Version | Features |
 |---|---|
-| **v0.1** | Detect tools, read skills + MCPs, hover descriptions, read-only display |
-| **v0.2** | Toggle MCP active/inactive (write config), launch at login, global hotkey, window vibrancy, settings panel |
-| **v0.3** | File watcher (FSEvents, auto-refresh), search/filter, collapsed-state memory |
-| **v0.4** | Add/remove MCP servers from UI |
-| **v0.5** | Notifications ("new skill installed", "MCP server added") |
-| **v1.0** | Notarized DMG release, auto-update (Tauri updater plugin) |
+| **v0.1** | Detect tools, read skills + MCPs, hover descriptions, read-only display | ✓ shipped |
+| **v0.2** | Settings panel, launch at login, global hotkey, window vibrancy | ✓ in progress |
+| **v0.3** | File watcher (FSEvents, auto-refresh), search/filter, collapsed-state memory | |
+| **v0.4** | Add/remove MCP servers from UI | |
+| **v0.5** | Notifications ("new skill installed", "MCP server added") | |
+| **v1.0** | Notarized DMG release, auto-update (Tauri updater plugin) | |
+| **v1.1** | Toggle MCP active/inactive — atomic config writes with backup per tool | |
