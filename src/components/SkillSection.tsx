@@ -8,6 +8,7 @@ interface SkillSectionProps {
   skills: Skill[];
   query?: string;
   matchedPaths?: Set<string>;
+  onSelectSkill?: (skill: Skill) => void;
 }
 
 function ChevronIcon({ open }: { open: boolean }) {
@@ -20,7 +21,7 @@ function ChevronIcon({ open }: { open: boolean }) {
   );
 }
 
-export default function SkillSection({ skills, query, matchedPaths }: SkillSectionProps) {
+export default function SkillSection({ skills, query, matchedPaths, onSelectSkill }: SkillSectionProps) {
   const [sectionOpen, setSectionOpen] = useState(true);
   const [listExpanded, setListExpanded] = useState(false);
 
@@ -49,7 +50,7 @@ export default function SkillSection({ skills, query, matchedPaths }: SkillSecti
         ) : (
           <>
             {visible.map((skill) => (
-              <SkillRow key={skill.path} skill={skill} query={query} />
+              <SkillRow key={skill.path} skill={skill} query={query} onSelect={onSelectSkill ? () => onSelectSkill(skill) : undefined} />
             ))}
             {!query && !listExpanded && hiddenCount > 0 && (
               <button

@@ -1,6 +1,6 @@
 import StatusDot from './StatusDot';
 import ToolDetails from './ToolDetails';
-import type { AiTool } from '../types';
+import type { AiTool, Skill } from '../types';
 
 const TOOL_COLORS: Record<string, { bg: string; text: string }> = {
   claude:   { bg: 'bg-orange-500/10',   text: 'text-orange-500'  },
@@ -47,9 +47,10 @@ interface ToolRowProps {
   onToggle: () => void;
   matchedSkills?: Set<string>;
   matchedMcps?: Set<string>;
+  onSelectSkill?: (skill: Skill) => void;
 }
 
-export default function ToolRow({ tool, query, isExpanded, onToggle, matchedSkills, matchedMcps }: ToolRowProps) {
+export default function ToolRow({ tool, query, isExpanded, onToggle, matchedSkills, matchedMcps, onSelectSkill }: ToolRowProps) {
   const statusState = getStatusState(tool);
   const canExpand = tool.installed;
   const isSearching = Boolean(query?.trim());
@@ -100,7 +101,7 @@ export default function ToolRow({ tool, query, isExpanded, onToggle, matchedSkil
         }`}
         aria-hidden={!showDetails}
       >
-        <ToolDetails tool={tool} query={query} matchedSkills={matchedSkills} matchedMcps={matchedMcps} />
+        <ToolDetails tool={tool} query={query} matchedSkills={matchedSkills} matchedMcps={matchedMcps} onSelectSkill={onSelectSkill} />
       </div>
     </div>
   );

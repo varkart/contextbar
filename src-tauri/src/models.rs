@@ -33,3 +33,13 @@ pub struct McpServer {
     pub has_secrets: bool,
     pub secret_key_names: Vec<String>,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FileEntry {
+    pub name: String,
+    pub path: String,
+    pub is_dir: bool,
+    pub children: Vec<FileEntry>,
+    pub extension: Option<String>,  // e.g. "md", "mjs", "ts" — None for dirs
+}

@@ -136,6 +136,69 @@ fn set_vibrancy(enabled: bool) -> Result<(), String> {
 }
 
 // ---------------------------------------------------------------------------
+// IPC commands – file system / opener
+// ---------------------------------------------------------------------------
+
+#[tauri::command]
+fn read_skill_dir(path: String) -> Result<crate::models::FileEntry, String> {
+    use std::path::Path;
+
+    let root = Path::new(&path);
+    if !root.exists() {
+        return Err(format!("Path not found: {}", path));
+    }
+    read_entry(root, 0)
+}
+
+fn read_entry(path: &std::path::Path, depth: usize) -> Result<crate::models::FileEntry, String> {
+    let name = path
+        .file_name()
+        .map(|n| n.to_string_lossy().to_string())
+        .unwrap_or_else(|| path.to_string_lossy().to_string());
+
+    let path_str = path.to_string_lossy().to_string();
+    let is_dir = path.is_dir();
+
+    let extension = if is_dir {
+        None
+    } else {
+        path.extension().map(|e| e.to_string_lossy().to_string())
+    };
+
+    let children = if is_dir && depth < 3 {
+        let mut entries: Vec<crate::models::FileEntry> = std::fs::read_dir(path)
+            .map_err(|e| e.to_string())?
+            .filter_map(|e| e.ok())
+            .filter(|e| {
+                // Skip hidden files and common noise
+                let n = e.file_name().to_string_lossy().to_string();
+                !n.starts_with('.') && n != "node_modules" && n != "__pycache__"
+            })
+            .filter_map(|e| read_entry(&e.path(), depth + 1).ok())
+            .collect();
+
+        // Sort: dirs first, then files, alphabetically within each group
+        entries.sort_by(|a, b| b.is_dir.cmp(&a.is_dir).then(a.name.cmp(&b.name)));
+        entries
+    } else {
+        vec![]
+    };
+
+    Ok(crate::models::FileEntry {
+        name,
+        path: path_str,
+        is_dir,
+        children,
+        extension,
+    })
+}
+
+#[tauri::command]
+fn open_path(path: String) -> Result<(), String> {
+    tauri_plugin_opener::open_path(path, None::<&str>).map_err(|e| e.to_string())
+}
+
+// ---------------------------------------------------------------------------
 // App entry point
 // ---------------------------------------------------------------------------
 
@@ -209,6 +272,8 @@ pub fn run() {
             set_shortcut,
             get_vibrancy,
             set_vibrancy,
+            read_skill_dir,
+            open_path,
         ])
         .run(tauri::generate_context!())
         .expect("error running agentbar");

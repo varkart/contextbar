@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
-import type { AiTool } from './types'
+import type { AiTool, Skill } from './types'
 import { searchTools } from './search'
 import { useExpandedState } from './useExpandedState'
 import { useUpdateCheck } from './useUpdateCheck'
@@ -12,8 +12,9 @@ import SearchBar from './components/SearchBar'
 import ToolRow from './components/ToolRow'
 import Footer from './components/Footer'
 import Settings from './components/Settings'
+import SkillDetailPanel from './components/SkillDetailPanel'
 
-type View = 'main' | 'settings'
+type View = 'main' | 'settings' | 'skill-detail'
 
 function useView(): [View, (v: View) => void] {
   const [view, setViewState] = useState<View>(() =>
@@ -51,6 +52,12 @@ export default function App() {
   const { expanded, toggle } = useExpandedState()
   const [version, setVersion] = useState('')
   const { theme, setTheme } = useTheme()
+  const [selectedSkill, setSelectedSkill] = useState<Skill | null>(null)
+
+  const handleSelectSkill = useCallback((skill: Skill) => {
+    setSelectedSkill(skill)
+    setView('skill-detail')
+  }, [setView])
 
   useEffect(() => {
     invoke<string>('get_version').then(setVersion).catch(() => setVersion('0.5.0'))
@@ -82,7 +89,8 @@ export default function App() {
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        if (view === 'settings') setView('main')
+        if (view === 'skill-detail') setView('main')
+        else if (view === 'settings') setView('main')
         else invoke('hide_window').catch(() => {})
       }
     }
@@ -94,7 +102,9 @@ export default function App() {
 
   return (
     <div className="w-[380px] h-[520px] bg-[var(--c-bg)] text-[var(--c-text)] flex flex-col overflow-hidden select-none">
-      {view === 'settings' ? (
+      {view === 'skill-detail' && selectedSkill ? (
+        <SkillDetailPanel skill={selectedSkill} onBack={() => setView('main')} />
+      ) : view === 'settings' ? (
         <Settings
           onBack={() => setView('main')}
           updateInfo={updateInfo}
@@ -122,6 +132,7 @@ export default function App() {
                   onToggle={() => toggle(tool.id)}
                   matchedSkills={matchedSkills}
                   matchedMcps={matchedMcps}
+                  onSelectSkill={handleSelectSkill}
                 />
               ))
             )}
