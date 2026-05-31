@@ -198,6 +198,11 @@ fn open_path(path: String) -> Result<(), String> {
     tauri_plugin_opener::open_path(path, None::<&str>).map_err(|e| e.to_string())
 }
 
+#[tauri::command]
+fn read_text_file(path: String) -> Result<String, String> {
+    std::fs::read_to_string(&path).map_err(|e| e.to_string())
+}
+
 // ---------------------------------------------------------------------------
 // App entry point
 // ---------------------------------------------------------------------------
@@ -274,6 +279,7 @@ pub fn run() {
             set_vibrancy,
             read_skill_dir,
             open_path,
+            read_text_file,
         ])
         .run(tauri::generate_context!())
         .expect("error running agentbar");
