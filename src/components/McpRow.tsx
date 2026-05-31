@@ -1,8 +1,10 @@
 import Tooltip from './Tooltip';
+import Highlight from './Highlight';
 import type { McpServer } from '../types';
 
 interface McpRowProps {
   mcp: McpServer;
+  query?: string;
 }
 
 function McpTooltipContent({ mcp }: { mcp: McpServer }) {
@@ -41,12 +43,12 @@ function LockIcon() {
   );
 }
 
-export default function McpRow({ mcp }: McpRowProps) {
+export default function McpRow({ mcp, query = '' }: McpRowProps) {
   return (
     <Tooltip content={<McpTooltipContent mcp={mcp} />}>
       <div className="flex items-center gap-2 py-[3px] px-2 rounded-sm hover:bg-white/[0.03] w-full cursor-default transition-colors">
         <span className="w-[3px] h-[3px] rounded-full bg-violet-500/50 flex-shrink-0" aria-hidden="true" />
-        <span className="text-[12px] text-zinc-400 truncate flex-1 leading-5">{mcp.name}</span>
+        <Highlight text={mcp.name} query={query} className="text-[12px] text-zinc-400 truncate flex-1 leading-5" />
         {mcp.hasSecrets && (
           <span className="flex-shrink-0">
             <LockIcon />

@@ -1,8 +1,10 @@
 import Tooltip from './Tooltip';
+import Highlight from './Highlight';
 import type { Skill } from '../types';
 
 interface SkillRowProps {
   skill: Skill;
+  query?: string;
 }
 
 function SkillTooltipContent({ skill }: { skill: Skill }) {
@@ -19,12 +21,12 @@ function SkillTooltipContent({ skill }: { skill: Skill }) {
   );
 }
 
-export default function SkillRow({ skill }: SkillRowProps) {
+export default function SkillRow({ skill, query = '' }: SkillRowProps) {
   return (
     <Tooltip content={<SkillTooltipContent skill={skill} />}>
       <div className="flex items-center gap-2 py-[3px] px-2 rounded-sm hover:bg-white/[0.03] w-full cursor-default transition-colors">
         <span className="w-[3px] h-[3px] rounded-full bg-indigo-500/50 flex-shrink-0" aria-hidden="true" />
-        <span className="text-[12px] text-zinc-400 truncate leading-5">{skill.name}</span>
+        <Highlight text={skill.name} query={query} className="text-[12px] text-zinc-400 truncate leading-5" />
       </div>
     </Tooltip>
   );
