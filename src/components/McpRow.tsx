@@ -37,7 +37,7 @@ function LockIcon() {
 export default function McpRow({ mcp, query = '' }: McpRowProps) {
   return (
     <Tooltip content={<McpTooltipContent mcp={mcp} />}>
-      <div className="flex items-center gap-2 py-[3px] pl-5 pr-2 rounded-sm hover:bg-[var(--c-hover)] w-full cursor-default transition-colors">
+      <div className="flex items-center gap-2 py-[3px] pl-[18px] pr-2 rounded-sm w-full cursor-default border-l-2 border-transparent hover:border-violet-400/50 hover:bg-[var(--c-hover)] hover:translate-x-[1px] transition-all duration-150 ease-out">
         <span className="w-[3px] h-[3px] rounded-full bg-violet-400/60 flex-shrink-0" aria-hidden="true" />
         <Highlight text={mcp.name} query={query} className="text-[12px] text-[var(--c-text-2)] truncate flex-1 leading-5" />
         {mcp.hasSecrets && <span className="flex-shrink-0"><LockIcon /></span>}
