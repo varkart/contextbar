@@ -54,7 +54,7 @@ export default function SkillSection({ skills, query, matchedPaths }: SkillSecti
             {!query && !listExpanded && hiddenCount > 0 && (
               <button
                 onClick={() => setListExpanded(true)}
-                className="text-[11px] text-zinc-700 hover:text-zinc-500 px-2 py-[3px] transition-colors leading-5"
+                className="text-[11px] text-zinc-700 hover:text-zinc-500 pl-5 pr-2 py-[3px] transition-colors leading-5"
               >
                 +{hiddenCount} more
               </button>
@@ -62,7 +62,7 @@ export default function SkillSection({ skills, query, matchedPaths }: SkillSecti
             {!query && listExpanded && hiddenCount > 0 && (
               <button
                 onClick={() => setListExpanded(false)}
-                className="text-[11px] text-zinc-700 hover:text-zinc-500 px-2 py-[3px] transition-colors leading-5"
+                className="text-[11px] text-zinc-700 hover:text-zinc-500 pl-5 pr-2 py-[3px] transition-colors leading-5"
               >
                 Show less
               </button>
