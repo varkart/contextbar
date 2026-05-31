@@ -63,6 +63,14 @@ export default function App() {
     invoke<string>('get_version').then(setVersion).catch(() => setVersion('0.5.0'))
   }, [])
 
+  useEffect(() => {
+    import('@tauri-apps/plugin-notification').then(({ isPermissionGranted, requestPermission }) => {
+      isPermissionGranted().then(granted => {
+        if (!granted) requestPermission().catch(() => {})
+      }).catch(() => {})
+    }).catch(() => {})
+  }, [])
+
   const updateInfo = useUpdateCheck(version)
   useToolsDiff()
 
