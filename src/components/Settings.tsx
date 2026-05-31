@@ -115,6 +115,60 @@ function ThemeSelector({ value, onChange }: { value: ThemePreference; onChange: 
   )
 }
 
+function ShortcutRecorder({ value, onChange }: { value: string; onChange: (s: string) => void }) {
+  const [recording, setRecording] = useState(false)
+  const [pending, setPending] = useState<string | null>(null)
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    if (e.key === 'Escape') { setRecording(false); setPending(null); return }
+
+    const modifiers: string[] = []
+    if (e.metaKey || e.ctrlKey) modifiers.push('CommandOrControl')
+    if (e.shiftKey) modifiers.push('Shift')
+    if (e.altKey) modifiers.push('Alt')
+
+    const ignored = new Set(['Meta', 'Control', 'Shift', 'Alt', 'CapsLock', 'Tab'])
+    if (ignored.has(e.key)) return
+
+    const keyMap: Record<string, string> = {
+      ' ': 'Space', ArrowUp: 'Up', ArrowDown: 'Down', ArrowLeft: 'Left', ArrowRight: 'Right',
+      Enter: 'Return', Backspace: 'Backspace', Delete: 'Delete', Escape: 'Escape',
+    }
+    const key = keyMap[e.key] ?? (e.key.length === 1 ? e.key.toUpperCase() : e.key)
+    if (!modifiers.length) return
+
+    const combo = [...modifiers, key].join('+')
+    setPending(combo)
+  }
+
+  const handleKeyUp = async () => {
+    if (!pending) return
+    setRecording(false)
+    const next = pending
+    setPending(null)
+    onChange(next)
+  }
+
+  return (
+    <button
+      onKeyDown={handleKeyDown}
+      onKeyUp={handleKeyUp}
+      onBlur={() => { setRecording(false); setPending(null) }}
+      onClick={() => setRecording(true)}
+      className={`text-[11px] font-mono px-1.5 py-0.5 rounded border transition-all duration-150 min-w-[72px] text-center ${
+        recording
+          ? 'border-indigo-500 bg-indigo-500/10 text-indigo-400 outline-none'
+          : 'border-[var(--c-border)] bg-[var(--c-surface)] text-[var(--c-text-2)] hover:border-indigo-400/50'
+      }`}
+      title="Click to record new shortcut"
+    >
+      {recording ? (pending ? formatShortcut(pending) : 'Press keys…') : formatShortcut(value)}
+    </button>
+  )
+}
+
 function ExternalLinkIcon() {
   return (
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
@@ -175,6 +229,15 @@ export default function Settings({ onBack, updateInfo, theme, onThemeChange }: S
     } catch { setVibrancy(!enabled) }
   }
 
+  const handleShortcutChange = async (s: string) => {
+    const prev = shortcut
+    setShortcut(s)
+    try {
+      await invoke('set_shortcut', { shortcut: s })
+      capture('settings_shortcut_changed', { shortcut: s })
+    } catch { setShortcut(prev) }
+  }
+
   return (
     <div className="flex flex-col h-full bg-[var(--c-bg)] animate-slide-in-right">
       <div className="flex items-center gap-2 px-4 py-2.5 border-b border-[var(--c-border)] flex-shrink-0">
@@ -198,13 +261,11 @@ export default function Settings({ onBack, updateInfo, theme, onThemeChange }: S
           <SettingRow label="Launch at login" description="Start agentbar when you log in">
             <Toggle checked={autostart} onChange={handleAutostart} disabled={autostartLoading} />
           </SettingRow>
-          <SettingRow label="Global shortcut" description="Open agentbar from anywhere">
+          <SettingRow label="Global shortcut" description="Click to record new shortcut">
             {shortcutLoading ? (
               <span className="text-[11px] text-[var(--c-text-3)] font-mono bg-[var(--c-surface)] px-1.5 py-0.5 rounded">—</span>
             ) : (
-              <span className="text-[11px] text-[var(--c-text-2)] font-mono bg-[var(--c-surface)] border border-[var(--c-border)] px-1.5 py-0.5 rounded tabular-nums">
-                {formatShortcut(shortcut)}
-              </span>
+              <ShortcutRecorder value={shortcut} onChange={handleShortcutChange} />
             )}
           </SettingRow>
         </div>

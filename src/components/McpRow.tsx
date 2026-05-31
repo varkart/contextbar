@@ -5,6 +5,7 @@ import type { McpServer } from '../types';
 interface McpRowProps {
   mcp: McpServer;
   query?: string;
+  onSelect?: () => void;
 }
 
 function McpTooltipContent({ mcp }: { mcp: McpServer }) {
@@ -34,13 +35,23 @@ function LockIcon() {
   );
 }
 
-export default function McpRow({ mcp, query = '' }: McpRowProps) {
+export default function McpRow({ mcp, query = '', onSelect }: McpRowProps) {
   return (
     <Tooltip content={<McpTooltipContent mcp={mcp} />}>
-      <div className="flex items-center gap-2 py-[3px] pl-[18px] pr-2 rounded-sm w-full cursor-default border-l-2 border-transparent hover:border-violet-400/50 hover:bg-[var(--c-hover)] hover:translate-x-[1px] transition-all duration-150 ease-out">
+      <div
+        onClick={onSelect}
+        className={`group flex items-center gap-2 py-[3px] pl-[18px] pr-2 rounded-sm w-full border-l-2 border-transparent hover:border-violet-400/50 hover:bg-[var(--c-hover)] hover:translate-x-[1px] transition-all duration-150 ease-out ${onSelect ? 'cursor-pointer' : 'cursor-default'}`}
+      >
         <span className="w-[3px] h-[3px] rounded-full bg-violet-400/60 flex-shrink-0" aria-hidden="true" />
-        <Highlight text={mcp.name} query={query} className="text-[12px] text-[var(--c-text-2)] truncate flex-1 leading-5" />
+        <Highlight text={mcp.name} query={query} className="text-[12px] font-mono text-[var(--c-text-2)] truncate flex-1 leading-5" />
         {mcp.hasSecrets && <span className="flex-shrink-0"><LockIcon /></span>}
+        {onSelect && (
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+            stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+            className="w-3 h-3 text-[var(--c-text-3)] opacity-0 group-hover:opacity-100 flex-shrink-0 ml-auto transition-opacity">
+            <polyline points="9 18 15 12 9 6"/>
+          </svg>
+        )}
       </div>
     </Tooltip>
   );

@@ -1,5 +1,6 @@
 pub(crate) mod detectors;
 pub(crate) mod models;
+mod mcp_client;
 mod watcher;
 
 use crate::models::AiTool;
@@ -204,6 +205,32 @@ fn read_text_file(path: String) -> Result<String, String> {
 }
 
 // ---------------------------------------------------------------------------
+// IPC commands – MCP client
+// ---------------------------------------------------------------------------
+
+#[tauri::command]
+async fn query_mcp_tools(command: String, args: Vec<String>) -> Result<Vec<mcp_client::McpTool>, String> {
+    mcp_client::query_tools(&command, &args).await
+}
+
+// ---------------------------------------------------------------------------
+// IPC commands – updater
+// ---------------------------------------------------------------------------
+
+#[tauri::command]
+async fn check_for_update(app: tauri::AppHandle) -> Result<Option<serde_json::Value>, String> {
+    use tauri_plugin_updater::UpdaterExt;
+    match app.updater().map_err(|e| e.to_string())?.check().await {
+        Ok(Some(update)) => Ok(Some(serde_json::json!({
+            "version": update.version,
+            "currentVersion": update.current_version,
+        }))),
+        Ok(None) => Ok(None),
+        Err(e) => Err(e.to_string()),
+    }
+}
+
+// ---------------------------------------------------------------------------
 // App entry point
 // ---------------------------------------------------------------------------
 
@@ -219,6 +246,7 @@ pub fn run() {
         .plugin(tauri_plugin_autostart::init(MacosLauncher::LaunchAgent, None))
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
             #[cfg(target_os = "macos")]
             app.set_activation_policy(tauri::ActivationPolicy::Accessory);
@@ -284,6 +312,8 @@ pub fn run() {
             read_skill_dir,
             open_path,
             read_text_file,
+            check_for_update,
+            query_mcp_tools,
         ])
         .run(tauri::generate_context!())
         .expect("error running agentbar");
