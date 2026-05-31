@@ -4,6 +4,10 @@ mod copilot;
 mod cursor;
 mod gemini;
 mod windsurf;
+mod aider;
+mod amazonq;
+mod r#continue;
+mod zed;
 
 use crate::models::AiTool;
 
@@ -15,6 +19,10 @@ pub fn detect_all() -> Vec<AiTool> {
         copilot::detect(),
         windsurf::detect(),
         chatgpt::detect(),
+        aider::detect(),
+        amazonq::detect(),
+        r#continue::detect(),
+        zed::detect(),
     ]
 }
 

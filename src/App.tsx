@@ -1,13 +1,14 @@
 import { useState, useEffect, useCallback } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
-import type { AiTool, Skill } from './types'
+import type { AiTool, Skill, McpServer } from './types'
 import { searchTools } from './search'
 import { useExpandedState } from './useExpandedState'
 import { useUpdateCheck } from './useUpdateCheck'
 import { useToolsDiff } from './useToolsDiff'
 import { useTheme, type ThemePreference } from './useTheme'
 import { capture } from './analytics'
+import McpDetailPanel from './components/McpDetailPanel'
 import Header from './components/Header'
 import SearchBar from './components/SearchBar'
 import ToolRow from './components/ToolRow'
@@ -15,7 +16,7 @@ import Footer from './components/Footer'
 import Settings from './components/Settings'
 import SkillDetailPanel from './components/SkillDetailPanel'
 
-type View = 'main' | 'settings' | 'skill-detail'
+type View = 'main' | 'settings' | 'skill-detail' | 'mcp-detail'
 
 function useView(): [View, (v: View) => void] {
   const [view, setViewState] = useState<View>(() =>
@@ -54,11 +55,18 @@ export default function App() {
   const [version, setVersion] = useState('')
   const { theme, setTheme } = useTheme()
   const [selectedSkill, setSelectedSkill] = useState<Skill | null>(null)
+  const [selectedMcp, setSelectedMcp] = useState<McpServer | null>(null)
 
   const handleSelectSkill = useCallback((skill: Skill) => {
     setSelectedSkill(skill)
     setView('skill-detail')
     capture('skill_detail_viewed', { skill_name: skill.name })
+  }, [setView])
+
+  const handleSelectMcp = useCallback((mcp: McpServer) => {
+    setSelectedMcp(mcp)
+    setView('mcp-detail')
+    capture('mcp_detail_viewed', { mcp_name: mcp.name })
   }, [setView])
 
   useEffect(() => {
@@ -116,7 +124,7 @@ export default function App() {
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        if (view === 'skill-detail') setView('main')
+        if (view === 'skill-detail' || view === 'mcp-detail') setView('main')
         else if (view === 'settings') setView('main')
         else invoke('hide_window').catch(() => {})
       }
@@ -131,6 +139,8 @@ export default function App() {
     <div className="w-[380px] h-[520px] bg-[var(--c-bg)] text-[var(--c-text)] flex flex-col overflow-hidden select-none">
       {view === 'skill-detail' && selectedSkill ? (
         <SkillDetailPanel skill={selectedSkill} onBack={() => setView('main')} />
+      ) : view === 'mcp-detail' && selectedMcp ? (
+        <McpDetailPanel mcp={selectedMcp} onBack={() => setView('main')} />
       ) : view === 'settings' ? (
         <Settings
           onBack={() => setView('main')}
@@ -149,6 +159,20 @@ export default function App() {
               <div className="px-4 py-8 text-center">
                 <p className="text-[12px] text-[var(--c-text-3)]">No results for "{query}"</p>
               </div>
+            ) : !loading && tools.every(t => !t.installed) ? (
+              <div className="flex flex-col items-center justify-center h-full px-6 py-12 text-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-[var(--c-surface)] flex items-center justify-center mb-1">
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+                    stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"
+                    className="w-5 h-5 text-[var(--c-text-3)]">
+                    <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                  </svg>
+                </div>
+                <p className="text-[13px] font-semibold text-[var(--c-text)]">No AI tools detected</p>
+                <p className="text-[11px] text-[var(--c-text-3)] leading-relaxed max-w-[240px]">
+                  Install Claude Code, Cursor, Gemini CLI, or GitHub Copilot and agentbar will pick them up automatically.
+                </p>
+              </div>
             ) : (
               searchResults.map(({ tool, matchedSkills, matchedMcps }) => (
                 <ToolRow
@@ -160,6 +184,7 @@ export default function App() {
                   matchedSkills={matchedSkills}
                   matchedMcps={matchedMcps}
                   onSelectSkill={handleSelectSkill}
+                  onSelectMcp={handleSelectMcp}
                 />
               ))
             )}

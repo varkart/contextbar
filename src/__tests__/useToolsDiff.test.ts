@@ -7,14 +7,12 @@ import { useToolsDiff } from '../useToolsDiff'
 vi.mock('@tauri-apps/api/event')
 vi.mock('@tauri-apps/plugin-notification')
 
-type DiffPayload = Parameters<typeof useToolsDiff>[0] extends undefined
-  ? {
-      addedSkills: { toolName: string; itemName: string }[]
-      removedSkills: { toolName: string; itemName: string }[]
-      addedMcps: { toolName: string; itemName: string }[]
-      removedMcps: { toolName: string; itemName: string }[]
-    }
-  : never
+type DiffPayload = {
+  addedSkills: { toolName: string; itemName: string }[]
+  removedSkills: { toolName: string; itemName: string }[]
+  addedMcps: { toolName: string; itemName: string }[]
+  removedMcps: { toolName: string; itemName: string }[]
+}
 
 const emptyDiff = (): DiffPayload => ({
   addedSkills: [],
@@ -32,7 +30,7 @@ describe('useToolsDiff', () => {
     unlisten = vi.fn()
     vi.mocked(listen).mockImplementation((_event, cb) => {
       capturedCallback = cb as typeof capturedCallback
-      return Promise.resolve(unlisten)
+      return Promise.resolve(unlisten as unknown as () => void)
     })
     vi.mocked(sendNotification).mockReset()
   })

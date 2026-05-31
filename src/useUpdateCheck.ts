@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { invoke } from '@tauri-apps/api/core'
 
 const CACHE_KEY = 'agentbar:updateCheck'
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000 // 24 hours
@@ -28,7 +29,6 @@ function saveCache(info: UpdateInfo) {
 }
 
 function isNewer(latest: string, current: string): boolean {
-  // Strip leading 'v'
   const parse = (v: string) => v.replace(/^v/, '').split('.').map(Number)
   const [lMaj, lMin, lPat] = parse(latest)
   const [cMaj, cMin, cPat] = parse(current)
@@ -43,31 +43,45 @@ export function useUpdateCheck(currentVersion: string) {
   useEffect(() => {
     if (!currentVersion) return
 
-    // Check cache first
     const cached = loadCache()
     if (cached && isNewer(cached.latestVersion, currentVersion)) {
       setUpdateInfo(cached)
       return
     }
 
-    // Fetch GitHub API
-    fetch('https://api.github.com/repos/varkart/agentbar/releases/latest', {
-      headers: { Accept: 'application/vnd.github+json' },
-    })
-      .then(r => r.json())
-      .then((data: { tag_name: string; html_url: string }) => {
-        if (!data.tag_name) return
-        const info: UpdateInfo = {
-          latestVersion: data.tag_name,
-          releaseUrl: data.html_url,
-          checkedAt: Date.now(),
-        }
-        saveCache(info)
-        if (isNewer(data.tag_name, currentVersion)) {
+    // Try tauri-plugin-updater IPC first (works when signed + endpoints configured)
+    invoke<{ version: string; currentVersion: string } | null>('check_for_update')
+      .then(result => {
+        if (result && isNewer(result.version, currentVersion)) {
+          const info: UpdateInfo = {
+            latestVersion: result.version,
+            releaseUrl: `https://github.com/varkart/agentbar/releases/tag/v${result.version}`,
+            checkedAt: Date.now(),
+          }
+          saveCache(info)
           setUpdateInfo(info)
         }
       })
-      .catch(() => {}) // silent fail — no update info is fine
+      .catch(() => {
+        // Fallback: GitHub API (works without signing)
+        fetch('https://api.github.com/repos/varkart/agentbar/releases/latest', {
+          headers: { Accept: 'application/vnd.github+json' },
+        })
+          .then(r => r.json())
+          .then((data: { tag_name: string; html_url: string }) => {
+            if (!data.tag_name) return
+            const info: UpdateInfo = {
+              latestVersion: data.tag_name,
+              releaseUrl: data.html_url,
+              checkedAt: Date.now(),
+            }
+            saveCache(info)
+            if (isNewer(data.tag_name, currentVersion)) {
+              setUpdateInfo(info)
+            }
+          })
+          .catch(() => {})
+      })
   }, [currentVersion])
 
   return updateInfo

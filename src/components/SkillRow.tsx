@@ -28,7 +28,7 @@ export default function SkillRow({ skill, query = '', onSelect }: SkillRowProps)
         className={`group flex items-center gap-2 py-[3px] pl-[18px] pr-2 rounded-sm w-full border-l-2 border-transparent hover:border-indigo-400/50 hover:bg-[var(--c-hover)] hover:translate-x-[1px] transition-all duration-150 ease-out ${onSelect ? 'cursor-pointer' : 'cursor-default'}`}
       >
         <span className="w-[3px] h-[3px] rounded-full bg-indigo-400/60 flex-shrink-0" aria-hidden="true" />
-        <Highlight text={skill.name} query={query} className="text-[12px] text-[var(--c-text-2)] truncate leading-5" />
+        <Highlight text={skill.name} query={query} className="text-[12px] font-mono text-[var(--c-text-2)] truncate leading-5" />
         {onSelect && (
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
             stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"

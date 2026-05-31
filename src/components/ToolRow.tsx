@@ -1,6 +1,6 @@
 import StatusDot from './StatusDot';
 import ToolDetails from './ToolDetails';
-import type { AiTool, Skill } from '../types';
+import type { AiTool, Skill, McpServer } from '../types';
 
 const TOOL_COLORS: Record<string, { bg: string; text: string }> = {
   claude:   { bg: 'bg-orange-500/10',   text: 'text-orange-500'  },
@@ -9,6 +9,10 @@ const TOOL_COLORS: Record<string, { bg: string; text: string }> = {
   copilot:  { bg: 'bg-zinc-500/15',     text: 'text-zinc-500'    },
   windsurf: { bg: 'bg-teal-500/10',     text: 'text-teal-500'    },
   chatgpt:  { bg: 'bg-emerald-500/10',  text: 'text-emerald-500' },
+  aider:    { bg: 'bg-lime-500/10',     text: 'text-lime-500'    },
+  continue: { bg: 'bg-violet-500/10',   text: 'text-violet-500'  },
+  amazonq:  { bg: 'bg-amber-500/10',    text: 'text-amber-500'   },
+  zed:      { bg: 'bg-purple-500/10',   text: 'text-purple-500'  },
 };
 
 function ToolIcon({ tool }: { tool: AiTool }) {
@@ -48,9 +52,10 @@ interface ToolRowProps {
   matchedSkills?: Set<string>;
   matchedMcps?: Set<string>;
   onSelectSkill?: (skill: Skill) => void;
+  onSelectMcp?: (mcp: McpServer) => void;
 }
 
-export default function ToolRow({ tool, query, isExpanded, onToggle, matchedSkills, matchedMcps, onSelectSkill }: ToolRowProps) {
+export default function ToolRow({ tool, query, isExpanded, onToggle, matchedSkills, matchedMcps, onSelectSkill, onSelectMcp }: ToolRowProps) {
   const statusState = getStatusState(tool);
   const canExpand = tool.installed;
   const isSearching = Boolean(query?.trim());
@@ -101,7 +106,7 @@ export default function ToolRow({ tool, query, isExpanded, onToggle, matchedSkil
         }`}
         aria-hidden={!showDetails}
       >
-        <ToolDetails tool={tool} query={query} matchedSkills={matchedSkills} matchedMcps={matchedMcps} onSelectSkill={onSelectSkill} />
+        <ToolDetails tool={tool} query={query} matchedSkills={matchedSkills} matchedMcps={matchedMcps} onSelectSkill={onSelectSkill} onSelectMcp={onSelectMcp} />
       </div>
     </div>
   );

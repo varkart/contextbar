@@ -6,6 +6,7 @@ interface McpSectionProps {
   mcps: McpServer[];
   query?: string;
   matchedNames?: Set<string>;
+  onSelectMcp?: (mcp: McpServer) => void;
 }
 
 function ChevronIcon({ open }: { open: boolean }) {
@@ -18,7 +19,7 @@ function ChevronIcon({ open }: { open: boolean }) {
   );
 }
 
-export default function McpSection({ mcps, query, matchedNames }: McpSectionProps) {
+export default function McpSection({ mcps, query, matchedNames, onSelectMcp }: McpSectionProps) {
   const [sectionOpen, setSectionOpen] = useState(true);
 
   const filtered = matchedNames && matchedNames.size > 0
@@ -41,7 +42,7 @@ export default function McpSection({ mcps, query, matchedNames }: McpSectionProp
         filtered.length === 0 ? (
           <p className="text-[11px] text-zinc-700 px-2 py-1 italic">None detected</p>
         ) : (
-          filtered.map((mcp) => <McpRow key={mcp.name} mcp={mcp} query={query} />)
+          filtered.map((mcp) => <McpRow key={mcp.name} mcp={mcp} query={query} onSelect={onSelectMcp ? () => onSelectMcp(mcp) : undefined} />)
         )
       )}
     </div>

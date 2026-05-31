@@ -26,6 +26,12 @@ export interface McpServer {
   secretKeyNames: string[];
 }
 
+export interface McpTool {
+  name: string
+  description?: string
+  inputSchema?: unknown
+}
+
 export interface FileEntry {
   name: string
   path: string
