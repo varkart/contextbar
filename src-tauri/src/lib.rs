@@ -11,6 +11,37 @@ use tauri::{
 use tauri_plugin_autostart::MacosLauncher;
 use tauri_plugin_positioner::{Position, WindowExt};
 
+// ---------------------------------------------------------------------------
+// Settings helpers
+// ---------------------------------------------------------------------------
+
+fn settings_path() -> std::path::PathBuf {
+    dirs::config_dir()
+        .unwrap_or_else(|| std::path::PathBuf::from("."))
+        .join("agentbar")
+        .join("settings.json")
+}
+
+fn read_settings() -> serde_json::Value {
+    std::fs::read_to_string(settings_path())
+        .ok()
+        .and_then(|s| serde_json::from_str(&s).ok())
+        .unwrap_or_else(|| serde_json::json!({}))
+}
+
+fn write_settings(val: serde_json::Value) -> Result<(), String> {
+    let path = settings_path();
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
+    std::fs::write(&path, serde_json::to_string_pretty(&val).unwrap())
+        .map_err(|e| e.to_string())
+}
+
+// ---------------------------------------------------------------------------
+// IPC commands – tools / window
+// ---------------------------------------------------------------------------
+
 #[tauri::command]
 fn get_tools() -> Vec<AiTool> {
     detectors::detect_all()
@@ -42,6 +73,70 @@ fn set_autostart(app: tauri::AppHandle, enabled: bool) -> Result<(), String> {
         launcher.disable().map_err(|e| e.to_string())
     }
 }
+
+// ---------------------------------------------------------------------------
+// IPC commands – global shortcut
+// ---------------------------------------------------------------------------
+
+const DEFAULT_SHORTCUT: &str = "CommandOrControl+Shift+Space";
+
+#[tauri::command]
+fn get_shortcut() -> String {
+    read_settings()
+        .get("globalShortcut")
+        .and_then(|v| v.as_str().map(|s| s.to_string()))
+        .unwrap_or_else(|| DEFAULT_SHORTCUT.to_string())
+}
+
+#[tauri::command]
+fn set_shortcut(app: tauri::AppHandle, shortcut: String) -> Result<(), String> {
+    use tauri_plugin_global_shortcut::GlobalShortcutExt;
+
+    // Unregister all currently registered shortcuts managed by this plugin
+    app.global_shortcut().unregister_all().map_err(|e| e.to_string())?;
+
+    // Parse and register the new shortcut
+    let parsed: tauri_plugin_global_shortcut::Shortcut =
+        shortcut.parse().map_err(|e| format!("{e}"))?;
+
+    app.global_shortcut()
+        .on_shortcut(parsed, move |app_handle, _shortcut, event| {
+            use tauri_plugin_global_shortcut::ShortcutState;
+            if event.state() == ShortcutState::Pressed {
+                toggle_main_window(app_handle);
+            }
+        })
+        .map_err(|e| e.to_string())?;
+
+    // Persist
+    let mut settings = read_settings();
+    settings["globalShortcut"] = serde_json::json!(shortcut);
+    write_settings(settings)
+}
+
+// ---------------------------------------------------------------------------
+// IPC commands – vibrancy
+// ---------------------------------------------------------------------------
+
+#[tauri::command]
+fn get_vibrancy() -> bool {
+    read_settings()
+        .get("vibrancy")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(true)
+}
+
+#[tauri::command]
+fn set_vibrancy(enabled: bool) -> Result<(), String> {
+    let mut settings = read_settings();
+    settings["vibrancy"] = serde_json::json!(enabled);
+    write_settings(settings)
+    // Vibrancy change takes effect on next window open (window is recreated)
+}
+
+// ---------------------------------------------------------------------------
+// App entry point
+// ---------------------------------------------------------------------------
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -81,6 +176,22 @@ pub fn run() {
                 })
                 .build(app)?;
 
+            // Register global shortcut
+            {
+                use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
+                let shortcut_str = get_shortcut();
+                if let Ok(shortcut) = shortcut_str.parse::<Shortcut>() {
+                    let _ = app.global_shortcut().on_shortcut(
+                        shortcut,
+                        move |app_handle, _shortcut, event| {
+                            if event.state() == ShortcutState::Pressed {
+                                toggle_main_window(app_handle);
+                            }
+                        },
+                    );
+                }
+            }
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -89,10 +200,18 @@ pub fn run() {
             get_version,
             get_autostart,
             set_autostart,
+            get_shortcut,
+            set_shortcut,
+            get_vibrancy,
+            set_vibrancy,
         ])
         .run(tauri::generate_context!())
         .expect("error running agentbar");
 }
+
+// ---------------------------------------------------------------------------
+// Window helpers
+// ---------------------------------------------------------------------------
 
 fn toggle_main_window(app: &tauri::AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
@@ -133,6 +252,13 @@ fn open_main_window(app: &tauri::AppHandle, hash: Option<&str>) {
         .skip_taskbar(true)
         .build()
         .unwrap();
+
+    #[cfg(target_os = "macos")]
+    if get_vibrancy() {
+        use window_vibrancy::{NSVisualEffectMaterial, apply_vibrancy};
+        let _ = apply_vibrancy(&window, NSVisualEffectMaterial::HudWindow, None, None);
+    }
+
     let win_blur = window.clone();
     window.on_window_event(move |event| {
         if let tauri::WindowEvent::Focused(false) = event {

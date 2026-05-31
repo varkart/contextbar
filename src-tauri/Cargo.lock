@@ -22,6 +22,7 @@ dependencies = [
  "tauri-plugin-opener",
  "tauri-plugin-positioner",
  "tempfile",
+ "window-vibrancy",
 ]
 
 [[package]]
