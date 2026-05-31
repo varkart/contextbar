@@ -100,6 +100,65 @@ function FileTreeNode({ entry, depth }: { entry: FileEntry; depth: number }) {
   )
 }
 
+function ExpandableDescription({ skill }: { skill: Skill }) {
+  const [expanded, setExpanded] = useState(false)
+  const [fullContent, setFullContent] = useState<string | null>(null)
+  const [loadingContent, setLoadingContent] = useState(false)
+
+  // Try to find and load SKILL.md
+  const loadFull = async () => {
+    if (fullContent !== null) { setExpanded(true); return }
+    setLoadingContent(true)
+    // Try <path>/SKILL.md then <path>.md
+    const candidates = [`${skill.path}/SKILL.md`, `${skill.path}.md`]
+    for (const p of candidates) {
+      try {
+        const text = await invoke<string>('read_text_file', { path: p })
+        setFullContent(text)
+        setExpanded(true)
+        return
+      } catch { /* try next */ }
+    }
+    // No file found — just expand the truncated description
+    setFullContent(skill.description ?? '')
+    setExpanded(true)
+    setLoadingContent(false)
+  }
+
+  if (!skill.description) return null
+
+  return (
+    <div className="px-4 py-3 border-b border-[var(--c-border)]">
+      {expanded && fullContent !== null ? (
+        <>
+          <pre className="text-[11px] text-[var(--c-text-2)] leading-relaxed whitespace-pre-wrap font-sans overflow-x-hidden">
+            {fullContent}
+          </pre>
+          <button
+            onClick={() => setExpanded(false)}
+            className="text-[11px] text-indigo-500 hover:text-indigo-400 mt-2 transition-colors"
+          >
+            Show less
+          </button>
+        </>
+      ) : (
+        <>
+          <p className="text-[12px] text-[var(--c-text-2)] leading-relaxed line-clamp-3">
+            {skill.description}
+          </p>
+          <button
+            onClick={loadFull}
+            disabled={loadingContent}
+            className="text-[11px] text-indigo-500 hover:text-indigo-400 mt-1.5 transition-colors disabled:opacity-50"
+          >
+            {loadingContent ? 'Loading…' : 'Show full description →'}
+          </button>
+        </>
+      )}
+    </div>
+  )
+}
+
 export default function SkillDetailPanel({ skill, onBack }: SkillDetailPanelProps) {
   const [fileTree, setFileTree] = useState<FileEntry | null>(null)
   const [loading, setLoading] = useState(true)
@@ -133,12 +192,8 @@ export default function SkillDetailPanel({ skill, onBack }: SkillDetailPanelProp
       </div>
 
       <div className="flex-1 overflow-y-auto">
-        {/* Description */}
-        {skill.description && (
-          <div className="px-4 py-3 border-b border-[var(--c-border)]">
-            <p className="text-[12px] text-[var(--c-text-2)] leading-relaxed">{skill.description}</p>
-          </div>
-        )}
+        {/* Expandable description */}
+        <ExpandableDescription skill={skill} />
 
         {/* File tree */}
         <div className="px-2 py-2">
