@@ -3,6 +3,7 @@ import { invoke } from '@tauri-apps/api/core'
 
 interface SettingsProps {
   onBack: () => void
+  updateInfo?: { latestVersion: string; releaseUrl: string } | null
 }
 
 function Toggle({ checked, onChange, disabled }: { checked: boolean; onChange: (v: boolean) => void; disabled?: boolean }) {
@@ -62,7 +63,7 @@ function formatShortcut(raw: string): string {
     .replace('Space', 'Space')
 }
 
-export default function Settings({ onBack }: SettingsProps) {
+export default function Settings({ onBack, updateInfo }: SettingsProps) {
   const [autostart, setAutostart] = useState(false)
   const [autostartLoading, setAutostartLoading] = useState(true)
   const [shortcut, setShortcut] = useState('CommandOrControl+Shift+Space')
@@ -168,6 +169,26 @@ export default function Settings({ onBack }: SettingsProps) {
               v{version}
             </span>
           </SettingRow>
+
+          {updateInfo && (
+            <SettingRow label="Update">
+              <a
+                href={updateInfo.releaseUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-[11px] text-indigo-400 hover:text-indigo-300 transition-colors flex items-center gap-1"
+              >
+                {updateInfo.latestVersion} available
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+                  stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+                  className="w-2.5 h-2.5">
+                  <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                  <polyline points="15 3 21 3 21 9" />
+                  <line x1="10" y1="14" x2="21" y2="3" />
+                </svg>
+              </a>
+            </SettingRow>
+          )}
 
           <SettingRow label="Source">
             <a

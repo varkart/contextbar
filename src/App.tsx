@@ -4,6 +4,8 @@ import { listen } from '@tauri-apps/api/event'
 import type { AiTool } from './types'
 import { searchTools } from './search'
 import { useExpandedState } from './useExpandedState'
+import { useUpdateCheck } from './useUpdateCheck'
+import { useToolsDiff } from './useToolsDiff'
 import Header from './components/Header'
 import SearchBar from './components/SearchBar'
 import ToolRow from './components/ToolRow'
@@ -46,6 +48,14 @@ export default function App() {
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
   const [query, setQuery] = useState('')
   const { expanded, toggle } = useExpandedState()
+  const [version, setVersion] = useState('')
+
+  useEffect(() => {
+    invoke<string>('get_version').then(setVersion).catch(() => setVersion('0.5.0'))
+  }, [])
+
+  const updateInfo = useUpdateCheck(version)
+  useToolsDiff()
 
   const fetchTools = useCallback(async () => {
     setLoading(true)
@@ -89,10 +99,10 @@ export default function App() {
   return (
     <div className="w-[380px] h-[520px] bg-zinc-950 text-white flex flex-col overflow-hidden select-none">
       {view === 'settings' ? (
-        <Settings onBack={() => setView('main')} />
+        <Settings onBack={() => setView('main')} updateInfo={updateInfo} />
       ) : (
         <>
-          <Header onSettingsClick={() => setView('settings')} />
+          <Header onSettingsClick={() => setView('settings')} updateAvailable={!!updateInfo} />
           <SearchBar value={query} onChange={setQuery} />
           <div className="flex-1 overflow-y-auto divide-y divide-zinc-800/50">
             {loading && tools.length === 0 ? (
