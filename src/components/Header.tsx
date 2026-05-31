@@ -16,21 +16,18 @@ function GearIcon() {
 
 export default function Header({ onSettingsClick, updateAvailable }: HeaderProps) {
   return (
-    <div className="flex items-center justify-between px-4 py-2.5 border-b border-zinc-800/80 flex-shrink-0">
-      <span className="text-[13px] font-semibold text-zinc-200 tracking-[-0.01em]">
+    <div className="flex items-center justify-between px-4 py-2.5 border-b border-[var(--c-border)] flex-shrink-0">
+      <span className="text-[13px] font-semibold text-[var(--c-text)] tracking-[-0.01em]">
         agentbar
       </span>
       <button
         onClick={onSettingsClick}
-        className="relative text-zinc-600 hover:text-zinc-400 transition-colors p-0.5 -mr-0.5 rounded"
+        className="relative text-[var(--c-text-3)] hover:text-[var(--c-text-2)] transition-colors p-0.5 -mr-0.5 rounded"
         aria-label={updateAvailable ? 'Open settings — update available' : 'Open settings'}
       >
         <GearIcon />
         {updateAvailable && (
-          <span
-            className="absolute -top-0.5 -right-0.5 w-[6px] h-[6px] rounded-full bg-indigo-400"
-            aria-hidden="true"
-          />
+          <span className="absolute -top-0.5 -right-0.5 w-[6px] h-[6px] rounded-full bg-indigo-400" aria-hidden="true" />
         )}
       </button>
     </div>

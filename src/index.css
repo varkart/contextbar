@@ -1,5 +1,37 @@
 @import "tailwindcss";
 
+/* Dark mode via .dark class on <html> */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* ── Theme tokens ─────────────────────────────────────── */
+:root {
+  --c-bg:         #ffffff;
+  --c-surface:    #f4f4f5;
+  --c-hover:      #f4f4f5;
+  --c-border:     rgba(228,228,231,0.9);
+  --c-border-sub: rgba(228,228,231,0.6);
+  --c-text:       #18181b;
+  --c-text-2:     #71717a;
+  --c-text-3:     #a1a1aa;
+  --c-input:      rgba(244,244,245,0.9);
+  --c-track:      #d4d4d8;
+  --c-skeleton:   #e4e4e7;
+}
+
+.dark {
+  --c-bg:         #09090b;
+  --c-surface:    #18181b;
+  --c-hover:      rgba(255,255,255,0.025);
+  --c-border:     rgba(39,39,42,0.8);
+  --c-border-sub: rgba(39,39,42,0.5);
+  --c-text:       #e4e4e7;
+  --c-text-2:     #71717a;
+  --c-text-3:     #52525b;
+  --c-input:      rgba(39,39,42,0.6);
+  --c-track:      #3f3f46;
+  --c-skeleton:   #27272a;
+}
+
 * {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -13,7 +45,6 @@ body {
   margin: 0;
 }
 
-/* Hide scrollbar, keep scroll */
 .overflow-y-auto {
   scrollbar-width: none;
   -ms-overflow-style: none;
@@ -22,29 +53,16 @@ body {
   display: none;
 }
 
-/* Tooltip entrance */
 @keyframes tooltip-in {
-  from {
-    opacity: 0;
-    transform: translateY(3px) scale(0.98);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
+  from { opacity: 0; transform: translateY(3px) scale(0.98); }
+  to   { opacity: 1; transform: translateY(0)   scale(1);    }
 }
 
 .animate-tooltip-in {
   animation: tooltip-in 120ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
-/* Reduced motion */
 @media (prefers-reduced-motion: reduce) {
-  .animate-tooltip-in {
-    animation: none;
-  }
-  * {
-    transition-duration: 0ms !important;
-    animation-duration: 0ms !important;
-  }
+  .animate-tooltip-in { animation: none; }
+  * { transition-duration: 0ms !important; animation-duration: 0ms !important; }
 }
