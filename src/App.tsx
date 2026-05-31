@@ -6,6 +6,7 @@ import { searchTools } from './search'
 import { useExpandedState } from './useExpandedState'
 import { useUpdateCheck } from './useUpdateCheck'
 import { useToolsDiff } from './useToolsDiff'
+import { useTheme, type ThemePreference } from './useTheme'
 import Header from './components/Header'
 import SearchBar from './components/SearchBar'
 import ToolRow from './components/ToolRow'
@@ -31,9 +32,9 @@ function SkeletonRows() {
       {[1, 2, 3].map((i) => (
         <div key={i} className="px-4 py-2.5 animate-pulse">
           <div className="flex items-center gap-2.5">
-            <div className="w-[7px] h-[7px] rounded-full bg-zinc-800" />
-            <div className="w-[20px] h-[20px] rounded bg-zinc-800" />
-            <div className="h-3 bg-zinc-800 rounded w-28" />
+            <div className="w-[7px] h-[7px] rounded-full bg-[var(--c-skeleton)]" />
+            <div className="w-[20px] h-[20px] rounded bg-[var(--c-skeleton)]" />
+            <div className="h-3 bg-[var(--c-skeleton)] rounded w-28" />
           </div>
         </div>
       ))}
@@ -49,6 +50,7 @@ export default function App() {
   const [query, setQuery] = useState('')
   const { expanded, toggle } = useExpandedState()
   const [version, setVersion] = useState('')
+  const { theme, setTheme } = useTheme()
 
   useEffect(() => {
     invoke<string>('get_version').then(setVersion).catch(() => setVersion('0.5.0'))
@@ -72,22 +74,16 @@ export default function App() {
 
   useEffect(() => { fetchTools() }, [fetchTools])
 
-  // Auto-refresh on file watcher event
   useEffect(() => {
-    const unlisten = listen('tools-changed', () => {
-      fetchTools()
-    })
+    const unlisten = listen('tools-changed', () => { fetchTools() })
     return () => { unlisten.then(fn => fn()) }
   }, [fetchTools])
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        if (view === 'settings') {
-          setView('main')
-        } else {
-          invoke('hide_window').catch(() => {})
-        }
+        if (view === 'settings') setView('main')
+        else invoke('hide_window').catch(() => {})
       }
     }
     window.addEventListener('keydown', handler)
@@ -97,19 +93,24 @@ export default function App() {
   const searchResults = searchTools(tools, query)
 
   return (
-    <div className="w-[380px] h-[520px] bg-zinc-950 text-white flex flex-col overflow-hidden select-none">
+    <div className="w-[380px] h-[520px] bg-[var(--c-bg)] text-[var(--c-text)] flex flex-col overflow-hidden select-none">
       {view === 'settings' ? (
-        <Settings onBack={() => setView('main')} updateInfo={updateInfo} />
+        <Settings
+          onBack={() => setView('main')}
+          updateInfo={updateInfo}
+          theme={theme}
+          onThemeChange={(t: ThemePreference) => setTheme(t)}
+        />
       ) : (
         <>
           <Header onSettingsClick={() => setView('settings')} updateAvailable={!!updateInfo} />
           <SearchBar value={query} onChange={setQuery} />
-          <div className="flex-1 overflow-y-auto divide-y divide-zinc-800/50">
+          <div className="flex-1 overflow-y-auto divide-y divide-[var(--c-border-sub)]">
             {loading && tools.length === 0 ? (
               <SkeletonRows />
             ) : searchResults.length === 0 && query ? (
               <div className="px-4 py-8 text-center">
-                <p className="text-[12px] text-zinc-600">No results for "{query}"</p>
+                <p className="text-[12px] text-[var(--c-text-3)]">No results for "{query}"</p>
               </div>
             ) : (
               searchResults.map(({ tool, matchedSkills, matchedMcps }) => (
