@@ -3,22 +3,22 @@ import { describe, it, expect } from 'vitest'
 import StatusDot from '../StatusDot'
 
 describe('StatusDot', () => {
-  it('installed → has bg-indigo-400 class', () => {
+  it('installed → has bg-emerald-500 class', () => {
     render(<StatusDot state="installed" />)
     const dot = screen.getByLabelText('installed')
-    expect(dot).toHaveClass('bg-indigo-400')
+    expect(dot).toHaveClass('bg-emerald-500')
   })
 
-  it('not-installed → has bg-zinc-700 class', () => {
+  it('not-installed → has bg-zinc-600 class', () => {
     render(<StatusDot state="not-installed" />)
     const dot = screen.getByLabelText('not installed')
-    expect(dot).toHaveClass('bg-zinc-700')
+    expect(dot).toHaveClass('bg-zinc-600')
   })
 
-  it('error → has bg-red-400 class', () => {
+  it('error → has bg-red-500 class', () => {
     render(<StatusDot state="error" />)
     const dot = screen.getByLabelText('error')
-    expect(dot).toHaveClass('bg-red-400')
+    expect(dot).toHaveClass('bg-red-500')
   })
 
   it('no-config → renders without error', () => {
