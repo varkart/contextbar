@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import type { Skill, FileEntry } from '../types'
+import { capture, captureException } from '../analytics'
 
 interface SkillDetailPanelProps {
   skill: Skill
@@ -52,8 +53,10 @@ function FileTreeNode({ entry, depth }: { entry: FileEntry; depth: number }) {
     } else {
       try {
         await invoke('open_path', { path: entry.path })
+        capture('skill_file_opened', { extension: entry.extension ?? 'unknown' })
       } catch (e) {
         console.error('open_path failed:', e)
+        captureException(e)
       }
     }
   }
@@ -115,10 +118,10 @@ function ExpandableDescription({ skill }: { skill: Skill }) {
           const text = await invoke<string>('read_text_file', { path: p })
           setFullContent(text)
           setExpanded(true)
+          capture('skill_description_expanded', { skill_name: skill.name })
           return
         } catch { /* try next */ }
       }
-      // No SKILL.md found — show truncated description
       setFullContent(skill.description ?? '')
       setExpanded(true)
     } finally {

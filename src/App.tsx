@@ -7,6 +7,7 @@ import { useExpandedState } from './useExpandedState'
 import { useUpdateCheck } from './useUpdateCheck'
 import { useToolsDiff } from './useToolsDiff'
 import { useTheme, type ThemePreference } from './useTheme'
+import { capture } from './analytics'
 import Header from './components/Header'
 import SearchBar from './components/SearchBar'
 import ToolRow from './components/ToolRow'
@@ -57,6 +58,7 @@ export default function App() {
   const handleSelectSkill = useCallback((skill: Skill) => {
     setSelectedSkill(skill)
     setView('skill-detail')
+    capture('skill_detail_viewed', { skill_name: skill.name })
   }, [setView])
 
   useEffect(() => {
@@ -80,6 +82,11 @@ export default function App() {
       const result = await invoke<AiTool[]>('get_tools')
       setTools(result)
       setLastUpdated(new Date())
+      capture('tools_loaded', {
+        tool_count: result.length,
+        installed_count: result.filter(t => t.installed).length,
+        tools_detected: result.filter(t => t.installed).map(t => t.id),
+      })
     } catch (e) {
       console.error('get_tools failed:', e)
     } finally {
@@ -93,6 +100,18 @@ export default function App() {
     const unlisten = listen('tools-changed', () => { fetchTools() })
     return () => { unlisten.then(fn => fn()) }
   }, [fetchTools])
+
+  useEffect(() => {
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') capture('app_opened')
+    }
+    document.addEventListener('visibilitychange', onVisibility)
+    return () => document.removeEventListener('visibilitychange', onVisibility)
+  }, [])
+
+  useEffect(() => {
+    if (view === 'settings') capture('settings_opened')
+  }, [view])
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
