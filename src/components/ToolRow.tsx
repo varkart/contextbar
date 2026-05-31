@@ -97,7 +97,7 @@ export default function ToolRow({ tool, query, isExpanded, onToggle, matchedSkil
 
       <div
         className={`overflow-hidden transition-all duration-200 ease-out ${
-          showDetails && canExpand ? 'max-h-[480px] opacity-100' : 'max-h-0 opacity-0'
+          showDetails && canExpand ? 'max-h-[900px] opacity-100' : 'max-h-0 opacity-0'
         }`}
         aria-hidden={!showDetails}
       >
