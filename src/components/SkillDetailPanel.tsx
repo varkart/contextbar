@@ -105,24 +105,25 @@ function ExpandableDescription({ skill }: { skill: Skill }) {
   const [fullContent, setFullContent] = useState<string | null>(null)
   const [loadingContent, setLoadingContent] = useState(false)
 
-  // Try to find and load SKILL.md
   const loadFull = async () => {
     if (fullContent !== null) { setExpanded(true); return }
     setLoadingContent(true)
-    // Try <path>/SKILL.md then <path>.md
-    const candidates = [`${skill.path}/SKILL.md`, `${skill.path}.md`]
-    for (const p of candidates) {
-      try {
-        const text = await invoke<string>('read_text_file', { path: p })
-        setFullContent(text)
-        setExpanded(true)
-        return
-      } catch { /* try next */ }
+    try {
+      const candidates = [`${skill.path}/SKILL.md`, `${skill.path}.md`]
+      for (const p of candidates) {
+        try {
+          const text = await invoke<string>('read_text_file', { path: p })
+          setFullContent(text)
+          setExpanded(true)
+          return
+        } catch { /* try next */ }
+      }
+      // No SKILL.md found — show truncated description
+      setFullContent(skill.description ?? '')
+      setExpanded(true)
+    } finally {
+      setLoadingContent(false)
     }
-    // No file found — just expand the truncated description
-    setFullContent(skill.description ?? '')
-    setExpanded(true)
-    setLoadingContent(false)
   }
 
   if (!skill.description) return null
