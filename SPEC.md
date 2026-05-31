@@ -607,12 +607,24 @@ Requires: `npm run tauri build` first, or `tauri dev` running.
 
 ## 15. Roadmap
 
-| Version | Features |
-|---|---|
+| Version | Features | Status |
+|---|---|---|
 | **v0.1** | Detect tools, read skills + MCPs, hover descriptions, read-only display | ✓ shipped |
-| **v0.2** | Settings panel, launch at login, global hotkey, window vibrancy | ✓ in progress |
-| **v0.3** | File watcher (FSEvents, auto-refresh), search/filter, collapsed-state memory | |
-| **v0.4** | Add/remove MCP servers from UI | |
-| **v0.5** | Notifications ("new skill installed", "MCP server added") | |
-| **v1.0** | Notarized DMG release, auto-update (Tauri updater plugin) | |
-| **v1.1** | Toggle MCP active/inactive — atomic config writes with backup per tool | |
+| **v0.2** | Settings panel, launch at login, global hotkey, window vibrancy | ✓ shipped |
+| **v0.3** | FSEvents watcher, smart search + highlight, collapsed-state memory | ✓ shipped |
+| **v0.5** | Notifications: new skill detected, app update check via GitHub API | next |
+| **v1.0** | Notarized DMG, PostHog analytics (opt-in), Sentry crash reporting, onboarding | |
+| **v1.1** | MCP toggle — atomic config writes with backup (first write feature) | |
+| **v1.2** | MCP add/remove from UI | |
+| **v1.3** | Skill install via URL or local path + hash-based version tracking | |
+| **v2.0** | Skill registry, upstream update checks for git-origin skills | |
+
+### Deferred: Skill version tracking
+Tracking skill update versions requires knowing install origin. Without it, we can only detect local hash changes, not upstream versions.
+
+**Design for v1.3:**
+- User installs skill via URL (GitHub/GitLab git URL) or local path through agentbar UI
+- agentbar stores origin + hash in `~/.config/agentbar/skill-registry.json`
+- On each scan: compare current hash vs registry hash → detect local changes
+- For git-origin skills: `git fetch` to detect upstream commits
+- This registry is the foundation — not reverse-engineering origin from existing skills
