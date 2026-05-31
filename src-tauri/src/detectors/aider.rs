@@ -62,8 +62,10 @@ pub fn detect() -> AiTool {
         }
     });
 
-    // Try to get version by running `aider --version`
-    let version = run_aider_version();
+    // Try to get version — pass the confirmed binary path to avoid a second PATH search
+    let version = in_path.as_deref()
+        .or_else(|| install_path.as_deref())
+        .and_then(|bin| run_aider_version(bin));
 
     AiTool {
         id: "aider".to_string(),
@@ -77,7 +79,7 @@ pub fn detect() -> AiTool {
     }
 }
 
-/// Returns the path to the `aider` binary if it is found in PATH.
+/// Returns the path to the `aider` binary if found in PATH via `which`.
 fn which_aider() -> Option<String> {
     let output = std::process::Command::new("which")
         .arg("aider")
@@ -85,26 +87,19 @@ fn which_aider() -> Option<String> {
         .ok()?;
     if output.status.success() {
         let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
-        if !path.is_empty() {
-            return Some(path);
-        }
+        if !path.is_empty() { return Some(path); }
     }
     None
 }
 
-/// Runs `aider --version` and returns the first word of the output.
-fn run_aider_version() -> Option<String> {
-    let output = std::process::Command::new("aider")
+/// Run `aider --version`; only called when binary is already confirmed present.
+fn run_aider_version(binary: &str) -> Option<String> {
+    let output = std::process::Command::new(binary)
         .arg("--version")
         .output()
         .ok()?;
     let stdout = String::from_utf8_lossy(&output.stdout);
-    let first_word = stdout.split_whitespace().next()?.to_string();
-    if first_word.is_empty() {
-        None
-    } else {
-        Some(first_word)
-    }
+    stdout.split_whitespace().next().map(|s| s.to_string())
 }
 
 #[cfg(test)]
