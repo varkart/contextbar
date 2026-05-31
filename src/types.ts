@@ -25,3 +25,11 @@ export interface McpServer {
   hasSecrets: boolean;
   secretKeyNames: string[];
 }
+
+export interface FileEntry {
+  name: string
+  path: string
+  isDir: boolean
+  children: FileEntry[]
+  extension?: string
+}
