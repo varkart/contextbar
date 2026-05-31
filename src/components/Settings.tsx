@@ -171,7 +171,7 @@ export default function Settings({ onBack, updateInfo, theme, onThemeChange }: S
   }
 
   return (
-    <div className="flex flex-col h-full bg-[var(--c-bg)]">
+    <div className="flex flex-col h-full bg-[var(--c-bg)] animate-slide-in-right">
       <div className="flex items-center gap-2 px-4 py-2.5 border-b border-[var(--c-border)] flex-shrink-0">
         <button
           onClick={onBack}
