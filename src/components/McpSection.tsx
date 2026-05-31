@@ -32,9 +32,9 @@ export default function McpSection({ mcps, query, matchedNames }: McpSectionProp
         className="flex items-center gap-1 px-2 mb-0.5 w-full text-left hover:opacity-80 transition-opacity"
         aria-expanded={sectionOpen}
       >
-        <span className="text-zinc-700"><ChevronIcon open={sectionOpen} /></span>
-        <span className="text-[11px] text-zinc-600 font-medium">MCPs</span>
-        <span className="text-[11px] text-zinc-700">{filtered.length}</span>
+        <span className="text-violet-400/70"><ChevronIcon open={sectionOpen} /></span>
+        <span className="text-[11px] font-semibold text-violet-500">MCPs</span>
+        <span className="text-[11px] text-violet-400/60">{filtered.length}</span>
       </button>
 
       {sectionOpen && (

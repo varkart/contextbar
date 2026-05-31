@@ -68,7 +68,7 @@ export default function ToolRow({ tool, query, isExpanded, onToggle, matchedSkil
         <StatusDot state={statusState} />
         <ToolIcon tool={tool} />
 
-        <span className="text-[13px] font-medium text-[var(--c-text)] flex-1 truncate leading-5">
+        <span className="text-[14px] font-semibold text-[var(--c-text)] flex-1 truncate leading-5">
           {tool.name}
         </span>
 
