@@ -22,7 +22,7 @@ function SkillTooltipContent({ skill }: { skill: Skill }) {
 export default function SkillRow({ skill, query = '' }: SkillRowProps) {
   return (
     <Tooltip content={<SkillTooltipContent skill={skill} />}>
-      <div className="flex items-center gap-2 py-[3px] px-2 rounded-sm hover:bg-[var(--c-hover)] w-full cursor-default transition-colors">
+      <div className="flex items-center gap-2 py-[3px] pl-5 pr-2 rounded-sm hover:bg-[var(--c-hover)] w-full cursor-default transition-colors">
         <span className="w-[3px] h-[3px] rounded-full bg-indigo-400/60 flex-shrink-0" aria-hidden="true" />
         <Highlight text={skill.name} query={query} className="text-[12px] text-[var(--c-text-2)] truncate leading-5" />
       </div>
