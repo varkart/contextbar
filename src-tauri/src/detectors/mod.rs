@@ -12,18 +12,22 @@ mod zed;
 use crate::models::AiTool;
 
 pub fn detect_all() -> Vec<AiTool> {
-    vec![
-        claude::detect(),
-        cursor::detect(),
-        gemini::detect(),
-        copilot::detect(),
-        windsurf::detect(),
-        chatgpt::detect(),
-        aider::detect(),
-        amazonq::detect(),
-        r#continue::detect(),
-        zed::detect(),
-    ]
+    // Run all detectors in parallel — each may spawn subprocesses (e.g. `which aider`)
+    // which makes sequential execution slow. Threads are cheap here; no shared state.
+    let fns: Vec<fn() -> AiTool> = vec![
+        claude::detect,
+        cursor::detect,
+        gemini::detect,
+        copilot::detect,
+        windsurf::detect,
+        chatgpt::detect,
+        aider::detect,
+        amazonq::detect,
+        r#continue::detect,
+        zed::detect,
+    ];
+    let handles: Vec<_> = fns.into_iter().map(|f| std::thread::spawn(f)).collect();
+    handles.into_iter().filter_map(|h| h.join().ok()).collect()
 }
 
 /// Parse a skill description from a skill directory or file.
