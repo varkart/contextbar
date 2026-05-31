@@ -8,6 +8,7 @@
     "build": "tsc && vite build",
     "preview": "vite preview",
     "tauri": "tauri",
+    "tauri:dev": "pkill -x agentbar 2>/dev/null; npm run tauri dev",
     "test": "vitest run",
     "test:watch": "vitest"
   },
