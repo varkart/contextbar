@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import type { ThemePreference } from '../useTheme'
+import { capture } from '../analytics'
 
 interface SettingsProps {
   onBack: () => void
@@ -160,14 +161,18 @@ export default function Settings({ onBack, updateInfo, theme, onThemeChange }: S
 
   const handleAutostart = async (enabled: boolean) => {
     setAutostart(enabled)
-    try { await invoke('set_autostart', { enabled }) }
-    catch { setAutostart(!enabled) }
+    try {
+      await invoke('set_autostart', { enabled })
+      capture('settings_autostart_changed', { enabled })
+    } catch { setAutostart(!enabled) }
   }
 
   const handleVibrancy = async (enabled: boolean) => {
     setVibrancy(enabled)
-    try { await invoke('set_vibrancy', { enabled }) }
-    catch { setVibrancy(!enabled) }
+    try {
+      await invoke('set_vibrancy', { enabled })
+      capture('settings_vibrancy_changed', { enabled })
+    } catch { setVibrancy(!enabled) }
   }
 
   return (
@@ -205,7 +210,10 @@ export default function Settings({ onBack, updateInfo, theme, onThemeChange }: S
         </div>
 
         <SectionLabel>Appearance</SectionLabel>
-        <ThemeSelector value={theme} onChange={onThemeChange} />
+        <ThemeSelector value={theme} onChange={(t) => {
+          capture('settings_theme_changed', { theme: t })
+          onThemeChange(t)
+        }} />
         <div className="divide-y divide-[var(--c-border-sub)]">
           <SettingRow label="Window vibrancy" description="Takes effect when panel reopens">
             <Toggle checked={vibrancy} onChange={handleVibrancy} disabled={vibrancyLoading} />
