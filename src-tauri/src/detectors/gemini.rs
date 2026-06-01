@@ -15,30 +15,26 @@ fn not_installed() -> AiTool {
 }
 
 pub fn detect() -> AiTool {
-    // Check if `gemini` is on PATH
-    let which = std::process::Command::new("which")
-        .arg("gemini")
-        .output();
+    let bin_path = super::find_in_path("gemini");
 
-    let installed = match which {
-        Ok(out) => out.status.success(),
-        Err(_) => false,
-    };
-
-    if !installed {
+    if bin_path.is_none() {
         return not_installed();
     }
 
-    // Get version
-    let version = std::process::Command::new("gemini")
-        .arg("--version")
-        .output()
-        .ok()
-        .and_then(|out| {
-            let stdout = String::from_utf8_lossy(&out.stdout).to_string();
-            stdout.lines().next().map(|l| l.trim().to_string())
-        })
-        .filter(|s| !s.is_empty());
+    let version = super::run_with_timeout(
+        || {
+            std::process::Command::new("gemini")
+                .arg("--version")
+                .output()
+                .ok()
+                .and_then(|out| {
+                    let stdout = String::from_utf8_lossy(&out.stdout).to_string();
+                    stdout.lines().next().map(|l| l.trim().to_string())
+                })
+                .filter(|s| !s.is_empty())
+        },
+        std::time::Duration::from_millis(800),
+    );
 
     // MCPs from ~/.config/gemini/settings.json
     let (mcps, error) = read_mcps();

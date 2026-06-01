@@ -11,8 +11,31 @@ mod zed;
 
 use crate::models::AiTool;
 
+/// Find a binary in PATH without spawning a subprocess.
+pub fn find_in_path(binary: &str) -> Option<String> {
+    let path_var = std::env::var("PATH").ok()?;
+    for dir in std::env::split_paths(&path_var) {
+        let candidate = dir.join(binary);
+        if candidate.is_file() {
+            return Some(candidate.to_string_lossy().into_owned());
+        }
+    }
+    None
+}
+
+/// Run a blocking closure in a thread, returning None if it doesn't finish within `dur`.
+pub fn run_with_timeout<F, T>(f: F, dur: std::time::Duration) -> Option<T>
+where
+    F: FnOnce() -> Option<T> + Send + 'static,
+    T: Send + 'static,
+{
+    let (tx, rx) = std::sync::mpsc::channel();
+    std::thread::spawn(move || { let _ = tx.send(f()); });
+    rx.recv_timeout(dur).ok().flatten()
+}
+
 pub fn detect_all() -> Vec<AiTool> {
-    // Run all detectors in parallel — each may spawn subprocesses (e.g. `which aider`)
+    // Run all detectors in parallel — each may spawn subprocesses
     // which makes sequential execution slow. Threads are cheap here; no shared state.
     let fns: Vec<fn() -> AiTool> = vec![
         claude::detect,
@@ -133,12 +156,11 @@ pub fn parse_mcp_servers(
                         .collect()
                 })
                 .unwrap_or_default();
-            let description = Some(format!(
-                "{} {}",
-                command,
-                args.join(" ")
-            ))
-            .filter(|s| !s.trim().is_empty());
+            let description = cfg
+                .get("description")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string())
+                .filter(|s| !s.trim().is_empty());
 
             let env = cfg.get("env");
             let (has_secrets, secret_key_names) = match env {
