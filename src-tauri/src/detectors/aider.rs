@@ -31,8 +31,7 @@ pub fn detect() -> AiTool {
             .join("aider"),
     ];
 
-    // Check if `aider` is available in PATH (via `which`)
-    let in_path = which_aider();
+    let in_path = super::find_in_path("aider");
 
     let install_path = if let Some(p) = in_path.as_ref() {
         Some(p.clone())
@@ -54,7 +53,7 @@ pub fn detect() -> AiTool {
     }
 
     // Determine the resolved install path for display
-    let resolved_path = install_path.or_else(|| {
+    let resolved_path = install_path.as_ref().cloned().or_else(|| {
         if config_dir_exists {
             Some(home.join(".aider").to_string_lossy().to_string())
         } else {
@@ -62,10 +61,14 @@ pub fn detect() -> AiTool {
         }
     });
 
-    // Try to get version — pass the confirmed binary path to avoid a second PATH search
-    let version = in_path.as_deref()
-        .or_else(|| install_path.as_deref())
-        .and_then(|bin| run_aider_version(bin));
+    let version_bin = in_path.clone()
+        .or_else(|| install_path.clone());
+    let version = version_bin.and_then(|bin| {
+        super::run_with_timeout(
+            move || run_aider_version(&bin),
+            std::time::Duration::from_millis(800),
+        )
+    });
 
     AiTool {
         id: "aider".to_string(),
@@ -77,19 +80,6 @@ pub fn detect() -> AiTool {
         mcps: vec![],
         error: None,
     }
-}
-
-/// Returns the path to the `aider` binary if found in PATH via `which`.
-fn which_aider() -> Option<String> {
-    let output = std::process::Command::new("which")
-        .arg("aider")
-        .output()
-        .ok()?;
-    if output.status.success() {
-        let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
-        if !path.is_empty() { return Some(path); }
-    }
-    None
 }
 
 /// Run `aider --version`; only called when binary is already confirmed present.
