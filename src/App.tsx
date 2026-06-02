@@ -133,7 +133,8 @@ export default function App() {
     return () => window.removeEventListener('keydown', handler)
   }, [view, setView])
 
-  const searchResults = searchTools(tools, query)
+  const installedTools = tools.filter(t => t.installed)
+  const searchResults = searchTools(installedTools, query)
 
   return (
     <div className="w-[380px] h-[520px] bg-[var(--c-bg)] text-[var(--c-text)] flex flex-col overflow-hidden select-none">
@@ -159,7 +160,7 @@ export default function App() {
               <div className="px-4 py-8 text-center">
                 <p className="text-[12px] text-[var(--c-text-3)]">No results for "{query}"</p>
               </div>
-            ) : !loading && tools.every(t => !t.installed) ? (
+            ) : !loading && installedTools.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-full px-6 py-12 text-center gap-3">
                 <div className="w-10 h-10 rounded-xl bg-[var(--c-surface)] flex items-center justify-center mb-1">
                   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
