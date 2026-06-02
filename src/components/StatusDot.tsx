@@ -17,6 +17,7 @@ export default function StatusDot({ state }: StatusDotProps) {
     <span
       className={`inline-block w-[7px] h-[7px] rounded-full flex-shrink-0 ${color}`}
       aria-label={label}
+      title={label}
       role="img"
     />
   );
