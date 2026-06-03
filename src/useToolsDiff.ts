@@ -32,10 +32,10 @@ export function useToolsDiff() {
       try {
         const { sendNotification } = await import('@tauri-apps/plugin-notification')
         if (changes.length === 1) {
-          await sendNotification({ title: 'agentbar', body: changes[0] })
+          await sendNotification({ title: 'aicontextbar', body: changes[0] })
         } else {
           await sendNotification({
-            title: 'agentbar',
+            title: 'aicontextbar',
             body: `${changes.length} changes detected`,
           })
         }
