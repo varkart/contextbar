@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "agentbar",
+  "productName": "aicontextbar",
   "version": "0.6.0",
-  "identifier": "com.varkart.agentbar",
+  "identifier": "com.varkart.aicontextbar",
   "build": {
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:1420",

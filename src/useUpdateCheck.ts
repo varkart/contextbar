@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 
-const CACHE_KEY = 'agentbar:updateCheck'
+const CACHE_KEY = 'aicontextbar:updateCheck'
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000 // 24 hours
 
 interface UpdateInfo {
@@ -55,7 +55,7 @@ export function useUpdateCheck(currentVersion: string) {
         if (result && isNewer(result.version, currentVersion)) {
           const info: UpdateInfo = {
             latestVersion: result.version,
-            releaseUrl: `https://github.com/varkart/agentbar/releases/tag/v${result.version}`,
+            releaseUrl: `https://github.com/varkart/aicontextbar/releases/tag/v${result.version}`,
             checkedAt: Date.now(),
           }
           saveCache(info)
@@ -64,7 +64,7 @@ export function useUpdateCheck(currentVersion: string) {
       })
       .catch(() => {
         // Fallback: GitHub API (works without signing)
-        fetch('https://api.github.com/repos/varkart/agentbar/releases/latest', {
+        fetch('https://api.github.com/repos/varkart/aicontextbar/releases/latest', {
           headers: { Accept: 'application/vnd.github+json' },
         })
           .then(r => r.json())

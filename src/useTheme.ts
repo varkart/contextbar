@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 
 export type ThemePreference = 'light' | 'dark' | 'system'
 
-const STORAGE_KEY = 'agentbar:theme'
+const STORAGE_KEY = 'aicontextbar:theme'
 
 function getSystemDark() {
   return window.matchMedia('(prefers-color-scheme: dark)').matches

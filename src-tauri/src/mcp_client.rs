@@ -34,7 +34,7 @@ pub async fn query_tools(command: &str, args: &[String]) -> Result<Vec<McpTool>,
         "params": {
             "protocolVersion": "2024-11-05",
             "capabilities": {},
-            "clientInfo": { "name": "agentbar", "version": env!("CARGO_PKG_VERSION") }
+            "clientInfo": { "name": "aicontextbar", "version": env!("CARGO_PKG_VERSION") }
         }
     });
     stdin

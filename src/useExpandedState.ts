@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 
-const STORAGE_KEY = 'agentbar:expandedTools'
+const STORAGE_KEY = 'aicontextbar:expandedTools'
 
 function loadExpanded(): Set<string> {
   try {
