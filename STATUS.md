@@ -1,18 +1,25 @@
 # agentbar — Status
 
-**Version:** 0.5.0 (package) / v0.6.0 (effective, not yet bumped)
-**Branch:** main — 3 commits ahead of origin
-**Last updated:** 2026-05-31
+**Version:** 0.6.0
+**Branch:** main (clean, in sync with origin)
+**Last updated:** 2026-06-03
 
 ---
 
-## Commits this cycle
+## Commits this cycle (since v0.5.0)
 
 | SHA | Description |
 |-----|-------------|
-| `6351d17` | add PostHog analytics and Sentry error tracking |
-| `300e885` | v0.6.0 — fonts, MCP client, new detectors, observability, shortcut UI |
+| `be9ee2e` | fix duplicate tray icon — remove conf trayIcon, add icon_as_template |
+| `c203484` | add demo GIF to README |
+| `463be73` | add README and MIT license |
+| `3a61cfe` | bump to v0.6.0 |
+| `05eab22` | add GitHub Actions release workflow with ad-hoc signing |
+| `ae62478` | hide non-installed tools, add status tooltip, show MCP description |
+| `5645a3e` | fix startup latency and cargo check error in detectors |
+| `4db32ad` | add STATUS.md with current project state and pending items |
 | `ac05d21` | parallelize detectors to fix 5s startup time |
+| `300e885` | v0.6.0 — fonts, MCP client, new detectors, observability, shortcut UI |
 
 ---
 
@@ -49,19 +56,24 @@
 ## Features shipped
 
 - Tool detection with skills + MCPs per LLM
+- Only installed tools shown (non-installed filtered out)
 - Skill detail panel — file navigator + full SKILL.md expand
-- MCP detail panel — live `tools/list` via JSON-RPC stdio
+- MCP detail panel — live `tools/list` via JSON-RPC stdio + description
 - Light / dark / system theme (CSS custom properties)
 - FSEvents watcher — auto-refresh on file changes
 - Global shortcut (configurable, click-to-record UI)
 - Launch at login (autostart)
 - Window vibrancy
 - Single-instance (no duplicate tray icons)
+- Single tray icon — template (white/black), right-click → Quit / Settings
+- Status dot tooltip on hover
 - Update check (Tauri updater IPC + GitHub API fallback)
 - Onboarding empty state when no tools detected
 - PostHog analytics (9 events tracked)
 - Sentry error monitoring (React 19 `reactErrorHandler`)
 - Sentry source maps upload on build (`sentryVitePlugin`)
+- GitHub Actions release pipeline (build → ad-hoc sign → DMG → GitHub Release)
+- README + MIT license
 
 ---
 
@@ -72,40 +84,53 @@
 | `VITE_PUBLIC_POSTHOG_PROJECT_TOKEN` | PostHog ingestion |
 | `VITE_PUBLIC_POSTHOG_HOST` | `https://us.i.posthog.com` |
 | `VITE_SENTRY_DSN` | Sentry error ingestion |
-| `SENTRY_AUTH_TOKEN` | Source map upload (build only) — set |
+| `SENTRY_AUTH_TOKEN` | Source map upload (build only) |
 | `SENTRY_ORG` | `personal-zt1` |
 | `SENTRY_PROJECT` | `agentbar` |
+
+All 6 synced to GitHub repo secrets via `gh secret set --env-file .env`.
 
 ---
 
 ## PostHog
 
 - Project ID: `448542`
-- Dashboard: `/dashboard/1651568` (5 insights: DAU, Tool Detection, Top Skills, Settings Changes, Theme Distribution)
+- Dashboard: `/dashboard/1651568`
 
 ## Sentry
 
 - Org: `personal-zt1`
 - Project: `agentbar` (ID: `4511486930911232`)
-- DSN: `https://0a6b75547dcc0d0bc681f6e47c6e1ebc@o4511486603821056.ingest.us.sentry.io/4511486930911232`
 
 ---
 
-## Pending / Next session
+## Release process
 
-### Must do before v1.0
-- [ ] `cargo check` — confirm Rust compiles clean (bash permission blocked last session)
-- [ ] `npm run tauri:dev` — end-to-end test after cargo check
-- [ ] Bump `version` in `package.json` + `Cargo.toml` to `0.6.0`
-- [ ] Push commits to origin
+```bash
+git tag -a vX.Y.Z -m "$(cat <<'EOF'
+One-line summary
 
-### v1.0 gate (explicitly deferred)
-- [ ] Apple Developer account + code signing certificate
+- Change 1
+- Change 2
+EOF
+)"
+git push --tags
+```
+
+GitHub Actions builds universal DMG, signs ad-hoc, uploads to release automatically.
+
+---
+
+## Pending / Next
+
+### v1.0 gate (deferred — needs Apple Dev account)
+- [ ] Apple Developer account (Individual or LLC org)
+- [ ] Code signing certificate (Developer ID Application)
 - [ ] Notarization via `notarytool`
-- [ ] GitHub Actions release pipeline (build universal binary, sign, notarize, upload DMG)
-- [ ] `latest.json` update endpoint for `tauri-plugin-updater`
+- [ ] Update signing step in `release.yml`
+- [ ] `latest.json` endpoint for `tauri-plugin-updater`
 
 ### Post v1.0
-- [ ] More detectors: Cline, Cody, OpenAI CLI, JetBrains AI, Amazon Q CLI
-- [ ] MCP client error UX improvements (show which MCPs timed out)
-- [ ] Geist font — verify renders correctly in production `.app` build
+- [ ] More detectors: Cline, Cody, OpenAI CLI, JetBrains AI
+- [ ] MCP client error UX (show which MCPs timed out)
+- [ ] Geist font — verify renders correctly in production `.app`
