@@ -60,20 +60,22 @@ jobs:
 
       - name: Ad-hoc sign
         run: |
-          APP="src-tauri/target/universal-apple-darwin/release/bundle/macos/agentbar.app"
+          APP=$(find src-tauri/target/universal-apple-darwin/release/bundle/macos -name "*.app" -maxdepth 1 | head -1)
+          echo "Signing: $APP"
           codesign --deep --force --sign - "$APP"
 
       - name: Package DMG
         run: |
           VERSION="${{ github.ref_name }}"
-          APP="src-tauri/target/universal-apple-darwin/release/bundle/macos/agentbar.app"
-          DMG="agentbar_${VERSION}_universal.dmg"
-          mkdir -p /tmp/agentbar_dmg
-          cp -r "$APP" /tmp/agentbar_dmg/
-          ln -s /Applications /tmp/agentbar_dmg/Applications
+          APP=$(find src-tauri/target/universal-apple-darwin/release/bundle/macos -name "*.app" -maxdepth 1 | head -1)
+          APP_NAME=$(basename "$APP" .app)
+          DMG="${APP_NAME}_${VERSION}_universal.dmg"
+          mkdir -p /tmp/aicontextbar_dmg
+          cp -r "$APP" /tmp/aicontextbar_dmg/
+          ln -s /Applications /tmp/aicontextbar_dmg/Applications
           hdiutil create \
-            -volname "agentbar ${VERSION}" \
-            -srcfolder /tmp/agentbar_dmg \
+            -volname "${APP_NAME} ${VERSION}" \
+            -srcfolder /tmp/aicontextbar_dmg \
             -ov -format UDZO \
             -o "$DMG"
           echo "DMG_NAME=$DMG" >> $GITHUB_ENV
@@ -81,13 +83,13 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          name: "agentbar ${{ github.ref_name }}"
+          name: "aicontextbar ${{ github.ref_name }}"
           body: |
             ${{ steps.tag.outputs.notes }}
 
             ---
-            **Install:** Download `agentbar_${{ github.ref_name }}_universal.dmg` below.
-            **macOS security prompt:** run `xattr -d com.apple.quarantine /Applications/agentbar.app`
+            **Install:** Download the `.dmg` below.
+            **macOS security prompt:** run `xattr -d com.apple.quarantine /Applications/aicontextbar.app`
           files: ${{ env.DMG_NAME }}
           draft: false
           prerelease: false
