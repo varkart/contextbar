@@ -7,8 +7,7 @@
 [![License](https://img.shields.io/github/license/varkart/agentbar)](LICENSE)
 [![Build](https://img.shields.io/github/actions/workflow/status/varkart/agentbar/release.yml)](https://github.com/varkart/agentbar/actions)
 
-<!-- Replace with actual screenshot/GIF: drop into .github/assets/ and update path -->
-<!-- ![agentbar demo](.github/assets/demo.gif) -->
+![agentbar demo](.github/assets/demo.gif)
 
 ---
 
