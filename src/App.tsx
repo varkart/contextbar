@@ -171,7 +171,7 @@ export default function App() {
                 </div>
                 <p className="text-[13px] font-semibold text-[var(--c-text)]">No AI tools detected</p>
                 <p className="text-[11px] text-[var(--c-text-3)] leading-relaxed max-w-[240px]">
-                  Install Claude Code, Cursor, Gemini CLI, or GitHub Copilot and agentbar will pick them up automatically.
+                  Install Claude Code, Cursor, Gemini CLI, or GitHub Copilot and aicontextbar will pick them up automatically.
                 </p>
               </div>
             ) : (

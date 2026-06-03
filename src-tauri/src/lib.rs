@@ -20,7 +20,7 @@ use tauri_plugin_positioner::{Position, WindowExt};
 fn settings_path() -> std::path::PathBuf {
     dirs::config_dir()
         .unwrap_or_else(|| std::path::PathBuf::from("."))
-        .join("agentbar")
+        .join("aicontextbar")
         .join("settings.json")
 }
 
@@ -251,7 +251,7 @@ pub fn run() {
             #[cfg(target_os = "macos")]
             app.set_activation_policy(tauri::ActivationPolicy::Accessory);
 
-            let quit = MenuItem::with_id(app, "quit", "Quit agentbar", true, None::<&str>)?;
+            let quit = MenuItem::with_id(app, "quit", "Quit aicontextbar", true, None::<&str>)?;
             let settings = MenuItem::with_id(app, "settings", "Settings…", true, None::<&str>)?;
             let menu = Menu::with_items(app, &[&settings, &quit])?;
 
@@ -317,7 +317,7 @@ pub fn run() {
             query_mcp_tools,
         ])
         .run(tauri::generate_context!())
-        .expect("error running agentbar");
+        .expect("error running aicontextbar");
 }
 
 // ---------------------------------------------------------------------------
@@ -355,7 +355,7 @@ fn open_main_window(app: &tauri::AppHandle, hash: Option<&str>) {
         return;
     }
     let window = WebviewWindowBuilder::new(app, "main", url)
-        .title("agentbar")
+        .title("aicontextbar")
         .inner_size(380.0, 520.0)
         .resizable(false)
         .decorations(false)

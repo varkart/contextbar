@@ -161,14 +161,14 @@ pub fn start(app: AppHandle) {
                         for item in &diff.added_skills {
                             let _ = app.notification()
                                 .builder()
-                                .title("agentbar")
+                                .title("aicontextbar")
                                 .body(format!("{}: skill {} added", item.tool_name, item.item_name))
                                 .show();
                         }
                         for item in &diff.added_mcps {
                             let _ = app.notification()
                                 .builder()
-                                .title("agentbar")
+                                .title("aicontextbar")
                                 .body(format!("{}: MCP {} added", item.tool_name, item.item_name))
                                 .show();
                         }
