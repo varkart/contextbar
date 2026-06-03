@@ -1,6 +1,6 @@
 [package]
 name = "agentbar"
-version = "0.5.0"
+version = "0.6.0"
 description = "macOS menu bar app — unified view of installed LLMs, agents, skills, and MCPs"
 authors = ["varkart"]
 edition = "2021"
