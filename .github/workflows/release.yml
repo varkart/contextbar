@@ -1,0 +1,93 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: macos-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Extract release notes from tag annotation
+        id: tag
+        run: |
+          git fetch --tags --force
+          NOTES=$(git tag -l --format='%(contents)' "${{ github.ref_name }}")
+          if [ -z "$NOTES" ]; then
+            echo "notes=No release notes provided." >> $GITHUB_OUTPUT
+          else
+            {
+              echo "notes<<EOF"
+              echo "$NOTES"
+              echo "EOF"
+            } >> $GITHUB_OUTPUT
+          fi
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: './src-tauri -> target'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build universal app
+        run: npm run tauri build -- --target universal-apple-darwin
+        env:
+          VITE_PUBLIC_POSTHOG_PROJECT_TOKEN: ${{ secrets.VITE_PUBLIC_POSTHOG_PROJECT_TOKEN }}
+          VITE_PUBLIC_POSTHOG_HOST: ${{ secrets.VITE_PUBLIC_POSTHOG_HOST }}
+          VITE_SENTRY_DSN: ${{ secrets.VITE_SENTRY_DSN }}
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
+          SENTRY_PROJECT: ${{ secrets.SENTRY_PROJECT }}
+
+      - name: Ad-hoc sign
+        run: |
+          APP="src-tauri/target/universal-apple-darwin/release/bundle/macos/agentbar.app"
+          codesign --deep --force --sign - "$APP"
+
+      - name: Package DMG
+        run: |
+          VERSION="${{ github.ref_name }}"
+          APP="src-tauri/target/universal-apple-darwin/release/bundle/macos/agentbar.app"
+          DMG="agentbar_${VERSION}_universal.dmg"
+          mkdir -p /tmp/agentbar_dmg
+          cp -r "$APP" /tmp/agentbar_dmg/
+          ln -s /Applications /tmp/agentbar_dmg/Applications
+          hdiutil create \
+            -volname "agentbar ${VERSION}" \
+            -srcfolder /tmp/agentbar_dmg \
+            -ov -format UDZO \
+            -o "$DMG"
+          echo "DMG_NAME=$DMG" >> $GITHUB_ENV
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "agentbar ${{ github.ref_name }}"
+          body: |
+            ${{ steps.tag.outputs.notes }}
+
+            ---
+            **Install:** Download `agentbar_${{ github.ref_name }}_universal.dmg` below.
+            **macOS security prompt:** run `xattr -d com.apple.quarantine /Applications/agentbar.app`
+          files: ${{ env.DMG_NAME }}
+          draft: false
+          prerelease: false
