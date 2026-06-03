@@ -34,3 +34,7 @@ src-tauri/gen/
 # Secrets
 .env
 .env.local
+
+# Local-only knowledge (not for public repo)
+.local/
+docs/

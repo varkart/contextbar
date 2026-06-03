@@ -43,7 +43,10 @@ agentbar/
 │   ├── Cargo.toml
 │   └── tauri.conf.json
 ├── CLAUDE.md                   # This file
-└── SPEC.md                     # Full product + technical spec
+└── .local/                     # Local-only knowledge (gitignored)
+    ├── SPEC.md                 # Full product + technical spec
+    ├── STATUS.md               # Current project state
+    └── PRODUCT.md              # Product decisions
 ```
 
 ---
@@ -142,7 +145,7 @@ pub struct McpServer {
 
 ## Spec-Driven Workflow
 
-1. All features start in `SPEC.md` before code
+1. All features start in `.local/SPEC.md` before code
 2. UI changes: prototype with `impeccable` or `design-taste-frontend` skill first
 3. Rust changes: `cargo check` must pass before committing
 4. Commits: small + incremental, feature branch per feature
