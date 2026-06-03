@@ -34,7 +34,6 @@ agentbar sits in your menu bar and gives you one place to see all of it — inst
 - **Light / dark / system theme**
 - **Global shortcut** — configurable, click-to-record UI
 - **Launch at login**
-- **Single instance** — no duplicate tray icons
 - **Update check** — notifies when a new release is available
 
 ---
