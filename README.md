@@ -40,18 +40,7 @@ agentbar sits in your menu bar and gives you one place to see all of it — inst
 
 ## Supported tools
 
-| Tool | Skills | MCPs | Version |
-|------|--------|------|---------|
-| Claude Code | ✓ `~/.claude/skills/` | ✓ `~/.claude/settings.json` | ✓ |
-| Cursor | ✓ `~/.cursor/skills-cursor/` | ✓ `~/.cursor/mcp.json` | ✓ |
-| Gemini CLI | — | ✓ `~/.config/gemini/settings.json` | ✓ |
-| GitHub Copilot | — | — | ✓ |
-| Windsurf | — | — | ✓ |
-| ChatGPT (VS Code) | — | — | ✓ |
-| Aider | — | — | ✓ |
-| Continue.dev | — | ✓ `~/.continue/config.json` | — |
-| Amazon Q | — | — | — |
-| Zed | — | ✓ `assistant.context_servers` | — |
+Claude Code, Cursor, Gemini CLI, GitHub Copilot, Windsurf, ChatGPT, Aider, Continue.dev, Amazon Q, Zed
 
 ---
 
