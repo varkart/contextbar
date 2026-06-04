@@ -70,12 +70,25 @@ jobs:
           APP=$(find src-tauri/target/universal-apple-darwin/release/bundle/macos -name "*.app" -maxdepth 1 | head -1)
           APP_NAME=$(basename "$APP" .app)
           DMG="${APP_NAME}_${VERSION}_universal.dmg"
-          mkdir -p /tmp/aicontextbar_dmg
-          cp -r "$APP" /tmp/aicontextbar_dmg/
-          ln -s /Applications /tmp/aicontextbar_dmg/Applications
+          STAGING="/tmp/aicontextbar_dmg"
+          mkdir -p "$STAGING"
+          cp -r "$APP" "$STAGING/"
+          ln -s /Applications "$STAGING/Applications"
+
+          # Install note shown alongside the app in the DMG
+          cat > "$STAGING/INSTALL.txt" << 'INSTALLEOF'
+          Drag aicontextbar to Applications, then launch it.
+
+          If macOS blocks the app on first launch, run this once in Terminal:
+
+              xattr -d com.apple.quarantine /Applications/aicontextbar.app
+
+          Or: System Settings → Privacy & Security → Open Anyway
+          INSTALLEOF
+
           hdiutil create \
             -volname "${APP_NAME} ${VERSION}" \
-            -srcfolder /tmp/aicontextbar_dmg \
+            -srcfolder "$STAGING" \
             -ov -format UDZO \
             -o "$DMG"
           echo "DMG_NAME=$DMG" >> $GITHUB_ENV
