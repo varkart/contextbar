@@ -67,7 +67,7 @@ fn read_mcps() -> (Vec<crate::models::McpServer>, Option<String>) {
     };
     let mcps = json
         .get("mcpServers")
-        .map(|v| parse_mcp_servers(v))
+        .map(|v| parse_mcp_servers(v, true))
         .unwrap_or_default();
     (mcps, None)
 }

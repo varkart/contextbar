@@ -136,8 +136,23 @@ fn truncate(s: String, max_chars: usize) -> String {
 
 /// Parse MCP servers from a JSON value representing a `mcpServers` object.
 /// Returns (mcps, error_string).
+/// Parse MCP servers from a full config JSON value.
+/// Reads both `mcpServers` (active=true) and `disabledMcpServers` (active=false).
+pub fn parse_all_mcp_servers(config: &serde_json::Value) -> Vec<crate::models::McpServer> {
+    let mut mcps = Vec::new();
+    if let Some(active) = config.get("mcpServers") {
+        mcps.extend(parse_mcp_servers(active, true));
+    }
+    if let Some(disabled) = config.get("disabledMcpServers") {
+        mcps.extend(parse_mcp_servers(disabled, false));
+    }
+    mcps.sort_by(|a, b| a.name.cmp(&b.name));
+    mcps
+}
+
 pub fn parse_mcp_servers(
     servers_obj: &serde_json::Value,
+    active: bool,
 ) -> Vec<crate::models::McpServer> {
     let mut mcps = Vec::new();
     if let Some(obj) = servers_obj.as_object() {
@@ -176,7 +191,7 @@ pub fn parse_mcp_servers(
                 command,
                 args,
                 description,
-                active: true,
+                active,
                 has_secrets,
                 secret_key_names,
             });

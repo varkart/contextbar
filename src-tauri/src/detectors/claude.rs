@@ -1,5 +1,5 @@
 use crate::models::{AiTool, Skill};
-use super::{parse_mcp_servers, parse_skill_description};
+use super::{parse_all_mcp_servers, parse_skill_description};
 
 fn not_installed() -> AiTool {
     AiTool {
@@ -48,10 +48,7 @@ pub fn detect() -> AiTool {
                         .and_then(|v| v.as_str())
                         .map(|s| s.to_string());
 
-                    let mcps = json
-                        .get("mcpServers")
-                        .map(|v| parse_mcp_servers(v))
-                        .unwrap_or_default();
+                    let mcps = parse_all_mcp_servers(&json);
 
                     (version, mcps, None)
                 }
@@ -166,10 +163,7 @@ mod tests {
                             .get("version")
                             .and_then(|v| v.as_str())
                             .map(|s| s.to_string());
-                        let mcps = json
-                            .get("mcpServers")
-                            .map(|v| super::parse_mcp_servers(v))
-                            .unwrap_or_default();
+                        let mcps = super::parse_all_mcp_servers(&json);
                         (version, mcps, None)
                     }
                 }

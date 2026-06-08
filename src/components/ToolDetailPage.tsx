@@ -28,6 +28,7 @@ interface ToolDetailPageProps {
 export default function ToolDetailPage({ tool, onBack, onSelectSkill, onSelectMcp, onToolUpdated }: ToolDetailPageProps) {
   const colors = TOOL_COLORS[tool.id] ?? { bg: 'bg-zinc-500/10', text: 'text-zinc-500' };
   const [togglingSkill, setTogglingSkill] = useState<string | undefined>();
+  const [togglingMcp, setTogglingMcp] = useState<string | undefined>();
 
   const handleToggleSkill = useCallback(async (skill: Skill, active: boolean) => {
     setTogglingSkill(skill.name);
@@ -50,6 +51,25 @@ export default function ToolDetailPage({ tool, onBack, onSelectSkill, onSelectMc
       captureException(e);
     } finally {
       setTogglingSkill(undefined);
+    }
+  }, [tool.id, onToolUpdated]);
+
+  const handleToggleMcp = useCallback(async (mcp: McpServer, active: boolean) => {
+    setTogglingMcp(mcp.name);
+    try {
+      await invoke('set_mcp_active', { toolId: tool.id, mcpName: mcp.name, active });
+      capture('mcp_toggled', { tool_id: tool.id, mcp_name: mcp.name, active });
+      onToolUpdated();
+    } catch (e) {
+      capture('mcp_toggle_failed', {
+        tool_id: tool.id,
+        mcp_name: mcp.name,
+        intended_active: active,
+        error: String(e),
+      });
+      captureException(e);
+    } finally {
+      setTogglingMcp(undefined);
     }
   }, [tool.id, onToolUpdated]);
 
@@ -96,6 +116,8 @@ export default function ToolDetailPage({ tool, onBack, onSelectSkill, onSelectMc
           onSelectMcp={onSelectMcp}
           onToggleSkill={handleToggleSkill}
           togglingSkill={togglingSkill}
+          onToggleMcp={handleToggleMcp}
+          togglingMcp={togglingMcp}
         />
       </div>
     </div>

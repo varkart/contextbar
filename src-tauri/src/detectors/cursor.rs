@@ -1,5 +1,5 @@
 use crate::models::{AiTool, Skill};
-use super::{parse_mcp_servers, parse_skill_description};
+use super::{parse_all_mcp_servers, parse_skill_description};
 
 fn not_installed() -> AiTool {
     AiTool {
@@ -106,10 +106,7 @@ fn parse_mcps_from_file(path: &std::path::Path) -> (Vec<crate::models::McpServer
         Ok(v) => v,
         Err(e) => return (vec![], Some(format!("Failed to parse mcp.json: {}", e))),
     };
-    let mcps = json
-        .get("mcpServers")
-        .map(|v| parse_mcp_servers(v))
-        .unwrap_or_default();
+    let mcps = parse_all_mcp_servers(&json);
     (mcps, None)
 }
 
