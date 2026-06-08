@@ -1,5 +1,8 @@
+import { useState, useCallback } from 'react';
+import { invoke } from '@tauri-apps/api/core';
 import type { AiTool, Skill, McpServer } from '../types';
 import ToolDetails from './ToolDetails';
+import { capture, captureException } from '../analytics';
 
 const TOOL_COLORS: Record<string, { bg: string; text: string }> = {
   claude:   { bg: 'bg-orange-500/10',   text: 'text-orange-500'  },
@@ -19,10 +22,36 @@ interface ToolDetailPageProps {
   onBack: () => void;
   onSelectSkill: (skill: Skill) => void;
   onSelectMcp: (mcp: McpServer) => void;
+  onToolUpdated: () => void;
 }
 
-export default function ToolDetailPage({ tool, onBack, onSelectSkill, onSelectMcp }: ToolDetailPageProps) {
+export default function ToolDetailPage({ tool, onBack, onSelectSkill, onSelectMcp, onToolUpdated }: ToolDetailPageProps) {
   const colors = TOOL_COLORS[tool.id] ?? { bg: 'bg-zinc-500/10', text: 'text-zinc-500' };
+  const [togglingSkill, setTogglingSkill] = useState<string | undefined>();
+
+  const handleToggleSkill = useCallback(async (skill: Skill, active: boolean) => {
+    setTogglingSkill(skill.name);
+    try {
+      await invoke('set_skill_active', {
+        toolId: tool.id,
+        skillName: skill.name,
+        skillPath: skill.path,
+        active,
+      });
+      capture('skill_toggled', { tool_id: tool.id, skill_name: skill.name, active });
+      onToolUpdated();
+    } catch (e) {
+      capture('skill_toggle_failed', {
+        tool_id: tool.id,
+        skill_name: skill.name,
+        intended_active: active,
+        error: String(e),
+      });
+      captureException(e);
+    } finally {
+      setTogglingSkill(undefined);
+    }
+  }, [tool.id, onToolUpdated]);
 
   return (
     <div className="flex flex-col h-full bg-[var(--c-bg)] animate-slide-in-right">
@@ -65,6 +94,8 @@ export default function ToolDetailPage({ tool, onBack, onSelectSkill, onSelectMc
           tool={tool}
           onSelectSkill={onSelectSkill}
           onSelectMcp={onSelectMcp}
+          onToggleSkill={handleToggleSkill}
+          togglingSkill={togglingSkill}
         />
       </div>
     </div>
