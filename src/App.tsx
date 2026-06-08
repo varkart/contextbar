@@ -163,6 +163,7 @@ export default function App() {
           onBack={() => setView('main')}
           onSelectSkill={handleSelectSkill}
           onSelectMcp={handleSelectMcp}
+          onToolUpdated={fetchTools}
         />
       ) : view === 'settings' ? (
         <Settings
