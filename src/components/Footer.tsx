@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { invoke } from '@tauri-apps/api/core';
 
 interface FooterProps {
   lastUpdated: Date | null;
@@ -38,14 +39,23 @@ export default function Footer({ lastUpdated, onRefresh, loading }: FooterProps)
       <span className="text-[11px] text-[var(--c-text-3)] tabular-nums">
         {formatAgo(lastUpdated)}
       </span>
-      <button
-        onClick={onRefresh}
-        disabled={loading}
-        className="text-[var(--c-text-3)] hover:text-[var(--c-text-2)] disabled:opacity-30 disabled:cursor-not-allowed transition-colors p-1 -mr-1 rounded"
-        aria-label="Refresh tools"
-      >
-        <RefreshIcon spinning={loading} />
-      </button>
+      <div className="flex items-center gap-2">
+        <button
+          onClick={() => invoke('quit_app')}
+          className="text-[11px] text-[var(--c-text-3)] hover:text-red-400 transition-colors px-1 rounded"
+          aria-label="Quit app"
+        >
+          Quit
+        </button>
+        <button
+          onClick={onRefresh}
+          disabled={loading}
+          className="text-[var(--c-text-3)] hover:text-[var(--c-text-2)] disabled:opacity-30 disabled:cursor-not-allowed transition-colors p-1 -mr-1 rounded"
+          aria-label="Refresh tools"
+        >
+          <RefreshIcon spinning={loading} />
+        </button>
+      </div>
     </div>
   );
 }

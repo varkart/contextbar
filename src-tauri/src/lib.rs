@@ -214,6 +214,15 @@ async fn query_mcp_tools(command: String, args: Vec<String>) -> Result<Vec<mcp_c
 }
 
 // ---------------------------------------------------------------------------
+// IPC commands – app lifecycle
+// ---------------------------------------------------------------------------
+
+#[tauri::command]
+fn quit_app(app: tauri::AppHandle) {
+    app.exit(0);
+}
+
+// ---------------------------------------------------------------------------
 // IPC commands – updater
 // ---------------------------------------------------------------------------
 
@@ -228,6 +237,23 @@ async fn check_for_update(app: tauri::AppHandle) -> Result<Option<serde_json::Va
         Ok(None) => Ok(None),
         Err(e) => Err(e.to_string()),
     }
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+fn is_dark_mode() -> bool {
+    #[cfg(target_os = "macos")]
+    {
+        std::process::Command::new("defaults")
+            .args(["read", "-g", "AppleInterfaceStyle"])
+            .output()
+            .map(|o| String::from_utf8_lossy(&o.stdout).trim() == "Dark")
+            .unwrap_or(false)
+    }
+    #[cfg(not(target_os = "macos"))]
+    { false }
 }
 
 // ---------------------------------------------------------------------------
@@ -255,9 +281,14 @@ pub fn run() {
             let settings = MenuItem::with_id(app, "settings", "Settings…", true, None::<&str>)?;
             let menu = Menu::with_items(app, &[&settings, &quit])?;
 
-            let _tray = TrayIconBuilder::new()
-                .icon(app.default_window_icon().unwrap().clone())
-                .icon_as_template(true)
+            let dark = is_dark_mode();
+            let tray = TrayIconBuilder::new()
+                .icon(if dark {
+                    tauri::include_image!("icons/tray_icon_dark@2x.png")
+                } else {
+                    tauri::include_image!("icons/tray_icon@2x.png")
+                })
+                .icon_as_template(!dark)
                 .menu(&menu)
                 .show_menu_on_left_click(false)
                 .on_tray_icon_event(|tray, event| {
@@ -278,6 +309,8 @@ pub fn run() {
                     _ => {}
                 })
                 .build(app)?;
+
+            let _tray = tray;
 
             // Register global shortcut
             {
@@ -315,6 +348,7 @@ pub fn run() {
             read_text_file,
             check_for_update,
             query_mcp_tools,
+            quit_app,
         ])
         .run(tauri::generate_context!())
         .expect("error running aicontextbar");
