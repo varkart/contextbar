@@ -92,17 +92,26 @@ export default function App() {
 
   const fetchTools = useCallback(async () => {
     setLoading(true)
+    const t0 = Date.now()
     try {
       const result = await invoke<AiTool[]>('get_tools')
+      const duration_ms = Date.now() - t0
       setTools(result)
       setLastUpdated(new Date())
-      // Keep selectedTool in sync so ToolDetailPage reflects updated skill states
       setSelectedTool(prev => prev ? (result.find(t => t.id === prev.id) ?? prev) : null)
       capture('tools_loaded', {
         tool_count: result.length,
         installed_count: result.filter(t => t.installed).length,
         tools_detected: result.filter(t => t.installed).map(t => t.id),
       })
+      capture('tools_load_duration', {
+        duration_ms,
+        tool_count: result.length,
+      })
+      // Fire detector_failed for any tool that returned an error
+      result.filter(t => t.installed && t.error).forEach(t =>
+        capture('detector_failed', { tool_id: t.id, error: t.error })
+      )
     } catch (e) {
       console.error('get_tools failed:', e)
     } finally {

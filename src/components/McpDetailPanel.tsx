@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import type { McpServer, McpTool } from '../types'
+import { capture, captureException } from '../analytics'
 
 interface McpDetailPanelProps {
   mcp: McpServer
@@ -43,11 +44,23 @@ export default function McpDetailPanel({ mcp, onBack, toolName }: McpDetailPanel
   const commandStr = [mcp.command, ...mcp.args].join(' ')
 
   useEffect(() => {
+    const t0 = Date.now()
     invoke<McpTool[]>('query_mcp_tools', { command: mcp.command, args: mcp.args })
-      .then(setTools)
-      .catch(e => setError(String(e)))
+      .then(result => {
+        setTools(result)
+        capture('mcp_query_duration', {
+          mcp_name: mcp.name,
+          duration_ms: Date.now() - t0,
+          tool_count: result.length,
+        })
+      })
+      .catch(e => {
+        setError(String(e))
+        captureException(e)
+        capture('mcp_query_failed', { mcp_name: mcp.name, error: String(e) })
+      })
       .finally(() => setLoading(false))
-  }, [mcp.command, mcp.args])
+  }, [mcp.command, mcp.args, mcp.name])
 
   return (
     <div className="flex flex-col h-full bg-[var(--c-bg)] animate-slide-in-right">
