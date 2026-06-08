@@ -35,6 +35,19 @@ pub fn save(state: &AppState) -> Result<(), String> {
     std::fs::write(&path, json).map_err(|e| e.to_string())
 }
 
+pub fn set_mcp_disabled(tool_id: &str, mcp_name: &str, disabled: bool) -> Result<(), String> {
+    let mut state = load();
+    let list = state.disabled_mcps.entry(tool_id.to_string()).or_default();
+    if disabled {
+        if !list.contains(&mcp_name.to_string()) {
+            list.push(mcp_name.to_string());
+        }
+    } else {
+        list.retain(|s| s != mcp_name);
+    }
+    save(&state)
+}
+
 pub fn set_skill_disabled(tool_id: &str, skill_name: &str, disabled: bool) -> Result<(), String> {
     let mut state = load();
     let list = state.disabled_skills.entry(tool_id.to_string()).or_default();
@@ -46,6 +59,40 @@ pub fn set_skill_disabled(tool_id: &str, skill_name: &str, disabled: bool) -> Re
         list.retain(|s| s != skill_name);
     }
     save(&state)
+}
+
+/// Move an MCP entry between `mcpServers` and `disabledMcpServers` in a JSON config file.
+pub fn move_mcp_in_config(config_path: &str, mcp_name: &str, active: bool) -> Result<(), String> {
+    let content = std::fs::read_to_string(config_path)
+        .map_err(|e| format!("cannot read {config_path}: {e}"))?;
+    let mut json: serde_json::Value = serde_json::from_str(&content)
+        .map_err(|e| format!("cannot parse {config_path}: {e}"))?;
+
+    let obj = json.as_object_mut().ok_or("config is not a JSON object")?;
+
+    let src_key = if active { "disabledMcpServers" } else { "mcpServers" };
+    let dst_key = if active { "mcpServers" } else { "disabledMcpServers" };
+
+    // Extract the MCP entry from source section
+    let entry = obj
+        .get_mut(src_key)
+        .and_then(|v| v.as_object_mut())
+        .and_then(|m| m.remove(mcp_name))
+        .ok_or_else(|| format!("MCP '{mcp_name}' not found in {src_key}"))?;
+
+    // Insert into destination section (create if absent)
+    obj.entry(dst_key)
+        .or_insert_with(|| serde_json::Value::Object(serde_json::Map::new()))
+        .as_object_mut()
+        .ok_or("destination section is not an object")?
+        .insert(mcp_name.to_string(), entry);
+
+    let updated = serde_json::to_string_pretty(&json)
+        .map_err(|e| format!("serialization error: {e}"))?;
+    std::fs::write(config_path, updated)
+        .map_err(|e| format!("cannot write {config_path}: {e}"))?;
+
+    Ok(())
 }
 
 /// Move a skill folder between active and .disabled locations.

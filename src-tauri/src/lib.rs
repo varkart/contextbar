@@ -230,6 +230,29 @@ fn set_skill_active(
     Ok(())
 }
 
+#[tauri::command]
+fn set_mcp_active(tool_id: String, mcp_name: String, active: bool) -> Result<(), String> {
+    let home = dirs::home_dir().ok_or("cannot find home dir")?;
+    let config_path = mcp_config_path(&tool_id, &home)
+        .ok_or_else(|| format!("no known config path for tool '{tool_id}'"))?;
+
+    app_state::move_mcp_in_config(&config_path, &mcp_name, active)?;
+    app_state::set_mcp_disabled(&tool_id, &mcp_name, !active)?;
+    Ok(())
+}
+
+fn mcp_config_path(tool_id: &str, home: &std::path::Path) -> Option<String> {
+    let path = match tool_id {
+        "claude"   => home.join(".claude").join("settings.json"),
+        "cursor"   => home.join(".cursor").join("mcp.json"),
+        "gemini"   => home.join(".config").join("gemini").join("settings.json"),
+        "continue" => home.join(".continue").join("config.json"),
+        "zed"      => home.join(".config").join("zed").join("settings.json"),
+        _          => return None,
+    };
+    Some(path.to_string_lossy().to_string())
+}
+
 // ---------------------------------------------------------------------------
 // IPC commands – app lifecycle
 // ---------------------------------------------------------------------------
@@ -371,6 +394,7 @@ pub fn run() {
             check_for_update,
             query_mcp_tools,
             set_skill_active,
+            set_mcp_active,
             quit_app,
         ])
         .run(tauri::generate_context!())

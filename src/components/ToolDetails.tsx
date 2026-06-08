@@ -11,9 +11,11 @@ interface ToolDetailsProps {
   onSelectMcp?: (mcp: McpServer) => void;
   onToggleSkill?: (skill: Skill, active: boolean) => Promise<void>;
   togglingSkill?: string;
+  onToggleMcp?: (mcp: McpServer, active: boolean) => Promise<void>;
+  togglingMcp?: string;
 }
 
-export default function ToolDetails({ tool, query, matchedSkills, matchedMcps, onSelectSkill, onSelectMcp, onToggleSkill, togglingSkill }: ToolDetailsProps) {
+export default function ToolDetails({ tool, query, matchedSkills, matchedMcps, onSelectSkill, onSelectMcp, onToggleSkill, togglingSkill, onToggleMcp, togglingMcp }: ToolDetailsProps) {
   return (
     <div className="px-2 pt-1 pb-3 space-y-3">
       {tool.error && (
@@ -27,7 +29,14 @@ export default function ToolDetails({ tool, query, matchedSkills, matchedMcps, o
         onToggleSkill={onToggleSkill}
         togglingSkill={togglingSkill}
       />
-      <McpSection mcps={tool.mcps} query={query} matchedNames={matchedMcps} onSelectMcp={onSelectMcp} />
+      <McpSection
+        mcps={tool.mcps}
+        query={query}
+        matchedNames={matchedMcps}
+        onSelectMcp={onSelectMcp}
+        onToggleMcp={onToggleMcp}
+        togglingMcp={togglingMcp}
+      />
     </div>
   );
 }

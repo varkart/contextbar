@@ -115,7 +115,7 @@ fn read_mcps(home: &std::path::Path) -> (Vec<crate::models::McpServer>, Option<S
     let mcps = json
         .get("mcp")
         .and_then(|v| v.get("servers"))
-        .map(|v| parse_mcp_servers(v))
+        .map(|v| parse_mcp_servers(v, true))
         .unwrap_or_default();
     (mcps, None)
 }

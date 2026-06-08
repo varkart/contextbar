@@ -7,6 +7,8 @@ interface McpSectionProps {
   query?: string;
   matchedNames?: Set<string>;
   onSelectMcp?: (mcp: McpServer) => void;
+  onToggleMcp?: (mcp: McpServer, active: boolean) => Promise<void>;
+  togglingMcp?: string;
 }
 
 function ChevronIcon({ open }: { open: boolean }) {
@@ -19,7 +21,7 @@ function ChevronIcon({ open }: { open: boolean }) {
   );
 }
 
-export default function McpSection({ mcps, query, matchedNames, onSelectMcp }: McpSectionProps) {
+export default function McpSection({ mcps, query, matchedNames, onSelectMcp, onToggleMcp, togglingMcp }: McpSectionProps) {
   const [sectionOpen, setSectionOpen] = useState(true);
 
   const filtered = matchedNames && matchedNames.size > 0
@@ -42,7 +44,16 @@ export default function McpSection({ mcps, query, matchedNames, onSelectMcp }: M
         filtered.length === 0 ? (
           <p className="text-[11px] text-zinc-700 px-2 py-1 italic">None detected</p>
         ) : (
-          filtered.map((mcp) => <McpRow key={mcp.name} mcp={mcp} query={query} onSelect={onSelectMcp ? () => onSelectMcp(mcp) : undefined} />)
+          filtered.map((mcp) => (
+            <McpRow
+              key={mcp.name}
+              mcp={mcp}
+              query={query}
+              onSelect={onSelectMcp ? () => onSelectMcp(mcp) : undefined}
+              onToggle={onToggleMcp ? (active) => onToggleMcp(mcp, active) : undefined}
+              toggling={togglingMcp === mcp.name}
+            />
+          ))
         )
       )}
     </div>

@@ -61,7 +61,7 @@ fn parse_mcps_from_config(
     };
     let mcps = json
         .get("mcpServers")
-        .map(|v| parse_mcp_servers(v))
+        .map(|v| parse_mcp_servers(v, true))
         .unwrap_or_default();
     (mcps, None)
 }

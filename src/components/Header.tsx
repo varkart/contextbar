@@ -18,7 +18,7 @@ export default function Header({ onSettingsClick, updateAvailable }: HeaderProps
   return (
     <div className="flex items-center justify-between px-4 py-2.5 border-b border-[var(--c-border)] flex-shrink-0">
       <span className="text-[13px] font-semibold text-[var(--c-text)] tracking-[-0.01em]">
-        agentbar
+        aicontextbar
       </span>
       <button
         onClick={onSettingsClick}

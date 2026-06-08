@@ -106,7 +106,7 @@ fn parse_mcps_from_settings(
     // Zed:    { "name": { "command": { "path": "...", "args": [...] } } }
     // Generic: { "name": { "command": "...", "args": [...] } }
     let normalized = normalize_context_servers(context_servers);
-    let mcps = parse_mcp_servers(&normalized);
+    let mcps = parse_mcp_servers(&normalized, true);
     (mcps, None)
 }
 
