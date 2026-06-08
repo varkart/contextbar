@@ -348,6 +348,11 @@ pub fn run() {
             // Start FSEvents file watcher — emits "tools-changed" to frontend
             watcher::start(app.handle().clone());
 
+            // In test mode, auto-open the window so WebDriver can connect
+            if std::env::var("AICONTEXTBAR_TEST").is_ok() {
+                open_main_window(app.handle(), None);
+            }
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
