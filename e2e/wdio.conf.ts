@@ -1,6 +1,9 @@
 import path from 'path'
+import { fileURLToPath } from 'url'
 import { spawn, type ChildProcess } from 'child_process'
 import type { Options } from '@wdio/types'
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 const APP_BINARY = path.resolve(
   __dirname,
@@ -18,16 +21,8 @@ export const config: Options.Testrunner = {
     'tauri:options': { application: APP_BINARY },
   }],
 
-  services: [
-    [
-      'chromedriver',
-      {
-        port: 4444,
-        chromedriverCustomPath: 'tauri-driver',
-        args: ['--port=4444'],
-      },
-    ],
-  ],
+  // tauri-driver handles its own server — no service needed
+  services: [],
 
   hostname: 'localhost',
   port: 4444,
@@ -38,16 +33,20 @@ export const config: Options.Testrunner = {
 
   reporters: ['spec'],
 
-  before: async () => {
-    // Give app time to show the main window
-    await new Promise(r => setTimeout(r, 2000))
-  },
-
   onPrepare: () => {
-    tauriDriver = spawn('tauri-driver', ['--port', '4444'], {
-      stdio: [null, process.stdout, process.stderr],
-      env: { ...process.env, AICONTEXTBAR_TEST: '1' },
-    })
+    const driverBin = process.env.TAURI_DRIVER_BIN
+      ?? `${process.env.HOME}/.cargo/bin/tauri-driver`
+
+    tauriDriver = spawn(
+      driverBin,
+      [],
+      {
+        stdio: [null, process.stdout, process.stderr],
+        env: { ...process.env, AICONTEXTBAR_TEST: '1' },
+      }
+    )
+    // Give driver time to boot
+    return new Promise(r => setTimeout(r, 1000))
   },
 
   onComplete: () => {
