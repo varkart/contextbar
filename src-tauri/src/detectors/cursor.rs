@@ -61,24 +61,39 @@ fn read_version_from_argv(cursor_dir: &std::path::Path) -> Option<String> {
 
 fn parse_skills_dir(skills_dir: &std::path::Path) -> Vec<Skill> {
     let mut skills = Vec::new();
-    let entries = match std::fs::read_dir(skills_dir) {
-        Ok(e) => e,
-        Err(_) => return skills,
-    };
-    for entry in entries.flatten() {
-        let path = entry.path();
-        let name = entry.file_name().to_string_lossy().to_string();
-        if name.starts_with('.') {
-            continue;
+
+    if let Ok(entries) = std::fs::read_dir(skills_dir) {
+        for entry in entries.flatten() {
+            let name = entry.file_name().to_string_lossy().to_string();
+            if name.starts_with('.') { continue; }
+            let path = entry.path();
+            let description = parse_skill_description(&path);
+            skills.push(Skill {
+                name,
+                path: path.to_string_lossy().to_string(),
+                description,
+                active: true,
+            });
         }
-        let description = parse_skill_description(&path);
-        skills.push(Skill {
-            name,
-            path: path.to_string_lossy().to_string(),
-            description,
-            active: true,
-        });
     }
+
+    let disabled_dir = skills_dir.join(".disabled");
+    if let Ok(entries) = std::fs::read_dir(&disabled_dir) {
+        for entry in entries.flatten() {
+            let name = entry.file_name().to_string_lossy().to_string();
+            if name.starts_with('.') { continue; }
+            let path = entry.path();
+            let description = parse_skill_description(&path);
+            skills.push(Skill {
+                name,
+                path: path.to_string_lossy().to_string(),
+                description,
+                active: false,
+            });
+        }
+    }
+
+    skills.sort_by(|a, b| a.name.cmp(&b.name));
     skills
 }
 

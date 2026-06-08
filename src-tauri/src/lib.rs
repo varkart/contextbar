@@ -1,5 +1,6 @@
 pub(crate) mod detectors;
 pub(crate) mod models;
+mod app_state;
 mod mcp_client;
 mod watcher;
 
@@ -214,6 +215,22 @@ async fn query_mcp_tools(command: String, args: Vec<String>) -> Result<Vec<mcp_c
 }
 
 // ---------------------------------------------------------------------------
+// IPC commands – skill / MCP toggles
+// ---------------------------------------------------------------------------
+
+#[tauri::command]
+fn set_skill_active(
+    tool_id: String,
+    skill_name: String,
+    skill_path: String,
+    active: bool,
+) -> Result<(), String> {
+    app_state::move_skill_folder(&skill_path, &skill_name, active)?;
+    app_state::set_skill_disabled(&tool_id, &skill_name, !active)?;
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
 // IPC commands – app lifecycle
 // ---------------------------------------------------------------------------
 
@@ -348,6 +365,7 @@ pub fn run() {
             read_text_file,
             check_for_update,
             query_mcp_tools,
+            set_skill_active,
             quit_app,
         ])
         .run(tauri::generate_context!())
