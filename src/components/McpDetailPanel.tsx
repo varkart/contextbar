@@ -5,6 +5,7 @@ import type { McpServer, McpTool } from '../types'
 interface McpDetailPanelProps {
   mcp: McpServer
   onBack: () => void
+  toolName?: string
 }
 
 function ToolItem({ tool }: { tool: McpTool }) {
@@ -34,7 +35,7 @@ function ToolItem({ tool }: { tool: McpTool }) {
   )
 }
 
-export default function McpDetailPanel({ mcp, onBack }: McpDetailPanelProps) {
+export default function McpDetailPanel({ mcp, onBack, toolName }: McpDetailPanelProps) {
   const [tools, setTools] = useState<McpTool[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -63,6 +64,12 @@ export default function McpDetailPanel({ mcp, onBack }: McpDetailPanelProps) {
             <polyline points="15 18 9 12 15 6"/>
           </svg>
         </button>
+        {toolName && (
+          <>
+            <span className="text-[11px] text-[var(--c-text-3)] truncate max-w-[80px]">{toolName}</span>
+            <span className="text-[10px] text-[var(--c-text-3)]">›</span>
+          </>
+        )}
         <span className="text-[13px] font-semibold text-[var(--c-text)] tracking-[-0.01em] truncate">
           {mcp.name}
         </span>

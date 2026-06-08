@@ -3,7 +3,6 @@ import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
 import type { AiTool, Skill, McpServer } from './types'
 import { searchTools } from './search'
-import { useExpandedState } from './useExpandedState'
 import { useUpdateCheck } from './useUpdateCheck'
 import { useToolsDiff } from './useToolsDiff'
 import { useTheme, type ThemePreference } from './useTheme'
@@ -15,8 +14,9 @@ import ToolRow from './components/ToolRow'
 import Footer from './components/Footer'
 import Settings from './components/Settings'
 import SkillDetailPanel from './components/SkillDetailPanel'
+import ToolDetailPage from './components/ToolDetailPage'
 
-type View = 'main' | 'settings' | 'skill-detail' | 'mcp-detail'
+type View = 'main' | 'settings' | 'tool-detail' | 'skill-detail' | 'mcp-detail'
 
 function useView(): [View, (v: View) => void] {
   const [view, setViewState] = useState<View>(() =>
@@ -51,11 +51,17 @@ export default function App() {
   const [loading, setLoading] = useState(true)
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
   const [query, setQuery] = useState('')
-  const { expanded, toggle } = useExpandedState()
   const [version, setVersion] = useState('')
   const { theme, setTheme } = useTheme()
+  const [selectedTool, setSelectedTool] = useState<AiTool | null>(null)
   const [selectedSkill, setSelectedSkill] = useState<Skill | null>(null)
   const [selectedMcp, setSelectedMcp] = useState<McpServer | null>(null)
+
+  const handleSelectTool = useCallback((tool: AiTool) => {
+    setSelectedTool(tool)
+    setView('tool-detail')
+    capture('tool_detail_viewed', { tool_id: tool.id })
+  }, [setView])
 
   const handleSelectSkill = useCallback((skill: Skill) => {
     setSelectedSkill(skill)
@@ -124,14 +130,15 @@ export default function App() {
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        if (view === 'skill-detail' || view === 'mcp-detail') setView('main')
+        if (view === 'skill-detail' || view === 'mcp-detail') setView(selectedTool ? 'tool-detail' : 'main')
+        else if (view === 'tool-detail') setView('main')
         else if (view === 'settings') setView('main')
         else invoke('hide_window').catch(() => {})
       }
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [view, setView])
+  }, [view, setView, selectedTool])
 
   const installedTools = tools.filter(t => t.installed)
   const searchResults = searchTools(installedTools, query)
@@ -139,9 +146,24 @@ export default function App() {
   return (
     <div className="w-[380px] h-[520px] bg-[var(--c-bg)] text-[var(--c-text)] flex flex-col overflow-hidden select-none">
       {view === 'skill-detail' && selectedSkill ? (
-        <SkillDetailPanel skill={selectedSkill} onBack={() => setView('main')} />
+        <SkillDetailPanel
+          skill={selectedSkill}
+          toolName={selectedTool?.name}
+          onBack={() => setView(selectedTool ? 'tool-detail' : 'main')}
+        />
       ) : view === 'mcp-detail' && selectedMcp ? (
-        <McpDetailPanel mcp={selectedMcp} onBack={() => setView('main')} />
+        <McpDetailPanel
+          mcp={selectedMcp}
+          toolName={selectedTool?.name}
+          onBack={() => setView(selectedTool ? 'tool-detail' : 'main')}
+        />
+      ) : view === 'tool-detail' && selectedTool ? (
+        <ToolDetailPage
+          tool={selectedTool}
+          onBack={() => setView('main')}
+          onSelectSkill={handleSelectSkill}
+          onSelectMcp={handleSelectMcp}
+        />
       ) : view === 'settings' ? (
         <Settings
           onBack={() => setView('main')}
@@ -175,17 +197,11 @@ export default function App() {
                 </p>
               </div>
             ) : (
-              searchResults.map(({ tool, matchedSkills, matchedMcps }) => (
+              searchResults.map(({ tool }) => (
                 <ToolRow
                   key={tool.id}
                   tool={tool}
-                  query={query}
-                  isExpanded={expanded.has(tool.id)}
-                  onToggle={() => toggle(tool.id)}
-                  matchedSkills={matchedSkills}
-                  matchedMcps={matchedMcps}
-                  onSelectSkill={handleSelectSkill}
-                  onSelectMcp={handleSelectMcp}
+                  onSelectTool={handleSelectTool}
                 />
               ))
             )}

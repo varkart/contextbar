@@ -6,6 +6,7 @@ import { capture, captureException } from '../analytics'
 interface SkillDetailPanelProps {
   skill: Skill
   onBack: () => void
+  toolName?: string
 }
 
 function FileIcon({ extension, isDir }: { extension?: string; isDir: boolean }) {
@@ -163,7 +164,7 @@ function ExpandableDescription({ skill }: { skill: Skill }) {
   )
 }
 
-export default function SkillDetailPanel({ skill, onBack }: SkillDetailPanelProps) {
+export default function SkillDetailPanel({ skill, onBack, toolName }: SkillDetailPanelProps) {
   const [fileTree, setFileTree] = useState<FileEntry | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -190,6 +191,12 @@ export default function SkillDetailPanel({ skill, onBack }: SkillDetailPanelProp
             <polyline points="15 18 9 12 15 6"/>
           </svg>
         </button>
+        {toolName && (
+          <>
+            <span className="text-[11px] text-[var(--c-text-3)] truncate max-w-[80px]">{toolName}</span>
+            <span className="text-[10px] text-[var(--c-text-3)]">›</span>
+          </>
+        )}
         <span className="text-[13px] font-semibold text-[var(--c-text)] tracking-[-0.01em] truncate">
           {skill.name}
         </span>
