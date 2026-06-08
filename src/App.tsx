@@ -96,6 +96,8 @@ export default function App() {
       const result = await invoke<AiTool[]>('get_tools')
       setTools(result)
       setLastUpdated(new Date())
+      // Keep selectedTool in sync so ToolDetailPage reflects updated skill states
+      setSelectedTool(prev => prev ? (result.find(t => t.id === prev.id) ?? prev) : null)
       capture('tools_loaded', {
         tool_count: result.length,
         installed_count: result.filter(t => t.installed).length,
