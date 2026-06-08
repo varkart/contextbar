@@ -77,25 +77,41 @@ pub fn detect() -> AiTool {
 
 fn parse_skills_dir(skills_dir: &std::path::Path) -> Vec<Skill> {
     let mut skills = Vec::new();
-    let entries = match std::fs::read_dir(skills_dir) {
-        Ok(e) => e,
-        Err(_) => return skills,
-    };
-    for entry in entries.flatten() {
-        let path = entry.path();
-        let name = entry.file_name().to_string_lossy().to_string();
-        // Skip hidden files
-        if name.starts_with('.') {
-            continue;
+
+    // Active skills
+    if let Ok(entries) = std::fs::read_dir(skills_dir) {
+        for entry in entries.flatten() {
+            let name = entry.file_name().to_string_lossy().to_string();
+            if name.starts_with('.') { continue; }
+            let path = entry.path();
+            let description = parse_skill_description(&path);
+            skills.push(Skill {
+                name,
+                path: path.to_string_lossy().to_string(),
+                description,
+                active: true,
+            });
         }
-        let description = parse_skill_description(&path);
-        skills.push(Skill {
-            name,
-            path: path.to_string_lossy().to_string(),
-            description,
-            active: true,
-        });
     }
+
+    // Disabled skills from .disabled/ subdir
+    let disabled_dir = skills_dir.join(".disabled");
+    if let Ok(entries) = std::fs::read_dir(&disabled_dir) {
+        for entry in entries.flatten() {
+            let name = entry.file_name().to_string_lossy().to_string();
+            if name.starts_with('.') { continue; }
+            let path = entry.path();
+            let description = parse_skill_description(&path);
+            skills.push(Skill {
+                name,
+                path: path.to_string_lossy().to_string(),
+                description,
+                active: false,
+            });
+        }
+    }
+
+    skills.sort_by(|a, b| a.name.cmp(&b.name));
     skills
 }
 
@@ -269,5 +285,76 @@ mod tests {
         assert!(tool.error.is_some());
         assert!(tool.mcps.is_empty());
         assert!(tool.skills.is_empty());
+    }
+
+    // ── skill enable/disable detection ───────────────────────────────────────
+
+    fn make_skill(skills_dir: &std::path::Path, name: &str) {
+        let p = skills_dir.join(name);
+        fs::create_dir_all(&p).unwrap();
+        fs::write(p.join("SKILL.md"), format!("# {name}")).unwrap();
+    }
+
+    #[test]
+    fn test_active_skills_detected() {
+        let tmp = TempDir::new().unwrap();
+        let claude_dir = make_installed(&tmp);
+        let skills_dir = claude_dir.join("skills");
+        fs::create_dir_all(&skills_dir).unwrap();
+        make_skill(&skills_dir, "impeccable");
+        make_skill(&skills_dir, "graphify");
+
+        let tool = run_detect_in(tmp.path());
+        assert_eq!(tool.skills.len(), 2);
+        assert!(tool.skills.iter().all(|s| s.active));
+    }
+
+    #[test]
+    fn test_disabled_skills_included_with_active_false() {
+        let tmp = TempDir::new().unwrap();
+        let claude_dir = make_installed(&tmp);
+        let skills_dir = claude_dir.join("skills");
+        let disabled_dir = skills_dir.join(".disabled");
+        fs::create_dir_all(&skills_dir).unwrap();
+        fs::create_dir_all(&disabled_dir).unwrap();
+        make_skill(&skills_dir, "impeccable");      // active
+        make_skill(&disabled_dir, "graphify");      // disabled
+
+        let tool = run_detect_in(tmp.path());
+        assert_eq!(tool.skills.len(), 2);
+
+        let impeccable = tool.skills.iter().find(|s| s.name == "impeccable").unwrap();
+        let graphify   = tool.skills.iter().find(|s| s.name == "graphify").unwrap();
+        assert!(impeccable.active);
+        assert!(!graphify.active);
+    }
+
+    #[test]
+    fn test_disabled_skill_path_points_to_disabled_dir() {
+        let tmp = TempDir::new().unwrap();
+        let claude_dir = make_installed(&tmp);
+        let skills_dir = claude_dir.join("skills");
+        let disabled_dir = skills_dir.join(".disabled");
+        fs::create_dir_all(&disabled_dir).unwrap();
+        make_skill(&disabled_dir, "graphify");
+
+        let tool = run_detect_in(tmp.path());
+        let graphify = tool.skills.iter().find(|s| s.name == "graphify").unwrap();
+        assert!(graphify.path.contains(".disabled"), "path must point inside .disabled/");
+    }
+
+    #[test]
+    fn test_skills_sorted_alphabetically() {
+        let tmp = TempDir::new().unwrap();
+        let claude_dir = make_installed(&tmp);
+        let skills_dir = claude_dir.join("skills");
+        fs::create_dir_all(&skills_dir).unwrap();
+        make_skill(&skills_dir, "zebra");
+        make_skill(&skills_dir, "alpha");
+        make_skill(&skills_dir, "mango");
+
+        let tool = run_detect_in(tmp.path());
+        let names: Vec<&str> = tool.skills.iter().map(|s| s.name.as_str()).collect();
+        assert_eq!(names, vec!["alpha", "mango", "zebra"]);
     }
 }
