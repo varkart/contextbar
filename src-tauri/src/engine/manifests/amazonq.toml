@@ -1,0 +1,12 @@
+schema_version = 1
+id = "amazonq"
+name = "Amazon Q"
+
+# Check ~/.aws/amazonq first (takes precedence), then ~/.q
+[[detection]]
+type = "dir"
+path = "~/.aws/amazonq"
+
+[[detection]]
+type = "dir"
+path = "~/.q"

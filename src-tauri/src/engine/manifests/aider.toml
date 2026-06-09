@@ -1,0 +1,31 @@
+schema_version = 1
+id = "aider"
+name = "Aider"
+
+# Detection: any of these suffices
+[[detection]]
+type = "binary"
+name = "aider"
+
+[[detection]]
+type = "file"
+path = "~/.local/bin/aider"
+
+[[detection]]
+type = "file"
+path = "~/.local/share/pipx/venvs/aider-chat/bin/aider"
+
+[[detection]]
+type = "dir"
+path = "~/.aider"
+
+[[detection]]
+type = "file"
+path = "~/.aider.conf.yml"
+
+# Version: run detected binary with --version, take first whitespace-delimited token
+[version]
+type = "command"
+args = ["--version"]
+timeout_ms = 800
+parse = "first_token"

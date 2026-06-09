@@ -1,0 +1,29 @@
+schema_version = 1
+id = "gemini"
+name = "Gemini CLI"
+
+[[detection]]
+type = "binary"
+name = "gemini"
+
+[version]
+type = "command"
+binary = "gemini"
+args = ["--version"]
+timeout_ms = 800
+parse = "first_line"
+
+# Third-party MCPs from settings.json (JSONC — supports // comments)
+[[mcp_sources]]
+type = "json_key_pair"
+file = "~/.gemini/settings.json"
+active_key = "mcpServers"
+jsonc = true
+
+# Built-in extensions from ~/.gemini/extensions/
+[[mcp_sources]]
+type = "extension_dir"
+dir = "~/.gemini/extensions"
+manifest_file = "gemini-extension.json"
+enablement_file = "~/.gemini/extensions/extension-enablement.json"
+extension_path_var = "${extensionPath}"
