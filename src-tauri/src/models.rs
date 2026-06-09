@@ -26,8 +26,9 @@ pub struct Skill {
 #[serde(rename_all = "camelCase")]
 pub struct McpServer {
     pub name: String,
-    pub command: String,
+    pub command: String,     // empty string for HTTP-only MCPs
     pub args: Vec<String>,
+    pub url: Option<String>, // set for HTTP MCPs (e.g. Gemini github extension)
     pub description: Option<String>,
     pub active: bool,
     pub has_secrets: bool,

@@ -29,9 +29,11 @@ export default function ToolDetailPage({ tool, onBack, onSelectSkill, onSelectMc
   const colors = TOOL_COLORS[tool.id] ?? { bg: 'bg-zinc-500/10', text: 'text-zinc-500' };
   const [togglingSkill, setTogglingSkill] = useState<string | undefined>();
   const [togglingMcp, setTogglingMcp] = useState<string | undefined>();
+  const [toggleError, setToggleError] = useState<string | null>(null);
 
   const handleToggleSkill = useCallback(async (skill: Skill, active: boolean) => {
     setTogglingSkill(skill.name);
+    setToggleError(null);
     try {
       await invoke('set_skill_active', {
         toolId: tool.id,
@@ -42,11 +44,13 @@ export default function ToolDetailPage({ tool, onBack, onSelectSkill, onSelectMc
       capture('skill_toggled', { tool_id: tool.id, skill_name: skill.name, active });
       onToolUpdated();
     } catch (e) {
+      const msg = String(e);
+      setToggleError(`Failed to ${active ? 'enable' : 'disable'} skill: ${msg}`);
       capture('skill_toggle_failed', {
         tool_id: tool.id,
         skill_name: skill.name,
         intended_active: active,
-        error: String(e),
+        error: msg,
       });
       captureException(e);
     } finally {
@@ -56,16 +60,19 @@ export default function ToolDetailPage({ tool, onBack, onSelectSkill, onSelectMc
 
   const handleToggleMcp = useCallback(async (mcp: McpServer, active: boolean) => {
     setTogglingMcp(mcp.name);
+    setToggleError(null);
     try {
       await invoke('set_mcp_active', { toolId: tool.id, mcpName: mcp.name, active });
       capture('mcp_toggled', { tool_id: tool.id, mcp_name: mcp.name, active });
       onToolUpdated();
     } catch (e) {
+      const msg = String(e);
+      setToggleError(`Failed to ${active ? 'enable' : 'disable'} MCP: ${msg}`);
       capture('mcp_toggle_failed', {
         tool_id: tool.id,
         mcp_name: mcp.name,
         intended_active: active,
-        error: String(e),
+        error: msg,
       });
       captureException(e);
     } finally {
@@ -108,6 +115,20 @@ export default function ToolDetailPage({ tool, onBack, onSelectSkill, onSelectMc
           </span>
         )}
       </div>
+
+      {toggleError && (
+        <div
+          className="mx-3 mt-2 px-3 py-1.5 rounded text-[11px] text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800 flex items-center justify-between gap-2 flex-shrink-0"
+          role="alert"
+        >
+          <span className="truncate">{toggleError}</span>
+          <button
+            onClick={() => setToggleError(null)}
+            className="flex-shrink-0 text-red-400 hover:text-red-600 dark:hover:text-red-300"
+            aria-label="Dismiss"
+          >✕</button>
+        </div>
+      )}
 
       <div className="flex-1 overflow-y-auto">
         <ToolDetails

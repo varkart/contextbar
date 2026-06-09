@@ -18,8 +18,9 @@ export interface Skill {
 
 export interface McpServer {
   name: string;
-  command: string;
+  command: string;     // empty string for HTTP-only MCPs
   args: string[];
+  url?: string;        // set for HTTP MCPs
   description?: string;
   active: boolean;
   hasSecrets: boolean;
