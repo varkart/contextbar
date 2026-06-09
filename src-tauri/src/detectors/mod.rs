@@ -1,14 +1,3 @@
-mod claude;
-mod chatgpt;
-mod copilot;
-mod cursor;
-mod gemini;
-mod windsurf;
-mod aider;
-mod amazonq;
-mod r#continue;
-mod zed;
-
 use crate::models::AiTool;
 
 /// Find a binary in PATH without spawning a subprocess.
@@ -35,22 +24,7 @@ where
 }
 
 pub fn detect_all() -> Vec<AiTool> {
-    // Run all detectors in parallel — each may spawn subprocesses
-    // which makes sequential execution slow. Threads are cheap here; no shared state.
-    let fns: Vec<fn() -> AiTool> = vec![
-        claude::detect,
-        cursor::detect,
-        gemini::detect,
-        copilot::detect,
-        windsurf::detect,
-        chatgpt::detect,
-        aider::detect,
-        amazonq::detect,
-        r#continue::detect,
-        zed::detect,
-    ];
-    let handles: Vec<_> = fns.into_iter().map(|f| std::thread::spawn(f)).collect();
-    handles.into_iter().filter_map(|h| h.join().ok()).collect()
+    crate::engine::detect_all()
 }
 
 /// Parse a skill description from a skill directory or file.
@@ -134,22 +108,6 @@ fn truncate(s: String, max_chars: usize) -> String {
     }
 }
 
-/// Parse MCP servers from a JSON value representing a `mcpServers` object.
-/// Returns (mcps, error_string).
-/// Parse MCP servers from a full config JSON value.
-/// Reads both `mcpServers` (active=true) and `disabledMcpServers` (active=false).
-pub fn parse_all_mcp_servers(config: &serde_json::Value) -> Vec<crate::models::McpServer> {
-    let mut mcps = Vec::new();
-    if let Some(active) = config.get("mcpServers") {
-        mcps.extend(parse_mcp_servers(active, true));
-    }
-    if let Some(disabled) = config.get("disabledMcpServers") {
-        mcps.extend(parse_mcp_servers(disabled, false));
-    }
-    mcps.sort_by(|a, b| a.name.cmp(&b.name));
-    mcps
-}
-
 pub fn parse_mcp_servers(
     servers_obj: &serde_json::Value,
     active: bool,
@@ -186,10 +144,16 @@ pub fn parse_mcp_servers(
                 _ => (false, vec![]),
             };
 
+            let url = cfg
+                .get("httpUrl")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string());
+
             mcps.push(crate::models::McpServer {
                 name: name.clone(),
                 command,
                 args,
+                url,
                 description,
                 active,
                 has_secrets,
