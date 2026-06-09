@@ -1,0 +1,21 @@
+schema_version = 1
+id = "zed"
+name = "Zed"
+
+# Detection priority: settings file > local binary > app bundle
+[[detection]]
+type = "file"
+path = "~/.config/zed/settings.json"
+
+[[detection]]
+type = "file"
+path = "~/.local/bin/zed"
+
+[[detection]]
+type = "dir"
+path = "/Applications/Zed.app"
+
+[[mcp_sources]]
+type = "zed_context_servers"
+file = "~/.config/zed/settings.json"
+key_path = ["assistant", "context_servers"]

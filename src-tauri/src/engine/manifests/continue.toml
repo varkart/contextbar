@@ -1,0 +1,12 @@
+schema_version = 1
+id = "continue"
+name = "Continue"
+
+[[detection]]
+type = "dir"
+path = "~/.continue"
+
+[[mcp_sources]]
+type = "json_key_pair"
+file = "~/.continue/config.json"
+active_key = "mcpServers"

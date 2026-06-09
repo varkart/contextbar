@@ -1,0 +1,15 @@
+schema_version = 1
+id = "copilot"
+name = "GitHub Copilot"
+
+[[detection]]
+type = "vscode_extension"
+extensions_dir = "~/.vscode/extensions"
+prefix = "github.copilot-chat-"
+
+# MCPs shared with VSCode in mcp.servers
+[[mcp_sources]]
+type = "json_nested"
+file = "~/Library/Application Support/Code/User/settings.json"
+key_path = ["mcp", "servers"]
+jsonc = true
