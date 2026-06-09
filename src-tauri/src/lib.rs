@@ -1,4 +1,5 @@
 pub(crate) mod detectors;
+pub(crate) mod engine;
 pub(crate) mod models;
 mod app_state;
 mod mcp_client;
@@ -202,7 +203,32 @@ fn open_path(path: String) -> Result<(), String> {
 
 #[tauri::command]
 fn read_text_file(path: String) -> Result<String, String> {
-    std::fs::read_to_string(&path).map_err(|e| e.to_string())
+    let p = std::path::Path::new(&path);
+
+    // Only allow reads from known safe roots
+    let home = dirs::home_dir().ok_or("cannot resolve home dir")?;
+    let allowed_roots = [
+        home.join(".claude"),
+        home.join(".cursor"),
+        home.join(".config"),
+        home.join(".windsurf"),
+        home.join(".codeium"),
+        home.join(".continue"),
+        home.join(".aider"),
+        home.join("Library").join("Application Support"),
+    ];
+    let canonical = p.canonicalize().map_err(|e| e.to_string())?;
+    if !allowed_roots.iter().any(|root| canonical.starts_with(root)) {
+        return Err(format!("access denied: {path}"));
+    }
+
+    const MAX_BYTES: u64 = 1024 * 1024; // 1 MB
+    let meta = std::fs::metadata(&canonical).map_err(|e| e.to_string())?;
+    if meta.len() > MAX_BYTES {
+        return Err(format!("file too large ({} bytes)", meta.len()));
+    }
+
+    std::fs::read_to_string(&canonical).map_err(|e| e.to_string())
 }
 
 // ---------------------------------------------------------------------------
@@ -220,14 +246,12 @@ async fn query_mcp_tools(command: String, args: Vec<String>) -> Result<Vec<mcp_c
 
 #[tauri::command]
 fn set_skill_active(
-    tool_id: String,
+    _tool_id: String,
     skill_name: String,
     skill_path: String,
     active: bool,
 ) -> Result<(), String> {
-    app_state::move_skill_folder(&skill_path, &skill_name, active)?;
-    app_state::set_skill_disabled(&tool_id, &skill_name, !active)?;
-    Ok(())
+    app_state::move_skill_folder(&skill_path, &skill_name, active)
 }
 
 #[tauri::command]
@@ -236,16 +260,14 @@ fn set_mcp_active(tool_id: String, mcp_name: String, active: bool) -> Result<(),
     let config_path = mcp_config_path(&tool_id, &home)
         .ok_or_else(|| format!("no known config path for tool '{tool_id}'"))?;
 
-    app_state::move_mcp_in_config(&config_path, &mcp_name, active)?;
-    app_state::set_mcp_disabled(&tool_id, &mcp_name, !active)?;
-    Ok(())
+    app_state::move_mcp_in_config(&config_path, &mcp_name, active)
 }
 
 fn mcp_config_path(tool_id: &str, home: &std::path::Path) -> Option<String> {
     let path = match tool_id {
         "claude"   => home.join(".claude").join("settings.json"),
         "cursor"   => home.join(".cursor").join("mcp.json"),
-        "gemini"   => home.join(".config").join("gemini").join("settings.json"),
+        "gemini"   => home.join(".gemini").join("settings.json"),
         "continue" => home.join(".continue").join("config.json"),
         "zed"      => home.join(".config").join("zed").join("settings.json"),
         _          => return None,
@@ -426,10 +448,9 @@ fn open_main_window(app: &tauri::AppHandle, hash: Option<&str>) {
     };
     if let Some(window) = app.get_webview_window("main") {
         // Navigate existing window to settings hash
-        let _ = window.eval(&format!(
-            "window.location.hash = '{}'",
-            hash.unwrap_or("")
-        ));
+        // Use JSON-encode to prevent JS injection via hash value
+        let hash_json = serde_json::to_string(hash.unwrap_or("")).unwrap_or_default();
+        let _ = window.eval(&format!("window.location.hash = {hash_json}"));
         let _ = window.move_window(Position::TrayCenter);
         let _ = window.show();
         let _ = window.set_focus();

@@ -1,68 +1,25 @@
-use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::sync::{Arc, Mutex, OnceLock};
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-#[serde(rename_all = "camelCase")]
-pub struct AppState {
-    #[serde(default)]
-    pub disabled_skills: HashMap<String, Vec<String>>, // tool_id -> [skill_name]
-    #[serde(default)]
-    pub disabled_mcps: HashMap<String, Vec<String>>,   // tool_id -> [mcp_name]
-}
-
-fn state_path() -> std::path::PathBuf {
-    dirs::config_dir()
-        .or_else(dirs::home_dir)
-        .unwrap_or_default()
-        .join("aicontextbar")
-        .join("state.json")
-}
-
-pub fn load() -> AppState {
-    let path = state_path();
-    std::fs::read_to_string(&path)
-        .ok()
-        .and_then(|s| serde_json::from_str(&s).ok())
-        .unwrap_or_default()
-}
-
-pub fn save(state: &AppState) -> Result<(), String> {
-    let path = state_path();
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
-    }
-    let json = serde_json::to_string_pretty(state).map_err(|e| e.to_string())?;
-    std::fs::write(&path, json).map_err(|e| e.to_string())
-}
-
-pub fn set_mcp_disabled(tool_id: &str, mcp_name: &str, disabled: bool) -> Result<(), String> {
-    let mut state = load();
-    let list = state.disabled_mcps.entry(tool_id.to_string()).or_default();
-    if disabled {
-        if !list.contains(&mcp_name.to_string()) {
-            list.push(mcp_name.to_string());
-        }
-    } else {
-        list.retain(|s| s != mcp_name);
-    }
-    save(&state)
-}
-
-pub fn set_skill_disabled(tool_id: &str, skill_name: &str, disabled: bool) -> Result<(), String> {
-    let mut state = load();
-    let list = state.disabled_skills.entry(tool_id.to_string()).or_default();
-    if disabled {
-        if !list.contains(&skill_name.to_string()) {
-            list.push(skill_name.to_string());
-        }
-    } else {
-        list.retain(|s| s != skill_name);
-    }
-    save(&state)
+/// Returns a per-path mutex so concurrent MCP toggles on the same config file
+/// are serialized. Different config files get independent locks.
+fn config_lock(path: &str) -> Arc<Mutex<()>> {
+    static LOCKS: OnceLock<Mutex<HashMap<String, Arc<Mutex<()>>>>> = OnceLock::new();
+    let map = LOCKS.get_or_init(|| Mutex::new(HashMap::new()));
+    let mut guard = map.lock().unwrap();
+    guard
+        .entry(path.to_string())
+        .or_insert_with(|| Arc::new(Mutex::new(())))
+        .clone()
 }
 
 /// Move an MCP entry between `mcpServers` and `disabledMcpServers` in a JSON config file.
+/// Uses a per-file mutex to prevent concurrent read-modify-write races, and writes
+/// via a temp file + atomic rename to prevent torn writes.
 pub fn move_mcp_in_config(config_path: &str, mcp_name: &str, active: bool) -> Result<(), String> {
+    let lock = config_lock(config_path);
+    let _guard = lock.lock().unwrap();
+
     let content = std::fs::read_to_string(config_path)
         .map_err(|e| format!("cannot read {config_path}: {e}"))?;
     let mut json: serde_json::Value = serde_json::from_str(&content)
@@ -73,14 +30,12 @@ pub fn move_mcp_in_config(config_path: &str, mcp_name: &str, active: bool) -> Re
     let src_key = if active { "disabledMcpServers" } else { "mcpServers" };
     let dst_key = if active { "mcpServers" } else { "disabledMcpServers" };
 
-    // Extract the MCP entry from source section
     let entry = obj
         .get_mut(src_key)
         .and_then(|v| v.as_object_mut())
         .and_then(|m| m.remove(mcp_name))
         .ok_or_else(|| format!("MCP '{mcp_name}' not found in {src_key}"))?;
 
-    // Insert into destination section (create if absent)
     obj.entry(dst_key)
         .or_insert_with(|| serde_json::Value::Object(serde_json::Map::new()))
         .as_object_mut()
@@ -89,14 +44,21 @@ pub fn move_mcp_in_config(config_path: &str, mcp_name: &str, active: bool) -> Re
 
     let updated = serde_json::to_string_pretty(&json)
         .map_err(|e| format!("serialization error: {e}"))?;
-    std::fs::write(config_path, updated)
-        .map_err(|e| format!("cannot write {config_path}: {e}"))?;
+
+    // Atomic write: write to sibling temp file, then rename.
+    // On the same filesystem (always true for config files) rename is atomic.
+    let tmp_path = format!("{config_path}.tmp");
+    std::fs::write(&tmp_path, &updated)
+        .map_err(|e| format!("cannot write temp file: {e}"))?;
+    std::fs::rename(&tmp_path, config_path).map_err(|e| {
+        let _ = std::fs::remove_file(&tmp_path);
+        format!("cannot atomically replace {config_path}: {e}")
+    })?;
 
     Ok(())
 }
 
 /// Move a skill folder between active and .disabled locations.
-/// Extracted for unit testing.
 pub fn move_skill_folder(skill_path: &str, skill_name: &str, active: bool) -> Result<(), String> {
     let current = std::path::Path::new(skill_path);
     if active {
@@ -133,6 +95,14 @@ mod tests {
         skill_path
     }
 
+    fn make_mcp_config(dir: &std::path::Path, filename: &str, json: serde_json::Value) -> String {
+        let path = dir.join(filename);
+        fs::write(&path, serde_json::to_string_pretty(&json).unwrap()).unwrap();
+        path.to_string_lossy().to_string()
+    }
+
+    // ── move_skill_folder ────────────────────────────────────────────────────
+
     #[test]
     fn disable_moves_to_disabled_dir() {
         let tmp = TempDir::new().unwrap();
@@ -142,8 +112,8 @@ mod tests {
 
         move_skill_folder(skill_path.to_str().unwrap(), "impeccable", false).unwrap();
 
-        assert!(!skill_path.exists(), "original should be gone");
-        assert!(skills_dir.join(".disabled").join("impeccable").exists(), ".disabled/impeccable should exist");
+        assert!(!skill_path.exists());
+        assert!(skills_dir.join(".disabled").join("impeccable").exists());
     }
 
     #[test]
@@ -156,8 +126,8 @@ mod tests {
 
         move_skill_folder(disabled_path.to_str().unwrap(), "impeccable", true).unwrap();
 
-        assert!(!disabled_path.exists(), ".disabled/impeccable should be gone");
-        assert!(skills_dir.join("impeccable").exists(), "active skills/impeccable should exist");
+        assert!(!disabled_path.exists());
+        assert!(skills_dir.join("impeccable").exists());
     }
 
     #[test]
@@ -172,33 +142,100 @@ mod tests {
     }
 
     #[test]
-    fn set_skill_disabled_toggles_state() {
-        let mut state = AppState::default();
-        state.disabled_skills.insert("claude".to_string(), vec![]);
-
-        // Disable
-        let list = state.disabled_skills.entry("claude".to_string()).or_default();
-        list.push("impeccable".to_string());
-        assert!(list.contains(&"impeccable".to_string()));
-
-        // Re-enable
-        list.retain(|s| s != "impeccable");
-        assert!(!list.contains(&"impeccable".to_string()));
-    }
-
-    #[test]
     fn disable_creates_disabled_dir_if_missing() {
         let tmp = TempDir::new().unwrap();
         let skills_dir = tmp.path().join("skills");
         fs::create_dir_all(&skills_dir).unwrap();
         let skill_path = make_skill(&skills_dir, "graphify");
 
-        // .disabled dir does NOT exist yet
         assert!(!skills_dir.join(".disabled").exists());
-
         move_skill_folder(skill_path.to_str().unwrap(), "graphify", false).unwrap();
 
         assert!(skills_dir.join(".disabled").exists());
         assert!(skills_dir.join(".disabled").join("graphify").exists());
+    }
+
+    // ── move_mcp_in_config ───────────────────────────────────────────────────
+
+    #[test]
+    fn disable_mcp_moves_to_disabled_section() {
+        let tmp = TempDir::new().unwrap();
+        let config_path = make_mcp_config(&tmp.path(), "settings.json", serde_json::json!({
+            "mcpServers": { "my-server": { "command": "npx", "args": [] } }
+        }));
+
+        move_mcp_in_config(&config_path, "my-server", false).unwrap();
+
+        let content: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(&config_path).unwrap()).unwrap();
+        assert!(content["mcpServers"].get("my-server").is_none());
+        assert!(content["disabledMcpServers"]["my-server"].is_object());
+    }
+
+    #[test]
+    fn enable_mcp_moves_back_to_active_section() {
+        let tmp = TempDir::new().unwrap();
+        let config_path = make_mcp_config(&tmp.path(), "settings.json", serde_json::json!({
+            "disabledMcpServers": { "my-server": { "command": "npx", "args": [] } }
+        }));
+
+        move_mcp_in_config(&config_path, "my-server", true).unwrap();
+
+        let content: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(&config_path).unwrap()).unwrap();
+        assert!(content["disabledMcpServers"].get("my-server").is_none());
+        assert!(content["mcpServers"]["my-server"].is_object());
+    }
+
+    #[test]
+    fn move_mcp_missing_returns_err() {
+        let tmp = TempDir::new().unwrap();
+        let config_path = make_mcp_config(&tmp.path(), "settings.json", serde_json::json!({
+            "mcpServers": {}
+        }));
+
+        let result = move_mcp_in_config(&config_path, "ghost", false);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn concurrent_mcp_toggles_do_not_corrupt_config() {
+        use std::sync::Arc;
+        let tmp = TempDir::new().unwrap();
+        // Two distinct MCPs in the same config file
+        let config_path = Arc::new(make_mcp_config(&tmp.path(), "settings.json", serde_json::json!({
+            "mcpServers": {
+                "alpha": { "command": "npx", "args": [] },
+                "beta":  { "command": "npx", "args": [] }
+            }
+        })));
+
+        let p1 = config_path.clone();
+        let p2 = config_path.clone();
+        let t1 = std::thread::spawn(move || move_mcp_in_config(&p1, "alpha", false));
+        let t2 = std::thread::spawn(move || move_mcp_in_config(&p2, "beta", false));
+
+        t1.join().unwrap().unwrap();
+        t2.join().unwrap().unwrap();
+
+        let content: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(config_path.as_str()).unwrap()).unwrap();
+        // Both MCPs must have moved — neither write should clobber the other
+        assert!(content["mcpServers"].get("alpha").is_none());
+        assert!(content["mcpServers"].get("beta").is_none());
+        assert!(content["disabledMcpServers"]["alpha"].is_object());
+        assert!(content["disabledMcpServers"]["beta"].is_object());
+    }
+
+    #[test]
+    fn atomic_write_leaves_no_tmp_file_on_success() {
+        let tmp = TempDir::new().unwrap();
+        let config_path = make_mcp_config(&tmp.path(), "settings.json", serde_json::json!({
+            "mcpServers": { "srv": { "command": "node", "args": [] } }
+        }));
+
+        move_mcp_in_config(&config_path, "srv", false).unwrap();
+
+        assert!(!std::path::Path::new(&format!("{config_path}.tmp")).exists());
     }
 }

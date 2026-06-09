@@ -91,28 +91,31 @@ pub fn start(app: AppHandle) {
             Err(_) => return,
         };
 
-        let paths: Vec<std::path::PathBuf> = {
-            let home = match dirs::home_dir() {
-                Some(h) => h,
-                None => return,
-            };
-            vec![
-                home.join(".claude").join("settings.json"),
-                home.join(".claude").join("skills"),
-                home.join(".cursor").join("mcp.json"),
-                home.join(".cursor").join("skills-cursor"),
-                home.join(".config").join("gemini"),
-                home.join("Library").join("Application Support")
-                    .join("Code").join("User").join("settings.json"),
-                home.join("Library").join("Application Support")
-                    .join("Windsurf").join("User").join("settings.json"),
-            ]
+        let home = match dirs::home_dir() {
+            Some(h) => h,
+            None => return,
         };
 
+        // Watch the deepest existing ancestor so we catch installs that happen after startup.
+        // E.g. if ~/.cursor doesn't exist yet, watch ~ so creating ~/.cursor/mcp.json fires events.
+        let watch_targets: Vec<std::path::PathBuf> = vec![
+            home.join(".claude"),
+            home.join(".cursor"),
+            home.join(".gemini"),
+            home.join(".windsurf"),
+            home.join(".codeium"),
+            home.join(".continue"),
+            home.join("Library").join("Application Support").join("Code").join("User"),
+            home.join("Library").join("Application Support").join("Windsurf").join("User"),
+        ];
+
         use notify::RecursiveMode;
-        for path in &paths {
-            if path.exists() {
-                let _ = debouncer.watcher().watch(path, RecursiveMode::Recursive);
+        for target in &watch_targets {
+            // Walk up to the first existing ancestor, then watch it recursively
+            let watchable = std::iter::successors(Some(target.as_path()), |p| p.parent())
+                .find(|p| p.exists());
+            if let Some(p) = watchable {
+                let _ = debouncer.watcher().watch(p, RecursiveMode::Recursive);
             }
         }
 
@@ -144,35 +147,14 @@ pub fn start(app: AppHandle) {
                         &tool_names,
                     );
 
-                    // Only emit/notify if something actually changed
                     let has_changes = !diff.added_skills.is_empty()
                         || !diff.removed_skills.is_empty()
                         || !diff.added_mcps.is_empty()
                         || !diff.removed_mcps.is_empty();
 
-                    // Always emit tools-changed so UI refreshes
-                    let _ = app.emit("tools-changed", ());
-
                     if has_changes {
+                        let _ = app.emit("tools-changed", ());
                         let _ = app.emit("tools-diff", &diff);
-
-                        // Fire macOS notifications
-                        use tauri_plugin_notification::NotificationExt;
-                        for item in &diff.added_skills {
-                            let _ = app.notification()
-                                .builder()
-                                .title("aicontextbar")
-                                .body(format!("{}: skill {} added", item.tool_name, item.item_name))
-                                .show();
-                        }
-                        for item in &diff.added_mcps {
-                            let _ = app.notification()
-                                .builder()
-                                .title("aicontextbar")
-                                .body(format!("{}: MCP {} added", item.tool_name, item.item_name))
-                                .show();
-                        }
-                        // Don't notify on removals (too noisy)
                     }
 
                     last_skills = new_skills;
