@@ -28,6 +28,11 @@ mcp_filename = ".mcp.json"
 type = "claude_dotfile"
 file = "~/.claude.json"
 
+[[mcp_sources]]
+type = "claude_mcp_list"
+binary = "claude"
+timeout_ms = 6000
+
 [[skill_sources]]
 type = "directory"
 path = "~/.claude/skills"

@@ -17,7 +17,21 @@ pub fn collect(
             continue;
         }
         let (mcps, err) = read_source(&entry.spec, home);
-        all.extend(mcps);
+
+        // ClaudeMcpList is a "fill-in-the-gaps" source: skip any name already
+        // collected from a file-based source so we don't get duplicates.
+        if matches!(entry.spec, McpSourceSpec::ClaudeMcpList { .. }) {
+            let existing: std::collections::HashSet<String> =
+                all.iter().map(|m: &McpServer| m.name.clone()).collect();
+            for mcp in mcps {
+                if !existing.contains(&mcp.name) {
+                    all.push(mcp);
+                }
+            }
+        } else {
+            all.extend(mcps);
+        }
+
         if first_error.is_none() {
             first_error = err;
         }
@@ -62,6 +76,9 @@ fn read_source(source: &McpSourceSpec, home: &std::path::Path) -> (Vec<McpServer
         }
         McpSourceSpec::ClaudeDotfile { file } => {
             read_claude_dotfile(&expand_home(file, home))
+        }
+        McpSourceSpec::ClaudeMcpList { binary, timeout_ms } => {
+            read_claude_mcp_list(binary, *timeout_ms, home)
         }
     }
 }
@@ -365,6 +382,112 @@ fn read_toml_key_pair(
         Err(e) => return (vec![], Some(format!("toml→json parse failed: {e}"))),
     };
     (parse_mcp_servers(&json, true), None)
+}
+
+fn read_claude_mcp_list(
+    binary: &str,
+    timeout_ms: u64,
+    home: &std::path::Path,
+) -> (Vec<McpServer>, Option<String>) {
+    // Try the given binary, then common install paths if it fails
+    let candidates: Vec<std::path::PathBuf> = {
+        let mut v = vec![std::path::PathBuf::from(binary)];
+        if binary == "claude" {
+            v.push(std::path::PathBuf::from("/usr/local/bin/claude"));
+            v.push(std::path::PathBuf::from("/opt/homebrew/bin/claude"));
+            v.push(home.join(".npm").join("bin").join("claude"));
+            v.push(home.join(".local").join("bin").join("claude"));
+        }
+        v
+    };
+
+    let bin = candidates.into_iter().find(|p| {
+        if p.components().count() == 1 {
+            // bare name — check via `which`
+            std::process::Command::new("which")
+                .arg(p)
+                .output()
+                .map(|o| o.status.success())
+                .unwrap_or(false)
+        } else {
+            p.exists()
+        }
+    });
+
+    let bin = match bin {
+        Some(b) => b,
+        None => return (vec![], None), // claude not found — silent skip
+    };
+
+    let timeout = std::time::Duration::from_millis(timeout_ms);
+    let output = match crate::detectors::run_with_timeout(
+        move || {
+            std::process::Command::new(&bin)
+                .args(["mcp", "list"])
+                .output()
+                .ok()
+        },
+        timeout,
+    ) {
+        Some(o) => o,
+        None => return (vec![], None),
+    };
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let mcps = parse_mcp_list_output(&stdout);
+    (mcps, None)
+}
+
+/// Parse `claude mcp list` stdout into McpServer entries.
+/// Line format: `{name}: {url_or_stdio}[ (TYPE)] - {status}`
+fn parse_mcp_list_output(output: &str) -> Vec<McpServer> {
+    let mut mcps = Vec::new();
+    for line in output.lines() {
+        let line = line.trim();
+        // Skip blank lines and the "Checking…" header
+        if line.is_empty() || line.starts_with("Checking") {
+            continue;
+        }
+        // Split on first `: ` to get name
+        let (name, rest) = match line.split_once(": ") {
+            Some(p) => p,
+            None => continue,
+        };
+        // Split rest on last ` - ` to separate url_part from status
+        let (url_part, status) = match rest.rfind(" - ") {
+            Some(idx) => (&rest[..idx], &rest[idx + 3..]),
+            None => continue,
+        };
+        // Strip transport annotation e.g. " (HTTP)" or " (SSE)"
+        let url_clean = url_part
+            .trim_end_matches(|c: char| c == ')' || c == ' ')
+            .rsplit_once(" (")
+            .map(|(u, _)| u)
+            .unwrap_or(url_part)
+            .trim();
+
+        let active = status.contains("Connected");
+
+        // Only set url if it looks like a URL; stdio MCPs have command we don't know
+        let (url, command) = if url_clean.starts_with("http://") || url_clean.starts_with("https://") {
+            (Some(url_clean.to_string()), String::new())
+        } else {
+            (None, String::new())
+        };
+
+        mcps.push(McpServer {
+            name: name.trim().to_string(),
+            command,
+            args: vec![],
+            url,
+            description: None,
+            active,
+            has_secrets: false,
+            secret_key_names: vec![],
+            extension_name: None,
+        });
+    }
+    mcps
 }
 
 fn read_claude_dotfile(
@@ -861,6 +984,60 @@ mod tests {
         let (mcps, err) = collect(&[source], Some("2.5"), tmp.path());
         assert!(err.is_none());
         assert_eq!(mcps.len(), 1);
+    }
+
+    // ── claude_mcp_list parser ───────────────────────────────────────────────
+
+    #[test]
+    fn parse_mcp_list_output_extracts_cloud_mcps() {
+        let output = "Checking MCP server health…\n\n\
+            claude.ai Context7: https://mcp.context7.com/mcp - ✔ Connected\n\
+            claude.ai Google Drive: https://drivemcp.googleapis.com/mcp/v1 - ! Needs authentication\n\
+            plugin:posthog:posthog: https://mcp.posthog.com/mcp (HTTP) - ✔ Connected\n";
+        let mcps = parse_mcp_list_output(output);
+        assert_eq!(mcps.len(), 3);
+        let ctx7 = mcps.iter().find(|m| m.name == "claude.ai Context7").unwrap();
+        assert_eq!(ctx7.url.as_deref(), Some("https://mcp.context7.com/mcp"));
+        assert!(ctx7.active);
+        let drive = mcps.iter().find(|m| m.name == "claude.ai Google Drive").unwrap();
+        assert!(!drive.active);
+        let posthog = mcps.iter().find(|m| m.name == "plugin:posthog:posthog").unwrap();
+        assert_eq!(posthog.url.as_deref(), Some("https://mcp.posthog.com/mcp"));
+        assert!(posthog.active);
+    }
+
+    #[test]
+    fn parse_mcp_list_strips_transport_annotation() {
+        let output = "sentry: https://mcp.sentry.dev/mcp (HTTP) - ✔ Connected\n";
+        let mcps = parse_mcp_list_output(output);
+        assert_eq!(mcps[0].url.as_deref(), Some("https://mcp.sentry.dev/mcp"));
+    }
+
+    #[test]
+    fn parse_mcp_list_skips_blank_and_header_lines() {
+        let output = "Checking MCP server health…\n\n\
+            claude.ai Gmail: https://gmailmcp.googleapis.com/mcp/v1 - ! Needs authentication\n";
+        let mcps = parse_mcp_list_output(output);
+        assert_eq!(mcps.len(), 1);
+        assert_eq!(mcps[0].name, "claude.ai Gmail");
+    }
+
+    #[test]
+    fn claude_mcp_list_deduped_against_file_sources() {
+        // ClaudeMcpList output that includes an MCP already in a file source
+        // should be filtered; new names should be added.
+        let output = "github: https://api.github.com/mcp - ✔ Connected\n\
+            claude.ai Context7: https://mcp.context7.com/mcp - ✔ Connected\n";
+        let from_list = parse_mcp_list_output(output);
+        assert_eq!(from_list.len(), 2);
+
+        // Simulate: github already collected from settings.json
+        let existing_names: std::collections::HashSet<&str> = ["github"].iter().copied().collect();
+        let new_mcps: Vec<_> = from_list.into_iter()
+            .filter(|m| !existing_names.contains(m.name.as_str()))
+            .collect();
+        assert_eq!(new_mcps.len(), 1);
+        assert_eq!(new_mcps[0].name, "claude.ai Context7");
     }
 
     // ── claude_dotfile ───────────────────────────────────────────────────────
