@@ -1,15 +1,22 @@
 use crate::models::McpServer;
 use crate::detectors::parse_mcp_servers;
-use super::manifest::McpSourceSpec;
-use super::resolve::{expand_home, replace_var};
+use super::manifest::{McpSource, McpSourceSpec};
+use super::resolve::{expand_home, replace_var, version_in_range};
 use super::jsonc::strip_comments;
 
-pub fn collect(sources: &[McpSourceSpec], home: &std::path::Path) -> (Vec<McpServer>, Option<String>) {
+pub fn collect(
+    sources: &[McpSource],
+    version: Option<&str>,
+    home: &std::path::Path,
+) -> (Vec<McpServer>, Option<String>) {
     let mut all = Vec::new();
     let mut first_error: Option<String> = None;
 
-    for source in sources {
-        let (mcps, err) = read_source(source, home);
+    for entry in sources {
+        if !version_in_range(version, entry.min_version.as_deref(), entry.max_version.as_deref()) {
+            continue;
+        }
+        let (mcps, err) = read_source(&entry.spec, home);
         all.extend(mcps);
         if first_error.is_none() {
             first_error = err;
@@ -430,9 +437,13 @@ mod tests {
         p
     }
 
+    fn wrap(spec: McpSourceSpec) -> super::super::manifest::McpSource {
+        super::super::manifest::McpSource { min_version: None, max_version: None, spec }
+    }
+
     fn home_with_source(source: McpSourceSpec) -> (TempDir, Vec<McpServer>, Option<String>) {
         let tmp = TempDir::new().unwrap();
-        let (mcps, err) = collect(&[source], tmp.path());
+        let (mcps, err) = collect(&[wrap(source)], None, tmp.path());
         (tmp, mcps, err)
     }
 
@@ -453,7 +464,7 @@ mod tests {
             disabled_key: Some("disabledMcpServers".to_string()),
             jsonc: false,
         };
-        let (mcps, err) = collect(&[source], tmp.path());
+        let (mcps, err) = collect(&[wrap(source)], None, tmp.path());
         assert!(err.is_none());
         assert_eq!(mcps.len(), 2);
         let alpha = mcps.iter().find(|m| m.name == "alpha").unwrap();
@@ -471,7 +482,7 @@ mod tests {
             disabled_key: None,
             jsonc: false,
         };
-        let (mcps, err) = collect(&[source], tmp.path());
+        let (mcps, err) = collect(&[wrap(source)], None, tmp.path());
         assert!(mcps.is_empty());
         assert!(err.is_none());
     }
@@ -492,7 +503,7 @@ mod tests {
             disabled_key: None,
             jsonc: true,
         };
-        let (mcps, err) = collect(&[source], tmp.path());
+        let (mcps, err) = collect(&[wrap(source)], None, tmp.path());
         assert!(err.is_none(), "error: {:?}", err);
         assert_eq!(mcps.len(), 1);
         assert_eq!(mcps[0].name, "active");
@@ -516,7 +527,7 @@ mod tests {
             disabled_key: None,
             jsonc: false,
         };
-        let (mcps, _) = collect(&[source], tmp.path());
+        let (mcps, _) = collect(&[wrap(source)], None, tmp.path());
         assert_eq!(mcps.len(), 1);
         assert!(mcps[0].has_secrets);
         assert!(mcps[0].secret_key_names.contains(&"TOKEN".to_string()));
@@ -543,7 +554,7 @@ mod tests {
             key_path: vec!["mcp".to_string(), "servers".to_string()],
             jsonc: false,
         };
-        let (mcps, err) = collect(&[source], tmp.path());
+        let (mcps, err) = collect(&[wrap(source)], None, tmp.path());
         assert!(err.is_none());
         assert_eq!(mcps.len(), 1);
         assert_eq!(mcps[0].name, "my-srv");
@@ -559,7 +570,7 @@ mod tests {
             key_path: vec!["mcp".to_string(), "servers".to_string()],
             jsonc: false,
         };
-        let (mcps, err) = collect(&[source], tmp.path());
+        let (mcps, err) = collect(&[wrap(source)], None, tmp.path());
         assert!(mcps.is_empty());
         assert!(err.is_none());
     }
@@ -586,7 +597,7 @@ mod tests {
             file: tmp.path().join("settings.json").to_string_lossy().to_string(),
             key_path: vec!["assistant".to_string(), "context_servers".to_string()],
         };
-        let (mcps, err) = collect(&[source], tmp.path());
+        let (mcps, err) = collect(&[wrap(source)], None, tmp.path());
         assert!(err.is_none());
         assert_eq!(mcps.len(), 1);
         assert_eq!(mcps[0].command, "/usr/bin/node");
@@ -615,7 +626,7 @@ mod tests {
             enablement_file: None,
             extension_path_var: None,
         };
-        let (mcps, err) = collect(&[source], tmp.path());
+        let (mcps, err) = collect(&[wrap(source)], None, tmp.path());
         assert!(err.is_none());
         assert_eq!(mcps.len(), 1);
         assert_eq!(mcps[0].name, "my-tool");
@@ -648,7 +659,7 @@ mod tests {
             enablement_file: Some(ext_dir.join("enablement.json").to_string_lossy().to_string()),
             extension_path_var: None,
         };
-        let (mcps, _) = collect(&[source], tmp.path());
+        let (mcps, _) = collect(&[wrap(source)], None, tmp.path());
         assert_eq!(mcps.len(), 2);
         // Both extensions have a "tool" server, one active one not
         let active_count   = mcps.iter().filter(|m| m.active).count();
@@ -675,7 +686,7 @@ mod tests {
             enablement_file: None,
             extension_path_var: Some("${extensionPath}".to_string()),
         };
-        let (mcps, _) = collect(&[source], tmp.path());
+        let (mcps, _) = collect(&[wrap(source)], None, tmp.path());
         assert_eq!(mcps.len(), 1);
         let expected_arg = format!("{}/dist/index.js", my_ext.display());
         assert_eq!(mcps[0].args[0], expected_arg);
@@ -702,7 +713,7 @@ mod tests {
             enablement_file: None,
             extension_path_var: None,
         };
-        let (mcps, _) = collect(&[source], tmp.path());
+        let (mcps, _) = collect(&[wrap(source)], None, tmp.path());
         assert_eq!(mcps.len(), 1);
         assert_eq!(mcps[0].url.as_deref(), Some("https://api.github.com/mcp/"));
         assert_eq!(mcps[0].command, "");
@@ -733,7 +744,7 @@ mod tests {
             enablement_file: None,
             extension_path_var: None,
         };
-        let (mcps, err) = collect(&[source], tmp.path());
+        let (mcps, err) = collect(&[wrap(source)], None, tmp.path());
         assert!(err.is_none(), "should not error on missing manifest: {:?}", err);
         assert_eq!(mcps.len(), 1);
         assert_eq!(mcps[0].name, "tool");
@@ -752,23 +763,88 @@ mod tests {
         write_json(tmp.path(), "b.json", settings_b);
 
         let sources = vec![
-            McpSourceSpec::JsonKeyPair {
+            wrap(McpSourceSpec::JsonKeyPair {
                 file: tmp.path().join("a.json").to_string_lossy().to_string(),
                 active_key: "mcpServers".to_string(),
                 disabled_key: None,
                 jsonc: false,
-            },
-            McpSourceSpec::JsonKeyPair {
+            }),
+            wrap(McpSourceSpec::JsonKeyPair {
                 file: tmp.path().join("b.json").to_string_lossy().to_string(),
                 active_key: "mcpServers".to_string(),
                 disabled_key: None,
                 jsonc: false,
-            },
+            }),
         ];
-        let (mcps, err) = collect(&sources, tmp.path());
+        let (mcps, err) = collect(&sources, None, tmp.path());
         assert!(err.is_none());
         assert_eq!(mcps.len(), 2);
         assert!(mcps.iter().any(|m| m.name == "alpha"));
         assert!(mcps.iter().any(|m| m.name == "beta"));
+    }
+
+    #[test]
+    fn version_gate_skips_source_outside_range() {
+        let tmp = TempDir::new().unwrap();
+        write_json(tmp.path(), "settings.json", serde_json::json!({
+            "mcpServers": { "srv": { "command": "node", "args": [] } }
+        }));
+        let source = super::super::manifest::McpSource {
+            min_version: Some("2.0".to_string()),
+            max_version: None,
+            spec: McpSourceSpec::JsonKeyPair {
+                file: tmp.path().join("settings.json").to_string_lossy().to_string(),
+                active_key: "mcpServers".to_string(),
+                disabled_key: None,
+                jsonc: false,
+            },
+        };
+        // version 1.5 is below min 2.0 — source should be skipped
+        let (mcps, err) = collect(&[source], Some("1.5"), tmp.path());
+        assert!(err.is_none());
+        assert!(mcps.is_empty(), "expected skip due to version gate");
+    }
+
+    #[test]
+    fn version_gate_includes_source_in_range() {
+        let tmp = TempDir::new().unwrap();
+        write_json(tmp.path(), "settings.json", serde_json::json!({
+            "mcpServers": { "srv": { "command": "node", "args": [] } }
+        }));
+        let source = super::super::manifest::McpSource {
+            min_version: Some("2.0".to_string()),
+            max_version: Some("3.0".to_string()),
+            spec: McpSourceSpec::JsonKeyPair {
+                file: tmp.path().join("settings.json").to_string_lossy().to_string(),
+                active_key: "mcpServers".to_string(),
+                disabled_key: None,
+                jsonc: false,
+            },
+        };
+        let (mcps, err) = collect(&[source], Some("2.5"), tmp.path());
+        assert!(err.is_none());
+        assert_eq!(mcps.len(), 1);
+    }
+
+    #[test]
+    fn version_gate_unknown_version_runs_all_sources() {
+        let tmp = TempDir::new().unwrap();
+        write_json(tmp.path(), "settings.json", serde_json::json!({
+            "mcpServers": { "srv": { "command": "node", "args": [] } }
+        }));
+        let source = super::super::manifest::McpSource {
+            min_version: Some("99.0".to_string()),
+            max_version: None,
+            spec: McpSourceSpec::JsonKeyPair {
+                file: tmp.path().join("settings.json").to_string_lossy().to_string(),
+                active_key: "mcpServers".to_string(),
+                disabled_key: None,
+                jsonc: false,
+            },
+        };
+        // version = None (unknown) → gate is ignored, source runs
+        let (mcps, err) = collect(&[source], None, tmp.path());
+        assert!(err.is_none());
+        assert_eq!(mcps.len(), 1, "unknown version should not skip sources");
     }
 }

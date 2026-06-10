@@ -9,9 +9,29 @@ pub struct Manifest {
     pub detection: Vec<DetectionSpec>,
     pub version: Option<VersionSpec>,
     #[serde(default)]
-    pub mcp_sources: Vec<McpSourceSpec>,
+    pub mcp_sources: Vec<McpSource>,
     #[serde(default)]
-    pub skill_sources: Vec<SkillSourceSpec>,
+    pub skill_sources: Vec<SkillSource>,
+}
+
+/// Wrapper that pairs an MCP source spec with optional version bounds.
+/// Both bounds are inclusive. Absent bound = unbounded.
+/// If the detected tool version is unknown, the source always runs.
+#[derive(Debug, Deserialize)]
+pub struct McpSource {
+    pub min_version: Option<String>,
+    pub max_version: Option<String>,
+    #[serde(flatten)]
+    pub spec: McpSourceSpec,
+}
+
+/// Wrapper that pairs a skill source spec with optional version bounds.
+#[derive(Debug, Deserialize)]
+pub struct SkillSource {
+    pub min_version: Option<String>,
+    pub max_version: Option<String>,
+    #[serde(flatten)]
+    pub spec: SkillSourceSpec,
 }
 
 /// Each spec is one candidate. Tool is installed if ANY spec matches.

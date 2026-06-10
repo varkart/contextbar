@@ -91,8 +91,8 @@ fn detect_from_manifest(m: &Manifest) -> AiTool {
         .and_then(|v| run_version(v, &home, &dr))
         .or(dr.detected_version.clone());
 
-    let (mcps, error) = mcp::collect(&m.mcp_sources, &home);
-    let skills = skill::collect(&m.skill_sources, &home);
+    let (mcps, error) = mcp::collect(&m.mcp_sources, version.as_deref(), &home);
+    let skills = skill::collect(&m.skill_sources, version.as_deref(), &home);
 
     AiTool {
         id: m.id.clone(),
@@ -199,10 +199,7 @@ fn find_latest_vscode_extension(
 }
 
 fn semver_cmp(a: &str, b: &str) -> std::cmp::Ordering {
-    let parse = |s: &str| -> Vec<u64> {
-        s.split('.').map(|p| p.parse::<u64>().unwrap_or(0)).collect()
-    };
-    parse(a).cmp(&parse(b))
+    resolve::semver_cmp(a, b)
 }
 
 // ── Version ───────────────────────────────────────────────────────────────────

@@ -1,12 +1,15 @@
 use crate::models::Skill;
 use crate::detectors::parse_skill_description;
-use super::manifest::SkillSourceSpec;
-use super::resolve::expand_home;
+use super::manifest::{SkillSource, SkillSourceSpec};
+use super::resolve::{expand_home, version_in_range};
 
-pub fn collect(sources: &[SkillSourceSpec], home: &std::path::Path) -> Vec<Skill> {
+pub fn collect(sources: &[SkillSource], version: Option<&str>, home: &std::path::Path) -> Vec<Skill> {
     let mut all = Vec::new();
-    for source in sources {
-        all.extend(read_source(source, home));
+    for entry in sources {
+        if !version_in_range(version, entry.min_version.as_deref(), entry.max_version.as_deref()) {
+            continue;
+        }
+        all.extend(read_source(&entry.spec, home));
     }
     all.sort_by(|a, b| a.name.cmp(&b.name));
     all
@@ -52,8 +55,13 @@ fn read_directory(dir: &std::path::Path, disabled_subdir: Option<&str>) -> Vec<S
 #[cfg(test)]
 mod tests {
     use super::*;
+    use super::super::manifest::SkillSource;
     use std::fs;
     use tempfile::TempDir;
+
+    fn wrap(spec: SkillSourceSpec) -> SkillSource {
+        SkillSource { min_version: None, max_version: None, spec }
+    }
 
     fn make_skill_dir(parent: &std::path::Path, name: &str) {
         fs::create_dir_all(parent.join(name)).unwrap();
@@ -69,7 +77,7 @@ mod tests {
             path: tmp.path().to_string_lossy().to_string(),
             disabled_subdir: None,
         };
-        let skills = collect(&[source], tmp.path());
+        let skills = collect(&[wrap(source)], None, tmp.path());
         assert_eq!(skills.len(), 2);
         assert!(skills.iter().all(|s| s.active));
     }
@@ -84,7 +92,7 @@ mod tests {
             path: tmp.path().to_string_lossy().to_string(),
             disabled_subdir: Some(".disabled".to_string()),
         };
-        let skills = collect(&[source], tmp.path());
+        let skills = collect(&[wrap(source)], None, tmp.path());
         assert_eq!(skills.len(), 2);
         let active = skills.iter().find(|s| s.name == "active-skill").unwrap();
         let inactive = skills.iter().find(|s| s.name == "inactive-skill").unwrap();
@@ -99,7 +107,7 @@ mod tests {
             path: tmp.path().join("nonexistent").to_string_lossy().to_string(),
             disabled_subdir: None,
         };
-        let skills = collect(&[source], tmp.path());
+        let skills = collect(&[wrap(source)], None, tmp.path());
         assert!(skills.is_empty());
     }
 
@@ -113,7 +121,7 @@ mod tests {
             path: tmp.path().to_string_lossy().to_string(),
             disabled_subdir: None,
         };
-        let skills = collect(&[source], tmp.path());
+        let skills = collect(&[wrap(source)], None, tmp.path());
         assert_eq!(skills.len(), 1);
         assert_eq!(skills[0].name, "visible");
     }
@@ -129,8 +137,25 @@ mod tests {
             path: tmp.path().to_string_lossy().to_string(),
             disabled_subdir: None,
         };
-        let skills = collect(&[source], tmp.path());
+        let skills = collect(&[wrap(source)], None, tmp.path());
         let names: Vec<&str> = skills.iter().map(|s| s.name.as_str()).collect();
         assert_eq!(names, vec!["alpha", "mike", "zulu"]);
+    }
+
+    #[test]
+    fn version_gate_skips_skill_source_outside_range() {
+        let tmp = TempDir::new().unwrap();
+        make_skill_dir(tmp.path(), "skill-a");
+
+        let source = SkillSource {
+            min_version: Some("3.0".to_string()),
+            max_version: None,
+            spec: SkillSourceSpec::Directory {
+                path: tmp.path().to_string_lossy().to_string(),
+                disabled_subdir: None,
+            },
+        };
+        let skills = collect(&[source], Some("2.9"), tmp.path());
+        assert!(skills.is_empty(), "version 2.9 below min 3.0 should skip source");
     }
 }
