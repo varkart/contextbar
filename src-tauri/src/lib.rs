@@ -56,11 +56,6 @@ fn hide_window(window: tauri::WebviewWindow) {
     let _ = window.hide();
 }
 
-#[tauri::command]
-fn show_window(window: tauri::WebviewWindow) {
-    let _ = window.show();
-    let _ = window.set_focus();
-}
 
 #[tauri::command]
 fn get_version() -> String {
@@ -429,7 +424,6 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             get_tools,
             hide_window,
-            show_window,
             get_version,
             get_autostart,
             set_autostart,
@@ -490,7 +484,6 @@ fn open_main_window(app: &tauri::AppHandle, hash: Option<&str>) {
         .decorations(false)
         .always_on_top(true)
         .skip_taskbar(true)
-        .visible(false)
         .build()
         .unwrap();
 
@@ -507,5 +500,6 @@ fn open_main_window(app: &tauri::AppHandle, hash: Option<&str>) {
         }
     });
     let _ = window.move_window(Position::TrayCenter);
-    // Window stays hidden until frontend calls show_window after first paint
+    let _ = window.show();
+    let _ = window.set_focus();
 }
