@@ -84,6 +84,11 @@ pub enum McpSourceSpec {
         /// Template var in args replaced with the extension's absolute dir path.
         extension_path_var: Option<String>,
     },
+    /// Claude Code plugin system: read installed_plugins.json, then each plugin's .mcp.json.
+    ClaudePlugins {
+        installed_plugins_file: String,
+        mcp_filename: String,
+    },
 }
 
 fn default_mcp_key() -> String { "mcpServers".to_string() }

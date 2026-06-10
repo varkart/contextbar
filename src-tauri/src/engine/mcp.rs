@@ -44,6 +44,9 @@ fn read_source(source: &McpSourceSpec, home: &std::path::Path) -> (Vec<McpServer
                 extension_path_var.as_deref(),
             )
         }
+        McpSourceSpec::ClaudePlugins { installed_plugins_file, mcp_filename } => {
+            read_claude_plugins(&expand_home(installed_plugins_file, home), mcp_filename)
+        }
     }
 }
 
@@ -284,6 +287,67 @@ fn maybe_replace_var(s: &str, var: Option<&str>, value: &str) -> String {
         Some(v) => replace_var(s, v, value),
         None => s.to_string(),
     }
+}
+
+fn read_claude_plugins(
+    installed_plugins_path: &std::path::Path,
+    mcp_filename: &str,
+) -> (Vec<McpServer>, Option<String>) {
+    let raw = match std::fs::read_to_string(installed_plugins_path) {
+        Ok(s) => s,
+        Err(_) => return (vec![], None),
+    };
+    let json: serde_json::Value = match serde_json::from_str(&raw) {
+        Ok(v) => v,
+        Err(e) => return (vec![], Some(format!("cannot parse installed_plugins.json: {e}"))),
+    };
+
+    let plugins = match json.get("plugins").and_then(|p| p.as_object()) {
+        Some(p) => p,
+        None => return (vec![], None),
+    };
+
+    let mut all = Vec::new();
+
+    for (_plugin_id, versions) in plugins {
+        // Take the last (most recent) installed version entry
+        let entry = match versions.as_array().and_then(|a| a.last()) {
+            Some(e) => e,
+            None => continue,
+        };
+        let install_path = match entry.get("installPath").and_then(|p| p.as_str()) {
+            Some(p) => std::path::PathBuf::from(p),
+            None => continue,
+        };
+
+        let mcp_path = install_path.join(mcp_filename);
+        if !mcp_path.exists() {
+            continue;
+        }
+
+        let mcp_raw = match std::fs::read_to_string(&mcp_path) {
+            Ok(s) => s,
+            Err(_) => continue,
+        };
+        let mcp_json: serde_json::Value = match serde_json::from_str(&mcp_raw) {
+            Ok(v) => v,
+            Err(_) => continue,
+        };
+
+        // Support both {"mcpServers": {...}} and direct {"name": {...}} formats
+        let servers = if let Some(obj) = mcp_json.get("mcpServers").and_then(|v| v.as_object()) {
+            obj.clone()
+        } else if let Some(obj) = mcp_json.as_object() {
+            obj.clone()
+        } else {
+            continue
+        };
+
+        let mcps = crate::detectors::parse_mcp_servers(&serde_json::Value::Object(servers), true);
+        all.extend(mcps);
+    }
+
+    (all, None)
 }
 
 #[cfg(test)]
