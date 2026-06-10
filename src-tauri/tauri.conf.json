@@ -35,7 +35,13 @@
       "entitlements": null,
       "exceptionDomain": "",
       "frameworks": [],
-      "minimumSystemVersion": "13.0"
+      "minimumSystemVersion": "13.0",
+      "dmg": {
+        "background": "icons/dmg-background.png",
+        "windowSize": { "width": 660, "height": 400 },
+        "appPosition": { "x": 160, "y": 185 },
+        "applicationFolderPosition": { "x": 500, "y": 185 }
+      }
     }
   }
 }
