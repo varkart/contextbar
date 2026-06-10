@@ -384,11 +384,29 @@ fn read_toml_key_pair(
     (parse_mcp_servers(&json, true), None)
 }
 
+static CLAUDE_MCP_CACHE: std::sync::OnceLock<std::sync::Mutex<Option<(Vec<McpServer>, std::time::Instant)>>> =
+    std::sync::OnceLock::new();
+
+fn claude_mcp_cache() -> &'static std::sync::Mutex<Option<(Vec<McpServer>, std::time::Instant)>> {
+    CLAUDE_MCP_CACHE.get_or_init(|| std::sync::Mutex::new(None))
+}
+
 fn read_claude_mcp_list(
     binary: &str,
     timeout_ms: u64,
     home: &std::path::Path,
 ) -> (Vec<McpServer>, Option<String>) {
+    const TTL: std::time::Duration = std::time::Duration::from_secs(60);
+    {
+        if let Ok(guard) = claude_mcp_cache().lock() {
+            if let Some((ref cached, ts)) = *guard {
+                if ts.elapsed() < TTL {
+                    return (cached.clone(), None);
+                }
+            }
+        }
+    }
+
     // Try the given binary, then common install paths if it fails
     let candidates: Vec<std::path::PathBuf> = {
         let mut v = vec![std::path::PathBuf::from(binary)];
@@ -435,6 +453,9 @@ fn read_claude_mcp_list(
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     let mcps = parse_mcp_list_output(&stdout);
+    if let Ok(mut guard) = claude_mcp_cache().lock() {
+        *guard = Some((mcps.clone(), std::time::Instant::now()));
+    }
     (mcps, None)
 }
 

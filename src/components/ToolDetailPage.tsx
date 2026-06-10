@@ -3,19 +3,7 @@ import { invoke } from '@tauri-apps/api/core';
 import type { AiTool, Skill, McpServer } from '../types';
 import ToolDetails from './ToolDetails';
 import { capture, captureException } from '../analytics';
-
-const TOOL_COLORS: Record<string, { bg: string; text: string }> = {
-  claude:   { bg: 'bg-orange-500/10',   text: 'text-orange-500'  },
-  cursor:   { bg: 'bg-sky-500/10',      text: 'text-sky-500'     },
-  gemini:   { bg: 'bg-blue-500/10',     text: 'text-blue-500'    },
-  copilot:  { bg: 'bg-zinc-500/15',     text: 'text-zinc-500'    },
-  windsurf: { bg: 'bg-teal-500/10',     text: 'text-teal-500'    },
-  chatgpt:  { bg: 'bg-emerald-500/10',  text: 'text-emerald-500' },
-  aider:    { bg: 'bg-lime-500/10',     text: 'text-lime-500'    },
-  continue: { bg: 'bg-violet-500/10',   text: 'text-violet-500'  },
-  amazonq:  { bg: 'bg-amber-500/10',    text: 'text-amber-500'   },
-  zed:      { bg: 'bg-purple-500/10',   text: 'text-purple-500'  },
-};
+import { TOOL_COLORS } from '../constants/toolColors';
 
 interface ToolDetailPageProps {
   tool: AiTool;

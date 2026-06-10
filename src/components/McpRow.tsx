@@ -1,5 +1,6 @@
 import Tooltip from './Tooltip';
 import Highlight from './Highlight';
+import Toggle from './Toggle';
 import type { McpServer } from '../types';
 
 interface McpRowProps {
@@ -8,23 +9,6 @@ interface McpRowProps {
   onSelect?: () => void;
   onToggle?: (active: boolean) => void;
   toggling?: boolean;
-}
-
-function Toggle({ active, toggling, onChange }: { active: boolean; toggling: boolean; onChange: (v: boolean) => void }) {
-  return (
-    <button
-      onClick={e => { e.stopPropagation(); if (!toggling) onChange(!active); }}
-      disabled={toggling}
-      aria-label={active ? 'Disable MCP' : 'Enable MCP'}
-      className={`relative flex-shrink-0 w-7 h-4 rounded-full transition-colors duration-200 focus:outline-none disabled:opacity-40 ${
-        active ? 'bg-violet-500' : 'bg-[var(--c-border)]'
-      }`}
-    >
-      <span className={`absolute top-0.5 left-0.5 w-3 h-3 rounded-full bg-white shadow transition-transform duration-200 ${
-        active ? 'translate-x-3' : 'translate-x-0'
-      }`} />
-    </button>
-  );
 }
 
 function McpTooltipContent({ mcp }: { mcp: McpServer }) {
@@ -66,7 +50,7 @@ export default function McpRow({ mcp, query = '', onSelect, onToggle, toggling =
         {mcp.hasSecrets && <span className="flex-shrink-0"><LockIcon /></span>}
         <span className="flex-1" />
         {onToggle ? (
-          <Toggle active={mcp.active} toggling={toggling} onChange={onToggle} />
+          <Toggle active={mcp.active} toggling={toggling} onChange={onToggle} activeColor="bg-violet-500" entityLabel="MCP" />
         ) : onSelect ? (
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
             stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"

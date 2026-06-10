@@ -1,5 +1,6 @@
 import Tooltip from './Tooltip';
 import Highlight from './Highlight';
+import Toggle from './Toggle';
 import type { Skill } from '../types';
 
 interface SkillRowProps {
@@ -22,23 +23,6 @@ function SkillTooltipContent({ skill }: { skill: Skill }) {
   );
 }
 
-function Toggle({ active, toggling, onChange }: { active: boolean; toggling: boolean; onChange: (v: boolean) => void }) {
-  return (
-    <button
-      onClick={e => { e.stopPropagation(); if (!toggling) onChange(!active); }}
-      disabled={toggling}
-      aria-label={active ? 'Disable skill' : 'Enable skill'}
-      className={`relative flex-shrink-0 w-7 h-4 rounded-full transition-colors duration-200 focus:outline-none disabled:opacity-40 ${
-        active ? 'bg-indigo-500' : 'bg-[var(--c-border)]'
-      }`}
-    >
-      <span className={`absolute top-0.5 left-0.5 w-3 h-3 rounded-full bg-white shadow transition-transform duration-200 ${
-        active ? 'translate-x-3' : 'translate-x-0'
-      }`} />
-    </button>
-  );
-}
-
 export default function SkillRow({ skill, query = '', onSelect, onToggle, toggling = false }: SkillRowProps) {
   return (
     <Tooltip content={<SkillTooltipContent skill={skill} />}>
@@ -50,7 +34,7 @@ export default function SkillRow({ skill, query = '', onSelect, onToggle, toggli
         <Highlight text={skill.name} query={query} className="text-[14px] font-mono text-[var(--c-text-2)] truncate leading-5" />
         <span className="flex-1" />
         {onToggle ? (
-          <Toggle active={skill.active} toggling={toggling} onChange={onToggle} />
+          <Toggle active={skill.active} toggling={toggling} onChange={onToggle} activeColor="bg-indigo-500" entityLabel="skill" />
         ) : onSelect ? (
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
             stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"

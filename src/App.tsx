@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
 import type { AiTool, Skill, McpServer } from './types'
@@ -161,8 +161,8 @@ export default function App() {
     return () => window.removeEventListener('keydown', handler)
   }, [view, setView, selectedTool])
 
-  const installedTools = tools.filter(t => t.installed)
-  const searchResults = searchTools(installedTools, query)
+  const installedTools = useMemo(() => tools.filter(t => t.installed), [tools])
+  const searchResults = useMemo(() => searchTools(installedTools, query), [installedTools, query])
 
   return (
     <div className="w-[380px] h-[520px] bg-[var(--c-bg)] text-[var(--c-text)] flex flex-col overflow-hidden select-none">
