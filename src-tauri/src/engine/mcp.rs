@@ -60,6 +60,9 @@ fn read_source(source: &McpSourceSpec, home: &std::path::Path) -> (Vec<McpServer
         McpSourceSpec::TomlKeyPair { file, active_key } => {
             read_toml_key_pair(&expand_home(file, home), active_key)
         }
+        McpSourceSpec::ClaudeDotfile { file } => {
+            read_claude_dotfile(&expand_home(file, home))
+        }
     }
 }
 
@@ -362,6 +365,40 @@ fn read_toml_key_pair(
         Err(e) => return (vec![], Some(format!("toml→json parse failed: {e}"))),
     };
     (parse_mcp_servers(&json, true), None)
+}
+
+fn read_claude_dotfile(
+    path: &std::path::Path,
+) -> (Vec<McpServer>, Option<String>) {
+    if !path.exists() {
+        return (vec![], None);
+    }
+    let json = match parse_json(path, false) {
+        Ok(v) => v,
+        Err(e) => return (vec![], Some(e)),
+    };
+
+    let projects = match json.get("projects").and_then(|v| v.as_object()) {
+        Some(p) => p,
+        None => return (vec![], None),
+    };
+
+    let mut seen = std::collections::HashSet::new();
+    let mut all = Vec::new();
+
+    for (_proj_path, proj_val) in projects {
+        let servers = match proj_val.get("mcpServers").and_then(|v| v.as_object()) {
+            Some(s) => s,
+            None => continue,
+        };
+        for mcp in parse_mcp_servers(&serde_json::Value::Object(servers.clone()), true) {
+            if seen.insert(mcp.name.clone()) {
+                all.push(mcp);
+            }
+        }
+    }
+
+    (all, None)
 }
 
 fn read_claude_plugins(
@@ -824,6 +861,95 @@ mod tests {
         let (mcps, err) = collect(&[source], Some("2.5"), tmp.path());
         assert!(err.is_none());
         assert_eq!(mcps.len(), 1);
+    }
+
+    // ── claude_dotfile ───────────────────────────────────────────────────────
+
+    #[test]
+    fn claude_dotfile_collects_mcps_from_all_projects() {
+        let tmp = TempDir::new().unwrap();
+        let dotfile = serde_json::json!({
+            "projects": {
+                "/path/to/proj1": {
+                    "mcpServers": {
+                        "sentry": { "type": "http", "url": "https://mcp.sentry.dev/mcp" }
+                    }
+                },
+                "/path/to/proj2": {
+                    "mcpServers": {
+                        "linear": { "command": "npx", "args": ["-y", "linear-mcp"] }
+                    }
+                }
+            }
+        });
+        write_json(tmp.path(), ".claude.json", dotfile);
+        let source = McpSourceSpec::ClaudeDotfile {
+            file: tmp.path().join(".claude.json").to_string_lossy().to_string(),
+        };
+        let (mcps, err) = collect(&[wrap(source)], None, tmp.path());
+        assert!(err.is_none());
+        assert_eq!(mcps.len(), 2);
+        assert!(mcps.iter().any(|m| m.name == "sentry"));
+        assert!(mcps.iter().any(|m| m.name == "linear"));
+    }
+
+    #[test]
+    fn claude_dotfile_deduplicates_same_name_across_projects() {
+        let tmp = TempDir::new().unwrap();
+        let dotfile = serde_json::json!({
+            "projects": {
+                "/path/to/proj1": {
+                    "mcpServers": {
+                        "sentry": { "type": "http", "url": "https://mcp.sentry.dev/mcp" }
+                    }
+                },
+                "/path/to/proj2": {
+                    "mcpServers": {
+                        "sentry": { "type": "http", "url": "https://mcp.sentry.dev/mcp" }
+                    }
+                }
+            }
+        });
+        write_json(tmp.path(), ".claude.json", dotfile);
+        let source = McpSourceSpec::ClaudeDotfile {
+            file: tmp.path().join(".claude.json").to_string_lossy().to_string(),
+        };
+        let (mcps, err) = collect(&[wrap(source)], None, tmp.path());
+        assert!(err.is_none());
+        assert_eq!(mcps.len(), 1, "duplicate name should appear only once");
+    }
+
+    #[test]
+    fn claude_dotfile_missing_file_returns_empty() {
+        let tmp = TempDir::new().unwrap();
+        let source = McpSourceSpec::ClaudeDotfile {
+            file: tmp.path().join(".claude.json").to_string_lossy().to_string(),
+        };
+        let (mcps, err) = collect(&[wrap(source)], None, tmp.path());
+        assert!(mcps.is_empty());
+        assert!(err.is_none());
+    }
+
+    #[test]
+    fn claude_dotfile_http_mcp_sets_url() {
+        let tmp = TempDir::new().unwrap();
+        let dotfile = serde_json::json!({
+            "projects": {
+                "/proj": {
+                    "mcpServers": {
+                        "sentry": { "url": "https://mcp.sentry.dev/mcp" }
+                    }
+                }
+            }
+        });
+        write_json(tmp.path(), ".claude.json", dotfile);
+        let source = McpSourceSpec::ClaudeDotfile {
+            file: tmp.path().join(".claude.json").to_string_lossy().to_string(),
+        };
+        let (mcps, err) = collect(&[wrap(source)], None, tmp.path());
+        assert!(err.is_none());
+        assert_eq!(mcps[0].url.as_deref(), Some("https://mcp.sentry.dev/mcp"));
+        assert!(mcps[0].active);
     }
 
     #[test]

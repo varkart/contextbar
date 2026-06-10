@@ -24,6 +24,10 @@ type = "claude_plugins"
 installed_plugins_file = "~/.claude/plugins/installed_plugins.json"
 mcp_filename = ".mcp.json"
 
+[[mcp_sources]]
+type = "claude_dotfile"
+file = "~/.claude.json"
+
 [[skill_sources]]
 type = "directory"
 path = "~/.claude/skills"
