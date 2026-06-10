@@ -126,7 +126,18 @@ pub enum McpSourceSpec {
     ClaudeDotfile {
         file: String,
     },
+    /// Run `claude mcp list` and parse its output to capture cloud-synced MCPs
+    /// (e.g. claude.ai Context7, Google Drive) that have no local config file.
+    ClaudeMcpList {
+        #[serde(default = "default_claude_binary")]
+        binary: String,
+        #[serde(default = "default_mcp_list_timeout_ms")]
+        timeout_ms: u64,
+    },
 }
+
+fn default_claude_binary() -> String { "claude".to_string() }
+fn default_mcp_list_timeout_ms() -> u64 { 6000 }
 
 fn default_mcp_key() -> String { "mcpServers".to_string() }
 
