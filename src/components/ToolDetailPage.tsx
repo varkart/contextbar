@@ -62,7 +62,12 @@ export default function ToolDetailPage({ tool, onBack, onSelectSkill, onSelectMc
     setTogglingMcp(mcp.name);
     setToggleError(null);
     try {
-      await invoke('set_mcp_active', { toolId: tool.id, mcpName: mcp.name, active });
+      await invoke('set_mcp_active', {
+        toolId: tool.id,
+        mcpName: mcp.name,
+        active,
+        extensionName: mcp.extensionName ?? null,
+      });
       capture('mcp_toggled', { tool_id: tool.id, mcp_name: mcp.name, active });
       onToolUpdated();
     } catch (e) {

@@ -287,6 +287,27 @@ mod tests {
     }
 
     #[test]
+    fn find_latest_vscode_extension_picks_highest_version() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        for ver in &["0.10.0", "0.9.5", "1.2.3", "1.0.0"] {
+            std::fs::create_dir(tmp.path().join(format!("github.copilot-chat-{ver}"))).unwrap();
+        }
+        // Non-matching prefix should be ignored
+        std::fs::create_dir(tmp.path().join("other.ext-99.0.0")).unwrap();
+
+        let result = find_latest_vscode_extension(tmp.path(), "github.copilot-chat-");
+        assert!(result.is_some());
+        let (_path, ver) = result.unwrap();
+        assert_eq!(ver, "1.2.3");
+    }
+
+    #[test]
+    fn find_latest_vscode_extension_returns_none_when_empty() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        assert!(find_latest_vscode_extension(tmp.path(), "github.copilot-chat-").is_none());
+    }
+
+    #[test]
     fn detect_from_manifest_not_installed_when_no_dir() {
         let toml = r#"
 schema_version = 1

@@ -260,6 +260,7 @@ fn read_extension_dir(
                 active,
                 has_secrets,
                 secret_key_names,
+                extension_name: Some(ext_name.clone()),
             });
         }
     }
@@ -578,5 +579,64 @@ mod tests {
         // Secret value must not be serialised
         let serialized = serde_json::to_string(&mcps[0]).unwrap();
         assert!(!serialized.contains("$TOKEN"));
+    }
+
+    #[test]
+    fn extension_dir_skips_subdir_without_manifest() {
+        let tmp = TempDir::new().unwrap();
+        let ext_dir = tmp.path().join("extensions");
+        // One ext with manifest, one without
+        let good_ext = ext_dir.join("good-ext");
+        let bad_ext  = ext_dir.join("no-manifest-ext");
+        fs::create_dir_all(&good_ext).unwrap();
+        fs::create_dir_all(&bad_ext).unwrap();
+        write_json(&good_ext, "ext.json", serde_json::json!({
+            "mcpServers": { "tool": { "command": "node", "args": [] } }
+        }));
+        // bad_ext has no ext.json
+
+        let source = McpSourceSpec::ExtensionDir {
+            dir: ext_dir.to_string_lossy().to_string(),
+            manifest_file: "ext.json".to_string(),
+            enablement_file: None,
+            extension_path_var: None,
+        };
+        let (mcps, err) = collect(&[source], tmp.path());
+        assert!(err.is_none(), "should not error on missing manifest: {:?}", err);
+        assert_eq!(mcps.len(), 1);
+        assert_eq!(mcps[0].name, "tool");
+    }
+
+    #[test]
+    fn multiple_sources_aggregate_mcps() {
+        let tmp = TempDir::new().unwrap();
+        let settings_a = serde_json::json!({
+            "mcpServers": { "alpha": { "command": "node", "args": [] } }
+        });
+        let settings_b = serde_json::json!({
+            "mcpServers": { "beta": { "command": "python", "args": [] } }
+        });
+        write_json(tmp.path(), "a.json", settings_a);
+        write_json(tmp.path(), "b.json", settings_b);
+
+        let sources = vec![
+            McpSourceSpec::JsonKeyPair {
+                file: tmp.path().join("a.json").to_string_lossy().to_string(),
+                active_key: "mcpServers".to_string(),
+                disabled_key: None,
+                jsonc: false,
+            },
+            McpSourceSpec::JsonKeyPair {
+                file: tmp.path().join("b.json").to_string_lossy().to_string(),
+                active_key: "mcpServers".to_string(),
+                disabled_key: None,
+                jsonc: false,
+            },
+        ];
+        let (mcps, err) = collect(&sources, tmp.path());
+        assert!(err.is_none());
+        assert_eq!(mcps.len(), 2);
+        assert!(mcps.iter().any(|m| m.name == "alpha"));
+        assert!(mcps.iter().any(|m| m.name == "beta"));
     }
 }

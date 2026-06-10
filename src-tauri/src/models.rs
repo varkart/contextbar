@@ -33,6 +33,7 @@ pub struct McpServer {
     pub active: bool,
     pub has_secrets: bool,
     pub secret_key_names: Vec<String>,
+    pub extension_name: Option<String>, // set for extension-dir MCPs (e.g. Gemini extensions)
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
