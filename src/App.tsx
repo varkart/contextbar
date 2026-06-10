@@ -87,6 +87,16 @@ export default function App() {
     }).catch(() => {})
   }, [])
 
+  useEffect(() => {
+    if (!loading) {
+      const splash = document.getElementById('splash')
+      if (splash) {
+        splash.classList.add('fade-out')
+        splash.addEventListener('transitionend', () => splash.remove(), { once: true })
+      }
+    }
+  }, [loading])
+
   const updateInfo = useUpdateCheck(version)
   useToolsDiff()
 
