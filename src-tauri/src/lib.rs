@@ -7,7 +7,7 @@ mod watcher;
 
 use crate::models::AiTool;
 use tauri::{
-    Manager,
+    Emitter, Manager,
     menu::{Menu, MenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
     WebviewUrl, WebviewWindowBuilder,
@@ -47,8 +47,20 @@ fn write_settings(val: serde_json::Value) -> Result<(), String> {
 // ---------------------------------------------------------------------------
 
 #[tauri::command]
-fn get_tools() -> Vec<AiTool> {
-    detectors::detect_all()
+fn get_tools(app: tauri::AppHandle) -> Vec<AiTool> {
+    let tools = detectors::detect_all();
+    // If the claude mcp list cache is cold, warm it in the background and
+    // notify the frontend when done so it can re-fetch.
+    if engine::mcp::is_claude_mcp_cache_cold() {
+        let home = dirs::home_dir();
+        std::thread::spawn(move || {
+            if let Some(h) = home {
+                engine::mcp::warm_claude_mcp_list(&h);
+            }
+            let _ = app.emit("tools-changed", ());
+        });
+    }
+    tools
 }
 
 #[tauri::command]
