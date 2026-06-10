@@ -255,11 +255,23 @@ fn set_skill_active(
 }
 
 #[tauri::command]
-fn set_mcp_active(tool_id: String, mcp_name: String, active: bool) -> Result<(), String> {
+fn set_mcp_active(
+    tool_id: String,
+    mcp_name: String,
+    active: bool,
+    extension_name: Option<String>,
+) -> Result<(), String> {
     let home = dirs::home_dir().ok_or("cannot find home dir")?;
+
+    if let Some(ext_name) = extension_name {
+        // Extension-dir MCP (e.g. Gemini built-in extensions) — toggle in enablement file
+        let enablement_path = extension_enablement_path(&tool_id, &home)
+            .ok_or_else(|| format!("no known extension enablement path for '{tool_id}'"))?;
+        return app_state::toggle_extension_active(&enablement_path, &ext_name, active);
+    }
+
     let config_path = mcp_config_path(&tool_id, &home)
         .ok_or_else(|| format!("no known config path for tool '{tool_id}'"))?;
-
     app_state::move_mcp_in_config(&config_path, &mcp_name, active)
 }
 
@@ -271,6 +283,14 @@ fn mcp_config_path(tool_id: &str, home: &std::path::Path) -> Option<String> {
         "continue" => home.join(".continue").join("config.json"),
         "zed"      => home.join(".config").join("zed").join("settings.json"),
         _          => return None,
+    };
+    Some(path.to_string_lossy().to_string())
+}
+
+fn extension_enablement_path(tool_id: &str, home: &std::path::Path) -> Option<String> {
+    let path = match tool_id {
+        "gemini" => home.join(".gemini").join("extensions").join("extension-enablement.json"),
+        _        => return None,
     };
     Some(path.to_string_lossy().to_string())
 }

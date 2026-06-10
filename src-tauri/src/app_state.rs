@@ -58,6 +58,58 @@ pub fn move_mcp_in_config(config_path: &str, mcp_name: &str, active: bool) -> Re
     Ok(())
 }
 
+/// Toggle an extension in extension-enablement.json.
+/// Disabled entries are preserved under a `_disabled` key so re-enabling
+/// restores any previous overrides.
+pub fn toggle_extension_active(enablement_path: &str, extension_name: &str, active: bool) -> Result<(), String> {
+    let lock = config_lock(enablement_path);
+    let _guard = lock.lock().unwrap();
+
+    // Read existing file; start with empty object if missing
+    let json_str = std::fs::read_to_string(enablement_path).unwrap_or_else(|_| "{}".to_string());
+    let mut json: serde_json::Value = serde_json::from_str(&json_str)
+        .map_err(|e| format!("cannot parse {enablement_path}: {e}"))?;
+
+    let obj = json.as_object_mut().ok_or("enablement file is not a JSON object")?;
+
+    if active {
+        // Move from _disabled back to root
+        let entry = obj
+            .get_mut("_disabled")
+            .and_then(|d| d.as_object_mut())
+            .and_then(|m| m.remove(extension_name))
+            .unwrap_or_else(|| serde_json::json!({}));
+        obj.insert(extension_name.to_string(), entry);
+    } else {
+        // Move from root to _disabled (preserve any existing overrides)
+        let entry = obj.remove(extension_name)
+            .ok_or_else(|| format!("extension '{extension_name}' not found in enablement file"))?;
+        obj.entry("_disabled")
+            .or_insert_with(|| serde_json::Value::Object(serde_json::Map::new()))
+            .as_object_mut()
+            .ok_or("_disabled section is not an object")?
+            .insert(extension_name.to_string(), entry);
+    }
+
+    let updated = serde_json::to_string_pretty(&json)
+        .map_err(|e| format!("serialization error: {e}"))?;
+
+    // Ensure parent directory exists (file may not exist yet)
+    if let Some(parent) = std::path::Path::new(enablement_path).parent() {
+        std::fs::create_dir_all(parent).map_err(|e| format!("cannot create dir: {e}"))?;
+    }
+
+    let tmp_path = format!("{enablement_path}.tmp");
+    std::fs::write(&tmp_path, &updated)
+        .map_err(|e| format!("cannot write temp file: {e}"))?;
+    std::fs::rename(&tmp_path, enablement_path).map_err(|e| {
+        let _ = std::fs::remove_file(&tmp_path);
+        format!("cannot atomically replace {enablement_path}: {e}")
+    })?;
+
+    Ok(())
+}
+
 /// Move a skill folder between active and .disabled locations.
 pub fn move_skill_folder(skill_path: &str, skill_name: &str, active: bool) -> Result<(), String> {
     let current = std::path::Path::new(skill_path);
@@ -237,5 +289,79 @@ mod tests {
         move_mcp_in_config(&config_path, "srv", false).unwrap();
 
         assert!(!std::path::Path::new(&format!("{config_path}.tmp")).exists());
+    }
+
+    // ── toggle_extension_active ──────────────────────────────────────────────
+
+    fn make_enablement(dir: &std::path::Path, val: serde_json::Value) -> String {
+        let path = dir.join("extension-enablement.json");
+        fs::write(&path, serde_json::to_string_pretty(&val).unwrap()).unwrap();
+        path.to_string_lossy().to_string()
+    }
+
+    #[test]
+    fn disable_extension_moves_to_disabled_section() {
+        let tmp = TempDir::new().unwrap();
+        let path = make_enablement(&tmp.path(), serde_json::json!({
+            "my-ext": { "overrides": ["/Users/*"] }
+        }));
+
+        toggle_extension_active(&path, "my-ext", false).unwrap();
+
+        let content: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
+        assert!(content.get("my-ext").is_none());
+        assert!(content["_disabled"]["my-ext"].is_object());
+        assert_eq!(content["_disabled"]["my-ext"]["overrides"][0], "/Users/*");
+    }
+
+    #[test]
+    fn enable_extension_restores_from_disabled_section() {
+        let tmp = TempDir::new().unwrap();
+        let path = make_enablement(&tmp.path(), serde_json::json!({
+            "_disabled": { "my-ext": { "overrides": ["/Users/*"] } }
+        }));
+
+        toggle_extension_active(&path, "my-ext", true).unwrap();
+
+        let content: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
+        assert!(content["my-ext"].is_object());
+        assert_eq!(content["my-ext"]["overrides"][0], "/Users/*");
+        assert!(content["_disabled"].get("my-ext").is_none());
+    }
+
+    #[test]
+    fn enable_extension_not_in_disabled_uses_empty_entry() {
+        let tmp = TempDir::new().unwrap();
+        // No _disabled section — enabling adds an empty entry
+        let path = make_enablement(&tmp.path(), serde_json::json!({}));
+
+        toggle_extension_active(&path, "new-ext", true).unwrap();
+
+        let content: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
+        assert!(content["new-ext"].is_object());
+    }
+
+    #[test]
+    fn disable_extension_missing_returns_err() {
+        let tmp = TempDir::new().unwrap();
+        let path = make_enablement(&tmp.path(), serde_json::json!({}));
+
+        let result = toggle_extension_active(&path, "ghost-ext", false);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn toggle_extension_creates_file_when_missing_on_enable() {
+        let tmp = TempDir::new().unwrap();
+        let path = tmp.path().join("extension-enablement.json").to_string_lossy().to_string();
+        // File does not exist — enable should create it
+        toggle_extension_active(&path, "new-ext", true).unwrap();
+
+        let content: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+        assert!(content["new-ext"].is_object());
     }
 }

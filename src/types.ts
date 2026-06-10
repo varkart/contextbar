@@ -25,6 +25,7 @@ export interface McpServer {
   active: boolean;
   hasSecrets: boolean;
   secretKeyNames: string[];
+  extensionName?: string; // set for extension-dir MCPs (e.g. Gemini extensions)
 }
 
 export interface McpTool {

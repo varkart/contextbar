@@ -158,6 +158,7 @@ pub fn parse_mcp_servers(
                 active,
                 has_secrets,
                 secret_key_names,
+                extension_name: None,
             });
         }
     }
