@@ -1,0 +1,21 @@
+schema_version = 1
+id = "kiro"
+name = "Kiro"
+
+# Kiro replaced Amazon Q Developer; check both new Kiro paths and legacy Q paths
+[[detection]]
+type = "binary"
+name = "kiro"
+
+[[detection]]
+type = "dir"
+path = "~/.kiro"
+
+# Legacy Amazon Q paths (still valid on older installs)
+[[detection]]
+type = "dir"
+path = "~/.aws/amazonq"
+
+[[detection]]
+type = "dir"
+path = "~/.q"
