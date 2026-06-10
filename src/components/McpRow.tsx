@@ -31,11 +31,11 @@ function McpTooltipContent({ mcp }: { mcp: McpServer }) {
   const commandStr = [mcp.command, ...mcp.args].join(' ');
   return (
     <div className="space-y-1.5">
-      <p className="text-[11px] font-semibold">{mcp.name}</p>
-      <p className="text-[10px] opacity-70 font-mono break-all leading-relaxed">{commandStr}</p>
+      <p className="text-[13px] font-semibold">{mcp.name}</p>
+      <p className="text-[12px] opacity-70 font-mono break-all leading-relaxed">{commandStr}</p>
       {mcp.hasSecrets && mcp.secretKeyNames.length > 0 && (
         <div className="pt-0.5 border-t border-[var(--c-border)]">
-          <p className="text-[10px] opacity-50">env: {mcp.secretKeyNames.join(', ')}</p>
+          <p className="text-[12px] opacity-50">env: {mcp.secretKeyNames.join(', ')}</p>
         </div>
       )}
     </div>
@@ -62,7 +62,7 @@ export default function McpRow({ mcp, query = '', onSelect, onToggle, toggling =
         className={`group flex items-center gap-2 py-[3px] pl-[18px] pr-2 rounded-sm w-full border-l-2 border-transparent hover:border-violet-400/50 hover:bg-[var(--c-hover)] hover:translate-x-[1px] transition-all duration-150 ease-out ${onSelect ? 'cursor-pointer' : 'cursor-default'} ${!mcp.active ? 'opacity-40' : ''}`}
       >
         <span className="w-[3px] h-[3px] rounded-full bg-violet-400/60 flex-shrink-0" aria-hidden="true" />
-        <Highlight text={mcp.name} query={query} className="text-[12px] font-mono text-[var(--c-text-2)] truncate flex-1 leading-5" />
+        <Highlight text={mcp.name} query={query} className="text-[14px] font-mono text-[var(--c-text-2)] truncate flex-1 leading-5" />
         {mcp.hasSecrets && <span className="flex-shrink-0"><LockIcon /></span>}
         <span className="flex-1" />
         {onToggle ? (

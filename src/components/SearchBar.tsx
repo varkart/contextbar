@@ -17,7 +17,7 @@ export default function SearchBar({ value, onChange }: SearchBarProps) {
           value={value}
           onChange={e => onChange(e.target.value)}
           placeholder="Search tools, skills, MCPs…"
-          className="w-full bg-[var(--c-input)] border border-[var(--c-border)] rounded-md pl-7 pr-7 py-1.5 text-[12px] text-[var(--c-text)] placeholder-[var(--c-text-3)] outline-none focus:border-[var(--c-text-2)] transition-colors"
+          className="w-full bg-[var(--c-input)] border border-[var(--c-border)] rounded-md pl-7 pr-7 py-1.5 text-[14px] text-[var(--c-text)] placeholder-[var(--c-text-3)] outline-none focus:border-[var(--c-text-2)] transition-colors"
           autoComplete="off"
           spellCheck={false}
         />

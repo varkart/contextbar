@@ -73,7 +73,7 @@ function FileTreeNode({ entry, depth }: { entry: FileEntry; depth: number }) {
         style={{ paddingLeft: `${(depth * 16) + 8}px` }}
       >
         <FileIcon extension={entry.extension} isDir={entry.isDir} />
-        <span className={`text-[12px] truncate flex-1 ${
+        <span className={`text-[14px] truncate flex-1 ${
           entry.isDir
             ? 'text-[var(--c-text)] font-medium'
             : 'text-[var(--c-text-2)]'
@@ -136,25 +136,25 @@ function ExpandableDescription({ skill }: { skill: Skill }) {
     <div className="px-4 py-3 border-b border-[var(--c-border)]">
       {expanded && fullContent !== null ? (
         <>
-          <pre className="text-[11px] text-[var(--c-text-2)] leading-relaxed whitespace-pre-wrap font-sans overflow-x-hidden">
+          <pre className="text-[13px] text-[var(--c-text-2)] leading-relaxed whitespace-pre-wrap font-sans overflow-x-hidden">
             {fullContent}
           </pre>
           <button
             onClick={() => setExpanded(false)}
-            className="text-[11px] text-indigo-500 hover:text-indigo-400 mt-2 transition-colors"
+            className="text-[13px] text-indigo-500 hover:text-indigo-400 mt-2 transition-colors"
           >
             Show less
           </button>
         </>
       ) : (
         <>
-          <p className="text-[12px] text-[var(--c-text-2)] leading-relaxed line-clamp-3">
+          <p className="text-[14px] text-[var(--c-text-2)] leading-relaxed line-clamp-3">
             {skill.description}
           </p>
           <button
             onClick={loadFull}
             disabled={loadingContent}
-            className="text-[11px] text-indigo-500 hover:text-indigo-400 mt-1.5 transition-colors disabled:opacity-50"
+            className="text-[13px] text-indigo-500 hover:text-indigo-400 mt-1.5 transition-colors disabled:opacity-50"
           >
             {loadingContent ? 'Loading…' : 'Show full description →'}
           </button>
@@ -193,11 +193,11 @@ export default function SkillDetailPanel({ skill, onBack, toolName }: SkillDetai
         </button>
         {toolName && (
           <>
-            <span className="text-[11px] text-[var(--c-text-3)] truncate max-w-[80px]">{toolName}</span>
-            <span className="text-[10px] text-[var(--c-text-3)]">›</span>
+            <span className="text-[13px] text-[var(--c-text-3)] truncate max-w-[80px]">{toolName}</span>
+            <span className="text-[12px] text-[var(--c-text-3)]">›</span>
           </>
         )}
-        <span className="text-[13px] font-semibold text-[var(--c-text)] tracking-[-0.01em] truncate">
+        <span className="text-[15px] font-semibold text-[var(--c-text)] tracking-[-0.01em] truncate">
           {skill.name}
         </span>
       </div>
@@ -208,14 +208,14 @@ export default function SkillDetailPanel({ skill, onBack, toolName }: SkillDetai
 
         {/* File tree */}
         <div className="px-2 py-2">
-          <p className="text-[11px] font-semibold text-indigo-500 px-2 mb-1">Files</p>
+          <p className="text-[13px] font-semibold text-indigo-500 px-2 mb-1">Files</p>
           {loading && (
             <div className="px-2 py-4 animate-pulse space-y-2">
               {[1,2,3].map(i => <div key={i} className="h-3 bg-[var(--c-skeleton)] rounded w-3/4"/>)}
             </div>
           )}
           {error && (
-            <p className="text-[11px] text-red-400 px-2 py-2">{error}</p>
+            <p className="text-[13px] text-red-400 px-2 py-2">{error}</p>
           )}
           {fileTree && !loading && (
             fileTree.isDir
@@ -226,7 +226,7 @@ export default function SkillDetailPanel({ skill, onBack, toolName }: SkillDetai
 
         {/* Path */}
         <div className="px-4 py-3 border-t border-[var(--c-border)] mt-auto">
-          <p className="text-[10px] text-[var(--c-text-3)] font-mono break-all leading-relaxed">
+          <p className="text-[12px] text-[var(--c-text-3)] font-mono break-all leading-relaxed">
             {skill.path}
           </p>
         </div>

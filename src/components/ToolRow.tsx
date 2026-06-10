@@ -18,7 +18,7 @@ function ToolIcon({ tool }: { tool: AiTool }) {
   const colors = TOOL_COLORS[tool.id] ?? { bg: 'bg-zinc-500/10', text: 'text-zinc-500' };
   return (
     <span
-      className={`inline-flex items-center justify-center w-[20px] h-[20px] rounded text-[10px] font-bold flex-shrink-0 select-none ${colors.bg} ${colors.text}`}
+      className={`inline-flex items-center justify-center w-[20px] h-[20px] rounded text-[12px] font-bold flex-shrink-0 select-none ${colors.bg} ${colors.text}`}
       aria-hidden="true"
     >
       {tool.name[0].toUpperCase()}
@@ -63,12 +63,12 @@ export default function ToolRow({ tool, onSelectTool }: ToolRowProps) {
       <StatusDot state={statusState} />
       <ToolIcon tool={tool} />
 
-      <span className="text-[14px] font-semibold text-[var(--c-text)] flex-1 truncate leading-5">
+      <span className="text-[16px] font-semibold text-[var(--c-text)] flex-1 truncate leading-5">
         {tool.name}
       </span>
 
       {tool.installed && (tool.skills.length > 0 || tool.mcps.length > 0) && (
-        <span className="text-[10px] text-[var(--c-text-3)] flex-shrink-0 tabular-nums">
+        <span className="text-[12px] text-[var(--c-text-3)] flex-shrink-0 tabular-nums">
           {[
             tool.skills.length > 0 && `${tool.skills.length} skills`,
             tool.mcps.length > 0  && `${tool.mcps.length} mcp`,
@@ -77,13 +77,13 @@ export default function ToolRow({ tool, onSelectTool }: ToolRowProps) {
       )}
 
       {tool.version && (
-        <span className="text-[10px] text-[var(--c-text-3)] flex-shrink-0 tabular-nums">
+        <span className="text-[12px] text-[var(--c-text-3)] flex-shrink-0 tabular-nums">
           {tool.version.split('-')[0]}
         </span>
       )}
 
       {!tool.installed && (
-        <span className="text-[10px] text-[var(--c-text-3)]">not found</span>
+        <span className="text-[12px] text-[var(--c-text-3)]">not found</span>
       )}
 
       {canNavigate && <ChevronRight />}

@@ -36,13 +36,13 @@ export default function McpSection({ mcps, query, matchedNames, onSelectMcp, onT
         aria-expanded={sectionOpen}
       >
         <span className="text-violet-400/70"><ChevronIcon open={sectionOpen} /></span>
-        <span className="text-[11px] font-semibold text-violet-500">MCPs</span>
-        <span className="text-[11px] text-violet-400/60">{filtered.length}</span>
+        <span className="text-[13px] font-semibold text-violet-500">MCPs</span>
+        <span className="text-[13px] text-violet-400/60">{filtered.length}</span>
       </button>
 
       {sectionOpen && (
         filtered.length === 0 ? (
-          <p className="text-[11px] text-zinc-700 px-2 py-1 italic">None detected</p>
+          <p className="text-[13px] text-zinc-700 px-2 py-1 italic">None detected</p>
         ) : (
           filtered.map((mcp) => (
             <McpRow
