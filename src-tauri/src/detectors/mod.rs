@@ -144,8 +144,9 @@ pub fn parse_mcp_servers(
                 _ => (false, vec![]),
             };
 
-            let url = cfg
-                .get("httpUrl")
+            // httpUrl = streamable HTTP, url = SSE — both treated as remote URL
+            let url = cfg.get("httpUrl")
+                .or_else(|| cfg.get("url"))
                 .and_then(|v| v.as_str())
                 .map(|s| s.to_string());
 

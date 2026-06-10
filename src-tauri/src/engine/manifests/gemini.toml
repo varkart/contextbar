@@ -14,6 +14,7 @@ timeout_ms = 800
 parse = "first_line"
 
 # Third-party MCPs from settings.json (JSONC — supports // comments)
+# Disabled state tracked separately in mcp-server-enablement.json
 [[mcp_sources]]
 type = "json_key_pair"
 file = "~/.gemini/settings.json"
