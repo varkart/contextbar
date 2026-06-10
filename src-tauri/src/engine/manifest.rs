@@ -121,6 +121,11 @@ pub enum McpSourceSpec {
         #[serde(default = "default_mcp_key")]
         active_key: String,
     },
+    /// Claude Code's ~/.claude.json: collects mcpServers from all projects entries,
+    /// deduplicated by name (first occurrence wins).
+    ClaudeDotfile {
+        file: String,
+    },
 }
 
 fn default_mcp_key() -> String { "mcpServers".to_string() }
