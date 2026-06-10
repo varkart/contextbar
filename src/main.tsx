@@ -8,14 +8,17 @@ import { reactErrorHandler } from '@sentry/react'
 import App from './App'
 import './index.css'
 import { initAnalytics } from './analytics'
+import { invoke } from '@tauri-apps/api/core'
 
 initAnalytics()
 
-ReactDOM.createRoot(document.getElementById('root') as HTMLElement, {
+const root = ReactDOM.createRoot(document.getElementById('root') as HTMLElement, {
   onUncaughtError: reactErrorHandler(),
   onCaughtError: reactErrorHandler(),
   onRecoverableError: reactErrorHandler(),
-}).render(
+})
+
+root.render(
   <React.StrictMode>
     <PostHogProvider client={posthog}>
       <PostHogErrorBoundary>
@@ -24,3 +27,10 @@ ReactDOM.createRoot(document.getElementById('root') as HTMLElement, {
     </PostHogProvider>
   </React.StrictMode>,
 )
+
+// Show window only after React has painted — eliminates white flash
+requestAnimationFrame(() => {
+  requestAnimationFrame(() => {
+    invoke('show_window').catch(() => {})
+  })
+})
