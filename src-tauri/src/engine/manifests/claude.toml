@@ -12,6 +12,11 @@ file = "~/.claude/settings.json"
 active_key = "mcpServers"
 disabled_key = "disabledMcpServers"
 
+[[mcp_sources]]
+type = "claude_plugins"
+installed_plugins_file = "~/.claude/plugins/installed_plugins.json"
+mcp_filename = ".mcp.json"
+
 [[skill_sources]]
 type = "directory"
 path = "~/.claude/skills"
