@@ -27,3 +27,15 @@ dir = "~/.gemini/extensions"
 manifest_file = "gemini-extension.json"
 enablement_file = "~/.gemini/extensions/extension-enablement.json"
 extension_path_var = "${extensionPath}"
+
+# User skills — ~/.agents/skills/ (higher precedence alias)
+[[skill_sources]]
+type = "directory"
+path = "~/.agents/skills"
+disabled_subdir = ".disabled"
+
+# User skills — ~/.gemini/skills/ (primary path)
+[[skill_sources]]
+type = "directory"
+path = "~/.gemini/skills"
+disabled_subdir = ".disabled"
