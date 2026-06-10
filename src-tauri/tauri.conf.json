@@ -37,10 +37,9 @@
       "frameworks": [],
       "minimumSystemVersion": "13.0",
       "dmg": {
-        "background": "icons/dmg-background.png",
-        "windowSize": { "width": 660, "height": 400 },
-        "appPosition": { "x": 160, "y": 185 },
-        "applicationFolderPosition": { "x": 500, "y": 185 }
+        "windowSize": { "width": 540, "height": 360 },
+        "appPosition": { "x": 130, "y": 160 },
+        "applicationFolderPosition": { "x": 410, "y": 160 }
       }
     }
   }
