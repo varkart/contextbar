@@ -2,6 +2,7 @@ use serde::Deserialize;
 
 #[derive(Debug, Deserialize)]
 pub struct Manifest {
+    #[allow(dead_code)]
     pub schema_version: u32,
     pub id: String,
     pub name: String,

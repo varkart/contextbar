@@ -19,3 +19,15 @@ path = "~/.aws/amazonq"
 [[detection]]
 type = "dir"
 path = "~/.q"
+
+# Global MCP config
+[[mcp_sources]]
+type = "json_key_pair"
+file = "~/.kiro/settings/mcp.json"
+active_key = "mcpServers"
+
+# Legacy Amazon Q MCP config
+[[mcp_sources]]
+type = "json_key_pair"
+file = "~/.aws/amazonq/mcp.json"
+active_key = "mcpServers"

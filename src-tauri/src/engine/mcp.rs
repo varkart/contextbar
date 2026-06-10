@@ -391,22 +391,46 @@ fn claude_mcp_cache() -> &'static std::sync::Mutex<Option<(Vec<McpServer>, std::
     CLAUDE_MCP_CACHE.get_or_init(|| std::sync::Mutex::new(None))
 }
 
+/// Returns true when the cache has no valid entry — caller should trigger a warmup.
+pub fn is_claude_mcp_cache_cold() -> bool {
+    const TTL: std::time::Duration = std::time::Duration::from_secs(60);
+    if let Ok(guard) = claude_mcp_cache().lock() {
+        if let Some((_, ts)) = *guard {
+            return ts.elapsed() >= TTL;
+        }
+    }
+    true
+}
+
+/// Runs `claude mcp list`, populates the cache, and returns the results.
+/// Intended to be called from a background thread.
+pub fn warm_claude_mcp_list(home: &std::path::Path) {
+    run_claude_mcp_list("claude", 6000, home);
+}
+
 fn read_claude_mcp_list(
-    binary: &str,
-    timeout_ms: u64,
-    home: &std::path::Path,
+    _binary: &str,
+    _timeout_ms: u64,
+    _home: &std::path::Path,
 ) -> (Vec<McpServer>, Option<String>) {
     const TTL: std::time::Duration = std::time::Duration::from_secs(60);
-    {
-        if let Ok(guard) = claude_mcp_cache().lock() {
-            if let Some((ref cached, ts)) = *guard {
-                if ts.elapsed() < TTL {
-                    return (cached.clone(), None);
-                }
+    // Return cached result if still fresh.
+    if let Ok(guard) = claude_mcp_cache().lock() {
+        if let Some((ref cached, ts)) = *guard {
+            if ts.elapsed() < TTL {
+                return (cached.clone(), None);
             }
         }
     }
+    // Cache is cold — return empty; lib.rs spawns a background warmup.
+    (vec![], None)
+}
 
+fn run_claude_mcp_list(
+    binary: &str,
+    timeout_ms: u64,
+    home: &std::path::Path,
+) {
     // Try the given binary, then common install paths if it fails
     let candidates: Vec<std::path::PathBuf> = {
         let mut v = vec![std::path::PathBuf::from(binary)];
@@ -434,7 +458,7 @@ fn read_claude_mcp_list(
 
     let bin = match bin {
         Some(b) => b,
-        None => return (vec![], None), // claude not found — silent skip
+        None => return, // claude not found — silent skip
     };
 
     let timeout = std::time::Duration::from_millis(timeout_ms);
@@ -448,15 +472,14 @@ fn read_claude_mcp_list(
         timeout,
     ) {
         Some(o) => o,
-        None => return (vec![], None),
+        None => return,
     };
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     let mcps = parse_mcp_list_output(&stdout);
     if let Ok(mut guard) = claude_mcp_cache().lock() {
-        *guard = Some((mcps.clone(), std::time::Instant::now()));
+        *guard = Some((mcps, std::time::Instant::now()));
     }
-    (mcps, None)
 }
 
 /// Parse `claude mcp list` stdout into McpServer entries.
