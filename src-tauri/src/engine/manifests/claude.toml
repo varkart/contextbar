@@ -6,6 +6,13 @@ name = "Claude Code"
 type = "dir"
 path = "~/.claude"
 
+[version]
+type = "command"
+binary = "claude"
+args = ["--version"]
+timeout_ms = 1500
+parse = "first_token"
+
 [[mcp_sources]]
 type = "json_key_pair"
 file = "~/.claude/settings.json"
