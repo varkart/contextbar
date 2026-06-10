@@ -14,7 +14,8 @@
     "test:coverage": "vitest run --coverage",
     "test:e2e": "playwright test --config=e2e/playwright.config.ts",
     "test:e2e:headed": "playwright test --config=e2e/playwright.config.ts --headed",
-    "test:e2e:report": "playwright show-report playwright-report"
+    "test:e2e:report": "playwright show-report playwright-report",
+    "dmg": "npm run tauri build -- --bundles dmg && bash scripts/clean-dmg.sh"
   },
   "dependencies": {
     "@posthog/react": "^1.9.1",
