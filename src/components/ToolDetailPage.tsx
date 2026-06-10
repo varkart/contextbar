@@ -11,9 +11,12 @@ interface ToolDetailPageProps {
   onSelectSkill: (skill: Skill) => void;
   onSelectMcp: (mcp: McpServer) => void;
   onToolUpdated: () => void;
+  query?: string;
+  matchedSkills?: Set<string>;
+  matchedMcps?: Set<string>;
 }
 
-export default function ToolDetailPage({ tool, onBack, onSelectSkill, onSelectMcp, onToolUpdated }: ToolDetailPageProps) {
+export default function ToolDetailPage({ tool, onBack, onSelectSkill, onSelectMcp, onToolUpdated, query, matchedSkills, matchedMcps }: ToolDetailPageProps) {
   const colors = TOOL_COLORS[tool.id] ?? { bg: 'bg-zinc-500/10', text: 'text-zinc-500' };
   const [togglingSkill, setTogglingSkill] = useState<string | undefined>();
   const [togglingMcp, setTogglingMcp] = useState<string | undefined>();
@@ -126,6 +129,9 @@ export default function ToolDetailPage({ tool, onBack, onSelectSkill, onSelectMc
       <div className="flex-1 overflow-y-auto">
         <ToolDetails
           tool={tool}
+          query={query}
+          matchedSkills={matchedSkills}
+          matchedMcps={matchedMcps}
           onSelectSkill={onSelectSkill}
           onSelectMcp={onSelectMcp}
           onToggleSkill={handleToggleSkill}

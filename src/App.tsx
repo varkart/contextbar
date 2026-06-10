@@ -185,6 +185,9 @@ export default function App() {
           onSelectSkill={handleSelectSkill}
           onSelectMcp={handleSelectMcp}
           onToolUpdated={fetchTools}
+          query={query || undefined}
+          matchedSkills={searchResults.find(r => r.tool.id === selectedTool.id)?.matchedSkills}
+          matchedMcps={searchResults.find(r => r.tool.id === selectedTool.id)?.matchedMcps}
         />
       ) : view === 'settings' ? (
         <Settings
