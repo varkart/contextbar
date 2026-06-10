@@ -10,7 +10,7 @@ const TOOL_COLORS: Record<string, { bg: string; text: string }> = {
   chatgpt:  { bg: 'bg-emerald-500/10',  text: 'text-emerald-500' },
   aider:    { bg: 'bg-lime-500/10',     text: 'text-lime-500'    },
   continue: { bg: 'bg-violet-500/10',   text: 'text-violet-500'  },
-  amazonq:  { bg: 'bg-amber-500/10',    text: 'text-amber-500'   },
+  kiro:     { bg: 'bg-amber-500/10',    text: 'text-amber-500'   },
   zed:      { bg: 'bg-purple-500/10',   text: 'text-purple-500'  },
 };
 

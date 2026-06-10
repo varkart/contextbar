@@ -90,13 +90,16 @@ export default function McpDetailPanel({ mcp, onBack, toolName }: McpDetailPanel
       </div>
 
       <div className="flex-1 overflow-y-auto">
-        {/* Description / command */}
+        {/* Description / command / URL */}
         <div className="px-4 py-3 border-b border-[var(--c-border)]">
+          {mcp.url && (
+            <p className="text-[10px] text-[var(--c-text-3)] font-mono break-all leading-relaxed mb-1">{mcp.url}</p>
+          )}
           {mcp.description ? (
             <p className="text-[12px] text-[var(--c-text-2)] leading-relaxed">{mcp.description}</p>
-          ) : (
+          ) : !mcp.url ? (
             <p className="text-[10px] text-[var(--c-text-3)] font-mono break-all leading-relaxed">{commandStr}</p>
-          )}
+          ) : null}
           {mcp.hasSecrets && mcp.secretKeyNames.length > 0 && (
             <p className="text-[10px] text-amber-400/70 mt-1">env: {mcp.secretKeyNames.join(', ')}</p>
           )}

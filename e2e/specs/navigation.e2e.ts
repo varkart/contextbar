@@ -53,11 +53,13 @@ test('back button returns to main list', async ({ page }) => {
 
 test('Escape returns from tool detail to main list', async ({ page }) => {
   await page.getByText('Claude Code').click()
-  await page.waitForSelector('text=aicontextbar')
+  // Breadcrumb separator › appears on detail page
+  await expect(page.locator('span').filter({ hasText: '›' })).toBeVisible()
 
   await page.keyboard.press('Escape')
   await expect(page.getByText('Claude Code')).toBeVisible()
-  await expect(page.locator('text=aicontextbar')).not.toBeVisible()
+  // Breadcrumb separator gone — back on main list
+  await expect(page.locator('span').filter({ hasText: '›' })).not.toBeVisible()
 })
 
 test('clicking skill navigates to skill detail with breadcrumb', async ({ page }) => {
