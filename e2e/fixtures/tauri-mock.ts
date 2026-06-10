@@ -30,17 +30,100 @@ export const mockCursorTool: AiTool = {
   error: undefined,
 }
 
-export type MockOverrides = {
-  set_skill_active?: 'success' | 'error' | 'slow'
+// Claude with richer MCP data: active + inactive + HTTP URL type
+export const mockClaudeWithMcpVariants: AiTool = {
+  ...mockClaudeTool,
+  mcps: [
+    {
+      name: 'github',
+      command: 'npx',
+      args: ['-y', '@modelcontextprotocol/server-github'],
+      active: true,
+      hasSecrets: true,
+      secretKeyNames: ['GITHUB_TOKEN'],
+    },
+    {
+      name: 'filesystem',
+      command: 'npx',
+      args: ['-y', '@modelcontextprotocol/server-filesystem', '/tmp'],
+      active: false,
+      hasSecrets: false,
+      secretKeyNames: [],
+    },
+    {
+      name: 'remote-http',
+      command: '',
+      args: [],
+      url: 'https://mcp.example.com/sse',
+      active: true,
+      hasSecrets: true,
+      secretKeyNames: ['Authorization'],
+    },
+  ],
 }
 
-export async function injectTauriMock(page: Page, overrides: MockOverrides = {}) {
-  // Pass data + config as plain JSON — no closure serialization issues
+// Windsurf: installed, 3 MCPs (matching real ~/.codeium/windsurf/mcp_config.json), no skills
+export const mockWindsurfTool: AiTool = {
+  id: 'windsurf',
+  name: 'Windsurf',
+  version: '1.10.0',
+  installed: true,
+  skills: [],
+  mcps: [
+    { name: 'mcp-playwright',       command: 'npx', args: ['-y', '@playwright/mcp@latest'],                         active: true,  hasSecrets: false, secretKeyNames: [] },
+    { name: 'sequential-thinking',  command: 'npx', args: ['-y', '@modelcontextprotocol/server-sequential-thinking'], active: true,  hasSecrets: false, secretKeyNames: [] },
+    { name: 'sql-explorer',         command: 'node', args: ['-y', '@modelcontextprotocol/server-filesystem', '/tmp'], active: false, hasSecrets: false, secretKeyNames: [] },
+  ],
+  error: undefined,
+}
+
+// Kiro: not installed
+export const mockKiroTool: AiTool = {
+  id: 'kiro',
+  name: 'Kiro',
+  version: undefined,
+  installed: false,
+  skills: [],
+  mcps: [],
+  error: undefined,
+}
+
+// Gemini: installed but detector returned an error
+export const mockGeminiErrorTool: AiTool = {
+  id: 'gemini',
+  name: 'Gemini CLI',
+  version: '0.1.9',
+  installed: true,
+  skills: [],
+  mcps: [],
+  error: 'failed to parse ~/.gemini/settings.json: unexpected token',
+}
+
+// Aider: installed, no skills, no MCPs (no-config state)
+export const mockAiderNoConfigTool: AiTool = {
+  id: 'aider',
+  name: 'Aider',
+  version: '0.80.0',
+  installed: true,
+  skills: [],
+  mcps: [],
+  error: undefined,
+}
+
+export type MockOverrides = {
+  set_skill_active?: 'success' | 'error' | 'slow'
+  set_mcp_active?:   'success' | 'error' | 'slow'
+}
+
+export async function injectTauriMock(
+  page: Page,
+  overrides: MockOverrides = {},
+  tools?: AiTool[],
+) {
   const initData = {
-    tools: [
-      JSON.parse(JSON.stringify(mockClaudeTool)),
-      JSON.parse(JSON.stringify(mockCursorTool)),
-    ] as AiTool[],
+    tools: JSON.parse(JSON.stringify(
+      tools ?? [mockClaudeTool, mockCursorTool]
+    )) as AiTool[],
     overrides,
   }
 
@@ -51,7 +134,6 @@ export async function injectTauriMock(page: Page, overrides: MockOverrides = {})
       invoke: (cmd: string, args?: Record<string, unknown>) => {
         switch (cmd) {
           case 'get_tools':
-            // Deep copy — ensures React sees new references on re-fetch after mutation
             return Promise.resolve(JSON.parse(JSON.stringify(tools)))
 
           case 'get_version':
@@ -86,6 +168,23 @@ export async function injectTauriMock(page: Page, overrides: MockOverrides = {})
             })
           }
 
+          case 'set_mcp_active': {
+            const { toolId, mcpName, active } = (args ?? {}) as {
+              toolId: string; mcpName: string; active: boolean
+            }
+            const mode = (overrides as Record<string, string>).set_mcp_active ?? 'success'
+            if (mode === 'error') return Promise.reject(new Error('permission denied'))
+            const delay = mode === 'slow' ? new Promise<void>(r => setTimeout(r, 500)) : Promise.resolve()
+            return delay.then(() => {
+              const tool = tools.find((t: AiTool) => t.id === toolId)
+              if (tool) {
+                const mcp = tool.mcps.find((m: { name: string }) => m.name === mcpName)
+                if (mcp) (mcp as { active: boolean }).active = active
+              }
+              return null
+            })
+          }
+
           case 'query_mcp_tools':
             return Promise.resolve([
               { name: 'list_issues', description: 'List GitHub issues' },
@@ -109,7 +208,6 @@ export async function injectTauriMock(page: Page, overrides: MockOverrides = {})
         windows: [{ label: 'main' }],
       },
 
-      // Event system stubs (listen/emit/once)
       listen: (_event: string, _handler: unknown) => Promise.resolve(() => {}),
       emit: () => Promise.resolve(),
       once: (_event: string, _handler: unknown) => Promise.resolve(() => {}),
