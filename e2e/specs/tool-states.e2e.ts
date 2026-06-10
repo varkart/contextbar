@@ -27,17 +27,27 @@ test.describe('tool version display', () => {
     await page.waitForSelector('text=Claude Code', { timeout: 8000 })
   })
 
-  test('installed tool with version shows version string', async ({ page }) => {
-    // Claude has version '1.0.0'
+  test('version shown in Notes section on tool detail page', async ({ page }) => {
+    await page.getByText('Claude Code').click()
+    await page.waitForSelector('text=Notes', { timeout: 5000 })
     await expect(page.getByText('1.0.0')).toBeVisible()
   })
 
-  test('cursor version shown in tool row', async ({ page }) => {
+  test('cursor version shown in tool detail Notes section', async ({ page }) => {
+    await page.getByText('Cursor').click()
+    await page.waitForSelector('text=Notes', { timeout: 5000 })
     await expect(page.getByText('0.40.0')).toBeVisible()
   })
 
-  test('tool with no version field shows no version string', async ({ page }) => {
-    // Kiro is not installed so filtered from list — verify via Gemini (installed, has version)
+  test('version not shown in tool row', async ({ page }) => {
+    // Version moved to detail page — row should not show it
+    const claudeRow = page.locator('button', { hasText: 'Claude Code' })
+    await expect(claudeRow.getByText('1.0.0')).not.toBeVisible()
+  })
+
+  test('gemini version shown in detail Notes section', async ({ page }) => {
+    await page.locator('button', { hasText: 'Gemini CLI' }).click()
+    await page.waitForSelector('text=Notes', { timeout: 5000 })
     await expect(page.getByText('0.1.9')).toBeVisible()
   })
 })
