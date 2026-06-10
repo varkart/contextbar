@@ -1,8 +1,10 @@
 import { test, expect } from '@playwright/test'
-import { injectTauriMock } from '../fixtures/tauri-mock'
+import { injectTauriMock, mockClaudeTool, mockCursorTool, mockWindsurfTool } from '../fixtures/tauri-mock'
+
+const defaultTools = [mockClaudeTool, mockCursorTool, mockWindsurfTool]
 
 test.beforeEach(async ({ page }) => {
-  await injectTauriMock(page)
+  await injectTauriMock(page, {}, defaultTools)
   await page.goto('/')
   await page.waitForSelector('text=Claude Code', { timeout: 8000 })
 })
@@ -95,4 +97,31 @@ test('clearing search restores full list', async ({ page }) => {
 
   await expect(page.getByText('Claude Code')).toBeVisible()
   await expect(page.getByText('Cursor')).toBeVisible()
+})
+
+test('search by skill name — detail page shows only matched skill', async ({ page }) => {
+  const search = page.locator('input').first()
+  await search.fill('graphify')
+
+  await page.locator('button', { hasText: 'Claude Code' }).click()
+  await page.waitForSelector('text=Skills', { timeout: 5000 })
+
+  // matched skill visible
+  await expect(page.getByText('graphify').first()).toBeVisible()
+  // non-matched skills hidden
+  await expect(page.getByText('impeccable')).not.toBeVisible()
+  await expect(page.getByText('xlsx')).not.toBeVisible()
+})
+
+test('search by mcp name — detail page shows only matched mcp', async ({ page }) => {
+  const search = page.locator('input').first()
+  await search.fill('sequential')
+
+  // Windsurf matches because it has sequential-thinking MCP
+  await page.locator('button', { hasText: 'Windsurf' }).click()
+  await page.waitForSelector('text=MCPs', { timeout: 5000 })
+
+  await expect(page.getByText('sequential-thinking')).toBeVisible()
+  await expect(page.getByText('mcp-playwright')).not.toBeVisible()
+  await expect(page.getByText('sql-explorer')).not.toBeVisible()
 })
