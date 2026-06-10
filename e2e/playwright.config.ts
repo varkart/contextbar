@@ -5,11 +5,17 @@ export default defineConfig({
   testMatch: '**/*.e2e.ts',
   timeout: 15000,
   retries: 1,
-  reporter: [['list'], ['html', { open: 'never' }]],
+  outputDir: '../test-results',
+  reporter: [
+    ['list'],
+    ['html', { outputFolder: '../playwright-report', open: 'never' }],
+    ['json', { outputFile: '../test-results/e2e-results.json' }],
+  ],
 
   use: {
     baseURL: 'http://localhost:1420',
     trace: 'on-first-retry',
+    screenshot: 'only-on-failure',
   },
 
   projects: [
