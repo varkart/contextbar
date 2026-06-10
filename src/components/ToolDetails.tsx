@@ -18,8 +18,19 @@ interface ToolDetailsProps {
 export default function ToolDetails({ tool, query, matchedSkills, matchedMcps, onSelectSkill, onSelectMcp, onToggleSkill, togglingSkill, onToggleMcp, togglingMcp }: ToolDetailsProps) {
   return (
     <div className="px-2 pt-1 pb-3 space-y-3">
-      {tool.error && (
-        <p className="text-[13px] text-red-400/80 px-2 font-mono">{tool.error}</p>
+      {(tool.version || tool.error) && (
+        <div className="px-2 pt-1 pb-2 border-b border-[var(--c-border-sub)]">
+          <p className="text-[11px] font-semibold text-[var(--c-text-3)] uppercase tracking-wider mb-1.5">Notes</p>
+          {tool.version && (
+            <div className="flex items-center gap-2">
+              <span className="text-[12px] text-[var(--c-text-3)]">version</span>
+              <span className="text-[12px] font-mono text-[var(--c-text-2)]">{tool.version.split('-')[0]}</span>
+            </div>
+          )}
+          {tool.error && (
+            <p className="text-[13px] text-red-400/80 font-mono mt-1">{tool.error}</p>
+          )}
+        </div>
       )}
       <SkillSection
         skills={tool.skills}

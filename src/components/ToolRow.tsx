@@ -76,12 +76,6 @@ export default function ToolRow({ tool, onSelectTool }: ToolRowProps) {
         </span>
       )}
 
-      {tool.version && (
-        <span className="text-[12px] text-[var(--c-text-3)] flex-shrink-0 tabular-nums">
-          {tool.version.split('-')[0]}
-        </span>
-      )}
-
       {!tool.installed && (
         <span className="text-[12px] text-[var(--c-text-3)]">not found</span>
       )}
