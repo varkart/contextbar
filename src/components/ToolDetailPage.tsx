@@ -100,19 +100,19 @@ export default function ToolDetailPage({ tool, onBack, onSelectSkill, onSelectMc
           </svg>
         </button>
 
-        <span className="text-[11px] text-[var(--c-text-3)]">aicontextbar</span>
-        <span className="text-[10px] text-[var(--c-text-3)]">›</span>
+        <span className="text-[13px] text-[var(--c-text-3)]">aicontextbar</span>
+        <span className="text-[12px] text-[var(--c-text-3)]">›</span>
 
-        <span className={`inline-flex items-center justify-center w-[18px] h-[18px] rounded text-[9px] font-bold flex-shrink-0 ${colors.bg} ${colors.text}`}>
+        <span className={`inline-flex items-center justify-center w-[18px] h-[18px] rounded text-[11px] font-bold flex-shrink-0 ${colors.bg} ${colors.text}`}>
           {tool.name[0].toUpperCase()}
         </span>
 
-        <span className="text-[13px] font-semibold text-[var(--c-text)] tracking-[-0.01em] truncate">
+        <span className="text-[15px] font-semibold text-[var(--c-text)] tracking-[-0.01em] truncate">
           {tool.name}
         </span>
 
         {(tool.skills.length > 0 || tool.mcps.length > 0) && (
-          <span className="ml-auto text-[10px] text-[var(--c-text-3)] tabular-nums flex-shrink-0">
+          <span className="ml-auto text-[12px] text-[var(--c-text-3)] tabular-nums flex-shrink-0">
             {[
               tool.skills.length > 0 && `${tool.skills.length} skills`,
               tool.mcps.length > 0 && `${tool.mcps.length} mcp`,
@@ -123,7 +123,7 @@ export default function ToolDetailPage({ tool, onBack, onSelectSkill, onSelectMc
 
       {toggleError && (
         <div
-          className="mx-3 mt-2 px-3 py-1.5 rounded text-[11px] text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800 flex items-center justify-between gap-2 flex-shrink-0"
+          className="mx-3 mt-2 px-3 py-1.5 rounded text-[13px] text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800 flex items-center justify-between gap-2 flex-shrink-0"
           role="alert"
         >
           <span className="truncate">{toggleError}</span>

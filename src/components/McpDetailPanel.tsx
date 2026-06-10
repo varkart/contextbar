@@ -18,7 +18,7 @@ function ToolItem({ tool }: { tool: McpTool }) {
         className="w-full flex items-start gap-2 py-2 px-2 text-left hover:bg-[var(--c-hover)] transition-colors rounded-sm"
       >
         <span className="w-[3px] h-[3px] rounded-full bg-violet-400/60 flex-shrink-0 mt-[7px]" />
-        <span className="text-[12px] font-mono text-[var(--c-text-2)] flex-1 truncate">{tool.name}</span>
+        <span className="text-[14px] font-mono text-[var(--c-text-2)] flex-1 truncate">{tool.name}</span>
         {tool.description && (
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
             stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
@@ -28,7 +28,7 @@ function ToolItem({ tool }: { tool: McpTool }) {
         )}
       </button>
       {open && tool.description && (
-        <p className="text-[11px] text-[var(--c-text-3)] leading-relaxed px-4 pb-2 pl-6">
+        <p className="text-[13px] text-[var(--c-text-3)] leading-relaxed px-4 pb-2 pl-6">
           {tool.description}
         </p>
       )}
@@ -79,35 +79,35 @@ export default function McpDetailPanel({ mcp, onBack, toolName }: McpDetailPanel
         </button>
         {toolName && (
           <>
-            <span className="text-[11px] text-[var(--c-text-3)] truncate max-w-[80px]">{toolName}</span>
-            <span className="text-[10px] text-[var(--c-text-3)]">›</span>
+            <span className="text-[13px] text-[var(--c-text-3)] truncate max-w-[80px]">{toolName}</span>
+            <span className="text-[12px] text-[var(--c-text-3)]">›</span>
           </>
         )}
-        <span className="text-[13px] font-semibold text-[var(--c-text)] tracking-[-0.01em] truncate">
+        <span className="text-[15px] font-semibold text-[var(--c-text)] tracking-[-0.01em] truncate">
           {mcp.name}
         </span>
-        <span className="ml-auto text-[10px] bg-violet-500/10 text-violet-400 px-1.5 py-0.5 rounded font-mono">MCP</span>
+        <span className="ml-auto text-[12px] bg-violet-500/10 text-violet-400 px-1.5 py-0.5 rounded font-mono">MCP</span>
       </div>
 
       <div className="flex-1 overflow-y-auto">
         {/* Description / command / URL */}
         <div className="px-4 py-3 border-b border-[var(--c-border)]">
           {mcp.url && (
-            <p className="text-[10px] text-[var(--c-text-3)] font-mono break-all leading-relaxed mb-1">{mcp.url}</p>
+            <p className="text-[12px] text-[var(--c-text-3)] font-mono break-all leading-relaxed mb-1">{mcp.url}</p>
           )}
           {mcp.description ? (
-            <p className="text-[12px] text-[var(--c-text-2)] leading-relaxed">{mcp.description}</p>
+            <p className="text-[14px] text-[var(--c-text-2)] leading-relaxed">{mcp.description}</p>
           ) : !mcp.url ? (
-            <p className="text-[10px] text-[var(--c-text-3)] font-mono break-all leading-relaxed">{commandStr}</p>
+            <p className="text-[12px] text-[var(--c-text-3)] font-mono break-all leading-relaxed">{commandStr}</p>
           ) : null}
           {mcp.hasSecrets && mcp.secretKeyNames.length > 0 && (
-            <p className="text-[10px] text-amber-400/70 mt-1">env: {mcp.secretKeyNames.join(', ')}</p>
+            <p className="text-[12px] text-amber-400/70 mt-1">env: {mcp.secretKeyNames.join(', ')}</p>
           )}
         </div>
 
         {/* Live tools */}
         <div className="px-2 py-2">
-          <p className="text-[11px] font-semibold text-violet-500 px-2 mb-1">
+          <p className="text-[13px] font-semibold text-violet-500 px-2 mb-1">
             Live tools {!loading && !error && `(${tools.length})`}
           </p>
           {loading && (
@@ -116,10 +116,10 @@ export default function McpDetailPanel({ mcp, onBack, toolName }: McpDetailPanel
             </div>
           )}
           {error && (
-            <p className="text-[11px] text-red-400 px-2 py-2 leading-relaxed">{error}</p>
+            <p className="text-[13px] text-red-400 px-2 py-2 leading-relaxed">{error}</p>
           )}
           {!loading && !error && tools.length === 0 && (
-            <p className="text-[11px] text-[var(--c-text-3)] px-2 py-2">No tools returned</p>
+            <p className="text-[13px] text-[var(--c-text-3)] px-2 py-2">No tools returned</p>
           )}
           {!loading && !error && tools.length > 0 && (
             <div className="px-1">

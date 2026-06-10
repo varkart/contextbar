@@ -38,7 +38,7 @@ export default function Tooltip({ content, children }: TooltipProps) {
         <div
           role="tooltip"
           style={tooltipStyle}
-          className="z-50 max-w-[260px] min-w-[160px] bg-[var(--c-surface)] border border-[var(--c-border)] rounded-md px-2.5 py-2 text-[11px] text-[var(--c-text)] pointer-events-none shadow-xl shadow-black/20 animate-tooltip-in"
+          className="z-50 max-w-[260px] min-w-[160px] bg-[var(--c-surface)] border border-[var(--c-border)] rounded-md px-2.5 py-2 text-[13px] text-[var(--c-text)] pointer-events-none shadow-xl shadow-black/20 animate-tooltip-in"
         >
           {content}
         </div>

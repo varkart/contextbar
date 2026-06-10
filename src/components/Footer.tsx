@@ -36,13 +36,13 @@ export default function Footer({ lastUpdated, onRefresh, loading }: FooterProps)
 
   return (
     <div className="flex items-center justify-between px-4 py-2 border-t border-[var(--c-border)] flex-shrink-0">
-      <span className="text-[11px] text-[var(--c-text-3)] tabular-nums">
+      <span className="text-[13px] text-[var(--c-text-3)] tabular-nums">
         {formatAgo(lastUpdated)}
       </span>
       <div className="flex items-center gap-2">
         <button
           onClick={() => invoke('quit_app')}
-          className="text-[11px] text-[var(--c-text-3)] hover:text-red-400 transition-colors px-1 rounded"
+          className="text-[13px] text-[var(--c-text-3)] hover:text-red-400 transition-colors px-1 rounded"
           aria-label="Quit app"
         >
           Quit

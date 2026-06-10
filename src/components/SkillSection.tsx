@@ -42,13 +42,13 @@ export default function SkillSection({ skills, query, matchedPaths, onSelectSkil
         aria-expanded={sectionOpen}
       >
         <span className="text-indigo-400/70"><ChevronIcon open={sectionOpen} /></span>
-        <span className="text-[11px] font-semibold text-indigo-500">Skills</span>
-        <span className="text-[11px] text-indigo-400/60">{filtered.length}</span>
+        <span className="text-[13px] font-semibold text-indigo-500">Skills</span>
+        <span className="text-[13px] text-indigo-400/60">{filtered.length}</span>
       </button>
 
       {sectionOpen && (
         filtered.length === 0 ? (
-          <p className="text-[11px] text-zinc-700 px-2 py-1 italic">None detected</p>
+          <p className="text-[13px] text-zinc-700 px-2 py-1 italic">None detected</p>
         ) : (
           <>
             {visible.map((skill) => (
@@ -64,7 +64,7 @@ export default function SkillSection({ skills, query, matchedPaths, onSelectSkil
             {!query && !listExpanded && hiddenCount > 0 && (
               <button
                 onClick={() => setListExpanded(true)}
-                className="text-[11px] text-zinc-700 hover:text-zinc-500 pl-5 pr-2 py-[3px] transition-colors leading-5"
+                className="text-[13px] text-zinc-700 hover:text-zinc-500 pl-5 pr-2 py-[3px] transition-colors leading-5"
               >
                 +{hiddenCount} more
               </button>
@@ -72,7 +72,7 @@ export default function SkillSection({ skills, query, matchedPaths, onSelectSkil
             {!query && listExpanded && hiddenCount > 0 && (
               <button
                 onClick={() => setListExpanded(false)}
-                className="text-[11px] text-zinc-700 hover:text-zinc-500 pl-5 pr-2 py-[3px] transition-colors leading-5"
+                className="text-[13px] text-zinc-700 hover:text-zinc-500 pl-5 pr-2 py-[3px] transition-colors leading-5"
               >
                 Show less
               </button>

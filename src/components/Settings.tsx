@@ -36,8 +36,8 @@ function SettingRow({ label, description, children }: {
   return (
     <div className="flex items-center justify-between gap-4 py-2.5">
       <div className="min-w-0">
-        <p className="text-[13px] text-[var(--c-text)]">{label}</p>
-        {description && <p className="text-[11px] text-[var(--c-text-3)] mt-0.5">{description}</p>}
+        <p className="text-[15px] text-[var(--c-text)]">{label}</p>
+        {description && <p className="text-[13px] text-[var(--c-text-3)] mt-0.5">{description}</p>}
       </div>
       <div className="flex-shrink-0">{children}</div>
     </div>
@@ -46,7 +46,7 @@ function SettingRow({ label, description, children }: {
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
-    <p className="text-[11px] text-[var(--c-text-3)] font-medium mb-1 mt-4 first:mt-0">
+    <p className="text-[13px] text-[var(--c-text-3)] font-medium mb-1 mt-4 first:mt-0">
       {children}
     </p>
   )
@@ -108,7 +108,7 @@ function ThemeSelector({ value, onChange }: { value: ThemePreference; onChange: 
           aria-pressed={value === key}
         >
           <Icon />
-          <span className="text-[11px] font-medium">{label}</span>
+          <span className="text-[13px] font-medium">{label}</span>
         </button>
       ))}
     </div>
@@ -157,7 +157,7 @@ function ShortcutRecorder({ value, onChange }: { value: string; onChange: (s: st
       onKeyUp={handleKeyUp}
       onBlur={() => { setRecording(false); setPending(null) }}
       onClick={() => setRecording(true)}
-      className={`text-[11px] font-mono px-1.5 py-0.5 rounded border transition-all duration-150 min-w-[72px] text-center ${
+      className={`text-[13px] font-mono px-1.5 py-0.5 rounded border transition-all duration-150 min-w-[72px] text-center ${
         recording
           ? 'border-indigo-500 bg-indigo-500/10 text-indigo-400 outline-none'
           : 'border-[var(--c-border)] bg-[var(--c-surface)] text-[var(--c-text-2)] hover:border-indigo-400/50'
@@ -252,7 +252,7 @@ export default function Settings({ onBack, updateInfo, theme, onThemeChange }: S
             <polyline points="15 18 9 12 15 6" />
           </svg>
         </button>
-        <span className="text-[13px] font-semibold text-[var(--c-text)] tracking-[-0.01em]">Settings</span>
+        <span className="text-[15px] font-semibold text-[var(--c-text)] tracking-[-0.01em]">Settings</span>
       </div>
 
       <div className="flex-1 overflow-y-auto px-4 pb-4">
@@ -263,7 +263,7 @@ export default function Settings({ onBack, updateInfo, theme, onThemeChange }: S
           </SettingRow>
           <SettingRow label="Global shortcut" description="Click to record new shortcut">
             {shortcutLoading ? (
-              <span className="text-[11px] text-[var(--c-text-3)] font-mono bg-[var(--c-surface)] px-1.5 py-0.5 rounded">—</span>
+              <span className="text-[13px] text-[var(--c-text-3)] font-mono bg-[var(--c-surface)] px-1.5 py-0.5 rounded">—</span>
             ) : (
               <ShortcutRecorder value={shortcut} onChange={handleShortcutChange} />
             )}
@@ -284,19 +284,19 @@ export default function Settings({ onBack, updateInfo, theme, onThemeChange }: S
         <SectionLabel>About</SectionLabel>
         <div className="divide-y divide-[var(--c-border-sub)]">
           <SettingRow label="Version">
-            <span className="text-[12px] text-[var(--c-text-3)] font-mono tabular-nums">v{version}</span>
+            <span className="text-[14px] text-[var(--c-text-3)] font-mono tabular-nums">v{version}</span>
           </SettingRow>
           {updateInfo && (
             <SettingRow label="Update">
               <a href={updateInfo.releaseUrl} target="_blank" rel="noopener noreferrer"
-                className="text-[11px] text-indigo-500 hover:text-indigo-400 transition-colors flex items-center gap-1">
+                className="text-[13px] text-indigo-500 hover:text-indigo-400 transition-colors flex items-center gap-1">
                 {updateInfo.latestVersion} available <ExternalLinkIcon />
               </a>
             </SettingRow>
           )}
           <SettingRow label="Source">
             <a href="https://github.com/varkart/aicontextbar" target="_blank" rel="noopener noreferrer"
-              className="text-[11px] text-indigo-500 hover:text-indigo-400 transition-colors flex items-center gap-1">
+              className="text-[13px] text-indigo-500 hover:text-indigo-400 transition-colors flex items-center gap-1">
               github.com/varkart/aicontextbar <ExternalLinkIcon />
             </a>
           </SettingRow>

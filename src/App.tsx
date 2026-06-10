@@ -202,7 +202,7 @@ export default function App() {
               <SkeletonRows />
             ) : searchResults.length === 0 && query ? (
               <div className="px-4 py-8 text-center">
-                <p className="text-[12px] text-[var(--c-text-3)]">No results for "{query}"</p>
+                <p className="text-[14px] text-[var(--c-text-3)]">No results for "{query}"</p>
               </div>
             ) : !loading && installedTools.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-full px-6 py-12 text-center gap-3">
@@ -213,8 +213,8 @@ export default function App() {
                     <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
                   </svg>
                 </div>
-                <p className="text-[13px] font-semibold text-[var(--c-text)]">No AI tools detected</p>
-                <p className="text-[11px] text-[var(--c-text-3)] leading-relaxed max-w-[240px]">
+                <p className="text-[15px] font-semibold text-[var(--c-text)]">No AI tools detected</p>
+                <p className="text-[13px] text-[var(--c-text-3)] leading-relaxed max-w-[240px]">
                   Install Claude Code, Cursor, Gemini CLI, or GitHub Copilot and aicontextbar will pick them up automatically.
                 </p>
               </div>
