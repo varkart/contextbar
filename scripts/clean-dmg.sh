@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Post-process Tauri DMG: remove .VolumeIcon.icns added by bundle_dmg.sh
+# Post-process Tauri DMG: remove hidden clutter added by bundle_dmg.sh and macOS
 set -e
 
 DMG=$(find src-tauri/target/release/bundle/dmg -name "*.dmg" | head -1)
@@ -10,10 +10,16 @@ MOUNT="/Volumes/aicontextbar_clean"
 
 hdiutil detach "$MOUNT" 2>/dev/null || true
 hdiutil convert "$DMG" -format UDRW -o "$RW" -ov -quiet
-hdiutil attach "$RW" -mountpoint "$MOUNT" -quiet
 
+# -nobrowse: volume not shown in Finder/sidebar, suppresses FSEvents tracking
+hdiutil attach "$RW" -mountpoint "$MOUNT" -nobrowse -quiet
+
+SetFile -a c "$MOUNT" 2>/dev/null || true  # clear custom volume icon bit
+
+# Delete right before detach (FSEvents recreates on mount, delete it last)
 rm -f "$MOUNT/.VolumeIcon.icns"
-SetFile -a c "$MOUNT" 2>/dev/null || true  # clear custom icon bit
+rm -rf "$MOUNT/.fseventsd"
+sync
 
 hdiutil detach "$MOUNT" -quiet
 hdiutil convert "$RW" -format UDZO -o "$DMG" -ov -quiet
