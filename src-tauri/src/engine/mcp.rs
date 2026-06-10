@@ -47,6 +47,12 @@ fn read_source(source: &McpSourceSpec, home: &std::path::Path) -> (Vec<McpServer
         McpSourceSpec::ClaudePlugins { installed_plugins_file, mcp_filename } => {
             read_claude_plugins(&expand_home(installed_plugins_file, home), mcp_filename)
         }
+        McpSourceSpec::YamlKeyPair { file, active_key } => {
+            read_yaml_key_pair(&expand_home(file, home), active_key)
+        }
+        McpSourceSpec::TomlKeyPair { file, active_key } => {
+            read_toml_key_pair(&expand_home(file, home), active_key)
+        }
     }
 }
 
@@ -287,6 +293,68 @@ fn maybe_replace_var(s: &str, var: Option<&str>, value: &str) -> String {
         Some(v) => replace_var(s, v, value),
         None => s.to_string(),
     }
+}
+
+fn read_yaml_key_pair(
+    path: &std::path::Path,
+    active_key: &str,
+) -> (Vec<McpServer>, Option<String>) {
+    if !path.exists() {
+        return (vec![], None);
+    }
+    let raw = match std::fs::read_to_string(path) {
+        Ok(s) => s,
+        Err(e) => return (vec![], Some(format!("cannot read {}: {}", path.display(), e))),
+    };
+    let yaml: serde_yaml::Value = match serde_yaml::from_str(&raw) {
+        Ok(v) => v,
+        Err(e) => return (vec![], Some(format!("cannot parse YAML {}: {}", path.display(), e))),
+    };
+    let servers = match yaml.get(active_key) {
+        Some(v) => v,
+        None => return (vec![], None),
+    };
+    // Convert yaml → json for reuse of parse_mcp_servers
+    let json_str = match serde_json::to_string(&servers) {
+        Ok(s) => s,
+        Err(e) => return (vec![], Some(format!("yaml→json conversion failed: {e}"))),
+    };
+    let json: serde_json::Value = match serde_json::from_str(&json_str) {
+        Ok(v) => v,
+        Err(e) => return (vec![], Some(format!("yaml→json parse failed: {e}"))),
+    };
+    (parse_mcp_servers(&json, true), None)
+}
+
+fn read_toml_key_pair(
+    path: &std::path::Path,
+    active_key: &str,
+) -> (Vec<McpServer>, Option<String>) {
+    if !path.exists() {
+        return (vec![], None);
+    }
+    let raw = match std::fs::read_to_string(path) {
+        Ok(s) => s,
+        Err(e) => return (vec![], Some(format!("cannot read {}: {}", path.display(), e))),
+    };
+    let toml_val: toml::Value = match toml::from_str(&raw) {
+        Ok(v) => v,
+        Err(e) => return (vec![], Some(format!("cannot parse TOML {}: {}", path.display(), e))),
+    };
+    let servers = match toml_val.get(active_key) {
+        Some(v) => v,
+        None => return (vec![], None),
+    };
+    // Convert toml → json for reuse of parse_mcp_servers
+    let json_str = match serde_json::to_string(servers) {
+        Ok(s) => s,
+        Err(e) => return (vec![], Some(format!("toml→json conversion failed: {e}"))),
+    };
+    let json: serde_json::Value = match serde_json::from_str(&json_str) {
+        Ok(v) => v,
+        Err(e) => return (vec![], Some(format!("toml→json parse failed: {e}"))),
+    };
+    (parse_mcp_servers(&json, true), None)
 }
 
 fn read_claude_plugins(

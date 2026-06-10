@@ -6,6 +6,12 @@ name = "Continue"
 type = "dir"
 path = "~/.continue"
 
+# Continue.dev v0.9+ uses YAML (config.yaml); older versions used config.json
+[[mcp_sources]]
+type = "yaml_key_pair"
+file = "~/.continue/config.yaml"
+active_key = "mcpServers"
+
 [[mcp_sources]]
 type = "json_key_pair"
 file = "~/.continue/config.json"
