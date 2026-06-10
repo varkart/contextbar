@@ -136,4 +136,33 @@ describe('ToolDetailPage', () => {
     expect(captureException).toHaveBeenCalled()
     expect(defaultProps.onToolUpdated).not.toHaveBeenCalled()
   })
+
+  it('shows error banner when skill toggle fails', async () => {
+    mockIPC((cmd) => {
+      if (cmd === 'set_skill_active') throw new Error('permission denied')
+    })
+    render(<ToolDetailPage {...defaultProps} />)
+
+    fireEvent.click(screen.getAllByRole('button', { name: /disable skill/i })[0])
+
+    await waitFor(() =>
+      expect(screen.getByRole('alert')).toBeInTheDocument()
+    )
+    expect(screen.getByRole('alert').textContent).toContain('permission denied')
+  })
+
+  it('dismisses error banner when dismiss button clicked', async () => {
+    mockIPC((cmd) => {
+      if (cmd === 'set_skill_active') throw new Error('oops')
+    })
+    render(<ToolDetailPage {...defaultProps} />)
+
+    fireEvent.click(screen.getAllByRole('button', { name: /disable skill/i })[0])
+
+    await waitFor(() => expect(screen.getByRole('alert')).toBeInTheDocument())
+
+    fireEvent.click(screen.getByRole('button', { name: /dismiss/i }))
+
+    await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument())
+  })
 })
