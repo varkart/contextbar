@@ -89,6 +89,18 @@ pub enum McpSourceSpec {
         installed_plugins_file: String,
         mcp_filename: String,
     },
+    /// YAML file with active_key containing an mcpServers-style map.
+    YamlKeyPair {
+        file: String,
+        #[serde(default = "default_mcp_key")]
+        active_key: String,
+    },
+    /// TOML file where servers live at a dotted key path, all treated as active.
+    TomlKeyPair {
+        file: String,
+        #[serde(default = "default_mcp_key")]
+        active_key: String,
+    },
 }
 
 fn default_mcp_key() -> String { "mcpServers".to_string() }

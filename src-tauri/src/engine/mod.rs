@@ -27,6 +27,7 @@ fn all_manifest_strs() -> &'static [(&'static str, &'static str)] {
         ("aider",    manifest_toml!("aider")),
         ("amazonq",  manifest_toml!("amazonq")),
         ("continue", manifest_toml!("continue")),
+        ("codex",    manifest_toml!("codex")),
         ("zed",      manifest_toml!("zed")),
     ]
 }

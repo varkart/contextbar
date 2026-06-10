@@ -1,0 +1,23 @@
+schema_version = 1
+id = "codex"
+name = "Codex CLI"
+
+[[detection]]
+type = "binary"
+name = "codex"
+
+[[detection]]
+type = "file"
+path = "~/.codex/config.toml"
+
+[version]
+type = "command"
+args = ["--version"]
+timeout_ms = 800
+parse = "first_token"
+
+# MCP servers defined in [mcp_servers] TOML table
+[[mcp_sources]]
+type = "toml_key_pair"
+file = "~/.codex/config.toml"
+active_key = "mcp_servers"

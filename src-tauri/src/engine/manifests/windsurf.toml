@@ -12,7 +12,6 @@ file = "~/.windsurf/argv.json"
 key_path = ["version"]
 
 [[mcp_sources]]
-type = "json_nested"
-file = "~/Library/Application Support/Windsurf/User/settings.json"
-key_path = ["mcp", "servers"]
-jsonc = true
+type = "json_key_pair"
+file = "~/.codeium/windsurf/mcp_config.json"
+active_key = "mcpServers"
