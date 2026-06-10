@@ -57,7 +57,6 @@ export function searchTools(tools: AiTool[], query: string): ToolMatch[] {
     for (const mcp of tool.mcps) {
       const s = Math.max(
         scoreText(query, mcp.name),
-        scoreText(query, mcp.command),
         scoreText(query, mcp.description),
       )
       if (s > 0) {
