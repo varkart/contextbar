@@ -49,6 +49,7 @@ export default function App() {
   const [view, setView] = useView()
   const [tools, setTools] = useState<AiTool[]>([])
   const [loading, setLoading] = useState(true)
+  const [cloudSyncing, setCloudSyncing] = useState(false)
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
   const [query, setQuery] = useState('')
   const [version, setVersion] = useState('')
@@ -132,9 +133,14 @@ export default function App() {
   useEffect(() => { fetchTools() }, [fetchTools])
 
   useEffect(() => {
-    const unlisten = listen('tools-changed', () => { fetchTools() })
+    const unlisten = listen('tools-changed', () => { setCloudSyncing(false); fetchTools() })
     return () => { unlisten.then(fn => fn()) }
   }, [fetchTools])
+
+  useEffect(() => {
+    const unlisten = listen('cloud-mcps-loading', () => setCloudSyncing(true))
+    return () => { unlisten.then(fn => fn()) }
+  }, [])
 
   useEffect(() => {
     const onVisibility = () => {
@@ -231,7 +237,7 @@ export default function App() {
               ))
             )}
           </div>
-          <Footer lastUpdated={lastUpdated} onRefresh={fetchTools} loading={loading} />
+          <Footer lastUpdated={lastUpdated} onRefresh={fetchTools} loading={loading} cloudSyncing={cloudSyncing} />
         </>
       )}
     </div>

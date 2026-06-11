@@ -5,6 +5,7 @@ interface FooterProps {
   lastUpdated: Date | null;
   onRefresh: () => void;
   loading: boolean;
+  cloudSyncing?: boolean;
 }
 
 function formatAgo(date: Date | null): string {
@@ -27,7 +28,7 @@ function RefreshIcon({ spinning }: { spinning: boolean }) {
   );
 }
 
-export default function Footer({ lastUpdated, onRefresh, loading }: FooterProps) {
+export default function Footer({ lastUpdated, onRefresh, loading, cloudSyncing }: FooterProps) {
   const [, setTick] = useState(0);
   useEffect(() => {
     const id = setInterval(() => setTick(t => t + 1), 1000);
@@ -36,8 +37,11 @@ export default function Footer({ lastUpdated, onRefresh, loading }: FooterProps)
 
   return (
     <div className="flex items-center justify-between px-4 py-2 border-t border-[var(--c-border)] flex-shrink-0">
-      <span className="text-[13px] text-[var(--c-text-3)] tabular-nums">
+      <span className="text-[13px] text-[var(--c-text-3)] tabular-nums flex items-center gap-1.5">
         {formatAgo(lastUpdated)}
+        {cloudSyncing && (
+          <span className="text-[11px] text-[var(--c-text-3)] opacity-60 animate-pulse">cloud</span>
+        )}
       </span>
       <div className="flex items-center gap-2">
         <button
