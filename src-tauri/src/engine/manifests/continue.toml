@@ -3,6 +3,11 @@ id = "continue"
 name = "Continue"
 
 [[detection]]
+type = "vscode_extension"
+extensions_dir = "~/.vscode/extensions"
+prefix = "continue.continue-"
+
+[[detection]]
 type = "dir"
 path = "~/.continue"
 
