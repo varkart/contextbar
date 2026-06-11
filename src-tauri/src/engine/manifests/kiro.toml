@@ -2,6 +2,13 @@ schema_version = 1
 id = "kiro"
 name = "Kiro"
 
+[version]
+type = "command"
+binary = "kiro-cli"
+args = ["--version"]
+timeout_ms = 1500
+parse = "last_token"
+
 # Kiro replaced Amazon Q Developer; check both new Kiro paths and legacy Q paths
 [[detection]]
 type = "binary"

@@ -233,6 +233,7 @@ fn run_command_version(binary: &str, args: &[String], parse: &str) -> Option<Str
     let stdout = String::from_utf8_lossy(&output.stdout);
     match parse {
         "first_token" => stdout.split_whitespace().next().map(|s| s.to_string()),
+        "last_token"  => stdout.split_whitespace().last().map(|s| s.to_string()),
         _ => stdout.lines().next().map(|l| l.trim().to_string()).filter(|s| !s.is_empty()),
     }
 }
