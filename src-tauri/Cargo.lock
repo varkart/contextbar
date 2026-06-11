@@ -18,31 +18,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "aicontextbar"
-version = "0.7.0"
-dependencies = [
- "dirs 6.0.0",
- "notify",
- "notify-debouncer-mini",
- "serde",
- "serde_json",
- "serde_yaml",
- "tauri",
- "tauri-build",
- "tauri-plugin-autostart",
- "tauri-plugin-global-shortcut",
- "tauri-plugin-notification",
- "tauri-plugin-opener",
- "tauri-plugin-positioner",
- "tauri-plugin-single-instance",
- "tauri-plugin-updater",
- "tempfile",
- "tokio",
- "toml 0.8.2",
- "window-vibrancy",
-]
-
-[[package]]
 name = "alloc-no-stdlib"
 version = "2.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2174,6 +2149,31 @@ name = "litemap"
 version = "0.8.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "92daf443525c4cce67b150400bc2316076100ce0b3686209eb8cf3c31612e6f0"
+
+[[package]]
+name = "llmmanager"
+version = "0.7.0"
+dependencies = [
+ "dirs 6.0.0",
+ "notify",
+ "notify-debouncer-mini",
+ "serde",
+ "serde_json",
+ "serde_yaml",
+ "tauri",
+ "tauri-build",
+ "tauri-plugin-autostart",
+ "tauri-plugin-global-shortcut",
+ "tauri-plugin-notification",
+ "tauri-plugin-opener",
+ "tauri-plugin-positioner",
+ "tauri-plugin-single-instance",
+ "tauri-plugin-updater",
+ "tempfile",
+ "tokio",
+ "toml 0.8.2",
+ "window-vibrancy",
+]
 
 [[package]]
 name = "lock_api"

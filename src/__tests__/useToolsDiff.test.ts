@@ -69,7 +69,7 @@ describe('useToolsDiff', () => {
       })
     })
     expect(sendNotification).toHaveBeenCalledWith({
-      title: 'aicontextbar',
+      title: 'LLM Manager',
       body: 'Claude Code: skill "impeccable" added',
     })
   })
@@ -86,7 +86,7 @@ describe('useToolsDiff', () => {
       })
     })
     expect(sendNotification).toHaveBeenCalledWith({
-      title: 'aicontextbar',
+      title: 'LLM Manager',
       body: 'Cursor: MCP "github" added',
     })
   })
@@ -105,7 +105,7 @@ describe('useToolsDiff', () => {
       })
     })
     expect(sendNotification).toHaveBeenCalledWith({
-      title: 'aicontextbar',
+      title: 'LLM Manager',
       body: '3 changes detected',
     })
   })

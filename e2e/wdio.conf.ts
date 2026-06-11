@@ -7,7 +7,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 const APP_BINARY = path.resolve(
   __dirname,
-  '../src-tauri/target/debug/aicontextbar'
+  '../src-tauri/target/debug/llmmanager'
 )
 
 let tauriDriver: ChildProcess

@@ -91,7 +91,7 @@ export default function ToolDetailPage({ tool, onBack, onSelectSkill, onSelectMc
           </svg>
         </button>
 
-        <span className="text-[13px] text-[var(--c-text-3)]">aicontextbar</span>
+        <span className="text-[13px] text-[var(--c-text-3)]">LLM Manager</span>
         <span className="text-[12px] text-[var(--c-text-3)]">›</span>
 
         <span className={`inline-flex items-center justify-center w-[18px] h-[18px] rounded text-[11px] font-bold flex-shrink-0 ${colors.bg} ${colors.text}`}>

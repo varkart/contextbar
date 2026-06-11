@@ -81,7 +81,7 @@ describe('useUpdateCheck', () => {
 
     const { unmount } = renderHook(() => useUpdateCheck('0.5.0'))
     await waitFor(() => {
-      expect(localStorage.getItem('aicontextbar:updateCheck')).not.toBeNull()
+      expect(localStorage.getItem('llmmanager:updateCheck')).not.toBeNull()
     })
     unmount()
 

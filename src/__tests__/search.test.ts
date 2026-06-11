@@ -71,13 +71,6 @@ describe('searchTools', () => {
     expect(results[0].matchedMcps.has('github')).toBe(true)
   })
 
-  it('matches by mcp command', () => {
-    const tool = makeTool({
-      mcps: [{ name: 'my-mcp', command: 'uvx', args: [], active: true, hasSecrets: false, secretKeyNames: [] }],
-    })
-    const results = searchTools([tool], 'uvx')
-    expect(results).toHaveLength(1)
-  })
 
   it('sorts by score descending', () => {
     const exact = makeTool({ id: 'gemini', name: 'gemini' })

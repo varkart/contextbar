@@ -258,7 +258,7 @@ export default function Settings({ onBack, updateInfo, theme, onThemeChange }: S
       <div className="flex-1 overflow-y-auto px-4 pb-4">
         <SectionLabel>General</SectionLabel>
         <div className="divide-y divide-[var(--c-border-sub)]">
-          <SettingRow label="Launch at login" description="Start aicontextbar when you log in">
+          <SettingRow label="Launch at login" description="Start LLM Manager when you log in">
             <Toggle checked={autostart} onChange={handleAutostart} disabled={autostartLoading} />
           </SettingRow>
           <SettingRow label="Global shortcut" description="Click to record new shortcut">
@@ -295,9 +295,9 @@ export default function Settings({ onBack, updateInfo, theme, onThemeChange }: S
             </SettingRow>
           )}
           <SettingRow label="Source">
-            <a href="https://github.com/varkart/aicontextbar" target="_blank" rel="noopener noreferrer"
+            <a href="https://github.com/varkart/llmmanager" target="_blank" rel="noopener noreferrer"
               className="text-[13px] text-indigo-500 hover:text-indigo-400 transition-colors flex items-center gap-1">
-              github.com/varkart/aicontextbar <ExternalLinkIcon />
+              github.com/varkart/llmmanager <ExternalLinkIcon />
             </a>
           </SettingRow>
         </div>

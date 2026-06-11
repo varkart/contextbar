@@ -21,7 +21,7 @@ describe('navigation', () => {
     await toolButton.click()
 
     // Breadcrumb parent label should appear
-    const breadcrumb = await $('span=aicontextbar')
+    const breadcrumb = await $('span=LLM Manager')
     await expect(breadcrumb).toBeDisplayed()
   })
 
@@ -43,7 +43,7 @@ describe('navigation', () => {
     await browser.keys(['Escape'])
 
     // Should be back at main list
-    const breadcrumb = await $('span=aicontextbar')
+    const breadcrumb = await $('span=LLM Manager')
     await expect(breadcrumb).not.toBeDisplayed()
   })
 })
