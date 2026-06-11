@@ -104,7 +104,6 @@ pub fn start(app: AppHandle) {
             home.join(".gemini"),
             home.join(".windsurf"),
             home.join(".codeium"),
-            home.join(".continue"),
             home.join("Library").join("Application Support").join("Code").join("User"),
             home.join("Library").join("Application Support").join("Windsurf").join("User"),
         ];
