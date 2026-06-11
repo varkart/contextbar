@@ -44,7 +44,7 @@ describe('ToolDetailPage', () => {
   it('renders tool name in breadcrumb', () => {
     render(<ToolDetailPage {...defaultProps} />)
     expect(screen.getByText('Claude Code')).toBeInTheDocument()
-    expect(screen.getByText('aicontextbar')).toBeInTheDocument()
+    expect(screen.getByText('LLM Manager')).toBeInTheDocument()
   })
 
   it('renders both active and disabled skills', () => {

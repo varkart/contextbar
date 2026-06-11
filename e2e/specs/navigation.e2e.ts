@@ -26,7 +26,7 @@ test('tools show mcp counts', async ({ page }) => {
 
 test('clicking tool navigates to detail page with breadcrumb', async ({ page }) => {
   await page.getByText('Claude Code').click()
-  await expect(page.getByText('aicontextbar')).toBeVisible()
+  await expect(page.getByText('LLM Manager')).toBeVisible()
   await expect(page.locator('span').filter({ hasText: '›' })).toBeVisible()
 })
 
@@ -78,8 +78,8 @@ test('Escape from skill detail returns to tool detail', async ({ page }) => {
   await page.getByText('impeccable').first().click()
 
   await page.keyboard.press('Escape')
-  // Back at tool detail — breadcrumb still shows aicontextbar
-  await expect(page.getByText('aicontextbar').first()).toBeVisible()
+  // Back at tool detail — breadcrumb still shows LLM Manager
+  await expect(page.getByText('LLM Manager').first()).toBeVisible()
 })
 
 test('search filters tool list', async ({ page }) => {

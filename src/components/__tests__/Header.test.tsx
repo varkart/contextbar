@@ -5,7 +5,7 @@ import Header from '../Header'
 describe('Header', () => {
   it('renders app name', () => {
     render(<Header onSettingsClick={vi.fn()} />)
-    expect(screen.getByText('aicontextbar')).toBeInTheDocument()
+    expect(screen.getByText('LLM Manager')).toBeInTheDocument()
   })
 
   it('renders settings button', () => {

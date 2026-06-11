@@ -95,7 +95,7 @@ test.describe('tool with error', () => {
 
   test('tool with error navigates to detail page', async ({ page }) => {
     await page.locator('button', { hasText: 'Gemini CLI' }).click()
-    await expect(page.getByText('aicontextbar')).toBeVisible()
+    await expect(page.getByText('LLM Manager')).toBeVisible()
     await page.getByLabel('Back').click()
   })
 })
@@ -118,7 +118,7 @@ test.describe('no-config tool', () => {
 
   test('no-config tool is navigable', async ({ page }) => {
     await page.locator('button', { hasText: 'Aider' }).click()
-    await expect(page.getByText('aicontextbar')).toBeVisible()
+    await expect(page.getByText('LLM Manager')).toBeVisible()
     await page.getByLabel('Back').click()
   })
 })
