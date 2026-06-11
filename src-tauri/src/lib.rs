@@ -228,7 +228,6 @@ fn read_text_file(path: String) -> Result<String, String> {
         home.join(".config"),
         home.join(".windsurf"),
         home.join(".codeium"),
-        home.join(".aider"),
         home.join("Library").join("Application Support"),
     ];
     let canonical = p.canonicalize().map_err(|e| e.to_string())?;
@@ -294,7 +293,6 @@ fn mcp_config_path(tool_id: &str, home: &std::path::Path) -> Option<String> {
         "claude"   => home.join(".claude").join("settings.json"),
         "cursor"   => home.join(".cursor").join("mcp.json"),
         "gemini"   => home.join(".gemini").join("settings.json"),
-        "zed"      => home.join(".config").join("zed").join("settings.json"),
         _          => return None,
     };
     Some(path.to_string_lossy().to_string())
