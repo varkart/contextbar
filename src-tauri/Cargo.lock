@@ -19,7 +19,7 @@ dependencies = [
 
 [[package]]
 name = "aicontextbar"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "dirs 6.0.0",
  "notify",
