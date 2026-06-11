@@ -387,13 +387,19 @@ fn read_toml_key_pair(
 static CLAUDE_MCP_CACHE: std::sync::OnceLock<std::sync::Mutex<Option<(Vec<McpServer>, std::time::Instant)>>> =
     std::sync::OnceLock::new();
 
+static CLAUDE_MCP_WARMING: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
+
 fn claude_mcp_cache() -> &'static std::sync::Mutex<Option<(Vec<McpServer>, std::time::Instant)>> {
     CLAUDE_MCP_CACHE.get_or_init(|| std::sync::Mutex::new(None))
 }
 
-/// Returns true when the cache has no valid entry — caller should trigger a warmup.
+/// Returns true when the cache has no valid entry and no warmup is in progress.
 pub fn is_claude_mcp_cache_cold() -> bool {
     const TTL: std::time::Duration = std::time::Duration::from_secs(60);
+    if CLAUDE_MCP_WARMING.load(std::sync::atomic::Ordering::Acquire) {
+        return false; // warmup already running
+    }
     if let Ok(guard) = claude_mcp_cache().lock() {
         if let Some((_, ts)) = *guard {
             return ts.elapsed() >= TTL;
@@ -402,10 +408,15 @@ pub fn is_claude_mcp_cache_cold() -> bool {
     true
 }
 
-/// Runs `claude mcp list`, populates the cache, and returns the results.
-/// Intended to be called from a background thread.
+/// Runs `claude mcp list`, populates the cache.
+/// Intended to be called from a background thread; guards against concurrent runs.
 pub fn warm_claude_mcp_list(home: &std::path::Path) {
+    use std::sync::atomic::Ordering;
+    if CLAUDE_MCP_WARMING.compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire).is_err() {
+        return; // another thread is already warming
+    }
     run_claude_mcp_list("claude", 6000, home);
+    CLAUDE_MCP_WARMING.store(false, Ordering::Release);
 }
 
 fn read_claude_mcp_list(

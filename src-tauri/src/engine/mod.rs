@@ -231,6 +231,10 @@ fn run_command_version(binary: &str, args: &[String], parse: &str) -> Option<Str
         .output()
         .ok()?;
     let stdout = String::from_utf8_lossy(&output.stdout);
+    run_command_version_from_str(&stdout, parse)
+}
+
+fn run_command_version_from_str(stdout: &str, parse: &str) -> Option<String> {
     match parse {
         "first_token" => stdout.split_whitespace().next().map(|s| s.to_string()),
         "last_token"  => stdout.split_whitespace().last().map(|s| s.to_string()),
@@ -320,5 +324,30 @@ path = "/tmp/this_dir_does_not_exist_xyzzy_12345"
         let tool = detect_from_manifest(&m);
         assert!(!tool.installed);
         assert_eq!(tool.id, "test-tool");
+    }
+
+    #[test]
+    fn run_command_version_last_token_extracts_version() {
+        // Simulate output like "kiro-cli 2.6.1"
+        assert_eq!(
+            run_command_version_from_str("kiro-cli 2.6.1\n", "last_token"),
+            Some("2.6.1".to_string())
+        );
+    }
+
+    #[test]
+    fn run_command_version_first_token_extracts_name() {
+        assert_eq!(
+            run_command_version_from_str("kiro-cli 2.6.1\n", "first_token"),
+            Some("kiro-cli".to_string())
+        );
+    }
+
+    #[test]
+    fn run_command_version_first_line_returns_whole_line() {
+        assert_eq!(
+            run_command_version_from_str("kiro-cli 2.6.1\nextra\n", "first_line"),
+            Some("kiro-cli 2.6.1".to_string())
+        );
     }
 }
