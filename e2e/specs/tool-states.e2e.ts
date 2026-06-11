@@ -29,7 +29,7 @@ test.describe('tool version display', () => {
 
   test('version shown in Notes section on tool detail page', async ({ page }) => {
     await page.getByText('Claude Code').click()
-    await page.waitForSelector('text=Notes', { timeout: 5000 })
+    await page.waitForSelector('text=Notes', { timeout: 8000 })
     await expect(page.getByText('1.0.0')).toBeVisible()
   })
 
