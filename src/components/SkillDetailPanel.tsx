@@ -108,12 +108,13 @@ function ExpandableDescription({ skill }: { skill: Skill }) {
   const [expanded, setExpanded] = useState(false)
   const [fullContent, setFullContent] = useState<string | null>(null)
   const [loadingContent, setLoadingContent] = useState(false)
+  const [readFailed, setReadFailed] = useState(false)
 
   const loadFull = async () => {
     if (fullContent !== null) { setExpanded(true); return }
     setLoadingContent(true)
     try {
-      const candidates = [`${skill.path}/SKILL.md`, `${skill.path}.md`]
+      const candidates = [`${skill.path}/SKILL.md`, skill.path]
       for (const p of candidates) {
         try {
           const text = await invoke<string>('read_text_file', { path: p })
@@ -123,8 +124,7 @@ function ExpandableDescription({ skill }: { skill: Skill }) {
           return
         } catch { /* try next */ }
       }
-      setFullContent(skill.description ?? '')
-      setExpanded(true)
+      setReadFailed(true)
     } finally {
       setLoadingContent(false)
     }
@@ -151,13 +151,15 @@ function ExpandableDescription({ skill }: { skill: Skill }) {
           <p className="text-[14px] text-[var(--c-text-2)] leading-relaxed line-clamp-3">
             {skill.description}
           </p>
-          <button
-            onClick={loadFull}
-            disabled={loadingContent}
-            className="text-[13px] text-indigo-500 hover:text-indigo-400 mt-1.5 transition-colors disabled:opacity-50"
-          >
-            {loadingContent ? 'Loading…' : 'Show full description →'}
-          </button>
+          {!readFailed && (
+            <button
+              onClick={loadFull}
+              disabled={loadingContent}
+              className="text-[13px] text-indigo-500 hover:text-indigo-400 mt-1.5 transition-colors disabled:opacity-50"
+            >
+              {loadingContent ? 'Loading…' : 'Show full description →'}
+            </button>
+          )}
         </>
       )}
     </div>
