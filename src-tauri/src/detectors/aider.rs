@@ -61,8 +61,7 @@ pub fn detect() -> AiTool {
         }
     });
 
-    let version_bin = in_path.clone()
-        .or_else(|| install_path.clone());
+    let version_bin = in_path.clone().or_else(|| install_path.clone());
     let version = version_bin.and_then(|bin| {
         super::run_with_timeout(
             move || run_aider_version(&bin),

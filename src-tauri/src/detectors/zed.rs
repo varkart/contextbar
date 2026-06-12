@@ -1,5 +1,5 @@
-use crate::models::AiTool;
 use super::parse_mcp_servers;
+use crate::models::AiTool;
 
 fn not_installed() -> AiTool {
     AiTool {
@@ -92,10 +92,7 @@ fn parse_mcps_from_settings(
         }
     };
 
-    let context_servers = match json
-        .get("assistant")
-        .and_then(|a| a.get("context_servers"))
-    {
+    let context_servers = match json.get("assistant").and_then(|a| a.get("context_servers")) {
         Some(v) => v,
         None => return (vec![], None),
     };

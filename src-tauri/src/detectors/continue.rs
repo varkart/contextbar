@@ -1,5 +1,5 @@
-use crate::models::AiTool;
 use super::parse_mcp_servers;
+use crate::models::AiTool;
 
 fn not_installed() -> AiTool {
     AiTool {
@@ -52,12 +52,7 @@ fn parse_mcps_from_config(
     };
     let json: serde_json::Value = match serde_json::from_str(&content) {
         Ok(v) => v,
-        Err(e) => {
-            return (
-                vec![],
-                Some(format!("Failed to parse config.json: {}", e)),
-            )
-        }
+        Err(e) => return (vec![], Some(format!("Failed to parse config.json: {}", e))),
     };
     let mcps = json
         .get("mcpServers")

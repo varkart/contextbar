@@ -1,14 +1,13 @@
 pub(crate) mod detectors;
-pub(crate) mod models;
 mod mcp_client;
+pub(crate) mod models;
 mod watcher;
 
 use crate::models::AiTool;
 use tauri::{
-    Manager,
     menu::{Menu, MenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    WebviewUrl, WebviewWindowBuilder,
+    Manager, WebviewUrl, WebviewWindowBuilder,
 };
 use tauri_plugin_autostart::MacosLauncher;
 use tauri_plugin_positioner::{Position, WindowExt};
@@ -36,8 +35,7 @@ fn write_settings(val: serde_json::Value) -> Result<(), String> {
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     }
-    std::fs::write(&path, serde_json::to_string_pretty(&val).unwrap())
-        .map_err(|e| e.to_string())
+    std::fs::write(&path, serde_json::to_string_pretty(&val).unwrap()).map_err(|e| e.to_string())
 }
 
 // ---------------------------------------------------------------------------
@@ -95,7 +93,9 @@ fn set_shortcut(app: tauri::AppHandle, shortcut: String) -> Result<(), String> {
     use tauri_plugin_global_shortcut::GlobalShortcutExt;
 
     // Unregister all currently registered shortcuts managed by this plugin
-    app.global_shortcut().unregister_all().map_err(|e| e.to_string())?;
+    app.global_shortcut()
+        .unregister_all()
+        .map_err(|e| e.to_string())?;
 
     // Parse and register the new shortcut
     let parsed: tauri_plugin_global_shortcut::Shortcut =
@@ -209,7 +209,10 @@ fn read_text_file(path: String) -> Result<String, String> {
 // ---------------------------------------------------------------------------
 
 #[tauri::command]
-async fn query_mcp_tools(command: String, args: Vec<String>) -> Result<Vec<mcp_client::McpTool>, String> {
+async fn query_mcp_tools(
+    command: String,
+    args: Vec<String>,
+) -> Result<Vec<mcp_client::McpTool>, String> {
     mcp_client::query_tools(&command, &args).await
 }
 
@@ -243,7 +246,10 @@ pub fn run() {
         }))
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_positioner::init())
-        .plugin(tauri_plugin_autostart::init(MacosLauncher::LaunchAgent, None))
+        .plugin(tauri_plugin_autostart::init(
+            MacosLauncher::LaunchAgent,
+            None,
+        ))
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
@@ -345,10 +351,7 @@ fn open_main_window(app: &tauri::AppHandle, hash: Option<&str>) {
     };
     if let Some(window) = app.get_webview_window("main") {
         // Navigate existing window to settings hash
-        let _ = window.eval(&format!(
-            "window.location.hash = '{}'",
-            hash.unwrap_or("")
-        ));
+        let _ = window.eval(&format!("window.location.hash = '{}'", hash.unwrap_or("")));
         let _ = window.move_window(Position::TrayCenter);
         let _ = window.show();
         let _ = window.set_focus();
@@ -366,7 +369,7 @@ fn open_main_window(app: &tauri::AppHandle, hash: Option<&str>) {
 
     #[cfg(target_os = "macos")]
     if get_vibrancy() {
-        use window_vibrancy::{NSVisualEffectMaterial, apply_vibrancy};
+        use window_vibrancy::{apply_vibrancy, NSVisualEffectMaterial};
         let _ = apply_vibrancy(&window, NSVisualEffectMaterial::HudWindow, None, None);
     }
 

@@ -1,5 +1,5 @@
-use crate::models::{AiTool, Skill};
 use super::{parse_mcp_servers, parse_skill_description};
+use crate::models::{AiTool, Skill};
 
 fn not_installed() -> AiTool {
     AiTool {
@@ -39,9 +39,11 @@ pub fn detect() -> AiTool {
         Some(s) => {
             let parsed: Result<serde_json::Value, _> = serde_json::from_str(&s);
             match parsed {
-                Err(e) => {
-                    (None, vec![], Some(format!("Failed to parse settings.json: {}", e)))
-                }
+                Err(e) => (
+                    None,
+                    vec![],
+                    Some(format!("Failed to parse settings.json: {}", e)),
+                ),
                 Ok(json) => {
                     let version = json
                         .get("version")
@@ -262,8 +264,11 @@ mod tests {
     fn test_malformed_json() {
         let tmp = TempDir::new().unwrap();
         let claude_dir = make_installed(&tmp);
-        fs::write(claude_dir.join("settings.json"), "{ this is not valid json }")
-            .unwrap();
+        fs::write(
+            claude_dir.join("settings.json"),
+            "{ this is not valid json }",
+        )
+        .unwrap();
         let tool = run_detect_in(tmp.path());
         assert!(tool.installed);
         assert!(tool.error.is_some());

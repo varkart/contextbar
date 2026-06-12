@@ -41,5 +41,5 @@ pub struct FileEntry {
     pub path: String,
     pub is_dir: bool,
     pub children: Vec<FileEntry>,
-    pub extension: Option<String>,  // e.g. "md", "mjs", "ts" — None for dirs
+    pub extension: Option<String>, // e.g. "md", "mjs", "ts" — None for dirs
 }

@@ -1,5 +1,5 @@
-use crate::models::AiTool;
 use super::parse_mcp_servers;
+use crate::models::AiTool;
 
 fn not_installed() -> AiTool {
     AiTool {
@@ -20,7 +20,11 @@ pub fn detect() -> AiTool {
         None => return not_installed(),
     };
 
-    let bin_path = home.join(".codeium").join("windsurf").join("bin").join("windsurf");
+    let bin_path = home
+        .join(".codeium")
+        .join("windsurf")
+        .join("bin")
+        .join("windsurf");
     if !bin_path.exists() {
         return not_installed();
     }
@@ -126,11 +130,7 @@ mod tests {
     #[test]
     fn test_no_panics_on_empty_dir() {
         let tmp = TempDir::new().unwrap();
-        let bin_dir = tmp
-            .path()
-            .join(".codeium")
-            .join("windsurf")
-            .join("bin");
+        let bin_dir = tmp.path().join(".codeium").join("windsurf").join("bin");
         fs::create_dir_all(&bin_dir).unwrap();
         // Create the binary file (empty)
         fs::write(bin_dir.join("windsurf"), b"").unwrap();

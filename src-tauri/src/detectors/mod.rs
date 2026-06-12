@@ -1,12 +1,12 @@
-mod claude;
+mod aider;
+mod amazonq;
 mod chatgpt;
+mod claude;
+mod r#continue;
 mod copilot;
 mod cursor;
 mod gemini;
 mod windsurf;
-mod aider;
-mod amazonq;
-mod r#continue;
 mod zed;
 
 use crate::models::AiTool;
@@ -30,7 +30,9 @@ where
     T: Send + 'static,
 {
     let (tx, rx) = std::sync::mpsc::channel();
-    std::thread::spawn(move || { let _ = tx.send(f()); });
+    std::thread::spawn(move || {
+        let _ = tx.send(f());
+    });
     rx.recv_timeout(dur).ok().flatten()
 }
 
@@ -60,15 +62,12 @@ pub fn detect_all() -> Vec<AiTool> {
 /// Falls back to the first non-empty, non-heading, non-separator line.
 /// Truncates to 120 characters.
 pub fn parse_skill_description(skill_path: &std::path::Path) -> Option<String> {
-    let candidates = [
-        skill_path.join("SKILL.md"),
-        {
-            let mut p = skill_path.to_path_buf();
-            let stem = p.file_name()?.to_string_lossy().into_owned();
-            p.set_file_name(format!("{}.md", stem));
-            p
-        },
-    ];
+    let candidates = [skill_path.join("SKILL.md"), {
+        let mut p = skill_path.to_path_buf();
+        let stem = p.file_name()?.to_string_lossy().into_owned();
+        p.set_file_name(format!("{}.md", stem));
+        p
+    }];
 
     for candidate in &candidates {
         if !candidate.exists() {
@@ -136,9 +135,7 @@ fn truncate(s: String, max_chars: usize) -> String {
 
 /// Parse MCP servers from a JSON value representing a `mcpServers` object.
 /// Returns (mcps, error_string).
-pub fn parse_mcp_servers(
-    servers_obj: &serde_json::Value,
-) -> Vec<crate::models::McpServer> {
+pub fn parse_mcp_servers(servers_obj: &serde_json::Value) -> Vec<crate::models::McpServer> {
     let mut mcps = Vec::new();
     if let Some(obj) = servers_obj.as_object() {
         for (name, cfg) in obj {
@@ -238,7 +235,10 @@ mod tests {
         )
         .unwrap();
         let desc = parse_skill_description(&skill_dir);
-        assert_eq!(desc, Some("Keep a PR merge-ready by triaging comments.".to_string()));
+        assert_eq!(
+            desc,
+            Some("Keep a PR merge-ready by triaging comments.".to_string())
+        );
     }
 
     #[test]

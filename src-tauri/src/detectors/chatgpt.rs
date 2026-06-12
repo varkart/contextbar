@@ -1,5 +1,5 @@
-use crate::models::AiTool;
 use super::copilot::find_latest_extension;
+use crate::models::AiTool;
 
 const PREFIX: &str = "openai.chatgpt-";
 

@@ -1,5 +1,5 @@
-use crate::models::AiTool;
 use super::parse_mcp_servers;
+use crate::models::AiTool;
 
 const PREFIX: &str = "github.copilot-chat-";
 

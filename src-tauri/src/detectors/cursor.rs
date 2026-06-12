@@ -1,5 +1,5 @@
-use crate::models::{AiTool, Skill};
 use super::{parse_mcp_servers, parse_skill_description};
+use crate::models::{AiTool, Skill};
 
 fn not_installed() -> AiTool {
     AiTool {
@@ -156,7 +156,11 @@ mod tests {
                 "tool1": { "command": "npx", "args": ["-y", "tool1"] }
             }
         });
-        fs::write(cursor_dir.join("mcp.json"), serde_json::to_string(&mcp).unwrap()).unwrap();
+        fs::write(
+            cursor_dir.join("mcp.json"),
+            serde_json::to_string(&mcp).unwrap(),
+        )
+        .unwrap();
         let tool = run_detect_in(tmp.path());
         assert_eq!(tool.mcps.len(), 1);
     }
