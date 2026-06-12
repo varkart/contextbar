@@ -1,6 +1,6 @@
 ---
 name: onboard-llm
-description: Research and onboard a new LLM tool into aicontextbar — web research, manifest creation, version detection, validation, and release monitoring setup
+description: Research and onboard a new LLM tool into LLM Manager — web research, manifest creation, version detection, validation, and release monitoring setup
 ---
 
 # Onboard a New LLM Tool
