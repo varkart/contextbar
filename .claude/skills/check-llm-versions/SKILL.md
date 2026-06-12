@@ -72,7 +72,7 @@ Run `/onboard-llm <tool-id>` to re-research and update the manifest. Focus the r
 ## Frequency
 
 Run this:
-- Before each release of aicontextbar
+- Before each release of LLM Manager
 - When a major AI tool announces a new version
 - When the app shows unexpected empty MCP or skills lists for a tool
 
