@@ -336,19 +336,6 @@ async fn check_for_update(app: tauri::AppHandle) -> Result<Option<serde_json::Va
 // Helpers
 // ---------------------------------------------------------------------------
 
-fn is_dark_mode() -> bool {
-    #[cfg(target_os = "macos")]
-    {
-        std::process::Command::new("defaults")
-            .args(["read", "-g", "AppleInterfaceStyle"])
-            .output()
-            .map(|o| String::from_utf8_lossy(&o.stdout).trim() == "Dark")
-            .unwrap_or(false)
-    }
-    #[cfg(not(target_os = "macos"))]
-    { false }
-}
-
 // ---------------------------------------------------------------------------
 // App entry point
 // ---------------------------------------------------------------------------
@@ -374,14 +361,9 @@ pub fn run() {
             let settings = MenuItem::with_id(app, "settings", "Settings…", true, None::<&str>)?;
             let menu = Menu::with_items(app, &[&settings, &quit])?;
 
-            let dark = is_dark_mode();
             let tray = TrayIconBuilder::new()
-                .icon(if dark {
-                    tauri::include_image!("icons/tray_icon_dark@2x.png")
-                } else {
-                    tauri::include_image!("icons/tray_icon@2x.png")
-                })
-                .icon_as_template(!dark)
+                .icon(tauri::include_image!("icons/tray_icon@2x.png"))
+                .icon_as_template(true)
                 .menu(&menu)
                 .show_menu_on_left_click(false)
                 .on_tray_icon_event(|tray, event| {
