@@ -1,0 +1,1147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>LLM Manager — UI Mock</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0f0f10;
+    --surface: #1a1a1c;
+    --surface2: #232326;
+    --surface3: #2c2c30;
+    --border: #2e2e33;
+    --border2: #3a3a40;
+    --text: #e8e8ea;
+    --text2: #9898a8;
+    --text3: #5a5a68;
+    --accent: #7c6af7;
+    --accent2: #5b4de0;
+    --green: #34d399;
+    --yellow: #fbbf24;
+    --red: #f87171;
+    --blue: #60a5fa;
+    --mono: 'SF Mono', 'Fira Code', monospace;
+    --sans: -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif;
+  }
+
+  body {
+    background: #111114;
+    font-family: var(--sans);
+    color: var(--text);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 40px 24px;
+    gap: 48px;
+  }
+
+  h2 {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    color: var(--text3);
+    margin-bottom: 12px;
+  }
+
+  /* ── MENU BAR SIMULATION ─────────────────────────── */
+  .menubar-sim {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+    background: rgba(255,255,255,0.07);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 6px 14px;
+    width: 420px;
+    backdrop-filter: blur(12px);
+    font-size: 12px;
+    color: var(--text2);
+  }
+  .menubar-sim .left { margin-right: auto; color: var(--text3); font-size: 11px; }
+  .tray-icon-btn {
+    display: flex; align-items: center; gap: 5px;
+    background: rgba(255,255,255,0.12);
+    border: 1px solid rgba(255,255,255,0.15);
+    border-radius: 5px;
+    padding: 3px 8px;
+    cursor: pointer;
+    font-size: 11px;
+    color: var(--text);
+    transition: background .15s;
+    position: relative;
+  }
+  .tray-icon-btn:hover { background: rgba(255,255,255,0.18); }
+  .tray-icon-btn svg { width: 14px; height: 14px; }
+  .notif-badge {
+    position: absolute;
+    top: -4px; right: -4px;
+    background: var(--red);
+    border-radius: 99px;
+    font-size: 9px;
+    font-weight: 700;
+    padding: 0 4px;
+    min-width: 14px;
+    height: 14px;
+    display: flex; align-items: center; justify-content: center;
+    border: 1.5px solid #111114;
+  }
+
+  /* ── VIEWS WRAPPER ───────────────────────────────── */
+  .views-wrapper {
+    display: flex;
+    gap: 40px;
+    align-items: flex-start;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  .view-container { display: flex; flex-direction: column; gap: 10px; }
+
+  /* ── POPOVER ─────────────────────────────────────── */
+  .popover {
+    width: 320px;
+    background: rgba(22,22,26,0.97);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    overflow: hidden;
+    box-shadow: 0 24px 64px rgba(0,0,0,.7), 0 0 0 .5px rgba(255,255,255,.05);
+    backdrop-filter: blur(24px);
+  }
+
+  .pop-header {
+    display: flex; align-items: center;
+    padding: 12px 14px 10px;
+    border-bottom: 1px solid var(--border);
+    gap: 8px;
+  }
+  .pop-header .title { font-size: 13px; font-weight: 600; flex: 1; }
+  .pop-header .subtitle { font-size: 10px; color: var(--text3); }
+  .icon-btn {
+    width: 26px; height: 26px;
+    display: flex; align-items: center; justify-content: center;
+    border-radius: 6px;
+    border: 1px solid var(--border2);
+    background: var(--surface2);
+    cursor: pointer;
+    color: var(--text2);
+    transition: all .15s;
+    flex-shrink: 0;
+  }
+  .icon-btn:hover { background: var(--surface3); color: var(--text); border-color: var(--border2); }
+  .icon-btn svg { width: 13px; height: 13px; }
+  .icon-btn.accent { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .icon-btn.accent:hover { background: var(--accent2); }
+
+  .pop-search {
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--border);
+  }
+  .pop-search input {
+    width: 100%;
+    background: var(--surface3);
+    border: 1px solid var(--border2);
+    border-radius: 7px;
+    padding: 5px 10px 5px 28px;
+    font-size: 12px;
+    color: var(--text);
+    outline: none;
+    font-family: var(--sans);
+  }
+  .pop-search input::placeholder { color: var(--text3); }
+  .search-wrap { position: relative; }
+  .search-wrap svg { position: absolute; left: 8px; top: 50%; transform: translateY(-50%); width: 13px; height: 13px; color: var(--text3); }
+
+  .pop-body { max-height: 420px; overflow-y: auto; }
+  .pop-body::-webkit-scrollbar { width: 4px; }
+  .pop-body::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+
+  .tool-group { padding: 6px 0; }
+  .tool-group + .tool-group { border-top: 1px solid var(--border); }
+
+  .tool-row {
+    display: flex; align-items: center;
+    padding: 8px 14px;
+    gap: 10px;
+    cursor: pointer;
+    transition: background .1s;
+  }
+  .tool-row:hover { background: rgba(255,255,255,.04); }
+
+  .tool-icon {
+    width: 28px; height: 28px;
+    border-radius: 7px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 14px;
+    flex-shrink: 0;
+    border: 1px solid var(--border2);
+  }
+  .tool-info { flex: 1; min-width: 0; }
+  .tool-name { font-size: 12px; font-weight: 600; }
+  .tool-meta { font-size: 10px; color: var(--text3); margin-top: 1px; font-family: var(--mono); }
+
+  .tool-right { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+  .health-dot { width: 7px; height: 7px; border-radius: 50%; }
+  .health-dot.green { background: var(--green); box-shadow: 0 0 5px var(--green); }
+  .health-dot.yellow { background: var(--yellow); box-shadow: 0 0 5px var(--yellow); }
+  .health-dot.red { background: var(--red); box-shadow: 0 0 5px var(--red); }
+  .health-dot.grey { background: var(--text3); }
+
+  .pill {
+    font-size: 9px;
+    font-weight: 600;
+    letter-spacing: .03em;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-family: var(--mono);
+  }
+  .pill.green { background: rgba(52,211,153,.15); color: var(--green); }
+  .pill.yellow { background: rgba(251,191,36,.15); color: var(--yellow); }
+  .pill.red { background: rgba(248,113,113,.15); color: var(--red); }
+  .pill.purple { background: rgba(124,106,247,.15); color: var(--accent); }
+  .pill.grey { background: var(--surface3); color: var(--text3); }
+
+  /* inline expand */
+  .tool-expand {
+    padding: 0 14px 8px 52px;
+    display: flex; gap: 6px; flex-wrap: wrap;
+  }
+  .tag {
+    font-size: 9px;
+    font-family: var(--mono);
+    background: var(--surface3);
+    border: 1px solid var(--border2);
+    border-radius: 4px;
+    padding: 2px 6px;
+    color: var(--text2);
+  }
+  .tag.active { border-color: rgba(124,106,247,.4); color: var(--accent); background: rgba(124,106,247,.08); }
+
+  .pop-notif-bar {
+    border-top: 1px solid var(--border);
+    padding: 8px 14px;
+    display: flex; align-items: center; gap: 8px;
+    cursor: pointer;
+  }
+  .pop-notif-bar:hover { background: rgba(255,255,255,.03); }
+  .notif-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--red); flex-shrink: 0; }
+  .pop-notif-bar span { font-size: 11px; color: var(--text2); flex: 1; }
+  .pop-notif-bar .count { font-size: 10px; font-weight: 600; color: var(--red); }
+
+  .pop-footer {
+    border-top: 1px solid var(--border);
+    padding: 8px 14px;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .pop-footer .version { font-size: 10px; color: var(--text3); font-family: var(--mono); }
+  .quit-btn {
+    font-size: 10px; color: var(--text3);
+    background: none; border: none; cursor: pointer; font-family: var(--sans);
+    padding: 3px 6px; border-radius: 4px;
+  }
+  .quit-btn:hover { background: rgba(248,113,113,.15); color: var(--red); }
+
+  /* ── FULL APP ─────────────────────────────────────── */
+  .full-app {
+    width: 860px;
+    height: 580px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    overflow: hidden;
+    box-shadow: 0 32px 80px rgba(0,0,0,.8);
+    display: flex;
+    flex-direction: column;
+  }
+
+  .app-titlebar {
+    display: flex; align-items: center;
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--border);
+    gap: 12px;
+    background: var(--surface);
+    flex-shrink: 0;
+  }
+  .traffic-lights { display: flex; gap: 6px; }
+  .tl { width: 12px; height: 12px; border-radius: 50%; }
+  .tl.red { background: #ff5f57; }
+  .tl.yellow { background: #ffbd2e; }
+  .tl.green { background: #28c840; }
+  .app-title { font-size: 12px; font-weight: 600; flex: 1; text-align: center; color: var(--text2); }
+  .app-title-icons { display: flex; gap: 6px; }
+
+  .app-body { display: flex; flex: 1; overflow: hidden; }
+
+  /* sidebar */
+  .sidebar {
+    width: 200px;
+    border-right: 1px solid var(--border);
+    background: var(--surface);
+    display: flex; flex-direction: column;
+    flex-shrink: 0;
+  }
+  .sidebar-section { padding: 10px 0; }
+  .sidebar-section + .sidebar-section { border-top: 1px solid var(--border); }
+  .sidebar-label {
+    font-size: 9px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase;
+    color: var(--text3); padding: 0 12px 6px;
+  }
+  .sidebar-item {
+    display: flex; align-items: center; gap: 9px;
+    padding: 7px 12px;
+    cursor: pointer; font-size: 12px;
+    transition: background .1s;
+    border-radius: 0;
+    color: var(--text2);
+  }
+  .sidebar-item:hover { background: rgba(255,255,255,.04); color: var(--text); }
+  .sidebar-item.active { background: rgba(124,106,247,.12); color: var(--accent); }
+  .sidebar-item .tool-icon-sm {
+    width: 22px; height: 22px; border-radius: 5px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px; border: 1px solid var(--border2);
+    flex-shrink: 0;
+  }
+  .sidebar-item .item-name { flex: 1; font-weight: 500; }
+  .sidebar-bottom {
+    margin-top: auto;
+    border-top: 1px solid var(--border);
+    padding: 8px 0;
+  }
+
+  /* main content */
+  .main-content { flex: 1; overflow: hidden; display: flex; flex-direction: column; }
+
+  /* tool detail */
+  .detail-header {
+    padding: 16px 20px 0;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+  .detail-header-top {
+    display: flex; align-items: center; gap: 12px; margin-bottom: 14px;
+  }
+  .detail-tool-icon {
+    width: 40px; height: 40px; border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 20px; border: 1px solid var(--border2); background: var(--surface2);
+  }
+  .detail-tool-info { flex: 1; }
+  .detail-tool-name { font-size: 15px; font-weight: 700; }
+  .detail-tool-sub { font-size: 11px; color: var(--text3); font-family: var(--mono); margin-top: 2px; }
+  .detail-actions { display: flex; gap: 6px; }
+  .btn {
+    font-size: 11px; font-weight: 600;
+    padding: 5px 12px; border-radius: 6px;
+    border: 1px solid var(--border2);
+    background: var(--surface2);
+    color: var(--text);
+    cursor: pointer;
+    font-family: var(--sans);
+    transition: all .15s;
+  }
+  .btn:hover { background: var(--surface3); }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .btn.primary:hover { background: var(--accent2); }
+  .btn.danger { background: rgba(248,113,113,.1); border-color: rgba(248,113,113,.3); color: var(--red); }
+
+  .tabs { display: flex; gap: 0; }
+  .tab {
+    font-size: 12px; font-weight: 500;
+    padding: 8px 14px;
+    color: var(--text3);
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    transition: all .15s;
+    white-space: nowrap;
+  }
+  .tab:hover { color: var(--text2); }
+  .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+  .tab .tab-count {
+    font-size: 9px; font-weight: 700; font-family: var(--mono);
+    background: var(--surface3);
+    border-radius: 4px; padding: 1px 5px; margin-left: 4px;
+    color: var(--text3);
+  }
+  .tab.active .tab-count { background: rgba(124,106,247,.2); color: var(--accent); }
+
+  .detail-body { flex: 1; overflow-y: auto; padding: 16px 20px; }
+  .detail-body::-webkit-scrollbar { width: 4px; }
+  .detail-body::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+
+  /* MCPs section */
+  .section-header {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 10px;
+  }
+  .section-title { font-size: 11px; font-weight: 700; color: var(--text2); letter-spacing: .04em; }
+
+  .mcp-row {
+    display: flex; align-items: center; gap: 10px;
+    padding: 9px 12px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    margin-bottom: 6px;
+    transition: border-color .15s;
+  }
+  .mcp-row:hover { border-color: var(--border2); }
+  .mcp-name {
+    font-size: 12px; font-weight: 600;
+    font-family: var(--mono);
+    flex: 1;
+  }
+  .mcp-cmd { font-size: 10px; color: var(--text3); font-family: var(--mono); margin-top: 2px; }
+  .mcp-right { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+
+  /* toggle */
+  .toggle {
+    width: 32px; height: 18px;
+    border-radius: 9px;
+    background: var(--surface3);
+    border: 1px solid var(--border2);
+    cursor: pointer;
+    position: relative;
+    transition: background .2s;
+    flex-shrink: 0;
+  }
+  .toggle.on { background: var(--accent); border-color: var(--accent); }
+  .toggle::after {
+    content: '';
+    position: absolute;
+    width: 12px; height: 12px;
+    border-radius: 50%;
+    background: var(--text3);
+    top: 2px; left: 2px;
+    transition: transform .2s, background .2s;
+  }
+  .toggle.on::after { transform: translateX(14px); background: #fff; }
+
+  /* skill row */
+  .skill-row {
+    display: flex; align-items: center; gap: 10px;
+    padding: 9px 12px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    margin-bottom: 6px;
+    cursor: pointer;
+    transition: border-color .15s;
+  }
+  .skill-row:hover { border-color: var(--border2); }
+  .skill-icon { font-size: 16px; }
+  .skill-name { font-size: 12px; font-weight: 600; font-family: var(--mono); flex: 1; }
+  .skill-desc { font-size: 10px; color: var(--text3); margin-top: 2px; }
+
+  /* permissions */
+  .perm-row {
+    display: flex; align-items: center; gap: 10px;
+    padding: 8px 12px;
+    border-radius: 7px;
+    margin-bottom: 4px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+  }
+  .perm-effect {
+    font-size: 9px; font-weight: 700; padding: 2px 6px; border-radius: 4px;
+    font-family: var(--mono); flex-shrink: 0;
+  }
+  .perm-effect.allow { background: rgba(52,211,153,.15); color: var(--green); }
+  .perm-effect.deny { background: rgba(248,113,113,.15); color: var(--red); }
+  .perm-rule { font-size: 12px; font-family: var(--mono); flex: 1; color: var(--text); }
+
+  /* doctor */
+  .doctor-section { margin-bottom: 16px; }
+  .doctor-item {
+    display: flex; align-items: center; gap: 10px;
+    padding: 9px 12px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    margin-bottom: 6px;
+  }
+  .doctor-status { font-size: 14px; flex-shrink: 0; }
+  .doctor-name { font-size: 12px; font-weight: 600; font-family: var(--mono); flex: 1; }
+  .doctor-msg { font-size: 10px; color: var(--text3); margin-top: 2px; }
+  .doctor-action { font-size: 10px; }
+
+  /* notifications */
+  .notif-row {
+    display: flex; gap: 10px;
+    padding: 10px 12px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    margin-bottom: 6px;
+  }
+  .notif-sev { width: 3px; border-radius: 2px; flex-shrink: 0; }
+  .notif-sev.warning { background: var(--yellow); }
+  .notif-sev.error { background: var(--red); }
+  .notif-sev.info { background: var(--blue); }
+  .notif-body { flex: 1; }
+  .notif-title { font-size: 12px; font-weight: 600; }
+  .notif-sub { font-size: 10px; color: var(--text3); margin-top: 2px; }
+  .notif-time { font-size: 10px; color: var(--text3); }
+  .notif-filters { display: flex; gap: 6px; margin-bottom: 12px; flex-wrap: wrap; }
+  .filter-pill {
+    font-size: 10px; font-weight: 600; padding: 3px 9px; border-radius: 5px;
+    border: 1px solid var(--border2); background: var(--surface2);
+    cursor: pointer; color: var(--text3); font-family: var(--mono);
+  }
+  .filter-pill.active { border-color: var(--accent); color: var(--accent); background: rgba(124,106,247,.1); }
+
+  /* history */
+  .history-row {
+    display: flex; align-items: center; gap: 10px;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--border);
+  }
+  .history-icon { font-size: 12px; flex-shrink: 0; width: 20px; text-align: center; }
+  .history-desc { font-size: 11px; flex: 1; }
+  .history-desc strong { font-family: var(--mono); font-size: 11px; }
+  .history-time { font-size: 10px; color: var(--text3); }
+
+  /* scrollbars */
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+
+  /* divider */
+  .divider { height: 1px; background: var(--border); margin: 10px 0; }
+
+  .empty { text-align: center; padding: 24px; color: var(--text3); font-size: 12px; }
+
+  /* tab panels */
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
+
+  .gap { margin-bottom: 10px; }
+</style>
+</head>
+<body>
+
+<!-- ── SECTION: MENU BAR ──────────────────────────────────── -->
+<div style="display:flex;flex-direction:column;align-items:center;gap:12px;width:100%">
+  <h2>Menu Bar</h2>
+  <div class="menubar-sim">
+    <span class="left">⌚ Mon Jun 15 &nbsp; 11:42</span>
+    <span style="font-size:11px;color:var(--text3)">wifi</span>
+    <span style="font-size:11px;color:var(--text3)">batt 87%</span>
+    <button class="tray-icon-btn" onclick="togglePopover()" id="tray-btn">
+      <!-- sloth head silhouette SVG -->
+      <svg viewBox="0 0 64 64" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+        <path d="M32 6 C18 6 10 16 10 28 C10 38 16 46 24 50 C24 54 28 56 32 56 C36 56 40 54 40 50 C48 46 54 38 54 28 C54 16 46 6 32 6 Z M24 36 Q32 43 40 36"/>
+      </svg>
+      <span style="font-size:11px;font-weight:600">LLM</span>
+      <div class="notif-badge" id="tray-badge">3</div>
+    </button>
+  </div>
+</div>
+
+<!-- ── SECTION: SIMPLE + FULL VIEWS ──────────────────────── -->
+<div style="display:flex;flex-direction:column;align-items:center;gap:12px;width:100%">
+  <h2>Views</h2>
+  <div class="views-wrapper">
+
+    <!-- ── SIMPLE POPOVER ──────────────────────────────── -->
+    <div class="view-container">
+      <h2>Simple — Popover</h2>
+      <div class="popover" id="popover">
+
+        <!-- header -->
+        <div class="pop-header">
+          <div>
+            <div class="title">LLM Manager</div>
+            <div class="subtitle">3 tools active &nbsp;·&nbsp; 2 issues</div>
+          </div>
+          <div class="icon-btn" title="Notifications" onclick="showNotifBadge()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+              <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+            </svg>
+          </div>
+          <div class="icon-btn" title="Settings" onclick="">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="3"/>
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+            </svg>
+          </div>
+          <div class="icon-btn accent" title="Open Full App" onclick="scrollToFullApp()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+              <polyline points="15 3 21 3 21 9"/>
+              <polyline points="9 21 3 21 3 15"/>
+              <line x1="21" y1="3" x2="14" y2="10"/>
+              <line x1="3" y1="21" x2="10" y2="14"/>
+            </svg>
+          </div>
+        </div>
+
+        <!-- search -->
+        <div class="pop-search">
+          <div class="search-wrap">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+            </svg>
+            <input type="text" placeholder="Search skills, MCPs…" />
+          </div>
+        </div>
+
+        <!-- tools list -->
+        <div class="pop-body">
+
+          <!-- Claude -->
+          <div class="tool-group">
+            <div class="tool-row" onclick="toggleExpand('claude-expand')">
+              <div class="tool-icon" style="background:#1a1a2e;border-color:#2a2a4e">🤖</div>
+              <div class="tool-info">
+                <div class="tool-name">Claude Code</div>
+                <div class="tool-meta">v1.0.3 &nbsp;·&nbsp; 32 skills &nbsp;·&nbsp; 8 MCPs</div>
+              </div>
+              <div class="tool-right">
+                <span class="pill green">active</span>
+                <div class="health-dot green"></div>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--text3)"><polyline points="6 9 12 15 18 9"/></svg>
+              </div>
+            </div>
+            <div class="tool-expand" id="claude-expand" style="display:none">
+              <span class="tag active">github-mcp</span>
+              <span class="tag active">postgres-mcp</span>
+              <span class="tag active">context7</span>
+              <span class="tag">sentry</span>
+              <span class="tag active">impeccable</span>
+              <span class="tag active">graphify</span>
+              <span class="tag" style="color:var(--yellow);border-color:rgba(251,191,36,.3)">jira-mcp ⚠</span>
+            </div>
+          </div>
+
+          <!-- Gemini -->
+          <div class="tool-group">
+            <div class="tool-row" onclick="toggleExpand('gemini-expand')">
+              <div class="tool-icon" style="background:#1a2a1a;border-color:#2a4a2a">✦</div>
+              <div class="tool-info">
+                <div class="tool-name">Gemini CLI</div>
+                <div class="tool-meta">v0.1.9 &nbsp;·&nbsp; 0 skills &nbsp;·&nbsp; 3 MCPs</div>
+              </div>
+              <div class="tool-right">
+                <span class="pill yellow">1 issue</span>
+                <div class="health-dot yellow"></div>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--text3)"><polyline points="6 9 12 15 18 9"/></svg>
+              </div>
+            </div>
+            <div class="tool-expand" id="gemini-expand" style="display:none">
+              <span class="tag active">github-mcp</span>
+              <span class="tag active">browser-ext</span>
+              <span class="tag" style="color:var(--yellow);border-color:rgba(251,191,36,.3)">maps-ext ⚠</span>
+            </div>
+          </div>
+
+          <!-- Cursor -->
+          <div class="tool-group">
+            <div class="tool-row" onclick="toggleExpand('cursor-expand')">
+              <div class="tool-icon" style="background:#1a1a1a;border-color:#333">⌥</div>
+              <div class="tool-info">
+                <div class="tool-name">Cursor</div>
+                <div class="tool-meta">v0.50.1 &nbsp;·&nbsp; 12 skills &nbsp;·&nbsp; 5 MCPs</div>
+              </div>
+              <div class="tool-right">
+                <span class="pill green">active</span>
+                <div class="health-dot green"></div>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--text3)"><polyline points="6 9 12 15 18 9"/></svg>
+              </div>
+            </div>
+            <div class="tool-expand" id="cursor-expand" style="display:none">
+              <span class="tag active">github-mcp</span>
+              <span class="tag active">postgres-mcp</span>
+              <span class="tag active">filesystem</span>
+              <span class="tag active">browser</span>
+              <span class="tag active">memory</span>
+            </div>
+          </div>
+
+          <!-- Kiro -->
+          <div class="tool-group">
+            <div class="tool-row">
+              <div class="tool-icon" style="background:#1a1a20;border-color:#2a2a38">◈</div>
+              <div class="tool-info">
+                <div class="tool-name">Kiro</div>
+                <div class="tool-meta">v0.2.0 &nbsp;·&nbsp; 0 skills &nbsp;·&nbsp; 2 MCPs</div>
+              </div>
+              <div class="tool-right">
+                <span class="pill green">active</span>
+                <div class="health-dot green"></div>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--text3)"><polyline points="6 9 12 15 18 9"/></svg>
+              </div>
+            </div>
+          </div>
+
+          <!-- Copilot not installed -->
+          <div class="tool-group">
+            <div class="tool-row" style="opacity:.45">
+              <div class="tool-icon" style="background:#111;border-color:#222">◎</div>
+              <div class="tool-info">
+                <div class="tool-name">GitHub Copilot</div>
+                <div class="tool-meta">not installed</div>
+              </div>
+              <div class="tool-right">
+                <div class="health-dot grey"></div>
+              </div>
+            </div>
+          </div>
+
+        </div><!-- /pop-body -->
+
+        <!-- notification bar -->
+        <div class="pop-notif-bar">
+          <div class="notif-dot"></div>
+          <span>3 notifications</span>
+          <span class="count">2 warnings</span>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--text3)"><polyline points="9 18 15 12 9 6"/></svg>
+        </div>
+
+        <!-- footer -->
+        <div class="pop-footer">
+          <span class="version">v0.7.0</span>
+          <button class="quit-btn">Quit</button>
+        </div>
+
+      </div><!-- /popover -->
+    </div><!-- /view-container simple -->
+
+    <!-- ── FULL APP ─────────────────────────────────────── -->
+    <div class="view-container" id="full-app-anchor">
+      <h2>Advanced — Full App</h2>
+      <div class="full-app">
+
+        <!-- titlebar -->
+        <div class="app-titlebar">
+          <div class="traffic-lights">
+            <div class="tl red"></div>
+            <div class="tl yellow"></div>
+            <div class="tl green"></div>
+          </div>
+          <div class="app-title">LLM Manager</div>
+          <div class="app-title-icons">
+            <div class="icon-btn" title="Notifications" style="position:relative">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13">
+                <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+                <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+              </svg>
+              <div class="notif-badge" style="font-size:8px;min-width:12px;height:12px">3</div>
+            </div>
+            <div class="icon-btn" title="Settings">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13">
+                <circle cx="12" cy="12" r="3"/>
+                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+              </svg>
+            </div>
+          </div>
+        </div>
+
+        <div class="app-body">
+
+          <!-- sidebar -->
+          <div class="sidebar">
+            <div class="sidebar-section">
+              <div class="sidebar-label">Tools</div>
+              <div class="sidebar-item active" onclick="selectSidebarTool(this,'claude-detail')">
+                <div class="tool-icon-sm" style="background:#1a1a2e;border-color:#2a2a4e">🤖</div>
+                <span class="item-name">Claude Code</span>
+                <div class="health-dot green"></div>
+              </div>
+              <div class="sidebar-item" onclick="selectSidebarTool(this,'gemini-detail')">
+                <div class="tool-icon-sm" style="background:#1a2a1a;border-color:#2a4a2a">✦</div>
+                <span class="item-name">Gemini CLI</span>
+                <div class="health-dot yellow"></div>
+              </div>
+              <div class="sidebar-item" onclick="selectSidebarTool(this,'cursor-detail')">
+                <div class="tool-icon-sm" style="background:#111;border-color:#333">⌥</div>
+                <span class="item-name">Cursor</span>
+                <div class="health-dot green"></div>
+              </div>
+              <div class="sidebar-item" onclick="selectSidebarTool(this,'kiro-detail')">
+                <div class="tool-icon-sm" style="background:#1a1a20;border-color:#2a2a38">◈</div>
+                <span class="item-name">Kiro</span>
+                <div class="health-dot green"></div>
+              </div>
+              <div class="sidebar-item" style="opacity:.4">
+                <div class="tool-icon-sm" style="background:#111;border-color:#222">◎</div>
+                <span class="item-name">Copilot</span>
+                <div class="health-dot grey"></div>
+              </div>
+            </div>
+            <div class="sidebar-section">
+              <div class="sidebar-label">App</div>
+              <div class="sidebar-item" onclick="selectSidebarTool(this,'notifications-detail')">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                  <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+                  <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+                </svg>
+                <span class="item-name">Notifications</span>
+                <span class="pill red" style="font-size:9px;padding:1px 5px">3</span>
+              </div>
+            </div>
+            <div class="sidebar-bottom">
+              <div class="sidebar-item" style="opacity:.6">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                  <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+                  <polyline points="16 17 21 12 16 7"/>
+                  <line x1="21" y1="12" x2="9" y2="12"/>
+                </svg>
+                <span class="item-name" style="font-size:11px">Quit</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- main content -->
+          <div class="main-content">
+
+            <!-- ── CLAUDE DETAIL ── -->
+            <div id="claude-detail" class="detail-panel" style="display:flex;flex-direction:column;height:100%">
+              <div class="detail-header">
+                <div class="detail-header-top">
+                  <div class="detail-tool-icon" style="background:#1a1a2e;border-color:#2a2a4e;font-size:20px">🤖</div>
+                  <div class="detail-tool-info">
+                    <div class="detail-tool-name">Claude Code</div>
+                    <div class="detail-tool-sub">v1.0.3 &nbsp;·&nbsp; ~/.claude/ &nbsp;·&nbsp; <span style="color:var(--green)">healthy</span></div>
+                  </div>
+                  <div class="detail-actions">
+                    <button class="btn" onclick="switchTab('claude','doctor')">🩺 Doctor</button>
+                    <button class="btn primary">+ Add MCP</button>
+                  </div>
+                </div>
+                <div class="tabs">
+                  <div class="tab active" onclick="switchTab('claude','skills')">Skills <span class="tab-count">32</span></div>
+                  <div class="tab" onclick="switchTab('claude','mcps')">MCPs <span class="tab-count">8</span></div>
+                  <div class="tab" onclick="switchTab('claude','permissions')">Permissions <span class="tab-count">5</span></div>
+                  <div class="tab" onclick="switchTab('claude','doctor')">Doctor</div>
+                  <div class="tab" onclick="switchTab('claude','history')">History</div>
+                </div>
+              </div>
+
+              <div class="detail-body">
+
+                <!-- SKILLS TAB -->
+                <div class="tab-panel active" id="claude-skills">
+                  <div class="section-header gap">
+                    <span class="section-title">ACTIVE (29)</span>
+                    <div class="search-wrap" style="width:140px">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="position:absolute;left:8px;top:50%;transform:translateY(-50%);width:11px;height:11px;color:var(--text3)"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                      <input type="text" placeholder="filter…" style="width:100%;background:var(--surface2);border:1px solid var(--border2);border-radius:6px;padding:4px 8px 4px 24px;font-size:11px;color:var(--text);outline:none;font-family:var(--sans)"/>
+                    </div>
+                  </div>
+                  <div class="skill-row"><span class="skill-icon">✨</span><div><div class="skill-name">impeccable</div><div class="skill-desc">Premium frontend UI design & audit</div></div><div class="toggle on" style="margin-left:auto"></div></div>
+                  <div class="skill-row"><span class="skill-icon">🕸</span><div><div class="skill-name">graphify</div><div class="skill-desc">Knowledge graph from any input</div></div><div class="toggle on" style="margin-left:auto"></div></div>
+                  <div class="skill-row"><span class="skill-icon">🔍</span><div><div class="skill-name">code-review</div><div class="skill-desc">Multi-level PR review with inline comments</div></div><div class="toggle on" style="margin-left:auto"></div></div>
+                  <div class="skill-row"><span class="skill-icon">📦</span><div><div class="skill-name">pdf</div><div class="skill-desc">Read, merge, split, watermark PDFs</div></div><div class="toggle on" style="margin-left:auto"></div></div>
+                  <div class="skill-row"><span class="skill-icon">🗓</span><div><div class="skill-name">xlsx</div><div class="skill-desc">Spreadsheet read/write/transform</div></div><div class="toggle on" style="margin-left:auto"></div></div>
+                  <div class="divider"></div>
+                  <div class="section-header gap"><span class="section-title">DISABLED (3)</span></div>
+                  <div class="skill-row" style="opacity:.5"><span class="skill-icon">📊</span><div><div class="skill-name">canvas-design</div><div class="skill-desc">Poster and art generation</div></div><div class="toggle" style="margin-left:auto"></div></div>
+                  <div class="skill-row" style="opacity:.5"><span class="skill-icon">🎞</span><div><div class="skill-name">pptx</div><div class="skill-desc">PowerPoint create/edit</div></div><div class="toggle" style="margin-left:auto"></div></div>
+                </div>
+
+                <!-- MCPs TAB -->
+                <div class="tab-panel" id="claude-mcps">
+                  <div class="section-header gap"><span class="section-title">ACTIVE (7)</span></div>
+                  <div class="mcp-row">
+                    <div style="flex:1"><div class="mcp-name">github-mcp</div><div class="mcp-cmd">npx -y @github/mcp-server</div></div>
+                    <div class="mcp-right"><span class="pill green">installed</span><div class="toggle on"></div></div>
+                  </div>
+                  <div class="mcp-row">
+                    <div style="flex:1"><div class="mcp-name">postgres-mcp</div><div class="mcp-cmd">npx -y @modelcontextprotocol/server-postgres</div></div>
+                    <div class="mcp-right"><span class="pill green">installed</span><div class="toggle on"></div></div>
+                  </div>
+                  <div class="mcp-row">
+                    <div style="flex:1"><div class="mcp-name">context7</div><div class="mcp-cmd">npx -y @upstash/context7-mcp</div></div>
+                    <div class="mcp-right"><span class="pill purple">update 2.1→2.2</span><div class="toggle on"></div></div>
+                  </div>
+                  <div class="mcp-row">
+                    <div style="flex:1"><div class="mcp-name">sentry</div><div class="mcp-cmd">npx -y @sentry/mcp-server</div></div>
+                    <div class="mcp-right"><span class="pill green">installed</span><div class="toggle on"></div></div>
+                  </div>
+                  <div class="divider"></div>
+                  <div class="section-header gap"><span class="section-title">ISSUES (1)</span></div>
+                  <div class="mcp-row" style="border-color:rgba(251,191,36,.3)">
+                    <div style="flex:1"><div class="mcp-name" style="color:var(--yellow)">jira-mcp</div><div class="mcp-cmd">npx -y @atlassian/jira-mcp</div></div>
+                    <div class="mcp-right"><span class="pill yellow">not installed</span><button class="btn primary" style="font-size:10px;padding:3px 9px">Install</button></div>
+                  </div>
+                  <div class="divider"></div>
+                  <div class="section-header gap"><span class="section-title">DISABLED (1)</span></div>
+                  <div class="mcp-row" style="opacity:.5">
+                    <div style="flex:1"><div class="mcp-name">memory</div><div class="mcp-cmd">npx -y @modelcontextprotocol/server-memory</div></div>
+                    <div class="mcp-right"><div class="toggle"></div></div>
+                  </div>
+                </div>
+
+                <!-- PERMISSIONS TAB -->
+                <div class="tab-panel" id="claude-permissions">
+                  <div class="section-header gap"><span class="section-title">ALLOW (3)</span><button class="btn" style="font-size:10px;padding:3px 9px">+ Add Rule</button></div>
+                  <div class="perm-row"><span class="perm-effect allow">ALLOW</span><span class="perm-rule">Bash(git:*)</span><div class="toggle on" style="margin-left:auto"></div></div>
+                  <div class="perm-row"><span class="perm-effect allow">ALLOW</span><span class="perm-rule">Read</span><div class="toggle on" style="margin-left:auto"></div></div>
+                  <div class="perm-row"><span class="perm-effect allow">ALLOW</span><span class="perm-rule">Bash(npm run:*)</span><div class="toggle on" style="margin-left:auto"></div></div>
+                  <div class="divider"></div>
+                  <div class="section-header gap"><span class="section-title">DENY (2)</span></div>
+                  <div class="perm-row"><span class="perm-effect deny">DENY</span><span class="perm-rule">Write(/etc/*)</span><div class="toggle on" style="margin-left:auto"></div></div>
+                  <div class="perm-row"><span class="perm-effect deny">DENY</span><span class="perm-rule">Bash(rm -rf:*)</span><div class="toggle on" style="margin-left:auto"></div></div>
+                </div>
+
+                <!-- DOCTOR TAB -->
+                <div class="tab-panel" id="claude-doctor">
+                  <div class="doctor-section">
+                    <div class="section-header gap"><span class="section-title">CONFIG</span></div>
+                    <div class="doctor-item">
+                      <div class="doctor-status">✅</div>
+                      <div style="flex:1"><div class="doctor-name">settings.json</div><div class="doctor-msg">Valid JSON · ~/.claude/settings.json</div></div>
+                    </div>
+                    <div class="doctor-item">
+                      <div class="doctor-status">✅</div>
+                      <div style="flex:1"><div class="doctor-name">claude binary</div><div class="doctor-msg">v1.0.3 · /opt/homebrew/bin/claude</div></div>
+                    </div>
+                  </div>
+                  <div class="doctor-section">
+                    <div class="section-header gap"><span class="section-title">MCPs</span></div>
+                    <div class="doctor-item">
+                      <div class="doctor-status">✅</div>
+                      <div style="flex:1"><div class="doctor-name">github-mcp</div><div class="doctor-msg">@github/mcp-server installed · npm global</div></div>
+                    </div>
+                    <div class="doctor-item">
+                      <div class="doctor-status">✅</div>
+                      <div style="flex:1"><div class="doctor-name">postgres-mcp</div><div class="doctor-msg">@modelcontextprotocol/server-postgres installed</div></div>
+                    </div>
+                    <div class="doctor-item">
+                      <div class="doctor-status">⚠️</div>
+                      <div style="flex:1"><div class="doctor-name" style="color:var(--yellow)">jira-mcp</div><div class="doctor-msg" style="color:var(--yellow)">@atlassian/jira-mcp not found in npm global</div></div>
+                      <button class="btn primary" style="font-size:10px;padding:3px 9px">Install</button>
+                    </div>
+                    <div class="doctor-item">
+                      <div class="doctor-status">🔄</div>
+                      <div style="flex:1"><div class="doctor-name" style="color:var(--blue)">context7</div><div class="doctor-msg" style="color:var(--blue)">Update available: 2.1.0 → 2.2.0</div></div>
+                      <button class="btn" style="font-size:10px;padding:3px 9px">Update</button>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- HISTORY TAB -->
+                <div class="tab-panel" id="claude-history">
+                  <div class="history-row">
+                    <div class="history-icon">🔌</div>
+                    <div class="history-desc">Enabled <strong>github-mcp</strong> via toggle</div>
+                    <div class="history-time">2 min ago</div>
+                  </div>
+                  <div class="history-row">
+                    <div class="history-icon">✏️</div>
+                    <div class="history-desc"><strong>settings.json</strong> modified externally</div>
+                    <div class="history-time">14 min ago</div>
+                  </div>
+                  <div class="history-row">
+                    <div class="history-icon">🔌</div>
+                    <div class="history-desc">Disabled <strong>memory</strong> via toggle</div>
+                    <div class="history-time">1 hr ago</div>
+                  </div>
+                  <div class="history-row">
+                    <div class="history-icon">📦</div>
+                    <div class="history-desc">Installed <strong>postgres-mcp</strong> · npm</div>
+                    <div class="history-time">Jun 14</div>
+                  </div>
+                  <div class="history-row">
+                    <div class="history-icon">🔄</div>
+                    <div class="history-desc">Updated <strong>context7</strong> 2.0.1 → 2.1.0</div>
+                    <div class="history-time">Jun 13</div>
+                  </div>
+                </div>
+
+              </div><!-- /detail-body -->
+            </div><!-- /claude-detail -->
+
+            <!-- ── GEMINI DETAIL ── -->
+            <div id="gemini-detail" class="detail-panel" style="display:none;flex-direction:column;height:100%">
+              <div class="detail-header">
+                <div class="detail-header-top">
+                  <div class="detail-tool-icon" style="background:#1a2a1a;border-color:#2a4a2a;font-size:20px">✦</div>
+                  <div class="detail-tool-info">
+                    <div class="detail-tool-name">Gemini CLI</div>
+                    <div class="detail-tool-sub">v0.1.9 &nbsp;·&nbsp; ~/.gemini/ &nbsp;·&nbsp; <span style="color:var(--yellow)">1 issue</span></div>
+                  </div>
+                  <div class="detail-actions">
+                    <button class="btn">🩺 Doctor</button>
+                    <button class="btn primary">+ Add MCP</button>
+                  </div>
+                </div>
+                <div class="tabs">
+                  <div class="tab active">MCPs <span class="tab-count">3</span></div>
+                  <div class="tab">Permissions</div>
+                  <div class="tab">Doctor</div>
+                  <div class="tab">History</div>
+                </div>
+              </div>
+              <div class="detail-body">
+                <div class="section-header gap"><span class="section-title">ACTIVE (2)</span></div>
+                <div class="mcp-row"><div style="flex:1"><div class="mcp-name">github-mcp</div><div class="mcp-cmd">npx -y @github/mcp-server</div></div><div class="mcp-right"><span class="pill green">installed</span><div class="toggle on"></div></div></div>
+                <div class="mcp-row"><div style="flex:1"><div class="mcp-name">browser-ext</div><div class="mcp-cmd">Gemini Browser Extension</div></div><div class="mcp-right"><span class="pill green">enabled</span><div class="toggle on"></div></div></div>
+                <div class="divider"></div>
+                <div class="section-header gap"><span class="section-title">ISSUES (1)</span></div>
+                <div class="mcp-row" style="border-color:rgba(251,191,36,.3)"><div style="flex:1"><div class="mcp-name" style="color:var(--yellow)">maps-ext</div><div class="mcp-cmd">Google Maps Extension</div></div><div class="mcp-right"><span class="pill yellow">files missing</span></div></div>
+              </div>
+            </div>
+
+            <!-- ── CURSOR DETAIL ── -->
+            <div id="cursor-detail" class="detail-panel" style="display:none;flex-direction:column;height:100%">
+              <div class="detail-header">
+                <div class="detail-header-top">
+                  <div class="detail-tool-icon" style="background:#111;border-color:#333;font-size:20px">⌥</div>
+                  <div class="detail-tool-info">
+                    <div class="detail-tool-name">Cursor</div>
+                    <div class="detail-tool-sub">v0.50.1 &nbsp;·&nbsp; ~/.cursor/ &nbsp;·&nbsp; <span style="color:var(--green)">healthy</span></div>
+                  </div>
+                  <div class="detail-actions">
+                    <button class="btn">🩺 Doctor</button>
+                    <button class="btn primary">+ Add MCP</button>
+                  </div>
+                </div>
+                <div class="tabs">
+                  <div class="tab active">Skills <span class="tab-count">12</span></div>
+                  <div class="tab">MCPs <span class="tab-count">5</span></div>
+                  <div class="tab">Doctor</div>
+                  <div class="tab">History</div>
+                </div>
+              </div>
+              <div class="detail-body">
+                <div class="section-header gap"><span class="section-title">ACTIVE (12)</span></div>
+                <div class="skill-row"><span class="skill-icon">✨</span><div><div class="skill-name">impeccable</div><div class="skill-desc">Premium frontend UI design</div></div><div class="toggle on" style="margin-left:auto"></div></div>
+                <div class="skill-row"><span class="skill-icon">🔍</span><div><div class="skill-name">code-review</div><div class="skill-desc">Multi-level PR review</div></div><div class="toggle on" style="margin-left:auto"></div></div>
+                <div class="skill-row"><span class="skill-icon">🕸</span><div><div class="skill-name">graphify</div><div class="skill-desc">Knowledge graph from any input</div></div><div class="toggle on" style="margin-left:auto"></div></div>
+              </div>
+            </div>
+
+            <!-- ── KIRO DETAIL ── -->
+            <div id="kiro-detail" class="detail-panel" style="display:none;flex-direction:column;height:100%">
+              <div class="detail-header">
+                <div class="detail-header-top">
+                  <div class="detail-tool-icon" style="background:#1a1a20;border-color:#2a2a38;font-size:20px">◈</div>
+                  <div class="detail-tool-info">
+                    <div class="detail-tool-name">Kiro</div>
+                    <div class="detail-tool-sub">v0.2.0 &nbsp;·&nbsp; ~/.kiro/ &nbsp;·&nbsp; <span style="color:var(--green)">healthy</span></div>
+                  </div>
+                  <div class="detail-actions">
+                    <button class="btn">🩺 Doctor</button>
+                    <button class="btn primary">+ Add MCP</button>
+                  </div>
+                </div>
+                <div class="tabs">
+                  <div class="tab active">MCPs <span class="tab-count">2</span></div>
+                  <div class="tab">Doctor</div>
+                  <div class="tab">History</div>
+                </div>
+              </div>
+              <div class="detail-body">
+                <div class="section-header gap"><span class="section-title">ACTIVE (2)</span></div>
+                <div class="mcp-row"><div style="flex:1"><div class="mcp-name">github-mcp</div><div class="mcp-cmd">npx -y @github/mcp-server</div></div><div class="mcp-right"><span class="pill green">installed</span><div class="toggle on"></div></div></div>
+                <div class="mcp-row"><div style="flex:1"><div class="mcp-name">memory</div><div class="mcp-cmd">npx -y @modelcontextprotocol/server-memory</div></div><div class="mcp-right"><span class="pill green">installed</span><div class="toggle on"></div></div></div>
+              </div>
+            </div>
+
+            <!-- ── NOTIFICATIONS DETAIL ── -->
+            <div id="notifications-detail" class="detail-panel" style="display:none;flex-direction:column;height:100%">
+              <div class="detail-header">
+                <div class="detail-header-top">
+                  <div class="detail-tool-info">
+                    <div class="detail-tool-name">Notifications</div>
+                    <div class="detail-tool-sub">3 unread &nbsp;·&nbsp; 2 warnings &nbsp;·&nbsp; 1 info</div>
+                  </div>
+                  <div class="detail-actions">
+                    <button class="btn">Mark all read</button>
+                    <button class="btn danger">Clear all</button>
+                  </div>
+                </div>
+              </div>
+              <div class="detail-body">
+                <div class="notif-filters">
+                  <div class="filter-pill active">All</div>
+                  <div class="filter-pill">MCP</div>
+                  <div class="filter-pill">Skill</div>
+                  <div class="filter-pill">Config</div>
+                  <div class="filter-pill">Health</div>
+                </div>
+                <div class="notif-row">
+                  <div class="notif-sev warning"></div>
+                  <div class="notif-body">
+                    <div class="notif-title">jira-mcp not installed</div>
+                    <div class="notif-sub">Configured in Claude Code · npx @atlassian/jira-mcp not found</div>
+                  </div>
+                  <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px">
+                    <div class="notif-time">2 min ago</div>
+                    <button class="btn primary" style="font-size:10px;padding:2px 8px">Install</button>
+                  </div>
+                </div>
+                <div class="notif-row">
+                  <div class="notif-sev warning"></div>
+                  <div class="notif-body">
+                    <div class="notif-title">context7 update available</div>
+                    <div class="notif-sub">Claude Code · 2.1.0 → 2.2.0</div>
+                  </div>
+                  <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px">
+                    <div class="notif-time">1 hr ago</div>
+                    <button class="btn" style="font-size:10px;padding:2px 8px">Update</button>
+                  </div>
+                </div>
+                <div class="notif-row">
+                  <div class="notif-sev info"></div>
+                  <div class="notif-body">
+                    <div class="notif-title">settings.json modified externally</div>
+                    <div class="notif-sub">Claude Code · changed outside the app (VS Code)</div>
+                  </div>
+                  <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px">
+                    <div class="notif-time">14 min ago</div>
+                    <button class="btn" style="font-size:10px;padding:2px 8px">View diff</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+          </div><!-- /main-content -->
+        </div><!-- /app-body -->
+      </div><!-- /full-app -->
+    </div><!-- /view-container full -->
+
+  </div><!-- /views-wrapper -->
+</div>
+
+<script>
+  function toggleExpand(id) {
+    const el = document.getElementById(id);
+    el.style.display = el.style.display === 'none' ? 'flex' : 'none';
+  }
+
+  function scrollToFullApp() {
+    document.getElementById('full-app-anchor').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  function selectSidebarTool(el, panelId) {
+    document.querySelectorAll('.sidebar-item').forEach(i => i.classList.remove('active'));
+    el.classList.add('active');
+    document.querySelectorAll('.detail-panel').forEach(p => p.style.display = 'none');
+    const panel = document.getElementById(panelId);
+    panel.style.display = 'flex';
+  }
+
+  function switchTab(tool, tabName) {
+    const detail = document.getElementById(tool + '-detail');
+    detail.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    detail.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+    const tabEl = Array.from(detail.querySelectorAll('.tab')).find(t => t.textContent.toLowerCase().includes(tabName));
+    if (tabEl) tabEl.classList.add('active');
+    const panel = document.getElementById(tool + '-' + tabName);
+    if (panel) panel.classList.add('active');
+  }
+
+  document.querySelectorAll('.toggle').forEach(t => {
+    t.addEventListener('click', () => t.classList.toggle('on'));
+  });
+</script>
+</body>
+</html>
