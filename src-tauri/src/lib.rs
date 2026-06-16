@@ -3,6 +3,7 @@ pub(crate) mod engine;
 pub(crate) mod models;
 mod app_state;
 pub(crate) mod backup;
+pub(crate) mod db;
 pub(crate) mod permissions;
 mod mcp_client;
 mod watcher;
@@ -261,16 +262,23 @@ async fn query_mcp_tools(command: String, args: Vec<String>) -> Result<Vec<mcp_c
 
 #[tauri::command]
 fn set_skill_active(
-    _tool_id: String,
+    db: tauri::State<'_, db::DbState>,
+    tool_id: String,
     skill_name: String,
     skill_path: String,
     active: bool,
 ) -> Result<(), String> {
-    app_state::move_skill_folder(&skill_path, &skill_name, active)
+    let result = app_state::move_skill_folder(&skill_path, &skill_name, active);
+    if result.is_ok() {
+        let detail = format!(r#"{{"active":{active}}}"#);
+        db::log_event(&db, "skill_toggled", &tool_id, &skill_name, Some(&detail));
+    }
+    result
 }
 
 #[tauri::command]
 fn set_mcp_active(
+    db: tauri::State<'_, db::DbState>,
     tool_id: String,
     mcp_name: String,
     source_id: String,
@@ -288,7 +296,7 @@ fn set_mcp_active(
         let eff_id = source.id.clone().unwrap_or_else(|| format!("source_{}", idx));
         if eff_id != source_id { continue; }
 
-        return match &source.spec {
+        let result = match &source.spec {
             McpSourceSpec::JsonKeyPair { file, active_key, disabled_key, .. } => {
                 let dk = disabled_key.as_deref()
                     .ok_or("source has no disabled_key; toggling not supported for this source")?;
@@ -313,6 +321,11 @@ fn set_mcp_active(
             }
             _ => Err(format!("source '{source_id}' does not support toggling")),
         };
+        if result.is_ok() {
+            let detail = format!(r#"{{"active":{active}}}"#);
+            db::log_event(&db, "mcp_toggled", &tool_id, &mcp_name, Some(&detail));
+        }
+        return result;
     }
 
     Err(format!("source '{source_id}' not found in '{tool_id}' manifest"))
@@ -407,6 +420,32 @@ fn read_backup_content(backup_path: String) -> Result<String, String> {
 }
 
 // ---------------------------------------------------------------------------
+// IPC commands – notifications (v0.9)
+// ---------------------------------------------------------------------------
+
+#[tauri::command]
+fn get_notifications(
+    db: tauri::State<'_, db::DbState>,
+) -> Result<Vec<db::Notification>, String> {
+    db::get_active_notifications(&db)
+}
+
+#[tauri::command]
+fn dismiss_notification(
+    db: tauri::State<'_, db::DbState>,
+    id: i64,
+) -> Result<(), String> {
+    db::dismiss_notification(&db, id)
+}
+
+#[tauri::command]
+fn dismiss_all_notifications(
+    db: tauri::State<'_, db::DbState>,
+) -> Result<(), String> {
+    db::dismiss_all_notifications(&db)
+}
+
+// ---------------------------------------------------------------------------
 // IPC commands – app lifecycle
 // ---------------------------------------------------------------------------
 
@@ -454,6 +493,8 @@ pub fn run() {
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
+            app.manage(db::open());
+
             #[cfg(target_os = "macos")]
             app.set_activation_policy(tauri::ActivationPolicy::Accessory);
 
@@ -536,6 +577,9 @@ pub fn run() {
             get_permissions,
             add_permission_rule,
             remove_permission_rule,
+            get_notifications,
+            dismiss_notification,
+            dismiss_all_notifications,
             quit_app,
         ])
         .run(tauri::generate_context!())
