@@ -1,5 +1,5 @@
 import type { Page } from '@playwright/test'
-import type { AiTool } from '../../src/types'
+import type { AiTool, Notification } from '../../src/types'
 
 export const mockClaudeTool: AiTool = {
   id: 'claude',
@@ -7,13 +7,13 @@ export const mockClaudeTool: AiTool = {
   version: '1.0.0',
   installed: true,
   skills: [
-    { name: 'impeccable', path: '/home/.claude/skills/impeccable', description: 'UI polish', active: true },
-    { name: 'graphify',   path: '/home/.claude/skills/graphify',   description: 'Graphs',    active: true },
-    { name: 'xlsx',       path: '/home/.claude/skills/.disabled/xlsx', description: 'Excel', active: false },
+    { name: 'impeccable', path: '/home/.claude/skills/impeccable', description: 'UI polish', active: true,  sourceId: 'skills_dir' },
+    { name: 'graphify',   path: '/home/.claude/skills/graphify',   description: 'Graphs',    active: true,  sourceId: 'skills_dir' },
+    { name: 'xlsx',       path: '/home/.claude/skills/.disabled/xlsx', description: 'Excel', active: false, sourceId: 'skills_dir' },
   ],
   mcps: [
     { name: 'github', command: 'npx', args: ['-y', '@modelcontextprotocol/server-github'],
-      active: true, hasSecrets: true, secretKeyNames: ['GITHUB_TOKEN'] },
+      active: true, hasSecrets: true, secretKeyNames: ['GITHUB_TOKEN'], sourceId: 'settings_json' },
   ],
   error: undefined,
 }
@@ -24,7 +24,7 @@ export const mockCursorTool: AiTool = {
   version: '0.40.0',
   installed: true,
   skills: [
-    { name: 'babysit', path: '/home/.cursor/skills-cursor/babysit', description: 'Monitor PRs', active: true },
+    { name: 'babysit', path: '/home/.cursor/skills-cursor/babysit', description: 'Monitor PRs', active: true, sourceId: 'skills_dir' },
   ],
   mcps: [],
   error: undefined,
@@ -41,6 +41,7 @@ export const mockClaudeWithMcpVariants: AiTool = {
       active: true,
       hasSecrets: true,
       secretKeyNames: ['GITHUB_TOKEN'],
+      sourceId: 'settings_json',
     },
     {
       name: 'filesystem',
@@ -49,6 +50,7 @@ export const mockClaudeWithMcpVariants: AiTool = {
       active: false,
       hasSecrets: false,
       secretKeyNames: [],
+      sourceId: 'settings_json',
     },
     {
       name: 'remote-http',
@@ -58,6 +60,7 @@ export const mockClaudeWithMcpVariants: AiTool = {
       active: true,
       hasSecrets: true,
       secretKeyNames: ['Authorization'],
+      sourceId: 'settings_json',
     },
   ],
 }
@@ -70,10 +73,21 @@ export const mockWindsurfTool: AiTool = {
   installed: true,
   skills: [],
   mcps: [
-    { name: 'mcp-playwright',       command: 'npx', args: ['-y', '@playwright/mcp@latest'],                         active: true,  hasSecrets: false, secretKeyNames: [] },
-    { name: 'sequential-thinking',  command: 'npx', args: ['-y', '@modelcontextprotocol/server-sequential-thinking'], active: true,  hasSecrets: false, secretKeyNames: [] },
-    { name: 'sql-explorer',         command: 'node', args: ['-y', '@modelcontextprotocol/server-filesystem', '/tmp'], active: false, hasSecrets: false, secretKeyNames: [] },
+    { name: 'mcp-playwright',       command: 'npx',  args: ['-y', '@playwright/mcp@latest'],                          active: true,  hasSecrets: false, secretKeyNames: [], sourceId: 'mcp_config' },
+    { name: 'sequential-thinking',  command: 'npx',  args: ['-y', '@modelcontextprotocol/server-sequential-thinking'], active: true,  hasSecrets: false, secretKeyNames: [], sourceId: 'mcp_config' },
+    { name: 'sql-explorer',         command: 'node', args: ['-y', '@modelcontextprotocol/server-filesystem', '/tmp'],  active: false, hasSecrets: false, secretKeyNames: [], sourceId: 'mcp_config' },
   ],
+  error: undefined,
+}
+
+// Aider: installed, no skills, no MCPs (no-config state)
+export const mockAiderNoConfigTool: AiTool = {
+  id: 'aider',
+  name: 'Aider',
+  version: '0.80.0',
+  installed: true,
+  skills: [],
+  mcps: [],
   error: undefined,
 }
 
@@ -99,20 +113,10 @@ export const mockGeminiErrorTool: AiTool = {
   error: 'failed to parse ~/.gemini/settings.json: unexpected token',
 }
 
-// Aider: installed, no skills, no MCPs (no-config state)
-export const mockAiderNoConfigTool: AiTool = {
-  id: 'aider',
-  name: 'Aider',
-  version: '0.80.0',
-  installed: true,
-  skills: [],
-  mcps: [],
-  error: undefined,
-}
-
 export type MockOverrides = {
   set_skill_active?: 'success' | 'error' | 'slow'
   set_mcp_active?:   'success' | 'error' | 'slow'
+  notifications?:    Notification[]
 }
 
 export async function injectTauriMock(
@@ -125,10 +129,15 @@ export async function injectTauriMock(
       tools ?? [mockClaudeTool, mockCursorTool]
     )) as AiTool[],
     overrides,
+    notifications: JSON.parse(JSON.stringify(
+      overrides.notifications ?? []
+    )) as Notification[],
   }
 
   await page.addInitScript((data: typeof initData) => {
-    const { tools, overrides } = data
+    const { tools, overrides, notifications: initNotifs } = data
+    // mutable copy for dismiss operations
+    let notifState: typeof initNotifs = [...initNotifs]
 
     ;(window as unknown as Record<string, unknown>).__TAURI_INTERNALS__ = {
       invoke: (cmd: string, args?: Record<string, unknown>) => {
@@ -150,6 +159,22 @@ export async function injectTauriMock(
 
           case 'hide_window':
             return Promise.resolve(null)
+
+          case 'get_notifications':
+            return Promise.resolve(JSON.parse(JSON.stringify(notifState)))
+
+          case 'dismiss_notification': {
+            const id = (args ?? {}).id as number
+            notifState = notifState.filter(n => n.id !== id)
+            return Promise.resolve(null)
+          }
+
+          case 'dismiss_all_notifications':
+            notifState = []
+            return Promise.resolve(null)
+
+          case 'get_permissions':
+            return Promise.resolve({ allow: [], deny: [] })
 
           case 'set_skill_active': {
             const { toolId, skillName, active } = (args ?? {}) as {
