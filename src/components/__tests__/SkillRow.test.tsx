@@ -8,6 +8,7 @@ const activeSkill: Skill = {
   path: '~/.claude/skills/impeccable',
   description: 'Polish frontend UI',
   active: true,
+  sourceId: 'skills_dir',
 }
 
 const disabledSkill: Skill = {

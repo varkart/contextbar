@@ -8,6 +8,7 @@ const skill = (name: string, active = true): Skill => ({
   path: `/skills/${name}`,
   description: undefined,
   active,
+  sourceId: 'skills_dir',
 })
 
 const manySkills = Array.from({ length: 8 }, (_, i) => skill(`skill-${i + 1}`))

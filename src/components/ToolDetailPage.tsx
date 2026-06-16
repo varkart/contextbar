@@ -56,6 +56,7 @@ export default function ToolDetailPage({ tool, onBack, onSelectSkill, onSelectMc
       await invoke('set_mcp_active', {
         toolId: tool.id,
         mcpName: mcp.name,
+        sourceId: mcp.sourceId,
         active,
         extensionName: mcp.extensionName ?? null,
       });
