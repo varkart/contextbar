@@ -285,7 +285,7 @@ mod tests {
     #[test]
     fn disable_mcp_moves_to_disabled_section() {
         let tmp = TempDir::new().unwrap();
-        let config_path = make_mcp_config(&tmp.path(), "settings.json", serde_json::json!({
+        let config_path = make_mcp_config(tmp.path(), "settings.json", serde_json::json!({
             "mcpServers": { "my-server": { "command": "npx", "args": [] } }
         }));
 
@@ -300,7 +300,7 @@ mod tests {
     #[test]
     fn enable_mcp_moves_back_to_active_section() {
         let tmp = TempDir::new().unwrap();
-        let config_path = make_mcp_config(&tmp.path(), "settings.json", serde_json::json!({
+        let config_path = make_mcp_config(tmp.path(), "settings.json", serde_json::json!({
             "disabledMcpServers": { "my-server": { "command": "npx", "args": [] } }
         }));
 
@@ -315,7 +315,7 @@ mod tests {
     #[test]
     fn move_mcp_missing_returns_err() {
         let tmp = TempDir::new().unwrap();
-        let config_path = make_mcp_config(&tmp.path(), "settings.json", serde_json::json!({
+        let config_path = make_mcp_config(tmp.path(), "settings.json", serde_json::json!({
             "mcpServers": {}
         }));
 
@@ -328,7 +328,7 @@ mod tests {
         use std::sync::Arc;
         let tmp = TempDir::new().unwrap();
         // Two distinct MCPs in the same config file
-        let config_path = Arc::new(make_mcp_config(&tmp.path(), "settings.json", serde_json::json!({
+        let config_path = Arc::new(make_mcp_config(tmp.path(), "settings.json", serde_json::json!({
             "mcpServers": {
                 "alpha": { "command": "npx", "args": [] },
                 "beta":  { "command": "npx", "args": [] }
@@ -355,7 +355,7 @@ mod tests {
     #[test]
     fn atomic_write_leaves_no_tmp_file_on_success() {
         let tmp = TempDir::new().unwrap();
-        let config_path = make_mcp_config(&tmp.path(), "settings.json", serde_json::json!({
+        let config_path = make_mcp_config(tmp.path(), "settings.json", serde_json::json!({
             "mcpServers": { "srv": { "command": "node", "args": [] } }
         }));
 
@@ -375,7 +375,7 @@ mod tests {
     #[test]
     fn disable_extension_moves_to_disabled_section() {
         let tmp = TempDir::new().unwrap();
-        let path = make_enablement(&tmp.path(), serde_json::json!({
+        let path = make_enablement(tmp.path(), serde_json::json!({
             "my-ext": { "overrides": ["/Users/*"] }
         }));
 
@@ -391,7 +391,7 @@ mod tests {
     #[test]
     fn enable_extension_restores_from_disabled_section() {
         let tmp = TempDir::new().unwrap();
-        let path = make_enablement(&tmp.path(), serde_json::json!({
+        let path = make_enablement(tmp.path(), serde_json::json!({
             "_disabled": { "my-ext": { "overrides": ["/Users/*"] } }
         }));
 
@@ -408,7 +408,7 @@ mod tests {
     fn enable_extension_not_in_disabled_uses_empty_entry() {
         let tmp = TempDir::new().unwrap();
         // No _disabled section — enabling adds an empty entry
-        let path = make_enablement(&tmp.path(), serde_json::json!({}));
+        let path = make_enablement(tmp.path(), serde_json::json!({}));
 
         toggle_extension_active(&path, "new-ext", true).unwrap();
 
@@ -420,7 +420,7 @@ mod tests {
     #[test]
     fn disable_extension_missing_returns_err() {
         let tmp = TempDir::new().unwrap();
-        let path = make_enablement(&tmp.path(), serde_json::json!({}));
+        let path = make_enablement(tmp.path(), serde_json::json!({}));
 
         let result = toggle_extension_active(&path, "ghost-ext", false);
         assert!(result.is_err());

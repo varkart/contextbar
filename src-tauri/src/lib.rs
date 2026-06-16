@@ -691,7 +691,7 @@ fn open_main_window(app: &tauri::AppHandle, hash: Option<&str>) {
         // Navigate existing window to settings hash
         // Use JSON-encode to prevent JS injection via hash value
         let hash_json = serde_json::to_string(hash.unwrap_or("")).unwrap_or_default();
-        let _ = window.eval(&format!("window.location.hash = {hash_json}"));
+        let _ = window.eval(format!("window.location.hash = {hash_json}"));
         let _ = window.move_window(Position::TrayCenter);
         let _ = window.show();
         let _ = window.set_focus();

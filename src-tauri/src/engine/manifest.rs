@@ -13,7 +13,9 @@ pub struct Manifest {
     pub mcp_sources: Vec<McpSource>,
     #[serde(default)]
     pub skill_sources: Vec<SkillSource>,
+    #[allow(dead_code)]
     pub mcp_toggle: Option<McpToggleSpec>,
+    #[allow(dead_code)]
     pub skill_toggle: Option<SkillToggleSpec>,
     pub permissions: Option<PermissionsSpec>,
 }
@@ -63,6 +65,7 @@ pub struct SkillSource {
 pub enum McpToggleSpec {
     /// Invoke a CLI binary to enable/disable. Args may contain `{name}` which
     /// is replaced with the MCP server name at toggle time.
+    #[allow(dead_code)]
     Cli {
         binary: String,
         disable_args: Vec<String>,
@@ -71,6 +74,7 @@ pub enum McpToggleSpec {
         timeout_ms: u64,
     },
     /// Move the server entry between two keys in a JSON config file.
+    #[allow(dead_code)]
     JsonKeyPair {
         file: String,
         active_key: String,
@@ -83,6 +87,7 @@ pub enum McpToggleSpec {
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum SkillToggleSpec {
     /// Move the skill directory into/out of a disabled subdirectory.
+    #[allow(dead_code)]
     DirMove {
         disabled_subdir: String,
     },
@@ -130,6 +135,7 @@ fn default_parse_mode() -> String { "first_line".to_string() }
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum McpSourceSpec {
     /// JSON file with active_key (active) and optional disabled_key (disabled).
+    #[allow(dead_code)]
     JsonKeyPair {
         file: String,
         #[serde(default = "default_mcp_key")]

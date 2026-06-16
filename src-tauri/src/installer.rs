@@ -133,6 +133,7 @@ pub async fn install_npm_global(package_name: &str) -> Result<String, String> {
 // Rollback (uninstall) — used if post-install validation fails
 // ---------------------------------------------------------------------------
 
+#[allow(dead_code)]
 pub async fn uninstall_npm_global(package_name: &str) -> Result<(), String> {
     let npm = find_npm().ok_or_else(|| "npm not found".to_string())?;
     let output = tokio::process::Command::new(&npm)
