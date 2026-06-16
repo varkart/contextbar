@@ -124,6 +124,65 @@ pub fn toggle_extension_active(enablement_path: &str, extension_name: &str, acti
     Ok(())
 }
 
+/// Read-modify-write a config file's permissions section under the per-file mutex.
+/// Takes a backup before writing. The caller provides a closure that mutates a
+/// `ToolPermissions` value in place.
+pub fn update_permissions_file(
+    config_path: &str,
+    mutate: impl FnOnce(&mut crate::permissions::ToolPermissions),
+    permissions_key: &str,
+) -> Result<(), String> {
+    let lock = config_lock(config_path);
+    let _guard = lock.lock().unwrap();
+
+    if let Err(e) = crate::backup::snapshot(config_path) {
+        eprintln!("[backup] snapshot failed for {config_path}: {e}");
+    }
+
+    // Read existing file or start with empty object
+    let raw = std::fs::read_to_string(config_path).unwrap_or_else(|_| "{}".to_string());
+    let mut json: serde_json::Value = serde_json::from_str(&raw)
+        .map_err(|e| format!("cannot parse {config_path}: {e}"))?;
+
+    let obj = json.as_object_mut().ok_or("config is not a JSON object")?;
+
+    // Extract current permissions (default empty)
+    let perms_val = obj.get(permissions_key).cloned().unwrap_or_default();
+    let mut perms = crate::permissions::ToolPermissions {
+        allow: perms_val.get("allow").and_then(|v| v.as_array())
+            .map(|a| a.iter().filter_map(|v| v.as_str().map(|s| s.to_string())).collect())
+            .unwrap_or_default(),
+        deny: perms_val.get("deny").and_then(|v| v.as_array())
+            .map(|a| a.iter().filter_map(|v| v.as_str().map(|s| s.to_string())).collect())
+            .unwrap_or_default(),
+    };
+
+    mutate(&mut perms);
+
+    // Write back
+    obj.insert(
+        permissions_key.to_string(),
+        serde_json::json!({ "allow": perms.allow, "deny": perms.deny }),
+    );
+
+    let updated = serde_json::to_string_pretty(&json)
+        .map_err(|e| format!("serialization error: {e}"))?;
+
+    if let Some(parent) = std::path::Path::new(config_path).parent() {
+        std::fs::create_dir_all(parent).map_err(|e| format!("cannot create dir: {e}"))?;
+    }
+
+    let tmp = format!("{config_path}.tmp");
+    std::fs::write(&tmp, &updated)
+        .map_err(|e| format!("cannot write temp file: {e}"))?;
+    std::fs::rename(&tmp, config_path).map_err(|e| {
+        let _ = std::fs::remove_file(&tmp);
+        format!("cannot atomically replace {config_path}: {e}")
+    })?;
+
+    Ok(())
+}
+
 /// Move a skill folder between active and .disabled locations.
 pub fn move_skill_folder(skill_path: &str, skill_name: &str, active: bool) -> Result<(), String> {
     let current = std::path::Path::new(skill_path);

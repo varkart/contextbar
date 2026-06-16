@@ -32,6 +32,13 @@ export interface McpServer {
   sourceId: string;
 }
 
+export interface ToolPermissions {
+  allow: string[];
+  deny: string[];
+}
+
+export type PermissionSection = 'allow' | 'deny';
+
 export interface McpTool {
   name: string
   description?: string

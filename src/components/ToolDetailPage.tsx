@@ -21,6 +21,7 @@ export default function ToolDetailPage({ tool, onBack, onSelectSkill, onSelectMc
   const [togglingSkill, setTogglingSkill] = useState<string | undefined>();
   const [togglingMcp, setTogglingMcp] = useState<string | undefined>();
   const [toggleError, setToggleError] = useState<string | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   const handleToggleSkill = useCallback(async (skill: Skill, active: boolean) => {
     setTogglingSkill(skill.name);
@@ -33,6 +34,7 @@ export default function ToolDetailPage({ tool, onBack, onSelectSkill, onSelectMc
         active,
       });
       capture('skill_toggled', { tool_id: tool.id, skill_name: skill.name, active });
+      setRefreshKey(k => k + 1);
       onToolUpdated();
     } catch (e) {
       const msg = String(e);
@@ -139,6 +141,7 @@ export default function ToolDetailPage({ tool, onBack, onSelectSkill, onSelectMc
           togglingSkill={togglingSkill}
           onToggleMcp={handleToggleMcp}
           togglingMcp={togglingMcp}
+          refreshKey={refreshKey}
         />
       </div>
     </div>
