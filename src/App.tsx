@@ -8,6 +8,7 @@ import { useToolsDiff } from './useToolsDiff'
 import { useTheme, type ThemePreference } from './useTheme'
 import { capture } from './analytics'
 import McpDetailPanel from './components/McpDetailPanel'
+import PermissionsDetailPanel from './components/PermissionsDetailPanel'
 import Header from './components/Header'
 import SearchBar from './components/SearchBar'
 import ToolRow from './components/ToolRow'
@@ -17,7 +18,7 @@ import SkillDetailPanel from './components/SkillDetailPanel'
 import ToolDetailPage from './components/ToolDetailPage'
 import NotificationsPanel from './components/NotificationsPanel'
 
-type View = 'main' | 'settings' | 'tool-detail' | 'skill-detail' | 'mcp-detail' | 'notifications'
+type View = 'main' | 'settings' | 'tool-detail' | 'skill-detail' | 'mcp-detail' | 'permissions-detail' | 'notifications'
 
 function useView(): [View, (v: View) => void] {
   const [view, setViewState] = useState<View>(() =>
@@ -77,6 +78,11 @@ export default function App() {
     setView('mcp-detail')
     capture('mcp_detail_viewed', { mcp_name: mcp.name })
   }, [setView])
+
+  const handleSelectPermissions = useCallback(() => {
+    setView('permissions-detail')
+    capture('permissions_detail_viewed', { tool_id: selectedTool?.id })
+  }, [setView, selectedTool])
 
   useEffect(() => {
     invoke<string>('get_version').then(setVersion).catch(() => setVersion('0.5.0'))
@@ -191,7 +197,7 @@ export default function App() {
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        if (view === 'skill-detail' || view === 'mcp-detail') setView(selectedTool ? 'tool-detail' : 'main')
+        if (view === 'skill-detail' || view === 'mcp-detail' || view === 'permissions-detail') setView(selectedTool ? 'tool-detail' : 'main')
         else if (view === 'tool-detail') setView('main')
         else if (view === 'settings' || view === 'notifications') setView('main')
         else invoke('hide_window').catch(() => {})
@@ -228,12 +234,19 @@ export default function App() {
           onToggled={fetchTools}
           onBack={() => setView(selectedTool ? 'tool-detail' : 'main')}
         />
+      ) : view === 'permissions-detail' && selectedTool ? (
+        <PermissionsDetailPanel
+          toolId={selectedTool.id}
+          toolName={selectedTool.name}
+          onBack={() => setView('tool-detail')}
+        />
       ) : view === 'tool-detail' && selectedTool ? (
         <ToolDetailPage
           tool={selectedTool}
           onBack={() => setView('main')}
           onSelectSkill={handleSelectSkill}
           onSelectMcp={handleSelectMcp}
+          onSelectPermissions={handleSelectPermissions}
           onToolUpdated={fetchTools}
           query={query || undefined}
           matchedSkills={searchResults.find(r => r.tool.id === selectedTool.id)?.matchedSkills}
