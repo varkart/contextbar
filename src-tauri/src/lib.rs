@@ -2,6 +2,7 @@ pub(crate) mod detectors;
 pub(crate) mod engine;
 pub(crate) mod models;
 mod app_state;
+pub(crate) mod backup;
 mod mcp_client;
 mod watcher;
 
@@ -317,6 +318,52 @@ fn set_mcp_active(
 }
 
 // ---------------------------------------------------------------------------
+// IPC commands – backup / restore
+// ---------------------------------------------------------------------------
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct BackupEntry {
+    timestamp_ms: u128,
+    path: String,
+}
+
+#[tauri::command]
+fn list_config_backups(config_path: String) -> Vec<BackupEntry> {
+    backup::list_snapshots(&config_path)
+        .into_iter()
+        .map(|(ts, p)| BackupEntry {
+            timestamp_ms: ts,
+            path: p.to_string_lossy().to_string(),
+        })
+        .collect()
+}
+
+#[tauri::command]
+fn restore_config_backup(config_path: String, timestamp_ms: u128) -> Result<(), String> {
+    // Snapshot the current file before overwriting so the restore itself is undoable.
+    if let Err(e) = backup::snapshot(&config_path) {
+        eprintln!("[backup] pre-restore snapshot failed: {e}");
+    }
+    backup::restore_snapshot(&config_path, timestamp_ms)
+}
+
+#[tauri::command]
+fn read_backup_content(backup_path: String) -> Result<String, String> {
+    let p = std::path::Path::new(&backup_path);
+    // Only allow reads from the llmmanager backup directory.
+    let data_dir = dirs::data_dir()
+        .ok_or("cannot resolve data dir")?
+        .join("llmmanager")
+        .join("backups");
+    let canonical = p.canonicalize().map_err(|e| e.to_string())?;
+    if !canonical.starts_with(&data_dir) {
+        return Err("access denied: path outside backup directory".to_string());
+    }
+    std::fs::read_to_string(&canonical).map_err(|e| e.to_string())
+}
+
+// ---------------------------------------------------------------------------
 // IPC commands – app lifecycle
 // ---------------------------------------------------------------------------
 
@@ -440,6 +487,9 @@ pub fn run() {
             query_mcp_tools,
             set_skill_active,
             set_mcp_active,
+            list_config_backups,
+            restore_config_backup,
+            read_backup_content,
             quit_app,
         ])
         .run(tauri::generate_context!())
