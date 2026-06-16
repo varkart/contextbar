@@ -26,10 +26,14 @@ pub fn collect(
         // ClaudeMcpList is a "fill-in-the-gaps" source: skip any name already
         // collected from a file-based source so we don't get duplicates.
         if matches!(entry.spec, McpSourceSpec::ClaudeMcpList { .. }) {
-            let existing: std::collections::HashSet<String> =
+            let existing_names: std::collections::HashSet<String> =
                 all.iter().map(|m: &McpServer| m.name.clone()).collect();
+            let existing_urls: std::collections::HashSet<String> =
+                all.iter().filter_map(|m: &McpServer| m.url.clone()).collect();
             for mcp in mcps {
-                if !existing.contains(&mcp.name) {
+                let name_seen = existing_names.contains(&mcp.name);
+                let url_seen = mcp.url.as_ref().map_or(false, |u| existing_urls.contains(u));
+                if !name_seen && !url_seen {
                     all.push(mcp);
                 }
             }
@@ -1214,5 +1218,59 @@ mod tests {
         let (mcps, err) = collect(&[source], None, tmp.path());
         assert!(err.is_none());
         assert_eq!(mcps.len(), 1, "unknown version should not skip sources");
+    }
+
+    #[test]
+    fn claude_mcp_list_deduped_by_url_same_server_different_name() {
+        // posthog plugin registers url "https://mcp.posthog.com/mcp" as name "posthog".
+        // claude mcp list returns same URL as "plugin:posthog:posthog".
+        // The fill-in-gaps source should drop the CLI entry because URL already seen.
+        let tmp = TempDir::new().unwrap();
+
+        // File source: plugin-provided posthog with known URL
+        let plugin_settings = serde_json::json!({
+            "mcpServers": {
+                "posthog": {
+                    "type": "http",
+                    "url": "https://mcp.posthog.com/mcp"
+                }
+            }
+        });
+        write_json(tmp.path(), "plugin_mcp.json", plugin_settings);
+
+        let file_source = wrap(McpSourceSpec::JsonKeyPair {
+            file: tmp.path().join("plugin_mcp.json").to_string_lossy().to_string(),
+            active_key: "mcpServers".to_string(),
+            disabled_key: None,
+            jsonc: false,
+        });
+
+        // ClaudeMcpList output with same URL but different name
+        let cli_output = "plugin:posthog:posthog: https://mcp.posthog.com/mcp (HTTP) - ✔ Connected\n\
+            sentry: https://mcp.sentry.dev/mcp (HTTP) - ✔ Connected\n";
+        let list_mcps = parse_mcp_list_output(cli_output);
+        assert_eq!(list_mcps.len(), 2);
+
+        // Simulate collect(): file source first, then ClaudeMcpList fill-in-gaps
+        let (file_mcps, _) = collect(&[file_source], None, tmp.path());
+        assert_eq!(file_mcps.len(), 1);
+        assert_eq!(file_mcps[0].name, "posthog");
+
+        let existing_names: std::collections::HashSet<String> =
+            file_mcps.iter().map(|m| m.name.clone()).collect();
+        let existing_urls: std::collections::HashSet<String> =
+            file_mcps.iter().filter_map(|m| m.url.clone()).collect();
+
+        let added: Vec<_> = list_mcps.into_iter()
+            .filter(|m| {
+                let name_seen = existing_names.contains(&m.name);
+                let url_seen = m.url.as_ref().map_or(false, |u| existing_urls.contains(u));
+                !name_seen && !url_seen
+            })
+            .collect();
+
+        // plugin:posthog:posthog dropped (same URL); sentry kept (new URL)
+        assert_eq!(added.len(), 1);
+        assert_eq!(added[0].name, "sentry");
     }
 }
