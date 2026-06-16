@@ -9,13 +9,15 @@ interface ToolDetailPageProps {
   onSelectSkill: (skill: Skill) => void;
   onSelectMcp: (mcp: McpServer) => void;
   onSelectPermissions: () => void;
+  onOpenSkillsPage: () => void;
+  onOpenMcpsPage: () => void;
   onToolUpdated: () => void;
   query?: string;
   matchedSkills?: Set<string>;
   matchedMcps?: Set<string>;
 }
 
-export default function ToolDetailPage({ tool, onBack, onSelectSkill, onSelectMcp, onSelectPermissions, query, matchedSkills, matchedMcps }: ToolDetailPageProps) {
+export default function ToolDetailPage({ tool, onBack, onSelectSkill, onSelectMcp, onSelectPermissions, onOpenSkillsPage, onOpenMcpsPage, query, matchedSkills, matchedMcps }: ToolDetailPageProps) {
   const colors = TOOL_COLORS[tool.id] ?? { bg: 'bg-zinc-500/10', text: 'text-zinc-500' };
   const [refreshKey] = useState(0);
 
@@ -64,6 +66,8 @@ export default function ToolDetailPage({ tool, onBack, onSelectSkill, onSelectMc
           onSelectSkill={onSelectSkill}
           onSelectMcp={onSelectMcp}
           onSelectPermissions={onSelectPermissions}
+          onOpenSkillsPage={onOpenSkillsPage}
+          onOpenMcpsPage={onOpenMcpsPage}
           refreshKey={refreshKey}
         />
       </div>

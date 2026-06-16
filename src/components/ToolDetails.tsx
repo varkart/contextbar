@@ -11,10 +11,12 @@ interface ToolDetailsProps {
   onSelectSkill?: (skill: Skill) => void;
   onSelectMcp?: (mcp: McpServer) => void;
   onSelectPermissions?: () => void;
+  onOpenSkillsPage?: () => void;
+  onOpenMcpsPage?: () => void;
   refreshKey?: number;
 }
 
-export default function ToolDetails({ tool, query, matchedSkills, matchedMcps, onSelectSkill, onSelectMcp, onSelectPermissions, refreshKey }: ToolDetailsProps) {
+export default function ToolDetails({ tool, query, matchedSkills, matchedMcps, onSelectSkill, onSelectMcp, onSelectPermissions, onOpenSkillsPage, onOpenMcpsPage, refreshKey }: ToolDetailsProps) {
   return (
     <div className="px-2 pt-1 pb-3 space-y-3">
       {(tool.version || tool.error) && (
@@ -36,12 +38,14 @@ export default function ToolDetails({ tool, query, matchedSkills, matchedMcps, o
         query={query}
         matchedPaths={matchedSkills}
         onSelectSkill={onSelectSkill}
+        onOpenPage={onOpenSkillsPage}
       />
       <McpSection
         mcps={tool.mcps}
         query={query}
         matchedNames={matchedMcps}
         onSelectMcp={onSelectMcp}
+        onOpenPage={onOpenMcpsPage}
       />
       <PermissionsSection toolId={tool.id} refreshKey={refreshKey} onOpen={onSelectPermissions} />
     </div>

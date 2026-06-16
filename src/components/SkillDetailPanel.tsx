@@ -226,7 +226,9 @@ export default function SkillDetailPanel({ skill, onBack, toolName, toolId, onTo
         </button>
         {toolName && (
           <>
-            <span className="text-[13px] text-[var(--c-text-3)] truncate max-w-[80px]">{toolName}</span>
+            <button onClick={onBack} className="text-[13px] text-[var(--c-text-3)] truncate max-w-[80px] hover:text-[var(--c-text-2)] transition-colors">
+              {toolName}
+            </button>
             <span className="text-[12px] text-[var(--c-text-3)]">›</span>
           </>
         )}
