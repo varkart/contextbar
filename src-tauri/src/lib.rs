@@ -1,4 +1,5 @@
 pub(crate) mod detectors;
+pub(crate) mod doctor;
 pub(crate) mod engine;
 pub(crate) mod models;
 mod app_state;
@@ -546,6 +547,16 @@ pub fn run() {
 
             // Start FSEvents file watcher — emits "tools-changed" to frontend
             watcher::start(app.handle().clone());
+
+            // Initial Doctor run — detect missing MCP binaries
+            {
+                let app_bg = app.handle().clone();
+                std::thread::spawn(move || {
+                    let tools = detectors::detect_all();
+                    let db = app_bg.state::<db::DbState>();
+                    doctor::run(&tools, &db, &app_bg);
+                });
+            }
 
             // In test mode, auto-open the window so WebDriver can connect
             if std::env::var("AICONTEXTBAR_TEST").is_ok() {

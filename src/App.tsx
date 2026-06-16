@@ -155,6 +155,11 @@ export default function App() {
   }, [])
 
   useEffect(() => {
+    const unlisten = listen('notifications-changed', fetchNotifications)
+    return () => { unlisten.then(fn => fn()) }
+  }, [fetchNotifications])
+
+  useEffect(() => {
     const onVisibility = () => {
       if (document.visibilityState === 'visible') capture('app_opened')
     }
