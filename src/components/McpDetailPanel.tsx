@@ -186,8 +186,13 @@ export default function McpDetailPanel({ mcp, onBack, toolName, toolId, onToggle
   }
 
   const commandStr = [mcp.command, ...mcp.args].join(' ')
+  const isHttp = !!mcp.url && !mcp.command
 
   useEffect(() => {
+    if (isHttp) {
+      setLoading(false)
+      return
+    }
     const t0 = Date.now()
     invoke<McpTool[]>('query_mcp_tools', { command: mcp.command, args: mcp.args })
       .then(result => {
@@ -204,7 +209,7 @@ export default function McpDetailPanel({ mcp, onBack, toolName, toolId, onToggle
         capture('mcp_query_failed', { mcp_name: mcp.name, error: String(e) })
       })
       .finally(() => setLoading(false))
-  }, [mcp.command, mcp.args, mcp.name])
+  }, [mcp.command, mcp.args, mcp.name, isHttp])
 
   return (
     <div className="flex flex-col h-full bg-[var(--c-bg)] animate-slide-in-right">
@@ -280,27 +285,35 @@ export default function McpDetailPanel({ mcp, onBack, toolName, toolId, onToggle
         <NpmInstallSection mcp={mcp} toolId={toolId} />
 
         {/* Live tools */}
-        <div className="px-2 py-2">
-          <p className="text-[13px] font-semibold text-violet-500 px-2 mb-1">
-            Live tools {!loading && !error && `(${tools.length})`}
-          </p>
-          {loading && (
-            <div className="px-2 py-4 animate-pulse space-y-2">
-              {[1,2,3].map(i => <div key={i} className="h-3 bg-[var(--c-skeleton)] rounded w-3/4"/>)}
-            </div>
-          )}
-          {error && (
-            <p className="text-[13px] text-red-400 px-2 py-2 leading-relaxed">{error}</p>
-          )}
-          {!loading && !error && tools.length === 0 && (
-            <p className="text-[13px] text-[var(--c-text-3)] px-2 py-2">No tools returned</p>
-          )}
-          {!loading && !error && tools.length > 0 && (
-            <div className="px-1">
-              {tools.map(t => <ToolItem key={t.name} tool={t} />)}
-            </div>
-          )}
-        </div>
+        {isHttp ? (
+          <div className="px-4 py-3 border-t border-[var(--c-border)]">
+            <p className="text-[13px] text-[var(--c-text-3)]">
+              HTTP MCP — tools discoverable only when connected
+            </p>
+          </div>
+        ) : (
+          <div className="px-2 py-2">
+            <p className="text-[13px] font-semibold text-violet-500 px-2 mb-1">
+              Live tools {!loading && !error && `(${tools.length})`}
+            </p>
+            {loading && (
+              <div className="px-2 py-4 animate-pulse space-y-2">
+                {[1,2,3].map(i => <div key={i} className="h-3 bg-[var(--c-skeleton)] rounded w-3/4"/>)}
+              </div>
+            )}
+            {error && (
+              <p className="text-[13px] text-red-400 px-2 py-2 leading-relaxed">{error}</p>
+            )}
+            {!loading && !error && tools.length === 0 && (
+              <p className="text-[13px] text-[var(--c-text-3)] px-2 py-2">No tools returned</p>
+            )}
+            {!loading && !error && tools.length > 0 && (
+              <div className="px-1">
+                {tools.map(t => <ToolItem key={t.name} tool={t} />)}
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   )
