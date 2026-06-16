@@ -23,63 +23,30 @@ describe('SkillRow', () => {
     expect(screen.getByText('impeccable')).toBeInTheDocument()
   })
 
-  it('tooltip includes description when present', () => {
+  it('no toggle button — enable/disable only from detail page', () => {
     render(<SkillRow skill={activeSkill} />)
-    const container = screen.getByText('impeccable').closest('[class*="relative"]') as HTMLElement
-    fireEvent.mouseEnter(container)
-    expect(screen.getByRole('tooltip')).toHaveTextContent('Polish frontend UI')
+    expect(screen.queryByRole('button', { name: /enable|disable/i })).toBeNull()
   })
 
-  it('tooltip includes path when no description', () => {
-    render(<SkillRow skill={{ ...activeSkill, description: undefined }} />)
-    const container = screen.getByText('impeccable').closest('[class*="relative"]') as HTMLElement
-    fireEvent.mouseEnter(container)
-    expect(screen.getByRole('tooltip')).toHaveTextContent('~/.claude/skills/impeccable')
-  })
-
-  // ── toggle ──────────────────────────────────────────────────────────────────
-
-  it('no toggle rendered without onToggle prop', () => {
-    render(<SkillRow skill={activeSkill} />)
-    expect(screen.queryByRole('button', { name: /disable skill/i })).toBeNull()
-  })
-
-  it('toggle renders when onToggle provided', () => {
-    render(<SkillRow skill={activeSkill} onToggle={vi.fn()} />)
-    expect(screen.getByRole('button', { name: /disable skill/i })).toBeInTheDocument()
-  })
-
-  it('toggle label is "Enable skill" when skill is disabled', () => {
-    render(<SkillRow skill={disabledSkill} onToggle={vi.fn()} />)
-    expect(screen.getByRole('button', { name: /enable skill/i })).toBeInTheDocument()
-  })
-
-  it('clicking active toggle calls onToggle(false)', () => {
-    const onToggle = vi.fn()
-    render(<SkillRow skill={activeSkill} onToggle={onToggle} />)
-    fireEvent.click(screen.getByRole('button', { name: /disable skill/i }))
-    expect(onToggle).toHaveBeenCalledWith(false)
-  })
-
-  it('clicking disabled toggle calls onToggle(true)', () => {
-    const onToggle = vi.fn()
-    render(<SkillRow skill={disabledSkill} onToggle={onToggle} />)
-    fireEvent.click(screen.getByRole('button', { name: /enable skill/i }))
-    expect(onToggle).toHaveBeenCalledWith(true)
-  })
-
-  it('toggling=true disables the toggle button', () => {
-    render(<SkillRow skill={activeSkill} onToggle={vi.fn()} toggling={true} />)
-    expect(screen.getByRole('button', { name: /disable skill/i })).toBeDisabled()
-  })
-
-  it('disabled skill row has reduced opacity class', () => {
-    const { container } = render(<SkillRow skill={disabledSkill} onToggle={vi.fn()} />)
+  it('disabled skill row has reduced opacity', () => {
+    const { container } = render(<SkillRow skill={disabledSkill} />)
     expect(container.querySelector('.opacity-40')).toBeInTheDocument()
   })
 
   it('active skill row has no opacity reduction', () => {
-    const { container } = render(<SkillRow skill={activeSkill} onToggle={vi.fn()} />)
+    const { container } = render(<SkillRow skill={activeSkill} />)
     expect(container.querySelector('.opacity-40')).toBeNull()
+  })
+
+  it('shows chevron when onSelect provided', () => {
+    const { container } = render(<SkillRow skill={activeSkill} onSelect={vi.fn()} />)
+    expect(container.querySelector('svg')).toBeInTheDocument()
+  })
+
+  it('calls onSelect when row clicked', () => {
+    const onSelect = vi.fn()
+    render(<SkillRow skill={activeSkill} onSelect={onSelect} />)
+    fireEvent.click(screen.getByText('impeccable'))
+    expect(onSelect).toHaveBeenCalledTimes(1)
   })
 })
