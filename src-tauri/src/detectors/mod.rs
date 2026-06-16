@@ -160,6 +160,7 @@ pub fn parse_mcp_servers(
                 has_secrets,
                 secret_key_names,
                 extension_name: None,
+                source_id: String::new(), // stamped by engine::mcp::collect()
             });
         }
     }
