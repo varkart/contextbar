@@ -3,6 +3,7 @@ pub(crate) mod engine;
 pub(crate) mod models;
 mod app_state;
 pub(crate) mod backup;
+pub(crate) mod permissions;
 mod mcp_client;
 mod watcher;
 
@@ -318,6 +319,48 @@ fn set_mcp_active(
 }
 
 // ---------------------------------------------------------------------------
+// IPC commands – permissions (v0.11)
+// ---------------------------------------------------------------------------
+
+#[tauri::command]
+fn get_permissions(tool_id: String) -> Result<permissions::ToolPermissions, String> {
+    let home = dirs::home_dir().ok_or("cannot find home dir")?;
+    let manifest = crate::engine::load_manifest(&tool_id)
+        .ok_or_else(|| format!("no manifest for '{tool_id}'"))?;
+    let spec = manifest.permissions
+        .ok_or_else(|| format!("'{tool_id}' manifest has no permissions section"))?;
+    permissions::read(&spec, &home)
+}
+
+#[tauri::command]
+fn add_permission_rule(
+    tool_id: String,
+    rule: String,
+    section: permissions::PermissionSection,
+) -> Result<(), String> {
+    let home = dirs::home_dir().ok_or("cannot find home dir")?;
+    let manifest = crate::engine::load_manifest(&tool_id)
+        .ok_or_else(|| format!("no manifest for '{tool_id}'"))?;
+    let spec = manifest.permissions
+        .ok_or_else(|| format!("'{tool_id}' manifest has no permissions section"))?;
+    permissions::add_rule(&spec, &home, &rule, section)
+}
+
+#[tauri::command]
+fn remove_permission_rule(
+    tool_id: String,
+    rule: String,
+    section: permissions::PermissionSection,
+) -> Result<(), String> {
+    let home = dirs::home_dir().ok_or("cannot find home dir")?;
+    let manifest = crate::engine::load_manifest(&tool_id)
+        .ok_or_else(|| format!("no manifest for '{tool_id}'"))?;
+    let spec = manifest.permissions
+        .ok_or_else(|| format!("'{tool_id}' manifest has no permissions section"))?;
+    permissions::remove_rule(&spec, &home, &rule, section)
+}
+
+// ---------------------------------------------------------------------------
 // IPC commands – backup / restore
 // ---------------------------------------------------------------------------
 
@@ -490,6 +533,9 @@ pub fn run() {
             list_config_backups,
             restore_config_backup,
             read_backup_content,
+            get_permissions,
+            add_permission_rule,
+            remove_permission_rule,
             quit_app,
         ])
         .run(tauri::generate_context!())

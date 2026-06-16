@@ -1,5 +1,6 @@
 import SkillSection from './SkillSection';
 import McpSection from './McpSection';
+import PermissionsSection from './PermissionsSection';
 import type { AiTool, Skill, McpServer } from '../types';
 
 interface ToolDetailsProps {
@@ -13,9 +14,10 @@ interface ToolDetailsProps {
   togglingSkill?: string;
   onToggleMcp?: (mcp: McpServer, active: boolean) => Promise<void>;
   togglingMcp?: string;
+  refreshKey?: number;
 }
 
-export default function ToolDetails({ tool, query, matchedSkills, matchedMcps, onSelectSkill, onSelectMcp, onToggleSkill, togglingSkill, onToggleMcp, togglingMcp }: ToolDetailsProps) {
+export default function ToolDetails({ tool, query, matchedSkills, matchedMcps, onSelectSkill, onSelectMcp, onToggleSkill, togglingSkill, onToggleMcp, togglingMcp, refreshKey }: ToolDetailsProps) {
   return (
     <div className="px-2 pt-1 pb-3 space-y-3">
       {(tool.version || tool.error) && (
@@ -48,6 +50,7 @@ export default function ToolDetails({ tool, query, matchedSkills, matchedMcps, o
         onToggleMcp={onToggleMcp}
         togglingMcp={togglingMcp}
       />
+      <PermissionsSection toolId={tool.id} refreshKey={refreshKey} />
     </div>
   );
 }

@@ -15,7 +15,20 @@ pub struct Manifest {
     pub skill_sources: Vec<SkillSource>,
     pub mcp_toggle: Option<McpToggleSpec>,
     pub skill_toggle: Option<SkillToggleSpec>,
+    pub permissions: Option<PermissionsSpec>,
 }
+
+/// Declares where this tool's allow/deny permission lists live.
+#[derive(Debug, Deserialize)]
+pub struct PermissionsSpec {
+    pub file: String,
+    /// Key inside the JSON object that holds `{allow: [...], deny: [...]}`.
+    /// Defaults to "permissions".
+    #[serde(default = "default_permissions_key")]
+    pub key: String,
+}
+
+fn default_permissions_key() -> String { "permissions".to_string() }
 
 /// Wrapper that pairs an MCP source spec with optional version bounds.
 /// Both bounds are inclusive. Absent bound = unbounded.

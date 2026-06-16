@@ -42,3 +42,6 @@ id = "skills_dir"
 type = "directory"
 path = "~/.claude/skills"
 disabled_subdir = ".disabled"
+
+[permissions]
+file = "~/.claude/settings.json"
