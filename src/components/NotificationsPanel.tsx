@@ -43,6 +43,15 @@ export default function NotificationsPanel({ notifications, onBack, onChanged }:
           Notifications
         </span>
 
+        {import.meta.env.DEV && (
+          <button
+            onClick={async () => { await invoke('debug_add_notification'); onChanged(); }}
+            className="text-[11px] text-[var(--c-text-3)]/50 hover:text-[var(--c-text-3)] transition-colors border border-dashed border-[var(--c-border)] rounded px-1.5 py-0.5"
+            title="Dev only: add a test notification"
+          >
+            + test
+          </button>
+        )}
         {notifications.length > 0 && (
           <button
             onClick={dismissAll}

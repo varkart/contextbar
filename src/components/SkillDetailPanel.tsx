@@ -7,6 +7,8 @@ interface SkillDetailPanelProps {
   skill: Skill
   onBack: () => void
   toolName?: string
+  toolId?: string
+  onToggled?: () => void
 }
 
 function FileIcon({ extension, isDir }: { extension?: string; isDir: boolean }) {
@@ -166,10 +168,35 @@ function ExpandableDescription({ skill }: { skill: Skill }) {
   )
 }
 
-export default function SkillDetailPanel({ skill, onBack, toolName }: SkillDetailPanelProps) {
+export default function SkillDetailPanel({ skill, onBack, toolName, toolId, onToggled }: SkillDetailPanelProps) {
+  const [active, setActive] = useState(skill.active)
+  const [toggling, setToggling] = useState(false)
+  const [toggleError, setToggleError] = useState<string | null>(null)
   const [fileTree, setFileTree] = useState<FileEntry | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+
+  const handleToggle = async () => {
+    if (!toolId) return
+    setToggling(true)
+    setToggleError(null)
+    try {
+      await invoke('set_skill_active', {
+        toolId,
+        skillName: skill.name,
+        skillPath: skill.path,
+        active: !active,
+      })
+      capture('skill_toggled', { tool_id: toolId, skill_name: skill.name, active: !active })
+      setActive(v => !v)
+      onToggled?.()
+    } catch (e) {
+      setToggleError(String(e))
+      captureException(e)
+    } finally {
+      setToggling(false)
+    }
+  }
 
   useEffect(() => {
     invoke<FileEntry>('read_skill_dir', { path: skill.path })
@@ -202,7 +229,28 @@ export default function SkillDetailPanel({ skill, onBack, toolName }: SkillDetai
         <span className="text-[15px] font-semibold text-[var(--c-text)] tracking-[-0.01em] truncate">
           {skill.name}
         </span>
+        {toolId && (
+          <button
+            onClick={handleToggle}
+            disabled={toggling}
+            aria-label={active ? 'Disable skill' : 'Enable skill'}
+            className={`ml-auto text-[12px] px-2 py-0.5 rounded transition-colors disabled:opacity-50 flex-shrink-0 ${
+              active
+                ? 'bg-red-500/10 text-red-400 hover:bg-red-500/20'
+                : 'bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20'
+            }`}
+          >
+            {toggling ? '…' : active ? 'Disable' : 'Enable'}
+          </button>
+        )}
       </div>
+
+      {toggleError && (
+        <div className="mx-3 mt-1 px-3 py-1.5 rounded text-[12px] text-red-400 bg-red-500/10 flex items-center justify-between gap-2 flex-shrink-0">
+          <span className="truncate">{toggleError}</span>
+          <button onClick={() => setToggleError(null)} className="flex-shrink-0 hover:text-red-300">✕</button>
+        </div>
+      )}
 
       <div className="flex-1 overflow-y-auto">
         {/* Expandable description */}

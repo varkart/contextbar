@@ -488,6 +488,28 @@ fn dismiss_all_notifications(
 }
 
 // ---------------------------------------------------------------------------
+// IPC commands – debug helpers
+// ---------------------------------------------------------------------------
+
+#[tauri::command]
+fn debug_add_notification(db: tauri::State<'_, db::DbState>, app: tauri::AppHandle) -> Result<(), String> {
+    // Use a timestamp-based key so each click creates a new notification
+    let key = format!("debug:test:{}", std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis());
+    db::add_notification(
+        &db,
+        "warn",
+        "Test notification",
+        "This is a test notification. Doctor fires real ones when an MCP binary is missing from PATH.",
+        Some(&key),
+    ).map_err(|e| e.to_string())?;
+    let _ = app.emit("notifications-changed", ());
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
 // IPC commands – app lifecycle
 // ---------------------------------------------------------------------------
 
@@ -632,6 +654,7 @@ pub fn run() {
             get_mcp_install_state,
             install_mcp_npm,
             get_mcp_npm_latest,
+            debug_add_notification,
             get_notifications,
             dismiss_notification,
             dismiss_all_notifications,

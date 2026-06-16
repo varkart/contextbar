@@ -100,4 +100,61 @@ describe('SkillDetailPanel', () => {
     await waitFor(() => expect(mockInvoke).toHaveBeenCalled())
     expect(mockInvoke).toHaveBeenCalledWith('read_skill_dir', { path: skill.path })
   })
+
+  // ── enable / disable toggle ──────────────────────────────────────────────
+
+  it('shows Disable button when toolId provided and skill is active', async () => {
+    mockInvoke.mockResolvedValue(fileTree)
+    render(<SkillDetailPanel skill={skill} onBack={vi.fn()} toolId="claude" />)
+    await waitFor(() => expect(screen.getByText('SKILL.md')).toBeInTheDocument())
+    expect(screen.getByRole('button', { name: /disable skill/i })).toBeInTheDocument()
+  })
+
+  it('hides toggle button when toolId not provided', async () => {
+    mockInvoke.mockResolvedValue(fileTree)
+    render(<SkillDetailPanel skill={skill} onBack={vi.fn()} />)
+    await waitFor(() => expect(screen.getByText('SKILL.md')).toBeInTheDocument())
+    expect(screen.queryByRole('button', { name: /disable skill/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /enable skill/i })).not.toBeInTheDocument()
+  })
+
+  it('shows Enable button for inactive skill', async () => {
+    const inactiveSkill = { ...skill, active: false }
+    mockInvoke.mockResolvedValue(fileTree)
+    render(<SkillDetailPanel skill={inactiveSkill} onBack={vi.fn()} toolId="claude" />)
+    await waitFor(() => expect(screen.getByText('SKILL.md')).toBeInTheDocument())
+    expect(screen.getByRole('button', { name: /enable skill/i })).toBeInTheDocument()
+  })
+
+  it('toggle calls set_skill_active with correct args', async () => {
+    mockInvoke.mockImplementation((cmd: string) => {
+      if (cmd === 'read_skill_dir') return Promise.resolve(fileTree)
+      if (cmd === 'set_skill_active') return Promise.resolve(null)
+      return Promise.resolve(null)
+    })
+    const onToggled = vi.fn()
+    render(<SkillDetailPanel skill={skill} onBack={vi.fn()} toolId="claude" onToggled={onToggled} />)
+    await waitFor(() => screen.getByRole('button', { name: /disable skill/i }))
+    fireEvent.click(screen.getByRole('button', { name: /disable skill/i }))
+    await waitFor(() =>
+      expect(mockInvoke).toHaveBeenCalledWith('set_skill_active', {
+        toolId: 'claude',
+        skillName: 'impeccable',
+        skillPath: '~/.claude/skills/impeccable',
+        active: false,
+      })
+    )
+    expect(onToggled).toHaveBeenCalled()
+  })
+
+  it('shows error when toggle fails', async () => {
+    mockInvoke.mockImplementation((cmd: string) => {
+      if (cmd === 'read_skill_dir') return Promise.resolve(fileTree)
+      return Promise.reject(new Error('permission denied'))
+    })
+    render(<SkillDetailPanel skill={skill} onBack={vi.fn()} toolId="claude" />)
+    await waitFor(() => screen.getByRole('button', { name: /disable skill/i }))
+    fireEvent.click(screen.getByRole('button', { name: /disable skill/i }))
+    await waitFor(() => expect(screen.getByText(/permission denied/i)).toBeInTheDocument())
+  })
 })

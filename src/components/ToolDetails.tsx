@@ -10,14 +10,10 @@ interface ToolDetailsProps {
   matchedMcps?: Set<string>;
   onSelectSkill?: (skill: Skill) => void;
   onSelectMcp?: (mcp: McpServer) => void;
-  onToggleSkill?: (skill: Skill, active: boolean) => Promise<void>;
-  togglingSkill?: string;
-  onToggleMcp?: (mcp: McpServer, active: boolean) => Promise<void>;
-  togglingMcp?: string;
   refreshKey?: number;
 }
 
-export default function ToolDetails({ tool, query, matchedSkills, matchedMcps, onSelectSkill, onSelectMcp, onToggleSkill, togglingSkill, onToggleMcp, togglingMcp, refreshKey }: ToolDetailsProps) {
+export default function ToolDetails({ tool, query, matchedSkills, matchedMcps, onSelectSkill, onSelectMcp, refreshKey }: ToolDetailsProps) {
   return (
     <div className="px-2 pt-1 pb-3 space-y-3">
       {(tool.version || tool.error) && (
@@ -39,16 +35,12 @@ export default function ToolDetails({ tool, query, matchedSkills, matchedMcps, o
         query={query}
         matchedPaths={matchedSkills}
         onSelectSkill={onSelectSkill}
-        onToggleSkill={onToggleSkill}
-        togglingSkill={togglingSkill}
       />
       <McpSection
         mcps={tool.mcps}
         query={query}
         matchedNames={matchedMcps}
         onSelectMcp={onSelectMcp}
-        onToggleMcp={onToggleMcp}
-        togglingMcp={togglingMcp}
       />
       <PermissionsSection toolId={tool.id} refreshKey={refreshKey} />
     </div>

@@ -37,6 +37,7 @@ export default function Header({ onSettingsClick, onNotificationsClick, updateAv
       <div className="flex items-center gap-1">
         <button
           onClick={onNotificationsClick}
+          title="Notifications — alerts about missing MCP binaries or config issues"
           className="relative text-[var(--c-text-3)] hover:text-[var(--c-text-2)] transition-colors p-0.5 rounded"
           aria-label={hasNotifications ? `${notificationCount} notifications` : 'Notifications'}
         >
