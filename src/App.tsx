@@ -112,6 +112,23 @@ export default function App() {
       setTools(result)
       setLastUpdated(new Date())
       setSelectedTool(prev => prev ? (result.find(t => t.id === prev.id) ?? prev) : null)
+      // Refresh selected skill/mcp with updated paths from detector (paths change on enable/disable)
+      setSelectedSkill(prev => {
+        if (!prev) return null
+        for (const tool of result) {
+          const found = tool.skills.find(s => s.name === prev.name)
+          if (found) return found
+        }
+        return prev
+      })
+      setSelectedMcp(prev => {
+        if (!prev) return null
+        for (const tool of result) {
+          const found = tool.mcps.find(m => m.name === prev.name)
+          if (found) return found
+        }
+        return prev
+      })
       capture('tools_loaded', {
         tool_count: result.length,
         installed_count: result.filter(t => t.installed).length,
