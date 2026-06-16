@@ -1,9 +1,6 @@
 import path from 'path'
-import { fileURLToPath } from 'url'
 import { spawn, type ChildProcess } from 'child_process'
 import type { Options } from '@wdio/types'
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 const APP_BINARY = path.resolve(
   __dirname,
@@ -12,7 +9,13 @@ const APP_BINARY = path.resolve(
 
 let tauriDriver: ChildProcess
 
-export const config: Options.Testrunner = {
+// capabilities uses Tauri-driver's non-standard 'tauri:options' extension
+// which is not in the WdIO 9 type definitions, hence the intersection type.
+type WdioConfig = Omit<Options.Testrunner, 'capabilities'> & {
+  capabilities: { browserName: string; 'tauri:options': { application: string } }[]
+}
+
+export const config: WdioConfig = {
   specs: ['./specs/**/*.spec.ts'],
   maxInstances: 1,
 

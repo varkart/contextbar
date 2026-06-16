@@ -104,10 +104,8 @@ describe('skill enable/disable', () => {
 
     // Find skill row — should not have opacity-40 anymore
     const disabledRows = await $$('.opacity-40')
-    const names = await Promise.all(
-      disabledRows.map(r => r.getText())
-    )
-    expect(names.every(n => !n.includes('__e2e_test_skill__'))).toBe(true)
+    const names = await Promise.all([...disabledRows].map(r => r.getText()))
+    expect(names.every((n: string) => !n.includes('__e2e_test_skill__'))).toBe(true)
 
     await goBack()
   })
