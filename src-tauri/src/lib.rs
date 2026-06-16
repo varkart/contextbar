@@ -1,6 +1,7 @@
 pub(crate) mod detectors;
 pub(crate) mod doctor;
 pub(crate) mod engine;
+pub(crate) mod installer;
 pub(crate) mod models;
 mod app_state;
 pub(crate) mod backup;
@@ -421,6 +422,46 @@ fn read_backup_content(backup_path: String) -> Result<String, String> {
 }
 
 // ---------------------------------------------------------------------------
+// IPC commands – npm installer (v0.13)
+// ---------------------------------------------------------------------------
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct NpmInstallState {
+    package: Option<String>,
+    installed_version: Option<String>,
+    is_npx: bool,
+}
+
+#[tauri::command]
+fn get_mcp_install_state(command: String, args: Vec<String>) -> NpmInstallState {
+    let package = installer::npm_package_from_mcp(&command, &args);
+    let is_npx = package.is_some();
+    let installed_version = package.as_deref().and_then(installer::get_npm_installed_version);
+    NpmInstallState { package, installed_version, is_npx }
+}
+
+#[tauri::command]
+async fn install_mcp_npm(
+    app: tauri::AppHandle,
+    tool_id: String,
+    mcp_name: String,
+    package_name: String,
+) -> Result<String, String> {
+    let version = installer::install_npm_global(&package_name).await?;
+    let detail = format!(r#"{{"version":"{}","package":"{}"}}"#, version, package_name);
+    let db = app.state::<db::DbState>();
+    db::log_event(&db, "mcp_npm_installed", &tool_id, &mcp_name, Some(&detail));
+    let _ = app.emit("tools-changed", ());
+    Ok(version)
+}
+
+#[tauri::command]
+async fn get_mcp_npm_latest(package_name: String) -> Option<String> {
+    installer::get_npm_latest_version(&package_name).await
+}
+
+// ---------------------------------------------------------------------------
 // IPC commands – notifications (v0.9)
 // ---------------------------------------------------------------------------
 
@@ -588,6 +629,9 @@ pub fn run() {
             get_permissions,
             add_permission_rule,
             remove_permission_rule,
+            get_mcp_install_state,
+            install_mcp_npm,
+            get_mcp_npm_latest,
             get_notifications,
             dismiss_notification,
             dismiss_all_notifications,

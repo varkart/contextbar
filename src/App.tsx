@@ -205,6 +205,7 @@ export default function App() {
         <McpDetailPanel
           mcp={selectedMcp}
           toolName={selectedTool?.name}
+          toolId={selectedTool?.id}
           onBack={() => setView(selectedTool ? 'tool-detail' : 'main')}
         />
       ) : view === 'tool-detail' && selectedTool ? (

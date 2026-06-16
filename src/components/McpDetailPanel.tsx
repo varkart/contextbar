@@ -1,12 +1,13 @@
 import { useState, useEffect } from 'react'
 import { invoke } from '@tauri-apps/api/core'
-import type { McpServer, McpTool } from '../types'
+import type { McpServer, McpTool, NpmInstallState } from '../types'
 import { capture, captureException } from '../analytics'
 
 interface McpDetailPanelProps {
   mcp: McpServer
   onBack: () => void
   toolName?: string
+  toolId?: string
 }
 
 function ToolItem({ tool }: { tool: McpTool }) {
@@ -36,7 +37,116 @@ function ToolItem({ tool }: { tool: McpTool }) {
   )
 }
 
-export default function McpDetailPanel({ mcp, onBack, toolName }: McpDetailPanelProps) {
+function NpmInstallSection({ mcp, toolId }: { mcp: McpServer; toolId?: string }) {
+  const [state, setState] = useState<NpmInstallState | null>(null)
+  const [installing, setInstalling] = useState(false)
+  const [installError, setInstallError] = useState<string | null>(null)
+  const [latestVersion, setLatestVersion] = useState<string | null>(null)
+  const [checkingLatest, setCheckingLatest] = useState(false)
+
+  useEffect(() => {
+    invoke<NpmInstallState>('get_mcp_install_state', { command: mcp.command, args: mcp.args })
+      .then(setState)
+      .catch(() => {})
+  }, [mcp.command, mcp.args])
+
+  if (!state?.isNpx) return null
+
+  const pkg = state.package!
+  const installed = state.installedVersion
+  const hasUpdate = latestVersion !== null && installed !== null && latestVersion !== installed
+
+  const handleInstall = async () => {
+    setInstalling(true)
+    setInstallError(null)
+    try {
+      const version = await invoke<string>('install_mcp_npm', {
+        toolId: toolId ?? '',
+        mcpName: mcp.name,
+        packageName: pkg,
+      })
+      setState(prev => prev ? { ...prev, installedVersion: version } : prev)
+      setLatestVersion(null)
+    } catch (e) {
+      setInstallError(String(e))
+    } finally {
+      setInstalling(false)
+    }
+  }
+
+  const handleCheckLatest = async () => {
+    setCheckingLatest(true)
+    try {
+      const latest = await invoke<string | null>('get_mcp_npm_latest', { packageName: pkg })
+      setLatestVersion(latest)
+    } catch {
+      setLatestVersion(null)
+    } finally {
+      setCheckingLatest(false)
+    }
+  }
+
+  return (
+    <div className="px-4 py-3 border-b border-[var(--c-border)]">
+      <div className="flex items-center gap-2 mb-1.5">
+        <span className="text-[11px] font-semibold text-[var(--c-text-3)] uppercase tracking-wider">npm</span>
+        <span className="text-[13px] font-mono text-[var(--c-text-2)] truncate flex-1">{pkg}</span>
+      </div>
+      <div className="flex items-center gap-2 flex-wrap">
+        {installed ? (
+          <>
+            <span className="text-[12px] bg-emerald-500/15 text-emerald-400 px-1.5 py-0.5 rounded font-mono">
+              v{installed}
+            </span>
+            {latestVersion !== null && (
+              hasUpdate
+                ? <span className="text-[12px] text-blue-400/70">v{latestVersion} available</span>
+                : <span className="text-[12px] text-[var(--c-text-3)]">up to date</span>
+            )}
+            <div className="ml-auto">
+              {hasUpdate ? (
+                <button
+                  onClick={handleInstall}
+                  disabled={installing}
+                  aria-label={`Update to ${latestVersion}`}
+                  className="text-[12px] bg-blue-500/20 text-blue-400 hover:bg-blue-500/30 px-2 py-0.5 rounded transition-colors disabled:opacity-50"
+                >
+                  {installing ? 'updating…' : `Update to v${latestVersion}`}
+                </button>
+              ) : (
+                <button
+                  onClick={handleCheckLatest}
+                  disabled={checkingLatest}
+                  aria-label="Check for updates"
+                  className="text-[12px] text-[var(--c-text-3)] hover:text-[var(--c-text-2)] transition-colors disabled:opacity-50"
+                >
+                  {checkingLatest ? 'checking…' : 'check for updates'}
+                </button>
+              )}
+            </div>
+          </>
+        ) : (
+          <>
+            <span className="text-[12px] text-amber-400/70">not installed</span>
+            <button
+              onClick={handleInstall}
+              disabled={installing}
+              aria-label="Install package"
+              className="ml-auto text-[12px] bg-violet-500/20 text-violet-400 hover:bg-violet-500/30 px-2 py-0.5 rounded transition-colors disabled:opacity-50"
+            >
+              {installing ? 'installing…' : 'Install'}
+            </button>
+          </>
+        )}
+      </div>
+      {installError && (
+        <p className="text-[12px] text-red-400 mt-1.5 leading-relaxed">{installError}</p>
+      )}
+    </div>
+  )
+}
+
+export default function McpDetailPanel({ mcp, onBack, toolName, toolId }: McpDetailPanelProps) {
   const [tools, setTools] = useState<McpTool[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -104,6 +214,9 @@ export default function McpDetailPanel({ mcp, onBack, toolName }: McpDetailPanel
             <p className="text-[12px] text-amber-400/70 mt-1">env: {mcp.secretKeyNames.join(', ')}</p>
           )}
         </div>
+
+        {/* npm install state */}
+        <NpmInstallSection mcp={mcp} toolId={toolId} />
 
         {/* Live tools */}
         <div className="px-2 py-2">
