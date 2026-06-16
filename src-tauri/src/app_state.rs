@@ -26,6 +26,10 @@ pub fn move_mcp_in_config(
     let lock = config_lock(config_path);
     let _guard = lock.lock().unwrap();
 
+    if let Err(e) = crate::backup::snapshot(config_path) {
+        eprintln!("[backup] snapshot failed for {config_path}: {e}");
+    }
+
     let content = std::fs::read_to_string(config_path)
         .map_err(|e| format!("cannot read {config_path}: {e}"))?;
     let mut json: serde_json::Value = serde_json::from_str(&content)
@@ -70,6 +74,10 @@ pub fn move_mcp_in_config(
 pub fn toggle_extension_active(enablement_path: &str, extension_name: &str, active: bool) -> Result<(), String> {
     let lock = config_lock(enablement_path);
     let _guard = lock.lock().unwrap();
+
+    if let Err(e) = crate::backup::snapshot(enablement_path) {
+        eprintln!("[backup] snapshot failed for {enablement_path}: {e}");
+    }
 
     // Read existing file; start with empty object if missing
     let json_str = std::fs::read_to_string(enablement_path).unwrap_or_else(|_| "{}".to_string());
