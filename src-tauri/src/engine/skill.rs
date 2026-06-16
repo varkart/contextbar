@@ -5,11 +5,16 @@ use super::resolve::{expand_home, version_in_range};
 
 pub fn collect(sources: &[SkillSource], version: Option<&str>, home: &std::path::Path) -> Vec<Skill> {
     let mut all = Vec::new();
-    for entry in sources {
+    for (idx, entry) in sources.iter().enumerate() {
         if !version_in_range(version, entry.min_version.as_deref(), entry.max_version.as_deref()) {
             continue;
         }
-        all.extend(read_source(&entry.spec, home));
+        let source_id = entry.id.clone().unwrap_or_else(|| format!("source_{}", idx));
+        let mut skills = read_source(&entry.spec, home);
+        for skill in &mut skills {
+            skill.source_id = source_id.clone();
+        }
+        all.extend(skills);
     }
     all.sort_by(|a, b| a.name.cmp(&b.name));
     all
@@ -32,7 +37,7 @@ fn read_directory(dir: &std::path::Path, disabled_subdir: Option<&str>) -> Vec<S
             if name.starts_with('.') { continue; }
             let path = entry.path();
             let description = parse_skill_description(&path);
-            skills.push(Skill { name, path: path.to_string_lossy().to_string(), description, active: true });
+            skills.push(Skill { name, path: path.to_string_lossy().to_string(), description, active: true, source_id: String::new() });
         }
     }
 
@@ -44,7 +49,7 @@ fn read_directory(dir: &std::path::Path, disabled_subdir: Option<&str>) -> Vec<S
                 if name.starts_with('.') { continue; }
                 let path = entry.path();
                 let description = parse_skill_description(&path);
-                skills.push(Skill { name, path: path.to_string_lossy().to_string(), description, active: false });
+                skills.push(Skill { name, path: path.to_string_lossy().to_string(), description, active: false, source_id: String::new() });
             }
         }
     }
@@ -60,7 +65,7 @@ mod tests {
     use tempfile::TempDir;
 
     fn wrap(spec: SkillSourceSpec) -> SkillSource {
-        SkillSource { min_version: None, max_version: None, spec }
+        SkillSource { id: None, min_version: None, max_version: None, spec }
     }
 
     fn make_skill_dir(parent: &std::path::Path, name: &str) {
@@ -148,6 +153,7 @@ mod tests {
         make_skill_dir(tmp.path(), "skill-a");
 
         let source = SkillSource {
+            id: None,
             min_version: Some("3.0".to_string()),
             max_version: None,
             spec: SkillSourceSpec::Directory {

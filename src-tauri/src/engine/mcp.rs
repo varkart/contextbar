@@ -12,11 +12,16 @@ pub fn collect(
     let mut all = Vec::new();
     let mut first_error: Option<String> = None;
 
-    for entry in sources {
+    for (idx, entry) in sources.iter().enumerate() {
         if !version_in_range(version, entry.min_version.as_deref(), entry.max_version.as_deref()) {
             continue;
         }
-        let (mcps, err) = read_source(&entry.spec, home);
+        let source_id = entry.id.clone().unwrap_or_else(|| format!("source_{}", idx));
+        let (mut mcps, err) = read_source(&entry.spec, home);
+
+        for mcp in &mut mcps {
+            mcp.source_id = source_id.clone();
+        }
 
         // ClaudeMcpList is a "fill-in-the-gaps" source: skip any name already
         // collected from a file-based source so we don't get duplicates.
@@ -297,6 +302,7 @@ fn read_extension_dir(
                 has_secrets,
                 secret_key_names,
                 extension_name: Some(ext_name.clone()),
+                source_id: String::new(), // stamped by collect()
             });
         }
     }
@@ -540,6 +546,7 @@ fn parse_mcp_list_output(output: &str) -> Vec<McpServer> {
             has_secrets: false,
             secret_key_names: vec![],
             extension_name: None,
+            source_id: String::new(), // stamped by collect()
         });
     }
     mcps
@@ -653,7 +660,7 @@ mod tests {
     }
 
     fn wrap(spec: McpSourceSpec) -> super::super::manifest::McpSource {
-        super::super::manifest::McpSource { min_version: None, max_version: None, spec }
+        super::super::manifest::McpSource { id: None, min_version: None, max_version: None, spec }
     }
 
     fn home_with_source(source: McpSourceSpec) -> (TempDir, Vec<McpServer>, Option<String>) {
@@ -1005,6 +1012,7 @@ mod tests {
             "mcpServers": { "srv": { "command": "node", "args": [] } }
         }));
         let source = super::super::manifest::McpSource {
+            id: None,
             min_version: Some("2.0".to_string()),
             max_version: None,
             spec: McpSourceSpec::JsonKeyPair {
@@ -1027,6 +1035,7 @@ mod tests {
             "mcpServers": { "srv": { "command": "node", "args": [] } }
         }));
         let source = super::super::manifest::McpSource {
+            id: None,
             min_version: Some("2.0".to_string()),
             max_version: Some("3.0".to_string()),
             spec: McpSourceSpec::JsonKeyPair {
@@ -1191,6 +1200,7 @@ mod tests {
             "mcpServers": { "srv": { "command": "node", "args": [] } }
         }));
         let source = super::super::manifest::McpSource {
+            id: None,
             min_version: Some("99.0".to_string()),
             max_version: None,
             spec: McpSourceSpec::JsonKeyPair {

@@ -31,6 +31,14 @@ fn all_manifest_strs() -> &'static [(&'static str, &'static str)] {
 
 // ── Public API ────────────────────────────────────────────────────────────────
 
+/// Parse and return the manifest for a given tool id.
+pub fn load_manifest(tool_id: &str) -> Option<manifest::Manifest> {
+    all_manifest_strs()
+        .iter()
+        .find(|(id, _)| *id == tool_id)
+        .and_then(|(_, toml_str)| toml::from_str(toml_str).ok())
+}
+
 pub fn detect_all() -> Vec<AiTool> {
     const TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
 
