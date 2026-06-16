@@ -70,6 +70,15 @@ fn migrate(conn: &mut Connection) -> Result<(), String> {
             .map_err(|e| e.to_string())?;
     }
 
+    if version < 2 {
+        conn.execute_batch(
+            "ALTER TABLE notifications ADD COLUMN dedup_key TEXT;",
+        )
+        .map_err(|e| e.to_string())?;
+        conn.pragma_update(None, "user_version", 2)
+            .map_err(|e| e.to_string())?;
+    }
+
     Ok(())
 }
 
@@ -145,4 +154,65 @@ pub fn count_active_notifications(state: &DbState) -> i64 {
         |r| r.get(0),
     )
     .unwrap_or(0)
+}
+
+/// Insert a notification. Returns true if a new row was inserted, false if a
+/// non-dismissed notification with the same dedup_key already exists.
+pub fn add_notification(
+    state: &DbState,
+    level: &str,
+    title: &str,
+    body: &str,
+    dedup_key: Option<&str>,
+) -> Result<bool, String> {
+    let conn = state.0.lock().map_err(|e| e.to_string())?;
+
+    if let Some(key) = dedup_key {
+        let exists: bool = conn
+            .query_row(
+                "SELECT EXISTS(SELECT 1 FROM notifications WHERE dedup_key = ?1 AND dismissed = 0)",
+                rusqlite::params![key],
+                |r| r.get(0),
+            )
+            .unwrap_or(false);
+        if exists {
+            return Ok(false);
+        }
+    }
+
+    conn.execute(
+        "INSERT INTO notifications (ts_ms, level, title, body, dedup_key)
+         VALUES (?1, ?2, ?3, ?4, ?5)",
+        rusqlite::params![now_ms(), level, title, body, dedup_key],
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(true)
+}
+
+/// Return dedup_keys of all active (non-dismissed) notifications whose key
+/// starts with the given prefix. Used by Doctor to find stale warnings.
+pub fn active_keys_with_prefix(state: &DbState, prefix: &str) -> std::collections::HashSet<String> {
+    let Ok(conn) = state.0.lock() else {
+        return std::collections::HashSet::new();
+    };
+    let mut stmt = match conn.prepare(
+        "SELECT dedup_key FROM notifications WHERE dedup_key LIKE ?1 AND dismissed = 0",
+    ) {
+        Ok(s) => s,
+        Err(_) => return std::collections::HashSet::new(),
+    };
+    let like_pat = format!("{prefix}%");
+    stmt.query_map(rusqlite::params![like_pat], |r| r.get::<_, String>(0))
+        .into_iter()
+        .flatten()
+        .filter_map(|r| r.ok())
+        .collect()
+}
+
+pub fn dismiss_by_dedup_key(state: &DbState, key: &str) {
+    let Ok(conn) = state.0.lock() else { return };
+    let _ = conn.execute(
+        "UPDATE notifications SET dismissed = 1 WHERE dedup_key = ?1 AND dismissed = 0",
+        rusqlite::params![key],
+    );
 }

@@ -1,7 +1,7 @@
 use notify_debouncer_mini::{new_debouncer, DebouncedEventKind};
 use std::collections::{HashMap, HashSet};
 use std::time::Duration;
-use tauri::{AppHandle, Emitter};
+use tauri::{AppHandle, Emitter, Manager};
 use serde::Serialize;
 
 #[derive(Debug, Clone, Serialize)]
@@ -22,11 +22,11 @@ pub struct DiffItem {
 type SkillSnapshot = HashMap<String, HashSet<String>>;
 type McpSnapshot = HashMap<String, HashSet<String>>;
 
-fn take_snapshot(_app: &AppHandle) -> (SkillSnapshot, McpSnapshot) {
+fn take_snapshot(_app: &AppHandle) -> (Vec<crate::models::AiTool>, SkillSnapshot, McpSnapshot) {
     let tools = crate::detectors::detect_all();
     let mut skills: SkillSnapshot = HashMap::new();
     let mut mcps: McpSnapshot = HashMap::new();
-    for tool in tools {
+    for tool in &tools {
         if !tool.installed { continue; }
         skills.insert(
             tool.id.clone(),
@@ -37,7 +37,7 @@ fn take_snapshot(_app: &AppHandle) -> (SkillSnapshot, McpSnapshot) {
             tool.mcps.iter().map(|m| m.name.clone()).collect(),
         );
     }
-    (skills, mcps)
+    (tools, skills, mcps)
 }
 
 fn diff_snapshots(
@@ -129,7 +129,7 @@ pub fn start(app: AppHandle) {
         ].iter().map(|(k, v)| (k.to_string(), v.to_string())).collect();
 
         // Take initial snapshot
-        let (mut last_skills, mut last_mcps) = take_snapshot(&app);
+        let (_, mut last_skills, mut last_mcps) = take_snapshot(&app);
 
         loop {
             match rx.recv() {
@@ -139,7 +139,7 @@ pub fn start(app: AppHandle) {
                     });
                     if !relevant { continue; }
 
-                    let (new_skills, new_mcps) = take_snapshot(&app);
+                    let (new_tools, new_skills, new_mcps) = take_snapshot(&app);
                     let diff = diff_snapshots(
                         &last_skills, &new_skills,
                         &last_mcps, &new_mcps,
@@ -155,6 +155,10 @@ pub fn start(app: AppHandle) {
                         let _ = app.emit("tools-changed", ());
                         let _ = app.emit("tools-diff", &diff);
                     }
+
+                    // Re-run Doctor on every relevant FS event (catches command edits too)
+                    let db = app.state::<crate::db::DbState>();
+                    crate::doctor::run(&new_tools, &db, &app);
 
                     last_skills = new_skills;
                     last_mcps = new_mcps;
