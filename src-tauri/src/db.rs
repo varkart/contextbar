@@ -41,6 +41,12 @@ fn try_open() -> Result<DbState, String> {
     Ok(DbState(Arc::new(Mutex::new(conn))))
 }
 
+/// Exposed for unit tests in other modules that need an in-memory DB.
+#[cfg(test)]
+pub fn migrate_for_test(conn: &mut Connection) {
+    migrate(conn).expect("test DB migration failed");
+}
+
 fn migrate(conn: &mut Connection) -> Result<(), String> {
     let version: i32 = conn
         .query_row("PRAGMA user_version", [], |r| r.get(0))
@@ -215,4 +221,207 @@ pub fn dismiss_by_dedup_key(state: &DbState, key: &str) {
         "UPDATE notifications SET dismissed = 1 WHERE dedup_key = ?1 AND dismissed = 0",
         rusqlite::params![key],
     );
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn test_db() -> DbState {
+        let mut conn = Connection::open_in_memory().unwrap();
+        migrate(&mut conn).unwrap();
+        DbState(Arc::new(Mutex::new(conn)))
+    }
+
+    // ── add_notification ──────────────────────────────────────────────────────
+
+    #[test]
+    fn add_notification_inserts_row() {
+        let db = test_db();
+        let inserted = add_notification(&db, "info", "Title", "Body", None).unwrap();
+        assert!(inserted);
+        let notifs = get_active_notifications(&db).unwrap();
+        assert_eq!(notifs.len(), 1);
+        assert_eq!(notifs[0].title, "Title");
+        assert_eq!(notifs[0].level, "info");
+    }
+
+    #[test]
+    fn add_notification_dedup_skips_existing_active() {
+        let db = test_db();
+        add_notification(&db, "warn", "T", "B", Some("key1")).unwrap();
+        let inserted = add_notification(&db, "warn", "T", "B", Some("key1")).unwrap();
+        assert!(!inserted, "duplicate active key should not insert");
+        assert_eq!(get_active_notifications(&db).unwrap().len(), 1);
+    }
+
+    #[test]
+    fn add_notification_dedup_allows_after_dismiss() {
+        let db = test_db();
+        add_notification(&db, "warn", "T", "B", Some("key1")).unwrap();
+        let notifs = get_active_notifications(&db).unwrap();
+        dismiss_notification(&db, notifs[0].id).unwrap();
+
+        let inserted = add_notification(&db, "warn", "T2", "B2", Some("key1")).unwrap();
+        assert!(inserted, "after dismiss, same key can be inserted again");
+        let active = get_active_notifications(&db).unwrap();
+        assert_eq!(active.len(), 1);
+        assert_eq!(active[0].title, "T2");
+    }
+
+    #[test]
+    fn add_notification_no_dedup_key_always_inserts() {
+        let db = test_db();
+        add_notification(&db, "info", "T", "B", None).unwrap();
+        add_notification(&db, "info", "T", "B", None).unwrap();
+        assert_eq!(get_active_notifications(&db).unwrap().len(), 2);
+    }
+
+    // ── get_active_notifications ──────────────────────────────────────────────
+
+    #[test]
+    fn get_active_excludes_dismissed() {
+        let db = test_db();
+        add_notification(&db, "info", "Keep", "B", None).unwrap();
+        add_notification(&db, "warn", "Gone", "B", Some("k")).unwrap();
+        let gone_id = get_active_notifications(&db).unwrap()
+            .iter().find(|n| n.title == "Gone").unwrap().id;
+        dismiss_notification(&db, gone_id).unwrap();
+
+        let active = get_active_notifications(&db).unwrap();
+        assert_eq!(active.len(), 1);
+        assert_eq!(active[0].title, "Keep");
+    }
+
+    #[test]
+    fn get_active_newest_first() {
+        let db = test_db();
+        add_notification(&db, "info", "First",  "B", None).unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(5));
+        add_notification(&db, "info", "Second", "B", None).unwrap();
+
+        let notifs = get_active_notifications(&db).unwrap();
+        assert_eq!(notifs[0].title, "Second");
+        assert_eq!(notifs[1].title, "First");
+    }
+
+    // ── dismiss_notification ──────────────────────────────────────────────────
+
+    #[test]
+    fn dismiss_notification_by_id() {
+        let db = test_db();
+        add_notification(&db, "info", "T", "B", None).unwrap();
+        let id = get_active_notifications(&db).unwrap()[0].id;
+        dismiss_notification(&db, id).unwrap();
+        assert!(get_active_notifications(&db).unwrap().is_empty());
+    }
+
+    #[test]
+    fn dismiss_notification_unknown_id_is_noop() {
+        let db = test_db();
+        assert!(dismiss_notification(&db, 999999).is_ok());
+    }
+
+    // ── dismiss_all_notifications ─────────────────────────────────────────────
+
+    #[test]
+    fn dismiss_all_clears_all_active() {
+        let db = test_db();
+        add_notification(&db, "info", "A", "B", None).unwrap();
+        add_notification(&db, "warn", "C", "D", None).unwrap();
+        dismiss_all_notifications(&db).unwrap();
+        assert!(get_active_notifications(&db).unwrap().is_empty());
+    }
+
+    #[test]
+    fn dismiss_all_on_empty_is_ok() {
+        let db = test_db();
+        assert!(dismiss_all_notifications(&db).is_ok());
+    }
+
+    // ── active_keys_with_prefix ───────────────────────────────────────────────
+
+    #[test]
+    fn active_keys_with_prefix_returns_matching() {
+        let db = test_db();
+        add_notification(&db, "warn", "T", "B", Some("doctor:mcp:claude:foo:missing")).unwrap();
+        add_notification(&db, "info", "T", "B", Some("other:key")).unwrap();
+
+        let keys = active_keys_with_prefix(&db, "doctor:");
+        assert_eq!(keys.len(), 1);
+        assert!(keys.contains("doctor:mcp:claude:foo:missing"));
+    }
+
+    #[test]
+    fn active_keys_excludes_dismissed() {
+        let db = test_db();
+        add_notification(&db, "warn", "T", "B", Some("doctor:mcp:x:y:missing")).unwrap();
+        let notifs = get_active_notifications(&db).unwrap();
+        dismiss_notification(&db, notifs[0].id).unwrap();
+
+        assert!(active_keys_with_prefix(&db, "doctor:").is_empty());
+    }
+
+    // ── dismiss_by_dedup_key ──────────────────────────────────────────────────
+
+    #[test]
+    fn dismiss_by_dedup_key_dismisses_target() {
+        let db = test_db();
+        add_notification(&db, "warn", "A", "B", Some("key-a")).unwrap();
+        add_notification(&db, "warn", "C", "D", Some("key-c")).unwrap();
+        dismiss_by_dedup_key(&db, "key-a");
+
+        let active = get_active_notifications(&db).unwrap();
+        assert_eq!(active.len(), 1);
+        assert_eq!(active[0].title, "C");
+    }
+
+    #[test]
+    fn dismiss_by_dedup_key_unknown_key_is_noop() {
+        let db = test_db();
+        add_notification(&db, "info", "T", "B", None).unwrap();
+        dismiss_by_dedup_key(&db, "nonexistent-key");
+        assert_eq!(get_active_notifications(&db).unwrap().len(), 1);
+    }
+
+    // ── log_event ─────────────────────────────────────────────────────────────
+
+    #[test]
+    fn log_event_inserts_audit_row() {
+        let db = test_db();
+        log_event(&db, "skill_toggled", "claude", "my-skill", Some(r#"{"active":true}"#));
+
+        let conn = db.0.lock().unwrap();
+        let count: i64 = conn.query_row(
+            "SELECT COUNT(*) FROM audit_events WHERE event_type = 'skill_toggled'",
+            [],
+            |r| r.get(0),
+        ).unwrap();
+        assert_eq!(count, 1);
+    }
+
+    #[test]
+    fn log_event_null_detail_allowed() {
+        let db = test_db();
+        log_event(&db, "mcp_toggled", "cursor", "my-mcp", None);
+
+        let conn = db.0.lock().unwrap();
+        let count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM audit_events", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(count, 1);
+    }
+
+    // ── schema ────────────────────────────────────────────────────────────────
+
+    #[test]
+    fn schema_has_dedup_key_column() {
+        let db = test_db();
+        // If dedup_key column is missing this insert would fail
+        let conn = db.0.lock().unwrap();
+        conn.execute(
+            "INSERT INTO notifications (ts_ms, level, title, body, dedup_key) VALUES (1, 'info', 'T', 'B', 'k')",
+            [],
+        ).expect("dedup_key column should exist after migration");
+    }
 }
