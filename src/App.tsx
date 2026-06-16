@@ -199,6 +199,8 @@ export default function App() {
         <SkillDetailPanel
           skill={selectedSkill}
           toolName={selectedTool?.name}
+          toolId={selectedTool?.id}
+          onToggled={fetchTools}
           onBack={() => setView(selectedTool ? 'tool-detail' : 'main')}
         />
       ) : view === 'mcp-detail' && selectedMcp ? (
@@ -206,6 +208,7 @@ export default function App() {
           mcp={selectedMcp}
           toolName={selectedTool?.name}
           toolId={selectedTool?.id}
+          onToggled={fetchTools}
           onBack={() => setView(selectedTool ? 'tool-detail' : 'main')}
         />
       ) : view === 'tool-detail' && selectedTool ? (

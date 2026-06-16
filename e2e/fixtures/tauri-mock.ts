@@ -210,6 +210,9 @@ export async function injectTauriMock(
             })
           }
 
+          case 'debug_add_notification':
+            return Promise.resolve(null)
+
           case 'get_mcp_install_state': {
             const { command, args: mcpArgs } = (args ?? {}) as { command: string; args: string[] }
             if (command !== 'npx') return Promise.resolve({ package: null, installedVersion: null, isNpx: false })

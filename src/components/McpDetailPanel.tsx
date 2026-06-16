@@ -8,6 +8,7 @@ interface McpDetailPanelProps {
   onBack: () => void
   toolName?: string
   toolId?: string
+  onToggled?: () => void
 }
 
 function ToolItem({ tool }: { tool: McpTool }) {
@@ -89,9 +90,13 @@ function NpmInstallSection({ mcp, toolId }: { mcp: McpServer; toolId?: string })
   return (
     <div className="px-4 py-3 border-b border-[var(--c-border)]">
       <div className="flex items-center gap-2 mb-1.5">
-        <span className="text-[11px] font-semibold text-[var(--c-text-3)] uppercase tracking-wider">npm</span>
+        <span className="text-[11px] font-semibold text-[var(--c-text-3)] uppercase tracking-wider">npm package</span>
         <span className="text-[13px] font-mono text-[var(--c-text-2)] truncate flex-1">{pkg}</span>
       </div>
+      <p className="text-[11px] text-[var(--c-text-3)]/60 mb-1.5">
+        Installs the global npm package so this MCP server command is available on PATH.
+        Does not modify your Claude config.
+      </p>
       <div className="flex items-center gap-2 flex-wrap">
         {installed ? (
           <>
@@ -146,10 +151,36 @@ function NpmInstallSection({ mcp, toolId }: { mcp: McpServer; toolId?: string })
   )
 }
 
-export default function McpDetailPanel({ mcp, onBack, toolName, toolId }: McpDetailPanelProps) {
+export default function McpDetailPanel({ mcp, onBack, toolName, toolId, onToggled }: McpDetailPanelProps) {
+  const [active, setActive] = useState(mcp.active)
+  const [toggling, setToggling] = useState(false)
+  const [toggleError, setToggleError] = useState<string | null>(null)
   const [tools, setTools] = useState<McpTool[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+
+  const handleToggle = async () => {
+    if (!toolId) return
+    setToggling(true)
+    setToggleError(null)
+    try {
+      await invoke('set_mcp_active', {
+        toolId,
+        mcpName: mcp.name,
+        sourceId: mcp.sourceId,
+        active: !active,
+        extensionName: mcp.extensionName ?? null,
+      })
+      capture('mcp_toggled', { tool_id: toolId, mcp_name: mcp.name, active: !active })
+      setActive(v => !v)
+      onToggled?.()
+    } catch (e) {
+      setToggleError(String(e))
+      captureException(e)
+    } finally {
+      setToggling(false)
+    }
+  }
 
   const commandStr = [mcp.command, ...mcp.args].join(' ')
 
@@ -196,8 +227,31 @@ export default function McpDetailPanel({ mcp, onBack, toolName, toolId }: McpDet
         <span className="text-[15px] font-semibold text-[var(--c-text)] tracking-[-0.01em] truncate">
           {mcp.name}
         </span>
-        <span className="ml-auto text-[12px] bg-violet-500/10 text-violet-400 px-1.5 py-0.5 rounded font-mono">MCP</span>
+        <div className="ml-auto flex items-center gap-1.5 flex-shrink-0">
+          {toolId && (
+            <button
+              onClick={handleToggle}
+              disabled={toggling}
+              aria-label={active ? 'Disable MCP' : 'Enable MCP'}
+              className={`text-[12px] px-2 py-0.5 rounded transition-colors disabled:opacity-50 ${
+                active
+                  ? 'bg-red-500/10 text-red-400 hover:bg-red-500/20'
+                  : 'bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20'
+              }`}
+            >
+              {toggling ? '…' : active ? 'Disable' : 'Enable'}
+            </button>
+          )}
+          <span className="text-[12px] bg-violet-500/10 text-violet-400 px-1.5 py-0.5 rounded font-mono">MCP</span>
+        </div>
       </div>
+
+      {toggleError && (
+        <div className="mx-3 mt-1 px-3 py-1.5 rounded text-[12px] text-red-400 bg-red-500/10 flex items-center justify-between gap-2 flex-shrink-0">
+          <span className="truncate">{toggleError}</span>
+          <button onClick={() => setToggleError(null)} className="flex-shrink-0 hover:text-red-300">✕</button>
+        </div>
+      )}
 
       <div className="flex-1 overflow-y-auto">
         {/* Description / command / URL */}

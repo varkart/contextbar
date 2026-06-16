@@ -10,6 +10,7 @@ interface PermissionsSectionProps {
 }
 
 export default function PermissionsSection({ toolId, refreshKey }: PermissionsSectionProps) {
+  const [sectionOpen, setSectionOpen] = useState(true);
   const [perms, setPerms] = useState<ToolPermissions | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [supported, setSupported] = useState(true);
@@ -76,47 +77,56 @@ export default function PermissionsSection({ toolId, refreshKey }: PermissionsSe
 
   return (
     <div className="space-y-2">
-      <div className="flex items-center justify-between px-2">
-        <p className="text-[13px] font-semibold text-[var(--c-text-3)] uppercase tracking-wider">
-          Permissions
-          {totalCount > 0 && (
-            <span className="ml-2 text-[11px] font-normal normal-case text-[var(--c-text-3)]/60">
-              {totalCount}
-            </span>
+      <button
+        onClick={() => setSectionOpen(v => !v)}
+        className="flex items-center gap-1 px-2 w-full text-left hover:opacity-80 transition-opacity"
+        aria-expanded={sectionOpen}
+      >
+        <span className="text-[var(--c-text-3)]/70">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+            stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
+            className={`w-2.5 h-2.5 transition-transform duration-150 ${sectionOpen ? 'rotate-90' : 'rotate-0'}`}>
+            <polyline points="9 18 15 12 9 6" />
+          </svg>
+        </span>
+        <span className="text-[13px] font-semibold text-[var(--c-text-3)] uppercase tracking-wider">Permissions</span>
+        {totalCount > 0 && (
+          <span className="text-[13px] text-[var(--c-text-3)]/60">{totalCount}</span>
+        )}
+      </button>
+
+      {sectionOpen && (
+        <>
+          {error && (
+            <p className="px-2 text-[13px] text-red-400/80">{error}</p>
           )}
-        </p>
-      </div>
 
-      {error && (
-        <p className="px-2 text-[13px] text-red-400/80">{error}</p>
-      )}
-
-      {perms && (
-        <div className="space-y-3 px-2">
-          <RuleList
-            label="Allow"
-            rules={perms.allow}
-            section="allow"
-            removingRule={removingRule}
-            onRemove={removeRule}
-            labelClass="text-emerald-500/80"
-          />
-          <RuleList
-            label="Deny"
-            rules={perms.deny}
-            section="deny"
-            removingRule={removingRule}
-            onRemove={removeRule}
-            labelClass="text-red-400/80"
-          />
-          {totalCount === 0 && (
-            <p className="text-[13px] text-[var(--c-text-3)]/50 italic">No custom rules</p>
+          {perms && (
+            <div className="space-y-3 px-2">
+              <RuleList
+                label="Allow"
+                rules={perms.allow}
+                section="allow"
+                removingRule={removingRule}
+                onRemove={removeRule}
+                labelClass="text-emerald-500/80"
+              />
+              <RuleList
+                label="Deny"
+                rules={perms.deny}
+                section="deny"
+                removingRule={removingRule}
+                onRemove={removeRule}
+                labelClass="text-red-400/80"
+              />
+              {totalCount === 0 && (
+                <p className="text-[13px] text-[var(--c-text-3)]/50 italic">No custom rules</p>
+              )}
+            </div>
           )}
-        </div>
-      )}
 
-      {/* Add rule */}
-      <div className="px-2 pt-1">
+          {/* Add rule */}
+          <div className="px-2 pt-1">
         <div className="flex gap-1.5">
           <select
             value={addSection}
@@ -142,7 +152,9 @@ export default function PermissionsSection({ toolId, refreshKey }: PermissionsSe
             {adding ? '…' : 'Add'}
           </button>
         </div>
-      </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }

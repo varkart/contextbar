@@ -1,8 +1,6 @@
-import { useState, useCallback } from 'react';
-import { invoke } from '@tauri-apps/api/core';
+import { useState } from 'react';
 import type { AiTool, Skill, McpServer } from '../types';
 import ToolDetails from './ToolDetails';
-import { capture, captureException } from '../analytics';
 import { TOOL_COLORS } from '../constants/toolColors';
 
 interface ToolDetailPageProps {
@@ -16,68 +14,9 @@ interface ToolDetailPageProps {
   matchedMcps?: Set<string>;
 }
 
-export default function ToolDetailPage({ tool, onBack, onSelectSkill, onSelectMcp, onToolUpdated, query, matchedSkills, matchedMcps }: ToolDetailPageProps) {
+export default function ToolDetailPage({ tool, onBack, onSelectSkill, onSelectMcp, query, matchedSkills, matchedMcps }: ToolDetailPageProps) {
   const colors = TOOL_COLORS[tool.id] ?? { bg: 'bg-zinc-500/10', text: 'text-zinc-500' };
-  const [togglingSkill, setTogglingSkill] = useState<string | undefined>();
-  const [togglingMcp, setTogglingMcp] = useState<string | undefined>();
-  const [toggleError, setToggleError] = useState<string | null>(null);
-  const [refreshKey, setRefreshKey] = useState(0);
-
-  const handleToggleSkill = useCallback(async (skill: Skill, active: boolean) => {
-    setTogglingSkill(skill.name);
-    setToggleError(null);
-    try {
-      await invoke('set_skill_active', {
-        toolId: tool.id,
-        skillName: skill.name,
-        skillPath: skill.path,
-        active,
-      });
-      capture('skill_toggled', { tool_id: tool.id, skill_name: skill.name, active });
-      setRefreshKey(k => k + 1);
-      onToolUpdated();
-    } catch (e) {
-      const msg = String(e);
-      setToggleError(`Failed to ${active ? 'enable' : 'disable'} skill: ${msg}`);
-      capture('skill_toggle_failed', {
-        tool_id: tool.id,
-        skill_name: skill.name,
-        intended_active: active,
-        error: msg,
-      });
-      captureException(e);
-    } finally {
-      setTogglingSkill(undefined);
-    }
-  }, [tool.id, onToolUpdated]);
-
-  const handleToggleMcp = useCallback(async (mcp: McpServer, active: boolean) => {
-    setTogglingMcp(mcp.name);
-    setToggleError(null);
-    try {
-      await invoke('set_mcp_active', {
-        toolId: tool.id,
-        mcpName: mcp.name,
-        sourceId: mcp.sourceId,
-        active,
-        extensionName: mcp.extensionName ?? null,
-      });
-      capture('mcp_toggled', { tool_id: tool.id, mcp_name: mcp.name, active });
-      onToolUpdated();
-    } catch (e) {
-      const msg = String(e);
-      setToggleError(`Failed to ${active ? 'enable' : 'disable'} MCP: ${msg}`);
-      capture('mcp_toggle_failed', {
-        tool_id: tool.id,
-        mcp_name: mcp.name,
-        intended_active: active,
-        error: msg,
-      });
-      captureException(e);
-    } finally {
-      setTogglingMcp(undefined);
-    }
-  }, [tool.id, onToolUpdated]);
+  const [refreshKey] = useState(0);
 
   return (
     <div className="flex flex-col h-full bg-[var(--c-bg)] animate-slide-in-right">
@@ -115,20 +54,6 @@ export default function ToolDetailPage({ tool, onBack, onSelectSkill, onSelectMc
         )}
       </div>
 
-      {toggleError && (
-        <div
-          className="mx-3 mt-2 px-3 py-1.5 rounded text-[13px] text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800 flex items-center justify-between gap-2 flex-shrink-0"
-          role="alert"
-        >
-          <span className="truncate">{toggleError}</span>
-          <button
-            onClick={() => setToggleError(null)}
-            className="flex-shrink-0 text-red-400 hover:text-red-600 dark:hover:text-red-300"
-            aria-label="Dismiss"
-          >✕</button>
-        </div>
-      )}
-
       <div className="flex-1 overflow-y-auto">
         <ToolDetails
           tool={tool}
@@ -137,10 +62,6 @@ export default function ToolDetailPage({ tool, onBack, onSelectSkill, onSelectMc
           matchedMcps={matchedMcps}
           onSelectSkill={onSelectSkill}
           onSelectMcp={onSelectMcp}
-          onToggleSkill={handleToggleSkill}
-          togglingSkill={togglingSkill}
-          onToggleMcp={handleToggleMcp}
-          togglingMcp={togglingMcp}
           refreshKey={refreshKey}
         />
       </div>

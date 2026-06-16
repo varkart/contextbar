@@ -9,8 +9,6 @@ interface SkillSectionProps {
   query?: string;
   matchedPaths?: Set<string>;
   onSelectSkill?: (skill: Skill) => void;
-  onToggleSkill?: (skill: Skill, active: boolean) => Promise<void>;
-  togglingSkill?: string;
 }
 
 function ChevronIcon({ open }: { open: boolean }) {
@@ -23,7 +21,7 @@ function ChevronIcon({ open }: { open: boolean }) {
   );
 }
 
-export default function SkillSection({ skills, query, matchedPaths, onSelectSkill, onToggleSkill, togglingSkill }: SkillSectionProps) {
+export default function SkillSection({ skills, query, matchedPaths, onSelectSkill }: SkillSectionProps) {
   const [sectionOpen, setSectionOpen] = useState(true);
   const [listExpanded, setListExpanded] = useState(false);
 
@@ -57,8 +55,6 @@ export default function SkillSection({ skills, query, matchedPaths, onSelectSkil
                 skill={skill}
                 query={query}
                 onSelect={onSelectSkill ? () => onSelectSkill(skill) : undefined}
-                onToggle={onToggleSkill ? (active) => onToggleSkill(skill, active) : undefined}
-                toggling={togglingSkill === skill.name}
               />
             ))}
             {!query && !listExpanded && hiddenCount > 0 && (

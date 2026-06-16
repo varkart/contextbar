@@ -7,8 +7,6 @@ interface McpSectionProps {
   query?: string;
   matchedNames?: Set<string>;
   onSelectMcp?: (mcp: McpServer) => void;
-  onToggleMcp?: (mcp: McpServer, active: boolean) => Promise<void>;
-  togglingMcp?: string;
 }
 
 function ChevronIcon({ open }: { open: boolean }) {
@@ -21,7 +19,7 @@ function ChevronIcon({ open }: { open: boolean }) {
   );
 }
 
-export default function McpSection({ mcps, query, matchedNames, onSelectMcp, onToggleMcp, togglingMcp }: McpSectionProps) {
+export default function McpSection({ mcps, query, matchedNames, onSelectMcp }: McpSectionProps) {
   const [sectionOpen, setSectionOpen] = useState(true);
 
   const filtered = matchedNames && matchedNames.size > 0
@@ -50,8 +48,6 @@ export default function McpSection({ mcps, query, matchedNames, onSelectMcp, onT
               mcp={mcp}
               query={query}
               onSelect={onSelectMcp ? () => onSelectMcp(mcp) : undefined}
-              onToggle={onToggleMcp ? (active) => onToggleMcp(mcp, active) : undefined}
-              toggling={togglingMcp === mcp.name}
             />
           ))
         )
