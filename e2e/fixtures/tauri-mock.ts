@@ -210,6 +210,30 @@ export async function injectTauriMock(
             })
           }
 
+          case 'get_mcp_install_state': {
+            const { command, args: mcpArgs } = (args ?? {}) as { command: string; args: string[] }
+            if (command !== 'npx') return Promise.resolve({ package: null, installedVersion: null, isNpx: false })
+            let skipNext = false
+            let pkg: string | null = null
+            for (const arg of (mcpArgs ?? [])) {
+              if (skipNext) { skipNext = false; continue }
+              if (arg === '-p' || arg === '--package' || arg === '--node-arg') { skipNext = true; continue }
+              if (arg.startsWith('-')) continue
+              const atIdx = arg.lastIndexOf('@')
+              pkg = atIdx > 0 ? arg.slice(0, atIdx) : arg
+              break
+            }
+            return Promise.resolve({ package: pkg, installedVersion: null, isNpx: pkg !== null })
+          }
+
+          case 'install_mcp_npm': {
+            const { packageName } = (args ?? {}) as { packageName: string }
+            return Promise.resolve(`0.0.0-mock-${packageName}`)
+          }
+
+          case 'get_mcp_npm_latest':
+            return Promise.resolve(null)
+
           case 'query_mcp_tools':
             return Promise.resolve([
               { name: 'list_issues', description: 'List GitHub issues' },

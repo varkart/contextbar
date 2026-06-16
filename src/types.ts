@@ -47,6 +47,12 @@ export interface Notification {
   body: string;
 }
 
+export interface NpmInstallState {
+  package: string | null
+  installedVersion: string | null
+  isNpx: boolean
+}
+
 export interface McpTool {
   name: string
   description?: string
