@@ -487,6 +487,46 @@ fn dismiss_all_notifications(
     db::dismiss_all_notifications(&db)
 }
 
+#[derive(serde::Serialize)]
+struct AuditEvent {
+    id: i64,
+    ts_ms: i64,
+    event_type: String,
+    tool_id: String,
+    item_name: String,
+    detail: Option<String>,
+}
+
+#[tauri::command]
+fn get_audit_log(
+    db: tauri::State<'_, db::DbState>,
+    limit: Option<i64>,
+) -> Result<Vec<AuditEvent>, String> {
+    let conn = db.0.lock().map_err(|e| e.to_string())?;
+    let limit = limit.unwrap_or(200);
+    let mut stmt = conn
+        .prepare(
+            "SELECT id, ts_ms, event_type, tool_id, item_name, detail
+             FROM audit_events ORDER BY id DESC LIMIT ?1",
+        )
+        .map_err(|e| e.to_string())?;
+    let events = stmt
+        .query_map([limit], |row| {
+            Ok(AuditEvent {
+                id: row.get(0)?,
+                ts_ms: row.get(1)?,
+                event_type: row.get(2)?,
+                tool_id: row.get(3)?,
+                item_name: row.get(4)?,
+                detail: row.get(5)?,
+            })
+        })
+        .map_err(|e| e.to_string())?
+        .filter_map(|r| r.ok())
+        .collect();
+    Ok(events)
+}
+
 // ---------------------------------------------------------------------------
 // IPC commands – debug helpers
 // ---------------------------------------------------------------------------
@@ -658,6 +698,7 @@ pub fn run() {
             get_notifications,
             dismiss_notification,
             dismiss_all_notifications,
+            get_audit_log,
             quit_app,
         ])
         .run(tauri::generate_context!())

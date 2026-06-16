@@ -19,8 +19,10 @@ import Settings from './components/Settings'
 import SkillDetailPanel from './components/SkillDetailPanel'
 import ToolDetailPage from './components/ToolDetailPage'
 import NotificationsPanel from './components/NotificationsPanel'
+import SplashScreen from './components/SplashScreen'
+import LogsPanel from './components/LogsPanel'
 
-type View = 'main' | 'settings' | 'tool-detail' | 'skills-list' | 'mcps-list' | 'skill-detail' | 'mcp-detail' | 'permissions-detail' | 'notifications'
+type View = 'main' | 'settings' | 'tool-detail' | 'skills-list' | 'mcps-list' | 'skill-detail' | 'mcp-detail' | 'permissions-detail' | 'notifications' | 'logs'
 
 function useView(): [View, (v: View) => void] {
   const [view, setViewState] = useState<View>(() =>
@@ -64,6 +66,8 @@ export default function App() {
   const [skillBackView, setSkillBackView] = useState<View>('tool-detail')
   const [mcpBackView, setMcpBackView] = useState<View>('tool-detail')
   const [notifications, setNotifications] = useState<Notification[]>([])
+  const [splashDismissed, setSplashDismissed] = useState(false)
+  const [backendReady, setBackendReady] = useState(false)
 
   const handleSelectTool = useCallback((tool: AiTool) => {
     setSelectedTool(tool)
@@ -110,15 +114,19 @@ export default function App() {
     }).catch(() => {})
   }, [])
 
+  // Remove HTML pre-splash immediately once React is mounted
   useEffect(() => {
-    if (!loading) {
-      const splash = document.getElementById('splash')
-      if (splash) {
-        splash.classList.add('fade-out')
-        splash.addEventListener('transitionend', () => splash.remove(), { once: true })
-      }
+    const splash = document.getElementById('splash')
+    if (splash) {
+      splash.classList.add('fade-out')
+      splash.addEventListener('transitionend', () => splash.remove(), { once: true })
     }
-  }, [loading])
+  }, [])
+
+  // Signal backend ready when first load completes
+  useEffect(() => {
+    if (!loading && !backendReady) setBackendReady(true)
+  }, [loading, backendReady])
 
   const updateInfo = useUpdateCheck(version)
   useToolsDiff()
@@ -215,7 +223,7 @@ export default function App() {
         else if (view === 'mcp-detail') setView(mcpBackView)
         else if (view === 'permissions-detail' || view === 'skills-list' || view === 'mcps-list') setView(selectedTool ? 'tool-detail' : 'main')
         else if (view === 'tool-detail') setView('main')
-        else if (view === 'settings' || view === 'notifications') setView('main')
+        else if (view === 'settings' || view === 'notifications' || view === 'logs') setView('main')
         else invoke('hide_window').catch(() => {})
       }
     }
@@ -228,7 +236,12 @@ export default function App() {
 
   return (
     <div className="w-[380px] h-[520px] bg-[var(--c-bg)] text-[var(--c-text)] flex flex-col overflow-hidden select-none">
-      {view === 'notifications' ? (
+      {!splashDismissed && (
+        <SplashScreen backendReady={backendReady} onDismiss={() => setSplashDismissed(true)} />
+      )}
+      {view === 'logs' ? (
+        <LogsPanel onBack={() => setView('main')} />
+      ) : view === 'notifications' ? (
         <NotificationsPanel
           notifications={notifications}
           onBack={() => setView('main')}
@@ -288,6 +301,7 @@ export default function App() {
           updateInfo={updateInfo}
           theme={theme}
           onThemeChange={(t: ThemePreference) => setTheme(t)}
+          onOpenLogs={() => setView('logs')}
         />
       ) : (
         <>

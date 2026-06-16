@@ -8,6 +8,7 @@ interface SettingsProps {
   updateInfo?: { latestVersion: string; releaseUrl: string } | null
   theme: ThemePreference
   onThemeChange: (t: ThemePreference) => void
+  onOpenLogs?: () => void
 }
 
 function Toggle({ checked, onChange, disabled }: { checked: boolean; onChange: (v: boolean) => void; disabled?: boolean }) {
@@ -191,7 +192,7 @@ function formatShortcut(raw: string): string {
     .replace(/\+/g, '')
 }
 
-export default function Settings({ onBack, updateInfo, theme, onThemeChange }: SettingsProps) {
+export default function Settings({ onBack, updateInfo, theme, onThemeChange, onOpenLogs }: SettingsProps) {
   const [autostart, setAutostart] = useState(false)
   const [autostartLoading, setAutostartLoading] = useState(true)
   const [shortcut, setShortcut] = useState('CommandOrControl+Shift+Space')
@@ -280,6 +281,25 @@ export default function Settings({ onBack, updateInfo, theme, onThemeChange }: S
             <Toggle checked={vibrancy} onChange={handleVibrancy} disabled={vibrancyLoading} />
           </SettingRow>
         </div>
+
+        {onOpenLogs && (
+          <>
+            <SectionLabel>Developer</SectionLabel>
+            <div className="divide-y divide-[var(--c-border-sub)]">
+              <button
+                onClick={onOpenLogs}
+                className="w-full flex items-center justify-between px-4 py-2 hover:bg-[var(--c-hover)] transition-colors text-left"
+              >
+                <span className="text-[14px] text-[var(--c-text-2)]">Activity Log</span>
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+                  stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+                  className="w-3 h-3 text-[var(--c-text-3)]">
+                  <polyline points="9 18 15 12 9 6"/>
+                </svg>
+              </button>
+            </div>
+          </>
+        )}
 
         <SectionLabel>About</SectionLabel>
         <div className="divide-y divide-[var(--c-border-sub)]">
