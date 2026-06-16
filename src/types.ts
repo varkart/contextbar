@@ -39,6 +39,14 @@ export interface ToolPermissions {
 
 export type PermissionSection = 'allow' | 'deny';
 
+export interface Notification {
+  id: number;
+  tsMs: number;
+  level: 'info' | 'warn' | 'error';
+  title: string;
+  body: string;
+}
+
 export interface McpTool {
   name: string
   description?: string
