@@ -13,10 +13,16 @@ fn config_lock(path: &str) -> Arc<Mutex<()>> {
         .clone()
 }
 
-/// Move an MCP entry between `mcpServers` and `disabledMcpServers` in a JSON config file.
+/// Move an MCP entry between `active_key` and `disabled_key` sections in a JSON config file.
 /// Uses a per-file mutex to prevent concurrent read-modify-write races, and writes
 /// via a temp file + atomic rename to prevent torn writes.
-pub fn move_mcp_in_config(config_path: &str, mcp_name: &str, active: bool) -> Result<(), String> {
+pub fn move_mcp_in_config(
+    config_path: &str,
+    mcp_name: &str,
+    active: bool,
+    active_key: &str,
+    disabled_key: &str,
+) -> Result<(), String> {
     let lock = config_lock(config_path);
     let _guard = lock.lock().unwrap();
 
@@ -27,8 +33,8 @@ pub fn move_mcp_in_config(config_path: &str, mcp_name: &str, active: bool) -> Re
 
     let obj = json.as_object_mut().ok_or("config is not a JSON object")?;
 
-    let src_key = if active { "disabledMcpServers" } else { "mcpServers" };
-    let dst_key = if active { "mcpServers" } else { "disabledMcpServers" };
+    let src_key = if active { disabled_key } else { active_key };
+    let dst_key = if active { active_key } else { disabled_key };
 
     let entry = obj
         .get_mut(src_key)
@@ -216,7 +222,7 @@ mod tests {
             "mcpServers": { "my-server": { "command": "npx", "args": [] } }
         }));
 
-        move_mcp_in_config(&config_path, "my-server", false).unwrap();
+        move_mcp_in_config(&config_path, "my-server", false, "mcpServers", "disabledMcpServers").unwrap();
 
         let content: serde_json::Value =
             serde_json::from_str(&fs::read_to_string(&config_path).unwrap()).unwrap();
@@ -231,7 +237,7 @@ mod tests {
             "disabledMcpServers": { "my-server": { "command": "npx", "args": [] } }
         }));
 
-        move_mcp_in_config(&config_path, "my-server", true).unwrap();
+        move_mcp_in_config(&config_path, "my-server", true, "mcpServers", "disabledMcpServers").unwrap();
 
         let content: serde_json::Value =
             serde_json::from_str(&fs::read_to_string(&config_path).unwrap()).unwrap();
@@ -246,7 +252,7 @@ mod tests {
             "mcpServers": {}
         }));
 
-        let result = move_mcp_in_config(&config_path, "ghost", false);
+        let result = move_mcp_in_config(&config_path, "ghost", false, "mcpServers", "disabledMcpServers");
         assert!(result.is_err());
     }
 
@@ -264,8 +270,8 @@ mod tests {
 
         let p1 = config_path.clone();
         let p2 = config_path.clone();
-        let t1 = std::thread::spawn(move || move_mcp_in_config(&p1, "alpha", false));
-        let t2 = std::thread::spawn(move || move_mcp_in_config(&p2, "beta", false));
+        let t1 = std::thread::spawn(move || move_mcp_in_config(&p1, "alpha", false, "mcpServers", "disabledMcpServers"));
+        let t2 = std::thread::spawn(move || move_mcp_in_config(&p2, "beta", false, "mcpServers", "disabledMcpServers"));
 
         t1.join().unwrap().unwrap();
         t2.join().unwrap().unwrap();
@@ -286,7 +292,7 @@ mod tests {
             "mcpServers": { "srv": { "command": "node", "args": [] } }
         }));
 
-        move_mcp_in_config(&config_path, "srv", false).unwrap();
+        move_mcp_in_config(&config_path, "srv", false, "mcpServers", "disabledMcpServers").unwrap();
 
         assert!(!std::path::Path::new(&format!("{config_path}.tmp")).exists());
     }

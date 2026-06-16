@@ -271,39 +271,49 @@ fn set_skill_active(
 fn set_mcp_active(
     tool_id: String,
     mcp_name: String,
+    source_id: String,
     active: bool,
     extension_name: Option<String>,
 ) -> Result<(), String> {
-    let home = dirs::home_dir().ok_or("cannot find home dir")?;
+    use crate::engine::manifest::McpSourceSpec;
+    use crate::engine::resolve::expand_home;
 
-    if let Some(ext_name) = extension_name {
-        // Extension-dir MCP (e.g. Gemini built-in extensions) — toggle in enablement file
-        let enablement_path = extension_enablement_path(&tool_id, &home)
-            .ok_or_else(|| format!("no known extension enablement path for '{tool_id}'"))?;
-        return app_state::toggle_extension_active(&enablement_path, &ext_name, active);
+    let home = dirs::home_dir().ok_or("cannot find home dir")?;
+    let manifest = crate::engine::load_manifest(&tool_id)
+        .ok_or_else(|| format!("no manifest for '{tool_id}'"))?;
+
+    for (idx, source) in manifest.mcp_sources.iter().enumerate() {
+        let eff_id = source.id.clone().unwrap_or_else(|| format!("source_{}", idx));
+        if eff_id != source_id { continue; }
+
+        return match &source.spec {
+            McpSourceSpec::JsonKeyPair { file, active_key, disabled_key, .. } => {
+                let dk = disabled_key.as_deref()
+                    .ok_or("source has no disabled_key; toggling not supported for this source")?;
+                let path = expand_home(file, &home);
+                app_state::move_mcp_in_config(
+                    &path.to_string_lossy(),
+                    &mcp_name,
+                    active,
+                    active_key,
+                    dk,
+                )
+            }
+            McpSourceSpec::ExtensionDir { enablement_file: Some(ef), .. } => {
+                let ext_name = extension_name.as_deref()
+                    .ok_or("extension_name required for extension-dir MCP toggle")?;
+                let ef_path = expand_home(ef, &home);
+                app_state::toggle_extension_active(
+                    &ef_path.to_string_lossy(),
+                    ext_name,
+                    active,
+                )
+            }
+            _ => Err(format!("source '{source_id}' does not support toggling")),
+        };
     }
 
-    let config_path = mcp_config_path(&tool_id, &home)
-        .ok_or_else(|| format!("no known config path for tool '{tool_id}'"))?;
-    app_state::move_mcp_in_config(&config_path, &mcp_name, active)
-}
-
-fn mcp_config_path(tool_id: &str, home: &std::path::Path) -> Option<String> {
-    let path = match tool_id {
-        "claude"   => home.join(".claude").join("settings.json"),
-        "cursor"   => home.join(".cursor").join("mcp.json"),
-        "gemini"   => home.join(".gemini").join("settings.json"),
-        _          => return None,
-    };
-    Some(path.to_string_lossy().to_string())
-}
-
-fn extension_enablement_path(tool_id: &str, home: &std::path::Path) -> Option<String> {
-    let path = match tool_id {
-        "gemini" => home.join(".gemini").join("extensions").join("extension-enablement.json"),
-        _        => return None,
-    };
-    Some(path.to_string_lossy().to_string())
+    Err(format!("source '{source_id}' not found in '{tool_id}' manifest"))
 }
 
 // ---------------------------------------------------------------------------
