@@ -46,7 +46,7 @@ describe('searchTools', () => {
 
   it('matches by skill name and records matched path', () => {
     const tool = makeTool({
-      skills: [{ name: 'impeccable', path: '/skills/impeccable', description: undefined, active: true }],
+      skills: [{ name: 'impeccable', path: '/skills/impeccable', description: undefined, active: true, sourceId: 'skills_dir' }],
     })
     const results = searchTools([tool], 'impec')
     expect(results).toHaveLength(1)
@@ -55,7 +55,7 @@ describe('searchTools', () => {
 
   it('matches by skill description', () => {
     const tool = makeTool({
-      skills: [{ name: 'my-skill', path: '/p', description: 'Builds graphs', active: true }],
+      skills: [{ name: 'my-skill', path: '/p', description: 'Builds graphs', active: true, sourceId: 'skills_dir' }],
     })
     const results = searchTools([tool], 'graph')
     expect(results).toHaveLength(1)
@@ -64,7 +64,7 @@ describe('searchTools', () => {
 
   it('matches by mcp name and records matched name', () => {
     const tool = makeTool({
-      mcps: [{ name: 'github', command: 'npx', args: [], active: true, hasSecrets: false, secretKeyNames: [] }],
+      mcps: [{ name: 'github', command: 'npx', args: [], active: true, hasSecrets: false, secretKeyNames: [], sourceId: 'settings_json' }],
     })
     const results = searchTools([tool], 'github')
     expect(results).toHaveLength(1)

@@ -14,6 +14,8 @@ export interface Skill {
   path: string;
   description?: string;
   active: boolean;
+  /** Which [[skill_sources]] entry produced this skill. */
+  sourceId: string;
 }
 
 export interface McpServer {
@@ -26,6 +28,8 @@ export interface McpServer {
   hasSecrets: boolean;
   secretKeyNames: string[];
   extensionName?: string; // set for extension-dir MCPs (e.g. Gemini extensions)
+  /** Which [[mcp_sources]] entry produced this server. Used to route toggle commands. */
+  sourceId: string;
 }
 
 export interface McpTool {

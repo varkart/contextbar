@@ -10,6 +10,7 @@ const baseMcp: McpServer = {
   active: true,
   hasSecrets: true,
   secretKeyNames: ['GITHUB_PERSONAL_ACCESS_TOKEN'],
+  sourceId: 'settings_json',
 }
 
 function getTooltipContainer(name: string) {

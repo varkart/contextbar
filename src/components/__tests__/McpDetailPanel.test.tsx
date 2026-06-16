@@ -16,6 +16,7 @@ const baseMcp: McpServer = {
   active: true,
   hasSecrets: true,
   secretKeyNames: ['GITHUB_TOKEN'],
+  sourceId: 'settings_json',
 }
 
 beforeEach(() => {

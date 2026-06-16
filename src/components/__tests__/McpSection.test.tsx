@@ -10,6 +10,7 @@ const mcp = (name: string): McpServer => ({
   active: true,
   hasSecrets: false,
   secretKeyNames: [],
+  sourceId: 'settings_json',
 })
 
 function getSectionHeader(container: HTMLElement) {
