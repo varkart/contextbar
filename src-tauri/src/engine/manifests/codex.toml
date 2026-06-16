@@ -18,6 +18,7 @@ parse = "first_token"
 
 # MCP servers defined in [mcp_servers] TOML table
 [[mcp_sources]]
+id = "config_toml"
 type = "toml_key_pair"
 file = "~/.codex/config.toml"
 active_key = "mcp_servers"

@@ -16,6 +16,7 @@ parse = "first_line"
 # Third-party MCPs from settings.json (JSONC — supports // comments)
 # Disabled state tracked separately in mcp-server-enablement.json
 [[mcp_sources]]
+id = "settings_json"
 type = "json_key_pair"
 file = "~/.gemini/settings.json"
 active_key = "mcpServers"
@@ -23,6 +24,7 @@ jsonc = true
 
 # Built-in extensions from ~/.gemini/extensions/
 [[mcp_sources]]
+id = "extensions"
 type = "extension_dir"
 dir = "~/.gemini/extensions"
 manifest_file = "gemini-extension.json"
@@ -31,12 +33,14 @@ extension_path_var = "${extensionPath}"
 
 # User skills — ~/.agents/skills/ (higher precedence alias)
 [[skill_sources]]
+id = "agents_skills_dir"
 type = "directory"
 path = "~/.agents/skills"
 disabled_subdir = ".disabled"
 
 # User skills — ~/.gemini/skills/ (primary path)
 [[skill_sources]]
+id = "skills_dir"
 type = "directory"
 path = "~/.gemini/skills"
 disabled_subdir = ".disabled"

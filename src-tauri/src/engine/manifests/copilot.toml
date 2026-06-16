@@ -9,6 +9,7 @@ prefix = "github.copilot-chat-"
 
 # MCPs shared with VSCode in mcp.servers
 [[mcp_sources]]
+id = "vscode_settings"
 type = "json_nested"
 file = "~/Library/Application Support/Code/User/settings.json"
 key_path = ["mcp", "servers"]
