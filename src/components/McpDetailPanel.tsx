@@ -154,6 +154,7 @@ function NpmInstallSection({ mcp, toolId }: { mcp: McpServer; toolId?: string })
 export default function McpDetailPanel({ mcp, onBack, toolName, toolId, onToggled }: McpDetailPanelProps) {
   const [active, setActive] = useState(mcp.active)
   const [toggling, setToggling] = useState(false)
+  const [justToggled, setJustToggled] = useState(false)
   const [toggleError, setToggleError] = useState<string | null>(null)
   const [tools, setTools] = useState<McpTool[]>([])
   const [loading, setLoading] = useState(true)
@@ -173,12 +174,14 @@ export default function McpDetailPanel({ mcp, onBack, toolName, toolId, onToggle
       })
       capture('mcp_toggled', { tool_id: toolId, mcp_name: mcp.name, active: !active })
       setActive(v => !v)
-      onToggled?.()
+      setJustToggled(true)
+      await onToggled?.()
     } catch (e) {
       setToggleError(String(e))
       captureException(e)
     } finally {
       setToggling(false)
+      setTimeout(() => setJustToggled(false), 800)
     }
   }
 
@@ -231,15 +234,17 @@ export default function McpDetailPanel({ mcp, onBack, toolName, toolId, onToggle
           {toolId && (
             <button
               onClick={handleToggle}
-              disabled={toggling}
+              disabled={toggling || justToggled}
               aria-label={active ? 'Disable MCP' : 'Enable MCP'}
-              className={`text-[12px] px-2 py-0.5 rounded transition-colors disabled:opacity-50 ${
-                active
-                  ? 'bg-red-500/10 text-red-400 hover:bg-red-500/20'
-                  : 'bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20'
+              className={`text-[12px] px-2 py-0.5 rounded transition-colors disabled:opacity-60 ${
+                justToggled
+                  ? 'bg-emerald-500/10 text-emerald-400'
+                  : active
+                    ? 'bg-red-500/10 text-red-400 hover:bg-red-500/20'
+                    : 'bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20'
               }`}
             >
-              {toggling ? '…' : active ? 'Disable' : 'Enable'}
+              {toggling ? '…' : justToggled ? '✓' : active ? 'Disable' : 'Enable'}
             </button>
           )}
           <span className="text-[12px] bg-violet-500/10 text-violet-400 px-1.5 py-0.5 rounded font-mono">MCP</span>

@@ -171,6 +171,7 @@ function ExpandableDescription({ skill }: { skill: Skill }) {
 export default function SkillDetailPanel({ skill, onBack, toolName, toolId, onToggled }: SkillDetailPanelProps) {
   const [active, setActive] = useState(skill.active)
   const [toggling, setToggling] = useState(false)
+  const [justToggled, setJustToggled] = useState(false)
   const [toggleError, setToggleError] = useState<string | null>(null)
   const [fileTree, setFileTree] = useState<FileEntry | null>(null)
   const [loading, setLoading] = useState(true)
@@ -189,12 +190,15 @@ export default function SkillDetailPanel({ skill, onBack, toolName, toolId, onTo
       })
       capture('skill_toggled', { tool_id: toolId, skill_name: skill.name, active: !active })
       setActive(v => !v)
-      onToggled?.()
+      setJustToggled(true)
+      await onToggled?.()
     } catch (e) {
       setToggleError(String(e))
       captureException(e)
     } finally {
       setToggling(false)
+      // Brief delay so "✓" flash is perceptible before button resets
+      setTimeout(() => setJustToggled(false), 800)
     }
   }
 
@@ -232,15 +236,17 @@ export default function SkillDetailPanel({ skill, onBack, toolName, toolId, onTo
         {toolId && (
           <button
             onClick={handleToggle}
-            disabled={toggling}
+            disabled={toggling || justToggled}
             aria-label={active ? 'Disable skill' : 'Enable skill'}
-            className={`ml-auto text-[12px] px-2 py-0.5 rounded transition-colors disabled:opacity-50 flex-shrink-0 ${
-              active
-                ? 'bg-red-500/10 text-red-400 hover:bg-red-500/20'
-                : 'bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20'
+            className={`ml-auto text-[12px] px-2 py-0.5 rounded transition-colors disabled:opacity-60 flex-shrink-0 ${
+              justToggled
+                ? 'bg-emerald-500/10 text-emerald-400'
+                : active
+                  ? 'bg-red-500/10 text-red-400 hover:bg-red-500/20'
+                  : 'bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20'
             }`}
           >
-            {toggling ? '…' : active ? 'Disable' : 'Enable'}
+            {toggling ? '…' : justToggled ? '✓' : active ? 'Disable' : 'Enable'}
           </button>
         )}
       </div>

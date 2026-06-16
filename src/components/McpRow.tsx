@@ -48,13 +48,12 @@ export default function McpRow({ mcp, query = '', onSelect, onToggle, toggling =
         <span className="w-[3px] h-[3px] rounded-full bg-violet-400/60 flex-shrink-0" aria-hidden="true" />
         <Highlight text={mcp.name} query={query} className="text-[14px] font-mono text-[var(--c-text-2)] truncate flex-1 leading-5" />
         {mcp.hasSecrets && (
-          <Tooltip content={
-            <span className="text-[12px]">
-              Uses env secrets{mcp.secretKeyNames.length > 0 ? `: ${mcp.secretKeyNames.join(', ')}` : ''}
-            </span>
-          }>
-            <span className="flex-shrink-0"><LockIcon /></span>
-          </Tooltip>
+          <span
+            className="flex-shrink-0"
+            title={`Uses env secrets${mcp.secretKeyNames.length > 0 ? `: ${mcp.secretKeyNames.join(', ')}` : ''}`}
+          >
+            <LockIcon />
+          </span>
         )}
         <span className="flex-1" />
         {onToggle ? (
