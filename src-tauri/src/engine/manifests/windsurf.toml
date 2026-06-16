@@ -12,6 +12,7 @@ file = "~/.windsurf/argv.json"
 key_path = ["version"]
 
 [[mcp_sources]]
+id = "mcp_config"
 type = "json_key_pair"
 file = "~/.codeium/windsurf/mcp_config.json"
 active_key = "mcpServers"
