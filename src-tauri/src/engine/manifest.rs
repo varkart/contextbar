@@ -13,6 +13,8 @@ pub struct Manifest {
     pub mcp_sources: Vec<McpSource>,
     #[serde(default)]
     pub skill_sources: Vec<SkillSource>,
+    pub mcp_toggle: Option<McpToggleSpec>,
+    pub skill_toggle: Option<SkillToggleSpec>,
 }
 
 /// Wrapper that pairs an MCP source spec with optional version bounds.
@@ -20,6 +22,9 @@ pub struct Manifest {
 /// If the detected tool version is unknown, the source always runs.
 #[derive(Debug, Deserialize)]
 pub struct McpSource {
+    /// Stable identifier for this source entry, used as McpServer.source_id.
+    /// Defaults to "source_{index}" if omitted.
+    pub id: Option<String>,
     pub min_version: Option<String>,
     pub max_version: Option<String>,
     #[serde(flatten)]
@@ -29,10 +34,45 @@ pub struct McpSource {
 /// Wrapper that pairs a skill source spec with optional version bounds.
 #[derive(Debug, Deserialize)]
 pub struct SkillSource {
+    /// Stable identifier for this source entry, used as Skill.source_id.
+    pub id: Option<String>,
     pub min_version: Option<String>,
     pub max_version: Option<String>,
     #[serde(flatten)]
     pub spec: SkillSourceSpec,
+}
+
+/// Explicit toggle strategy for MCP servers. When absent, the strategy is
+/// derived automatically from the source spec (e.g. JsonKeyPair with
+/// disabled_key → file-based key move).
+#[derive(Debug, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum McpToggleSpec {
+    /// Invoke a CLI binary to enable/disable. Args may contain `{name}` which
+    /// is replaced with the MCP server name at toggle time.
+    Cli {
+        binary: String,
+        disable_args: Vec<String>,
+        enable_args: Vec<String>,
+        #[serde(default = "default_timeout_ms")]
+        timeout_ms: u64,
+    },
+    /// Move the server entry between two keys in a JSON config file.
+    JsonKeyPair {
+        file: String,
+        active_key: String,
+        disabled_key: String,
+    },
+}
+
+/// Explicit toggle strategy for skills. When absent, derived from source spec.
+#[derive(Debug, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum SkillToggleSpec {
+    /// Move the skill directory into/out of a disabled subdirectory.
+    DirMove {
+        disabled_subdir: String,
+    },
 }
 
 /// Each spec is one candidate. Tool is installed if ANY spec matches.
