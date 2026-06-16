@@ -1,15 +1,16 @@
+import { useState } from 'react'
 import type { AiTool, Skill } from '../types'
 
 interface SkillsListPanelProps {
   tool: AiTool
   onBack: () => void
   onSelectSkill: (skill: Skill) => void
-  query?: string
 }
 
-export default function SkillsListPanel({ tool, onBack, onSelectSkill, query }: SkillsListPanelProps) {
-  const skills = query
-    ? tool.skills.filter(s => s.name.toLowerCase().includes(query.toLowerCase()))
+export default function SkillsListPanel({ tool, onBack, onSelectSkill }: SkillsListPanelProps) {
+  const [q, setQ] = useState('')
+  const filtered = q
+    ? tool.skills.filter(s => s.name.toLowerCase().includes(q.toLowerCase()))
     : tool.skills
 
   return (
@@ -34,14 +35,28 @@ export default function SkillsListPanel({ tool, onBack, onSelectSkill, query }: 
         </button>
         <span className="text-[12px] text-[var(--c-text-3)]">›</span>
         <span className="text-[15px] font-semibold text-[var(--c-text)] tracking-[-0.01em]">Skills</span>
-        <span className="ml-auto text-[12px] text-[var(--c-text-3)] tabular-nums flex-shrink-0">{skills.length}</span>
+        <span className="ml-auto text-[12px] text-[var(--c-text-3)] tabular-nums flex-shrink-0">{filtered.length}</span>
       </div>
 
+      {tool.skills.length > 5 && (
+        <div className="px-3 py-1.5 border-b border-[var(--c-border)] flex-shrink-0">
+          <input
+            type="text"
+            value={q}
+            onChange={e => setQ(e.target.value)}
+            placeholder="Filter skills…"
+            className="w-full bg-[var(--c-hover)] text-[13px] text-[var(--c-text)] placeholder-[var(--c-text-3)] rounded px-2.5 py-1 outline-none focus:ring-1 focus:ring-indigo-400/40"
+          />
+        </div>
+      )}
+
       <div className="flex-1 overflow-y-auto py-1">
-        {skills.length === 0 ? (
-          <p className="px-4 py-4 text-[13px] text-[var(--c-text-3)]">No skills</p>
+        {filtered.length === 0 ? (
+          <p className="px-4 py-4 text-[13px] text-[var(--c-text-3)]">
+            {q ? `No skills matching "${q}"` : 'No skills'}
+          </p>
         ) : (
-          skills.map(skill => (
+          filtered.map(skill => (
             <button
               key={skill.path}
               onClick={() => onSelectSkill(skill)}
