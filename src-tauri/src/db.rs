@@ -152,6 +152,7 @@ pub fn dismiss_all_notifications(state: &DbState) -> Result<(), String> {
     Ok(())
 }
 
+#[allow(dead_code)]
 pub fn count_active_notifications(state: &DbState) -> i64 {
     let Ok(conn) = state.0.lock() else { return 0 };
     conn.query_row(

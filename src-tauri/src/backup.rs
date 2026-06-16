@@ -64,14 +64,14 @@ pub fn list_snapshots(config_path: &str) -> Vec<(u128, std::path::PathBuf)> {
         })
         .unwrap_or_default();
 
-    entries.sort_by(|a, b| b.0.cmp(&a.0)); // newest first
+    entries.sort_by_key(|b| std::cmp::Reverse(b.0)); // newest first
     entries
 }
 
 /// Restore a snapshot (identified by timestamp_ms) over config_path.
 /// Atomically replaces the live file using temp-file + rename.
 pub fn restore_snapshot(config_path: &str, timestamp_ms: u128) -> Result<(), String> {
-    let dir = backup_dir(config_path);
+    let _dir = backup_dir(config_path);
     let src = list_snapshots(config_path)
         .into_iter()
         .find(|(ts, _)| *ts == timestamp_ms)

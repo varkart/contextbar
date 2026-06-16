@@ -1,17 +1,11 @@
 use crate::engine::manifest::PermissionsSpec;
 use crate::engine::resolve::expand_home;
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Default, Debug, Clone, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ToolPermissions {
     pub allow: Vec<String>,
     pub deny: Vec<String>,
-}
-
-impl Default for ToolPermissions {
-    fn default() -> Self {
-        ToolPermissions { allow: vec![], deny: vec![] }
-    }
 }
 
 /// Read the allow/deny lists from the tool's permissions file.

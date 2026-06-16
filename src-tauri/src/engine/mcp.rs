@@ -32,7 +32,7 @@ pub fn collect(
                 all.iter().filter_map(|m: &McpServer| m.url.clone()).collect();
             for mcp in mcps {
                 let name_seen = existing_names.contains(&mcp.name);
-                let url_seen = mcp.url.as_ref().map_or(false, |u| existing_urls.contains(u));
+                let url_seen = mcp.url.as_ref().is_some_and(|u| existing_urls.contains(u));
                 if !name_seen && !url_seen {
                     all.push(mcp);
                 }
@@ -394,7 +394,8 @@ fn read_toml_key_pair(
     (parse_mcp_servers(&json, true), None)
 }
 
-static CLAUDE_MCP_CACHE: std::sync::OnceLock<std::sync::Mutex<Option<(Vec<McpServer>, std::time::Instant)>>> =
+type ClaudeCacheType = Option<(Vec<McpServer>, std::time::Instant)>;
+static CLAUDE_MCP_CACHE: std::sync::OnceLock<std::sync::Mutex<ClaudeCacheType>> =
     std::sync::OnceLock::new();
 
 static CLAUDE_MCP_WARMING: std::sync::atomic::AtomicBool =
@@ -525,7 +526,7 @@ fn parse_mcp_list_output(output: &str) -> Vec<McpServer> {
         };
         // Strip transport annotation e.g. " (HTTP)" or " (SSE)"
         let url_clean = url_part
-            .trim_end_matches(|c: char| c == ')' || c == ' ')
+            .trim_end_matches([')', ' '])
             .rsplit_once(" (")
             .map(|(u, _)| u)
             .unwrap_or(url_part)
@@ -667,6 +668,7 @@ mod tests {
         super::super::manifest::McpSource { id: None, min_version: None, max_version: None, spec }
     }
 
+    #[allow(dead_code)]
     fn home_with_source(source: McpSourceSpec) -> (TempDir, Vec<McpServer>, Option<String>) {
         let tmp = TempDir::new().unwrap();
         let (mcps, err) = collect(&[wrap(source)], None, tmp.path());
@@ -1264,7 +1266,7 @@ mod tests {
         let added: Vec<_> = list_mcps.into_iter()
             .filter(|m| {
                 let name_seen = existing_names.contains(&m.name);
-                let url_seen = m.url.as_ref().map_or(false, |u| existing_urls.contains(u));
+                let url_seen = m.url.as_ref().is_some_and(|u| existing_urls.contains(u));
                 !name_seen && !url_seen
             })
             .collect();

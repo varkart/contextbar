@@ -131,40 +131,35 @@ pub fn start(app: AppHandle) {
         // Take initial snapshot
         let (_, mut last_skills, mut last_mcps) = take_snapshot(&app);
 
-        loop {
-            match rx.recv() {
-                Ok(Ok(events)) => {
-                    let relevant = events.iter().any(|e| {
-                        matches!(e.kind, DebouncedEventKind::Any)
-                    });
-                    if !relevant { continue; }
+        while let Ok(Ok(events)) = rx.recv() {
+            let relevant = events.iter().any(|e| {
+                matches!(e.kind, DebouncedEventKind::Any)
+            });
+            if !relevant { continue; }
 
-                    let (new_tools, new_skills, new_mcps) = take_snapshot(&app);
-                    let diff = diff_snapshots(
-                        &last_skills, &new_skills,
-                        &last_mcps, &new_mcps,
-                        &tool_names,
-                    );
+            let (new_tools, new_skills, new_mcps) = take_snapshot(&app);
+            let diff = diff_snapshots(
+                &last_skills, &new_skills,
+                &last_mcps, &new_mcps,
+                &tool_names,
+            );
 
-                    let has_changes = !diff.added_skills.is_empty()
-                        || !diff.removed_skills.is_empty()
-                        || !diff.added_mcps.is_empty()
-                        || !diff.removed_mcps.is_empty();
+            let has_changes = !diff.added_skills.is_empty()
+                || !diff.removed_skills.is_empty()
+                || !diff.added_mcps.is_empty()
+                || !diff.removed_mcps.is_empty();
 
-                    if has_changes {
-                        let _ = app.emit("tools-changed", ());
-                        let _ = app.emit("tools-diff", &diff);
-                    }
-
-                    // Re-run Doctor on every relevant FS event (catches command edits too)
-                    let db = app.state::<crate::db::DbState>();
-                    crate::doctor::run(&new_tools, &db, &app);
-
-                    last_skills = new_skills;
-                    last_mcps = new_mcps;
-                }
-                Ok(Err(_)) | Err(_) => break,
+            if has_changes {
+                let _ = app.emit("tools-changed", ());
+                let _ = app.emit("tools-diff", &diff);
             }
+
+            // Re-run Doctor on every relevant FS event (catches command edits too)
+            let db = app.state::<crate::db::DbState>();
+            crate::doctor::run(&new_tools, &db, &app);
+
+            last_skills = new_skills;
+            last_mcps = new_mcps;
         }
     });
 }
