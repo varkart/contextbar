@@ -151,11 +151,12 @@ test.describe('Windsurf MCP display', () => {
     await expect(page.getByText('sql-explorer')).toBeVisible()
   })
 
-  test('Windsurf detail shows inactive MCP (sql-explorer)', async ({ page }) => {
+  test('Windsurf detail shows inactive MCP (sql-explorer) with opacity-40', async ({ page }) => {
     await page.locator('button', { hasText: 'Windsurf' }).click()
     await page.waitForSelector('text=MCPs', { timeout: 5000 })
 
-    await expect(page.getByLabel('Enable MCP')).toBeVisible()
+    const row = page.locator('.opacity-40', { hasText: 'sql-explorer' })
+    await expect(row).toBeVisible()
   })
 
   test('Windsurf Skills section shows "None detected" (0 skills)', async ({ page }) => {

@@ -22,6 +22,10 @@ import NotificationsPanel from './components/NotificationsPanel'
 import SplashScreen from './components/SplashScreen'
 import LogsPanel from './components/LogsPanel'
 
+const SPLASH_BORN = Date.now()
+const SPLASH_MIN_MS = 5000
+const isE2E = !!(globalThis as Record<string, unknown>).__skipSplash
+
 type View = 'main' | 'settings' | 'tool-detail' | 'skills-list' | 'mcps-list' | 'skill-detail' | 'mcp-detail' | 'permissions-detail' | 'notifications' | 'logs'
 
 function useView(): [View, (v: View) => void] {
@@ -66,7 +70,7 @@ export default function App() {
   const [skillBackView, setSkillBackView] = useState<View>('tool-detail')
   const [mcpBackView, setMcpBackView] = useState<View>('tool-detail')
   const [notifications, setNotifications] = useState<Notification[]>([])
-  const [splashDismissed, setSplashDismissed] = useState(false)
+  const [splashDismissed, setSplashDismissed] = useState(isE2E)
   const [backendReady, setBackendReady] = useState(false)
 
   const handleSelectTool = useCallback((tool: AiTool) => {
@@ -123,10 +127,17 @@ export default function App() {
     }
   }, [])
 
-  // Signal backend ready when first load completes
+  // Signal backend ready; then wait out whatever remains of the 5s minimum
   useEffect(() => {
     if (!loading && !backendReady) setBackendReady(true)
   }, [loading, backendReady])
+
+  useEffect(() => {
+    if (!backendReady || isE2E) return
+    const remaining = Math.max(0, SPLASH_MIN_MS - (Date.now() - SPLASH_BORN))
+    const t = setTimeout(() => setSplashDismissed(true), remaining)
+    return () => clearTimeout(t)
+  }, [backendReady])
 
   const updateInfo = useUpdateCheck(version)
   useToolsDiff()
