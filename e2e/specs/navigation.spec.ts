@@ -10,7 +10,7 @@ describe('navigation', () => {
     // Each tool row is a button (ToolRow)
     const toolButtons = await $$('button[aria-label]')
     // At minimum Claude Code should be detected on dev machine
-    const texts = await Promise.all(toolButtons.map(b => b.getText()))
+    const texts = await Promise.all([...toolButtons].map(b => b.getText()))
     expect(texts.length).toBeGreaterThan(0)
   })
 

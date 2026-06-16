@@ -139,7 +139,7 @@ export async function injectTauriMock(
     // mutable copy for dismiss operations
     let notifState: typeof initNotifs = [...initNotifs]
 
-    ;(window as unknown as Record<string, unknown>).__TAURI_INTERNALS__ = {
+    ;(globalThis as unknown as Record<string, unknown>).__TAURI_INTERNALS__ = {
       invoke: (cmd: string, args?: Record<string, unknown>) => {
         switch (cmd) {
           case 'get_tools':
