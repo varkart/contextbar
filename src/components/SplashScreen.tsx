@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect } from 'react'
 
 const TIPS = [
   'take a small break',
@@ -7,8 +7,6 @@ const TIPS = [
   'have a sip of water',
   'breathe slowly',
 ]
-const MIN_MS = 5000
-const TIP_INTERVAL_MS = 2200
 
 interface SplashScreenProps {
   backendReady: boolean
@@ -16,28 +14,18 @@ interface SplashScreenProps {
 }
 
 export default function SplashScreen({ backendReady, onDismiss }: SplashScreenProps) {
-  const [elapsed, setElapsed] = useState(false)
   const [exiting, setExiting] = useState(false)
   const [tipIndex, setTipIndex] = useState(0)
 
   useEffect(() => {
-    const t = setTimeout(() => setElapsed(true), MIN_MS)
-    return () => clearTimeout(t)
-  }, [])
-
-  useEffect(() => {
-    const t = setInterval(() => setTipIndex(i => (i + 1) % TIPS.length), TIP_INTERVAL_MS)
+    const t = setInterval(() => setTipIndex(i => (i + 1) % TIPS.length), 2200)
     return () => clearInterval(t)
   }, [])
 
-  const dismiss = useCallback(() => {
+  const handleContinue = () => {
     setExiting(true)
-    setTimeout(onDismiss, 300)
-  }, [onDismiss])
-
-  useEffect(() => {
-    if (backendReady && elapsed) dismiss()
-  }, [backendReady, elapsed, dismiss])
+    setTimeout(onDismiss, 280)
+  }
 
   return (
     <div
@@ -60,7 +48,7 @@ export default function SplashScreen({ backendReady, onDismiss }: SplashScreenPr
         />
       </div>
 
-      {/* title */}
+      {/* title + cycling tip */}
       <div className="flex flex-col items-center gap-1">
         <p className="text-[17px] font-semibold text-[var(--c-text)] tracking-[-0.01em]">
           LLM Manager
@@ -87,10 +75,10 @@ export default function SplashScreen({ backendReady, onDismiss }: SplashScreenPr
         </div>
       )}
 
-      {/* continue button — only when backend is ready */}
+      {/* Continue button — only when backend is ready (user can skip remaining wait) */}
       {backendReady && (
         <button
-          onClick={dismiss}
+          onClick={handleContinue}
           className="mt-1 px-4 py-1.5 text-[13px] font-medium text-violet-400 bg-violet-500/10 hover:bg-violet-500/20 rounded-lg transition-colors splash-fade-in"
           style={{ animationDuration: '0.3s' }}
         >

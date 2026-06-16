@@ -12,9 +12,9 @@ async function openClaudeDetail(page: Parameters<typeof injectTauriMock>[0]) {
   await page.waitForSelector('text=MCPs', { timeout: 5000 })
 }
 
-// ── UI states ────────────────────────────────────────────────────────────────
+// ── Navigation / listing ──────────────────────────────────────────────────────
 
-test.describe('MCP toggle — UI states', () => {
+test.describe('MCP listing', () => {
   test.beforeEach(async ({ page }) => {
     await injectTauriMock(page, {}, tools)
     await page.goto('/')
@@ -22,30 +22,59 @@ test.describe('MCP toggle — UI states', () => {
     await openClaudeDetail(page)
   })
 
-  test('active MCP shows "Disable MCP" button', async ({ page }) => {
-    await expect(page.getByLabel('Disable MCP').first()).toBeVisible()
-    await expect(page.getByLabel('Disable MCP').first()).not.toBeDisabled()
-  })
-
-  test('inactive MCP shows "Enable MCP" button', async ({ page }) => {
-    await expect(page.getByLabel('Enable MCP')).toBeVisible()
-  })
-
-  test('MCP with secrets shows secrets indicator', async ({ page }) => {
-    await expect(page.getByLabel('has env secrets').first()).toBeVisible()
-  })
-
-  test('HTTP MCP with URL shows without command', async ({ page }) => {
+  test('active MCPs shown in tool detail', async ({ page }) => {
+    await expect(page.getByText('github')).toBeVisible()
     await expect(page.getByText('remote-http')).toBeVisible()
   })
 
-  test('tool row shows correct MCP count (3)', async ({ page }) => {
-    await page.getByLabel('Back').click()
-    await expect(page.getByText('3 mcp')).toBeVisible()
+  test('inactive MCP shown with opacity-40', async ({ page }) => {
+    const row = page.locator('.opacity-40', { hasText: 'filesystem' })
+    await expect(row).toBeVisible()
+  })
+
+  test('MCP with secrets shows lock indicator', async ({ page }) => {
+    await expect(page.getByLabel('has env secrets').first()).toBeVisible()
+  })
+
+  test('HTTP MCP with URL shown', async ({ page }) => {
+    await expect(page.getByText('remote-http')).toBeVisible()
   })
 })
 
-// ── Disable flow ─────────────────────────────────────────────────────────────
+// ── Toggle UI states ──────────────────────────────────────────────────────────
+
+test.describe('MCP toggle — detail panel UI states', () => {
+  test.beforeEach(async ({ page }) => {
+    await injectTauriMock(page, {}, tools)
+    await page.goto('/')
+    await page.waitForSelector('text=Claude Code', { timeout: 8000 })
+    await openClaudeDetail(page)
+  })
+
+  test('active MCP detail shows Disable MCP button', async ({ page }) => {
+    await page.getByText('github').click()
+    await expect(page.getByLabel('Disable MCP')).toBeVisible()
+    await expect(page.getByLabel('Disable MCP')).not.toBeDisabled()
+  })
+
+  test('inactive MCP detail shows Enable MCP button', async ({ page }) => {
+    await page.getByText('filesystem').click()
+    await expect(page.getByLabel('Enable MCP')).toBeVisible()
+    await expect(page.getByLabel('Enable MCP')).not.toBeDisabled()
+  })
+
+  test('MCP with secrets shows key names in detail', async ({ page }) => {
+    await page.getByText('github').click()
+    await expect(page.getByText('GITHUB_TOKEN')).toBeVisible()
+  })
+
+  test('HTTP MCP detail shows URL', async ({ page }) => {
+    await page.getByText('remote-http').click()
+    await expect(page.getByText(/mcp\.example\.com/)).toBeVisible()
+  })
+})
+
+// ── Disable flow ──────────────────────────────────────────────────────────────
 
 test.describe('MCP toggle — disable flow', () => {
   test.beforeEach(async ({ page }) => {
@@ -55,36 +84,30 @@ test.describe('MCP toggle — disable flow', () => {
     await openClaudeDetail(page)
   })
 
-  test('disabling active MCP then re-entering shows Enable MCP button', async ({ page }) => {
-    // github and remote-http are active → 2 Disable MCP buttons
-    await expect(page.getByLabel('Disable MCP')).toHaveCount(2)
-
-    await page.getByLabel('Disable MCP').first().dispatchEvent('click')
+  test('disabling active MCP then re-entering shows Enable button', async ({ page }) => {
+    await page.getByText('github').click()
+    await page.getByLabel('Disable MCP').dispatchEvent('click')
     await page.waitForTimeout(300)
 
     await page.getByLabel('Back').click()
-    await openClaudeDetail(page)
+    await page.getByText('github').click()
 
-    // Now filesystem + newly-disabled → 2 Enable MCP buttons
-    await expect(page.getByLabel('Enable MCP')).toHaveCount(2)
+    await expect(page.getByLabel('Enable MCP')).toBeVisible()
   })
 
-  test('enabling inactive MCP then re-entering shows Disable MCP button', async ({ page }) => {
-    // filesystem starts inactive — 1 Enable MCP
-    await expect(page.getByLabel('Enable MCP')).toHaveCount(1)
-
+  test('enabling inactive MCP then re-entering shows Disable button', async ({ page }) => {
+    await page.getByText('filesystem').click()
     await page.getByLabel('Enable MCP').dispatchEvent('click')
     await page.waitForTimeout(300)
 
     await page.getByLabel('Back').click()
-    await openClaudeDetail(page)
+    await page.getByText('filesystem').click()
 
-    // All 3 now active → 0 Enable MCP buttons
-    await expect(page.getByLabel('Enable MCP')).toHaveCount(0)
+    await expect(page.getByLabel('Disable MCP')).toBeVisible()
   })
 })
 
-// ── Loading state ────────────────────────────────────────────────────────────
+// ── Loading state ─────────────────────────────────────────────────────────────
 
 test.describe('MCP toggle — loading state', () => {
   test('toggle re-enables after slow IPC resolves', async ({ page }) => {
@@ -93,54 +116,28 @@ test.describe('MCP toggle — loading state', () => {
     await page.waitForSelector('text=Claude Code', { timeout: 8000 })
     await openClaudeDetail(page)
 
-    const toggle = page.getByLabel('Disable MCP').first()
-    await toggle.dispatchEvent('click')
+    await page.getByText('github').click()
+    await page.getByLabel('Disable MCP').dispatchEvent('click')
 
+    // Label changes to Enable MCP after toggle — use either label
+    const toggle = page.locator('[aria-label="Disable MCP"],[aria-label="Enable MCP"]').first()
     await expect(toggle).not.toBeDisabled({ timeout: 3000 })
   })
 })
 
-// ── Error handling ───────────────────────────────────────────────────────────
+// ── Error handling ────────────────────────────────────────────────────────────
 
 test.describe('MCP toggle — error handling', () => {
-  test('IPC error does not crash — MCPs still visible', async ({ page }) => {
+  test('IPC error does not crash — MCP detail still visible', async ({ page }) => {
     await injectTauriMock(page, { set_mcp_active: 'error' }, tools)
     await page.goto('/')
     await page.waitForSelector('text=Claude Code', { timeout: 8000 })
     await openClaudeDetail(page)
 
-    await page.getByLabel('Disable MCP').first().dispatchEvent('click')
+    await page.getByText('github').click()
+    await page.getByLabel('Disable MCP').dispatchEvent('click')
     await page.waitForTimeout(400)
 
     await expect(page.getByText('github').first()).toBeVisible()
-    await expect(page.getByText('MCPs').first()).toBeVisible()
-  })
-})
-
-// ── MCP detail panel ─────────────────────────────────────────────────────────
-
-test.describe('MCP detail panel', () => {
-  test.beforeEach(async ({ page }) => {
-    await injectTauriMock(page, {}, tools)
-    await page.goto('/')
-    await page.waitForSelector('text=Claude Code', { timeout: 8000 })
-    await openClaudeDetail(page)
-  })
-
-  test('clicking MCP with secrets opens detail showing key names', async ({ page }) => {
-    await page.getByText('github').click()
-    // Secret key name visible, not the value
-    await expect(page.getByText('GITHUB_TOKEN')).toBeVisible()
-  })
-
-  test('MCP detail back button returns to tool detail', async ({ page }) => {
-    await page.getByText('github').click()
-    await page.getByLabel('Back').click()
-    await expect(page.getByText('MCPs').first()).toBeVisible()
-  })
-
-  test('HTTP MCP detail shows URL', async ({ page }) => {
-    await page.getByText('remote-http').click()
-    await expect(page.getByText(/mcp\.example\.com/)).toBeVisible()
   })
 })

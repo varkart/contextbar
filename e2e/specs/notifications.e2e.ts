@@ -53,7 +53,7 @@ test.describe('notification panel navigation', () => {
 
   test('clicking bell opens notification panel', async ({ page }) => {
     await page.getByRole('button', { name: /notifications/i }).click()
-    await expect(page.getByText('Notifications')).toBeVisible()
+    await expect(page.getByText('Notifications', { exact: true })).toBeVisible()
   })
 
   test('back button returns to main list', async ({ page }) => {

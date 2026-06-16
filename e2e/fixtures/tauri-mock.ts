@@ -136,6 +136,8 @@ export async function injectTauriMock(
 
   await page.addInitScript((data: typeof initData) => {
     const { tools, overrides, notifications: initNotifs } = data
+    // skip the 5-second splash in E2E
+    ;(globalThis as unknown as Record<string, unknown>).__skipSplash = true
     // mutable copy for dismiss operations
     let notifState: typeof initNotifs = [...initNotifs]
 
@@ -242,6 +244,9 @@ export async function injectTauriMock(
               { name: 'list_issues', description: 'List GitHub issues' },
               { name: 'create_pr',   description: 'Create a pull request' },
             ])
+
+          case 'get_audit_log':
+            return Promise.resolve([])
 
           case 'quit_app':
             return Promise.resolve(null)
