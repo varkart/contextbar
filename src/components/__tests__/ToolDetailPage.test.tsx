@@ -26,6 +26,7 @@ const defaultProps = {
   onBack: vi.fn(),
   onSelectSkill: vi.fn(),
   onSelectMcp: vi.fn(),
+  onSelectPermissions: vi.fn(),
   onToolUpdated: vi.fn(),
 }
 
