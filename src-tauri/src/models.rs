@@ -20,6 +20,8 @@ pub struct Skill {
     pub path: String,
     pub description: Option<String>,
     pub active: bool,
+    /// Which [[skill_sources]] entry produced this skill. Matches McpSource.id or "source_{n}".
+    pub source_id: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -34,6 +36,8 @@ pub struct McpServer {
     pub has_secrets: bool,
     pub secret_key_names: Vec<String>,
     pub extension_name: Option<String>, // set for extension-dir MCPs (e.g. Gemini extensions)
+    /// Which [[mcp_sources]] entry produced this server. Matches McpSource.id or "source_{n}".
+    pub source_id: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
