@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
-import type { AiTool, Skill, McpServer } from './types'
+import type { AiTool, Skill, McpServer, Notification } from './types'
 import { searchTools } from './search'
 import { useUpdateCheck } from './useUpdateCheck'
 import { useToolsDiff } from './useToolsDiff'
@@ -15,8 +15,9 @@ import Footer from './components/Footer'
 import Settings from './components/Settings'
 import SkillDetailPanel from './components/SkillDetailPanel'
 import ToolDetailPage from './components/ToolDetailPage'
+import NotificationsPanel from './components/NotificationsPanel'
 
-type View = 'main' | 'settings' | 'tool-detail' | 'skill-detail' | 'mcp-detail'
+type View = 'main' | 'settings' | 'tool-detail' | 'skill-detail' | 'mcp-detail' | 'notifications'
 
 function useView(): [View, (v: View) => void] {
   const [view, setViewState] = useState<View>(() =>
@@ -57,6 +58,7 @@ export default function App() {
   const [selectedTool, setSelectedTool] = useState<AiTool | null>(null)
   const [selectedSkill, setSelectedSkill] = useState<Skill | null>(null)
   const [selectedMcp, setSelectedMcp] = useState<McpServer | null>(null)
+  const [notifications, setNotifications] = useState<Notification[]>([])
 
   const handleSelectTool = useCallback((tool: AiTool) => {
     setSelectedTool(tool)
@@ -130,7 +132,17 @@ export default function App() {
     }
   }, [])
 
+  const fetchNotifications = useCallback(async () => {
+    try {
+      const result = await invoke<Notification[]>('get_notifications')
+      setNotifications(result)
+    } catch {
+      // DB may not be available; silently ignore
+    }
+  }, [])
+
   useEffect(() => { fetchTools() }, [fetchTools])
+  useEffect(() => { fetchNotifications() }, [fetchNotifications])
 
   useEffect(() => {
     const unlisten = listen('tools-changed', () => { setCloudSyncing(false); fetchTools() })
@@ -159,7 +171,7 @@ export default function App() {
       if (e.key === 'Escape') {
         if (view === 'skill-detail' || view === 'mcp-detail') setView(selectedTool ? 'tool-detail' : 'main')
         else if (view === 'tool-detail') setView('main')
-        else if (view === 'settings') setView('main')
+        else if (view === 'settings' || view === 'notifications') setView('main')
         else invoke('hide_window').catch(() => {})
       }
     }
@@ -172,7 +184,13 @@ export default function App() {
 
   return (
     <div className="w-[380px] h-[520px] bg-[var(--c-bg)] text-[var(--c-text)] flex flex-col overflow-hidden select-none">
-      {view === 'skill-detail' && selectedSkill ? (
+      {view === 'notifications' ? (
+        <NotificationsPanel
+          notifications={notifications}
+          onBack={() => setView('main')}
+          onChanged={fetchNotifications}
+        />
+      ) : view === 'skill-detail' && selectedSkill ? (
         <SkillDetailPanel
           skill={selectedSkill}
           toolName={selectedTool?.name}
@@ -204,7 +222,12 @@ export default function App() {
         />
       ) : (
         <>
-          <Header onSettingsClick={() => setView('settings')} updateAvailable={!!updateInfo} />
+          <Header
+            onSettingsClick={() => setView('settings')}
+            onNotificationsClick={() => setView('notifications')}
+            updateAvailable={!!updateInfo}
+            notificationCount={notifications.length}
+          />
           <SearchBar value={query} onChange={setQuery} />
           <div className="flex-1 overflow-y-auto divide-y divide-[var(--c-border-sub)]">
             {loading && tools.length === 0 ? (
