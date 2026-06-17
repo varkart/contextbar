@@ -11,11 +11,12 @@ interface SettingsProps {
   onOpenLogs?: () => void
 }
 
-function Toggle({ checked, onChange, disabled }: { checked: boolean; onChange: (v: boolean) => void; disabled?: boolean }) {
+function Toggle({ checked, onChange, disabled, label }: { checked: boolean; onChange: (v: boolean) => void; disabled?: boolean; label?: string }) {
   return (
     <button
       role="switch"
       aria-checked={checked}
+      aria-label={label}
       onClick={() => !disabled && onChange(!checked)}
       disabled={disabled}
       className={`relative inline-flex h-[18px] w-[32px] flex-shrink-0 rounded-full transition-colors duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400 ${
@@ -260,7 +261,7 @@ export default function Settings({ onBack, updateInfo, theme, onThemeChange, onO
         <SectionLabel>General</SectionLabel>
         <div className="divide-y divide-[var(--c-border-sub)]">
           <SettingRow label="Launch at login" description="Start LLM Manager when you log in">
-            <Toggle checked={autostart} onChange={handleAutostart} disabled={autostartLoading} />
+            <Toggle checked={autostart} onChange={handleAutostart} disabled={autostartLoading} label="Launch at login" />
           </SettingRow>
           <SettingRow label="Global shortcut" description="Click to record new shortcut">
             {shortcutLoading ? (
