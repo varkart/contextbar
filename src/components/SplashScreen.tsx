@@ -91,17 +91,19 @@ export default function SplashScreen({ backendReady, onDismiss }: SplashScreenPr
         <p className="text-[22px] font-bold text-[var(--c-text)] tracking-[-0.02em]">
           LLM Manager
         </p>
-        <div className="flex items-center justify-center h-[20px]">
-          <span className="text-[14px] text-[var(--c-text-3)] mr-1.5">
+        <div className="flex flex-col items-center justify-center h-[44px] gap-1">
+          <span className="text-[14px] text-[var(--c-text-3)]">
             we are loading, until then
           </span>
-          <span className="font-mono text-[14px] text-violet-400 dark:text-violet-400">
-            {text}
-          </span>
-          <span 
-            className="inline-block w-2 h-4 bg-violet-400 ml-1"
-            style={{ animation: 'sp-blink 0.8s step-end infinite' }} 
-          />
+          <div className="flex items-center">
+            <span className="font-mono text-[14px] text-violet-400 dark:text-violet-400">
+              {text}
+            </span>
+            <span 
+              className="inline-block w-2 h-4 bg-violet-400 ml-1"
+              style={{ animation: 'sp-blink 0.8s step-end infinite' }} 
+            />
+          </div>
         </div>
       </div>
 
