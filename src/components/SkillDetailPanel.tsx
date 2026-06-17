@@ -241,7 +241,8 @@ export default function SkillDetailPanel({ skill, onBack, toolName, toolId, onTo
             onClick={handleToggle}
             disabled={toggling || justToggled}
             aria-label={active ? 'Disable skill' : 'Enable skill'}
-            className={`ml-auto text-[12px] px-2 py-0.5 rounded transition-colors disabled:opacity-60 flex-shrink-0 ${
+            className={`ml-auto text-[12px] px-2 py-0.5 rounded transition-colors flex-shrink-0 ${
+              toggling ? 'animate-toggle-busy' :
               toggleAnim === 'enable' ? 'animate-toggle-enable' :
               toggleAnim === 'disable' ? 'animate-toggle-disable' :
               justToggled ? 'animate-toggle-confirm' : ''
@@ -253,7 +254,7 @@ export default function SkillDetailPanel({ skill, onBack, toolName, toolId, onTo
                   : 'bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20'
             }`}
           >
-            {toggling ? '…' : justToggled ? '✓' : active ? 'Disable' : 'Enable'}
+            {justToggled ? '✓' : active ? 'Disable' : 'Enable'}
           </button>
         )}
       </div>
