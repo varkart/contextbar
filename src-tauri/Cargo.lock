@@ -2224,6 +2224,7 @@ dependencies = [
  "tauri-plugin-single-instance",
  "tauri-plugin-updater",
  "tempfile",
+ "thiserror 2.0.18",
  "tokio",
  "toml 0.8.2",
  "window-vibrancy",
