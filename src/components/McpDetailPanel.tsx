@@ -159,6 +159,7 @@ export default function McpDetailPanel({ mcp, onBack, toolName, toolId, onToggle
   const [toggleError, setToggleError] = useState<string | null>(null)
   const [removing, setRemoving] = useState(false)
   const [removeError, setRemoveError] = useState<string | null>(null)
+  const [toggleAnim, setToggleAnim] = useState<'enable' | 'disable' | null>(null)
   const [tools, setTools] = useState<McpTool[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -167,6 +168,7 @@ export default function McpDetailPanel({ mcp, onBack, toolName, toolId, onToggle
     if (!toolId) return
     setToggling(true)
     setToggleError(null)
+    setToggleAnim(active ? 'disable' : 'enable')
     try {
       await invoke('set_mcp_active', {
         toolId,
@@ -184,7 +186,7 @@ export default function McpDetailPanel({ mcp, onBack, toolName, toolId, onToggle
       captureException(e)
     } finally {
       setToggling(false)
-      setTimeout(() => setJustToggled(false), 800)
+      setTimeout(() => { setJustToggled(false); setToggleAnim(null) }, 800)
     }
   }
 
@@ -264,6 +266,10 @@ export default function McpDetailPanel({ mcp, onBack, toolName, toolId, onToggle
               disabled={toggling || justToggled}
               aria-label={active ? 'Disable MCP' : 'Enable MCP'}
               className={`text-[12px] px-2 py-0.5 rounded transition-colors disabled:opacity-60 ${
+                toggleAnim === 'enable' ? 'animate-toggle-enable' :
+                toggleAnim === 'disable' ? 'animate-toggle-disable' :
+                justToggled ? 'animate-toggle-confirm' : ''
+              } ${
                 justToggled
                   ? 'bg-emerald-500/10 text-emerald-400'
                   : active

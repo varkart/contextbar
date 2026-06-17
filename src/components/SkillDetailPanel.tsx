@@ -173,6 +173,7 @@ export default function SkillDetailPanel({ skill, onBack, toolName, toolId, onTo
   const [toggling, setToggling] = useState(false)
   const [justToggled, setJustToggled] = useState(false)
   const [toggleError, setToggleError] = useState<string | null>(null)
+  const [toggleAnim, setToggleAnim] = useState<'enable' | 'disable' | null>(null)
   const [fileTree, setFileTree] = useState<FileEntry | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -181,6 +182,7 @@ export default function SkillDetailPanel({ skill, onBack, toolName, toolId, onTo
     if (!toolId) return
     setToggling(true)
     setToggleError(null)
+    setToggleAnim(active ? 'disable' : 'enable')
     try {
       await invoke('set_skill_active', {
         toolId,
@@ -197,8 +199,7 @@ export default function SkillDetailPanel({ skill, onBack, toolName, toolId, onTo
       captureException(e)
     } finally {
       setToggling(false)
-      // Brief delay so "✓" flash is perceptible before button resets
-      setTimeout(() => setJustToggled(false), 800)
+      setTimeout(() => { setJustToggled(false); setToggleAnim(null) }, 800)
     }
   }
 
@@ -241,6 +242,10 @@ export default function SkillDetailPanel({ skill, onBack, toolName, toolId, onTo
             disabled={toggling || justToggled}
             aria-label={active ? 'Disable skill' : 'Enable skill'}
             className={`ml-auto text-[12px] px-2 py-0.5 rounded transition-colors disabled:opacity-60 flex-shrink-0 ${
+              toggleAnim === 'enable' ? 'animate-toggle-enable' :
+              toggleAnim === 'disable' ? 'animate-toggle-disable' :
+              justToggled ? 'animate-toggle-confirm' : ''
+            } ${
               justToggled
                 ? 'bg-emerald-500/10 text-emerald-400'
                 : active
