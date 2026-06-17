@@ -73,12 +73,12 @@ export default function App() {
   const { notifications, fetchNotifications } = useNotifications()
 
   const handleFetchTools = useCallback(async () => {
-    await fetchTools()
-    setSelectedTool(prev => prev ? (tools.find(t => t.id === prev.id) ?? prev) : null)
-    const { skill, mcp } = refreshSelected(selectedSkill, selectedMcp, tools)
+    const fresh = await fetchTools()
+    setSelectedTool(prev => prev ? (fresh.find(t => t.id === prev.id) ?? prev) : null)
+    const { skill, mcp } = refreshSelected(selectedSkill, selectedMcp, fresh)
     setSelectedSkill(skill)
     setSelectedMcp(mcp)
-  }, [fetchTools, tools, selectedSkill, selectedMcp, refreshSelected])
+  }, [fetchTools, selectedSkill, selectedMcp, refreshSelected])
 
   const handleSelectTool = useCallback((tool: AiTool) => {
     setSelectedTool(tool)
