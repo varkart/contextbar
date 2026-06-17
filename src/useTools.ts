@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
-import type { AiTool, Skill, McpServer } from './types'
+import type { AiTool } from './types'
 import { capture } from './analytics'
 
 export interface UseToolsResult {
@@ -10,11 +10,6 @@ export interface UseToolsResult {
   cloudSyncing: boolean
   lastUpdated: Date | null
   fetchTools: () => Promise<AiTool[]>
-  refreshSelected: (
-    prevSkill: Skill | null,
-    prevMcp: McpServer | null,
-    result: AiTool[]
-  ) => { skill: Skill | null; mcp: McpServer | null }
 }
 
 export function useTools(): UseToolsResult {
@@ -22,28 +17,6 @@ export function useTools(): UseToolsResult {
   const [loading, setLoading] = useState(true)
   const [cloudSyncing, setCloudSyncing] = useState(false)
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
-
-  const refreshSelected = useCallback((
-    prevSkill: Skill | null,
-    prevMcp: McpServer | null,
-    result: AiTool[]
-  ) => {
-    let skill = prevSkill
-    let mcp = prevMcp
-    if (prevSkill) {
-      for (const tool of result) {
-        const found = tool.skills.find(s => s.name === prevSkill.name)
-        if (found) { skill = found; break }
-      }
-    }
-    if (prevMcp) {
-      for (const tool of result) {
-        const found = tool.mcps.find(m => m.name === prevMcp.name)
-        if (found) { mcp = found; break }
-      }
-    }
-    return { skill, mcp }
-  }, [])
 
   const fetchTools = useCallback(async (): Promise<AiTool[]> => {
     setLoading(true)
@@ -83,5 +56,5 @@ export function useTools(): UseToolsResult {
     return () => { unlisten.then(fn => fn()) }
   }, [])
 
-  return { tools, loading, cloudSyncing, lastUpdated, fetchTools, refreshSelected }
+  return { tools, loading, cloudSyncing, lastUpdated, fetchTools }
 }
