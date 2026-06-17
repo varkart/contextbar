@@ -51,8 +51,10 @@ fn write_settings(val: serde_json::Value) -> Result<(), String> {
 // ---------------------------------------------------------------------------
 
 #[tauri::command]
-fn get_tools(app: tauri::AppHandle) -> Vec<AiTool> {
-    let tools = detectors::detect_all();
+async fn get_tools(app: tauri::AppHandle) -> Vec<AiTool> {
+    let tools = tokio::task::spawn_blocking(detectors::detect_all)
+        .await
+        .unwrap_or_default();
     // If the claude mcp list cache is cold, warm it in the background and
     // notify the frontend when done so it can re-fetch.
     if engine::mcp::is_claude_mcp_cache_cold() {
@@ -72,6 +74,11 @@ fn get_tools(app: tauri::AppHandle) -> Vec<AiTool> {
 #[tauri::command]
 fn hide_window(window: tauri::WebviewWindow) {
     let _ = window.hide();
+}
+
+#[tauri::command]
+fn get_skill_full_description(path: String) -> Option<String> {
+    detectors::read_skill_file_content(std::path::Path::new(&path))
 }
 
 #[tauri::command]
@@ -790,6 +797,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             get_tools,
+            get_skill_full_description,
             hide_window,
             get_version,
             get_autostart,

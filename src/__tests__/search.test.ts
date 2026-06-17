@@ -46,7 +46,7 @@ describe('searchTools', () => {
 
   it('matches by skill name and records matched path', () => {
     const tool = makeTool({
-      skills: [{ name: 'impeccable', path: '/skills/impeccable', description: undefined, active: true, sourceId: 'skills_dir' }],
+      skills: [{ name: 'impeccable', path: '/skills/impeccable', description: undefined, hasFullDescription: false, active: true, sourceId: 'skills_dir' }],
     })
     const results = searchTools([tool], 'impec')
     expect(results).toHaveLength(1)
@@ -55,7 +55,7 @@ describe('searchTools', () => {
 
   it('matches by skill description', () => {
     const tool = makeTool({
-      skills: [{ name: 'my-skill', path: '/p', description: 'Builds graphs', active: true, sourceId: 'skills_dir' }],
+      skills: [{ name: 'my-skill', path: '/p', description: 'Builds graphs', hasFullDescription: false, active: true, sourceId: 'skills_dir' }],
     })
     const results = searchTools([tool], 'graph')
     expect(results).toHaveLength(1)

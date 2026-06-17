@@ -14,8 +14,8 @@ const mockTool: AiTool = {
   version: '1.0.0',
   installed: true,
   skills: [
-    { name: 'impeccable', path: '~/.claude/skills/impeccable', description: 'UI polish', active: true, sourceId: 'skills_dir' },
-    { name: 'graphify',   path: '~/.claude/skills/.disabled/graphify', description: undefined, active: false, sourceId: 'skills_dir' },
+    { name: 'impeccable', path: '~/.claude/skills/impeccable', description: 'UI polish', hasFullDescription: false, active: true, sourceId: 'skills_dir' },
+    { name: 'graphify',   path: '~/.claude/skills/.disabled/graphify', description: undefined, hasFullDescription: false, active: false, sourceId: 'skills_dir' },
   ],
   mcps: [],
   error: undefined,

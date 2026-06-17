@@ -63,6 +63,13 @@ pub fn parse_skill_description(skill_path: &std::path::Path) -> Option<String> {
     None
 }
 
+/// Returns true if a SKILL.md (or sibling .md) exists — cheap stat, no read.
+pub fn skill_md_exists(skill_path: &std::path::Path) -> bool {
+    skill_md_candidates(skill_path)
+        .map(|cs| cs.iter().any(|c| c.is_file()))
+        .unwrap_or(false)
+}
+
 pub fn read_skill_file_content(skill_path: &std::path::Path) -> Option<String> {
     for candidate in skill_md_candidates(skill_path)?.iter() {
         if !candidate.exists() {

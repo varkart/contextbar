@@ -17,7 +17,7 @@ const tool: AiTool = {
 }
 
 const skill: Skill = {
-  name: 'graphify', path: '/skills/graphify', description: 'g', active: true, sourceId: 's',
+  name: 'graphify', path: '/skills/graphify', description: 'g', hasFullDescription: false, active: true, sourceId: 's',
 }
 
 const mcp: McpServer = {

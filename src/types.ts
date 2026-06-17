@@ -13,8 +13,8 @@ export interface Skill {
   name: string;
   path: string;
   description?: string;
-  /** Full raw text of the skill's SKILL.md file. */
-  fullDescription?: string;
+  /** True when a SKILL.md exists; full content fetched on demand via get_skill_full_description. */
+  hasFullDescription: boolean;
   active: boolean;
   /** Which [[skill_sources]] entry produced this skill. */
   sourceId: string;

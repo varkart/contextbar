@@ -1,0 +1,641 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Splash Text Prototypes (Expanded)</title>
+  <style>
+    :root {
+      --bg: #09090b;
+      --surface: #18181b;
+      --text: #e4e4e7;
+      --text-muted: #71717a;
+      --accent: #8b5cf6;
+      --accent-glow: rgba(139, 92, 246, 0.4);
+    }
+    body {
+      background-color: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      margin: 0;
+      padding: 40px;
+      display: flex;
+      flex-direction: column;
+      gap: 32px;
+      align-items: center;
+    }
+    h1 {
+      font-size: 28px;
+      margin-bottom: 0px;
+      text-align: center;
+      background: linear-gradient(90deg, #fff, #a78bfa);
+      -webkit-background-clip: text;
+      color: transparent;
+    }
+    p.desc {
+      color: var(--text-muted);
+      margin-top: 0;
+      margin-bottom: 16px;
+      text-align: center;
+      max-width: 600px;
+      line-height: 1.5;
+    }
+    
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap: 24px;
+      width: 100%;
+      max-width: 1200px;
+    }
+
+    .card {
+      background-color: var(--surface);
+      border: 1px solid rgba(255,255,255,0.05);
+      border-radius: 16px;
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.2);
+      transition: border-color 0.3s;
+      overflow: hidden;
+    }
+    .card:hover {
+      border-color: var(--accent);
+    }
+    .card-title {
+      font-size: 13px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-muted);
+      margin-bottom: 32px;
+    }
+
+    .display-area {
+      height: 60px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      position: relative;
+    }
+
+    .text-element {
+      font-size: 16px;
+      color: var(--text-muted);
+      position: absolute;
+      text-align: center;
+      width: 100%;
+      font-weight: 500;
+    }
+
+    /* 1. Simple Fade */
+    .p1-text { transition: opacity 1s ease; opacity: 0; }
+    .p1-text.active { opacity: 1; }
+
+    /* 2. Typewriter */
+    .p2-text { font-family: 'SF Mono', monospace; color: #a78bfa; font-size: 14px; }
+    .cursor {
+      display: inline-block; width: 8px; height: 16px; background-color: var(--accent);
+      vertical-align: middle; margin-left: 4px; animation: blink 0.8s step-end infinite;
+    }
+    @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+
+    /* 3. Breathing */
+    .p3-text { animation: breathe 4s ease-in-out infinite; opacity: 0; }
+    @keyframes breathe {
+      0% { transform: scale(0.95); opacity: 0; }
+      20% { opacity: 1; }
+      50% { transform: scale(1.05); opacity: 1; color: #d8b4fe; }
+      80% { opacity: 1; }
+      100% { transform: scale(0.95); opacity: 0; }
+    }
+
+    /* 4. Vertical Carousel */
+    .p4-text { animation: slide-up 3s cubic-bezier(0.16, 1, 0.3, 1) infinite; opacity: 0; }
+    @keyframes slide-up {
+      0% { transform: translateY(20px); opacity: 0; }
+      15%, 85% { transform: translateY(0); opacity: 1; }
+      100% { transform: translateY(-20px); opacity: 0; }
+    }
+
+    /* 5. Ethereal Blur */
+    .p5-text { animation: ethereal 4s ease-in-out infinite; opacity: 0; }
+    @keyframes ethereal {
+      0% { filter: blur(12px); opacity: 0; transform: scale(0.9) translateY(10px); }
+      30%, 70% { filter: blur(0px); opacity: 1; transform: scale(1) translateY(0); color: #e4e4e7; text-shadow: 0 0 12px var(--accent-glow); }
+      100% { filter: blur(12px); opacity: 0; transform: scale(1.1) translateY(-10px); }
+    }
+
+    /* 6. Staggered 3D Wave (was 9) */
+    .p6-text { display: flex; justify-content: center; perspective: 400px; }
+    .p6-char {
+      display: inline-block;
+      opacity: 0;
+      transform-origin: 50% 100%;
+      animation: wave-char 3.5s cubic-bezier(0.175, 0.885, 0.32, 1.275) infinite;
+    }
+    @keyframes wave-char {
+      0% { transform: translateY(12px) rotateX(-90deg); opacity: 0; color: #52525b; }
+      20%, 80% { transform: translateY(0) rotateX(0); opacity: 1; color: #d8b4fe; }
+      100% { transform: translateY(-12px) rotateX(90deg); opacity: 0; color: #52525b; }
+    }
+
+    /* 7. Hacker Decode (was 10) */
+    .p7-text { font-family: 'SF Mono', monospace; font-size: 15px; color: #a78bfa; letter-spacing: 1px; }
+
+    /* -------------------------------------------
+       NEW ANIMATIONS
+       ------------------------------------------- */
+
+    /* 8. Gooey Liquid Morph */
+    .p8-container {
+      filter: url(#goo);
+      position: relative;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .p8-text {
+      position: absolute;
+      color: #c084fc;
+      font-weight: 800;
+      font-size: 18px;
+      letter-spacing: 1px;
+      animation: gooey-morph 4s infinite;
+    }
+    @keyframes gooey-morph {
+      0% { filter: blur(10px); opacity: 0; transform: scale(0.8); }
+      20%, 80% { filter: blur(0px); opacity: 1; transform: scale(1); }
+      100% { filter: blur(10px); opacity: 0; transform: scale(1.2); }
+    }
+
+    /* 9. RGB Cyber Glitch */
+    .p9-text {
+      position: relative;
+      font-weight: 700;
+      color: #fff;
+      animation: glitch-fade 3s infinite;
+    }
+    .p9-text::before, .p9-text::after {
+      content: attr(data-text);
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      opacity: 0.8;
+    }
+    .p9-text::before {
+      color: #0ff;
+      z-index: -1;
+      animation: glitch-anim-1 3s infinite;
+    }
+    .p9-text::after {
+      color: #f0f;
+      z-index: -2;
+      animation: glitch-anim-2 3s infinite;
+    }
+    @keyframes glitch-fade {
+      0%, 10% { opacity: 0; }
+      15%, 85% { opacity: 1; }
+      90%, 100% { opacity: 0; }
+    }
+    @keyframes glitch-anim-1 {
+      0%, 10% { transform: translate(0); clip-path: polygon(0 20%, 100% 20%, 100% 40%, 0 40%); }
+      20% { transform: translate(-3px, 2px); clip-path: polygon(0 10%, 100% 10%, 100% 30%, 0 30%); }
+      40% { transform: translate(3px, -2px); clip-path: polygon(0 60%, 100% 60%, 100% 80%, 0 80%); }
+      60%, 100% { transform: translate(0); clip-path: polygon(0 0, 100% 0, 100% 100%, 0 100%); }
+    }
+    @keyframes glitch-anim-2 {
+      0%, 10% { transform: translate(0); clip-path: polygon(0 60%, 100% 60%, 100% 80%, 0 80%); }
+      20% { transform: translate(3px, -2px); clip-path: polygon(0 40%, 100% 40%, 100% 60%, 0 60%); }
+      40% { transform: translate(-3px, 2px); clip-path: polygon(0 20%, 100% 20%, 100% 40%, 0 40%); }
+      60%, 100% { transform: translate(0); clip-path: polygon(0 0, 100% 0, 100% 100%, 0 100%); }
+    }
+
+    /* 10. Neon Flicker */
+    .p10-text {
+      color: #fff;
+      font-weight: 700;
+      animation: neon-flicker 4s infinite;
+    }
+    @keyframes neon-flicker {
+      0%, 10% { opacity: 0; text-shadow: none; }
+      12% { opacity: 1; text-shadow: 0 0 10px #a855f7, 0 0 20px #a855f7, 0 0 40px #a855f7; }
+      14% { opacity: 0.2; text-shadow: none; }
+      16%, 85% { opacity: 1; text-shadow: 0 0 10px #a855f7, 0 0 20px #a855f7, 0 0 40px #a855f7; }
+      86% { opacity: 0.4; }
+      88% { opacity: 1; }
+      90%, 100% { opacity: 0; text-shadow: none; }
+    }
+
+    /* 11. Focus Puller (Lens effect) */
+    .p11-text {
+      animation: focus-pull 3.5s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+      color: #e4e4e7;
+    }
+    @keyframes focus-pull {
+      0% { filter: blur(20px); transform: scale(1.5); opacity: 0; }
+      20%, 80% { filter: blur(0px); transform: scale(1); opacity: 1; }
+      100% { filter: blur(20px); transform: scale(0.8); opacity: 0; }
+    }
+
+    /* 12. Elastic Bounce */
+    .p12-text {
+      display: flex;
+      justify-content: center;
+      gap: 4px;
+    }
+    .p12-word {
+      display: inline-block;
+      animation: elastic-drop 3.5s infinite;
+      opacity: 0;
+      transform-origin: bottom center;
+    }
+    @keyframes elastic-drop {
+      0% { transform: translateY(-30px) scaleY(1.5); opacity: 0; }
+      15% { transform: translateY(0) scaleY(0.7); opacity: 1; }
+      20% { transform: translateY(-10px) scaleY(1.1); opacity: 1; }
+      25%, 80% { transform: translateY(0) scaleY(1); opacity: 1; }
+      100% { transform: translateY(30px) scaleY(1.5); opacity: 0; }
+    }
+
+    /* 13. Slanted Slice Reveal */
+    .p13-container {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .p13-text {
+      position: absolute;
+      font-weight: 700;
+      color: #c084fc;
+      overflow: hidden;
+      animation: slice-fade 3.5s infinite;
+    }
+    .p13-top {
+      clip-path: polygon(0 0, 100% 0, 100% 45%, 0 55%);
+      animation: slice-top 3.5s cubic-bezier(0.25, 1, 0.5, 1) infinite;
+    }
+    .p13-bottom {
+      clip-path: polygon(0 55%, 100% 45%, 100% 100%, 0 100%);
+      animation: slice-bottom 3.5s cubic-bezier(0.25, 1, 0.5, 1) infinite;
+    }
+    @keyframes slice-fade {
+      0%, 10% { opacity: 0; }
+      20%, 80% { opacity: 1; }
+      90%, 100% { opacity: 0; }
+    }
+    @keyframes slice-top {
+      0% { transform: translate(-10px, -10px); }
+      20%, 80% { transform: translate(0, 0); }
+      100% { transform: translate(10px, -10px); }
+    }
+    @keyframes slice-bottom {
+      0% { transform: translate(10px, 10px); }
+      20%, 80% { transform: translate(0, 0); }
+      100% { transform: translate(-10px, 10px); }
+    }
+
+    /* 14. Split Mask Expansion */
+    .p14-text {
+      font-weight: 600;
+      color: #fff;
+      position: relative;
+    }
+    .p14-text::before {
+      content: '';
+      position: absolute;
+      top: 50%;
+      left: -10%;
+      width: 120%;
+      height: 2px;
+      background: var(--accent);
+      transform: scaleX(0);
+      animation: split-line 3.5s infinite;
+      z-index: 1;
+    }
+    .p14-inner {
+      display: inline-block;
+      clip-path: polygon(0 0, 100% 0, 100% 0, 0 0);
+      animation: split-reveal 3.5s infinite;
+    }
+    @keyframes split-line {
+      0%, 10% { transform: scaleX(0); opacity: 1; }
+      20% { transform: scaleX(1); opacity: 1; }
+      25%, 80% { transform: scaleX(1); opacity: 0; }
+      85% { transform: scaleX(1); opacity: 1; }
+      100% { transform: scaleX(0); opacity: 1; }
+    }
+    @keyframes split-reveal {
+      0%, 20% { clip-path: polygon(0 50%, 100% 50%, 100% 50%, 0 50%); opacity: 0; }
+      30%, 75% { clip-path: polygon(0 0%, 100% 0%, 100% 100%, 0 100%); opacity: 1; }
+      85%, 100% { clip-path: polygon(0 50%, 100% 50%, 100% 50%, 0 50%); opacity: 0; }
+    }
+
+    /* 15. Flip Board (Train Station) */
+    .p15-text {
+      display: flex;
+      justify-content: center;
+      gap: 2px;
+    }
+    .p15-char {
+      display: inline-block;
+      background: #27272a;
+      color: #fff;
+      padding: 4px 6px;
+      border-radius: 4px;
+      font-family: 'SF Mono', monospace;
+      font-weight: bold;
+      text-transform: uppercase;
+      position: relative;
+      perspective: 200px;
+      animation: flip-in 3.5s infinite;
+      opacity: 0;
+    }
+    .p15-char::after {
+      content: '';
+      position: absolute;
+      top: 50%;
+      left: 0;
+      width: 100%;
+      height: 1px;
+      background: #000;
+    }
+    @keyframes flip-in {
+      0% { transform: rotateX(-90deg); opacity: 0; }
+      15%, 85% { transform: rotateX(0deg); opacity: 1; }
+      100% { transform: rotateX(90deg); opacity: 0; }
+    }
+
+    /* 16. Magnetic Scatter (Particle assembly) */
+    .p16-text {
+      display: flex;
+      justify-content: center;
+    }
+    .p16-char {
+      display: inline-block;
+      opacity: 0;
+      animation: scatter-in 3.5s cubic-bezier(0.16, 1, 0.3, 1) infinite;
+    }
+    @keyframes scatter-in {
+      0% { transform: translate(var(--rx), var(--ry)) rotate(var(--rr)) scale(2); opacity: 0; filter: blur(4px); }
+      20%, 80% { transform: translate(0, 0) rotate(0deg) scale(1); opacity: 1; filter: blur(0px); color: #d8b4fe; }
+      100% { transform: scale(0.5); opacity: 0; filter: blur(4px); }
+    }
+
+    /* 17. Continuous 3D Marquee Cylinder */
+    .p17-container {
+      perspective: 800px;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .p17-text {
+      position: absolute;
+      font-weight: 700;
+      font-size: 18px;
+      color: #a78bfa;
+      transform-style: preserve-3d;
+      animation: cylinder-spin 4s infinite cubic-bezier(0.25, 1, 0.5, 1);
+      transform-origin: center center -30px;
+      opacity: 0;
+    }
+    @keyframes cylinder-spin {
+      0% { transform: rotateX(-90deg); opacity: 0; }
+      15%, 85% { transform: rotateX(0deg); opacity: 1; }
+      100% { transform: rotateX(90deg); opacity: 0; }
+    }
+
+  </style>
+</head>
+<body>
+
+  <!-- SVG Filter for Gooey Effect -->
+  <svg width="0" height="0" style="position: absolute;">
+    <filter id="goo">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="4" result="blur" />
+      <feColorMatrix in="blur" mode="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 18 -7" result="goo" />
+      <feBlend in="SourceGraphic" in2="goo" />
+    </filter>
+  </svg>
+
+  <h1>Mindfulness Splash Animations</h1>
+  <p class="desc">Removed the polarizing ones and added 10 entirely new, highly captivating CSS/JS concepts. From liquid morphing to neon flickers, split masks, and 3D flip boards.</p>
+
+  <div class="grid">
+    <!-- The Keepers -->
+    <div class="card"><div class="card-title">1. The Soft Crossfade</div><div class="display-area"><div id="p1" class="text-element p1-text"></div></div></div>
+    <div class="card"><div class="card-title">2. Terminal Typewriter</div><div class="display-area"><div class="text-element p2-text"><span id="p2"></span><span class="cursor"></span></div></div></div>
+    <div class="card"><div class="card-title">3. The Breathing Text</div><div class="display-area"><div id="p3" class="text-element p3-text"></div></div></div>
+    <div class="card"><div class="card-title">4. Vertical Carousel</div><div class="display-area"><div id="p4" class="text-element p4-text"></div></div></div>
+    <div class="card"><div class="card-title">5. Ethereal Blur</div><div class="display-area"><div id="p5" class="text-element p5-text"></div></div></div>
+    <div class="card"><div class="card-title">6. Staggered 3D Wave</div><div class="display-area"><div id="p6" class="text-element p6-text"></div></div></div>
+    <div class="card"><div class="card-title">7. Cyber/Hacker Decode</div><div class="display-area"><div id="p7" class="text-element p7-text"></div></div></div>
+
+    <!-- The 10 New Ones -->
+    <div class="card"><div class="card-title">8. Liquid Gooey Morph</div><div class="display-area"><div class="p8-container"><div id="p8" class="text-element p8-text"></div></div></div></div>
+    <div class="card"><div class="card-title">9. RGB Cyber Glitch</div><div class="display-area"><div id="p9" class="text-element p9-text" data-text=""></div></div></div>
+    <div class="card"><div class="card-title">10. Moody Neon Flicker</div><div class="display-area"><div id="p10" class="text-element p10-text"></div></div></div>
+    <div class="card"><div class="card-title">11. Focus Puller (Lens)</div><div class="display-area"><div id="p11" class="text-element p11-text"></div></div></div>
+    <div class="card"><div class="card-title">12. Elastic Bounce</div><div class="display-area"><div id="p12" class="text-element p12-text"></div></div></div>
+    <div class="card"><div class="card-title">13. Slanted Slice Reveal</div><div class="display-area"><div class="p13-container"><div id="p13-top" class="text-element p13-text p13-top"></div><div id="p13-bottom" class="text-element p13-text p13-bottom"></div></div></div></div>
+    <div class="card"><div class="card-title">14. Split Mask Expansion</div><div class="display-area"><div class="text-element p14-text"><span id="p14" class="p14-inner"></span></div></div></div>
+    <div class="card"><div class="card-title">15. Station Flip Board</div><div class="display-area"><div id="p15" class="text-element p15-text"></div></div></div>
+    <div class="card"><div class="card-title">16. Magnetic Scatter</div><div class="display-area"><div id="p16" class="text-element p16-text"></div></div></div>
+    <div class="card"><div class="card-title">17. 3D Cylinder Spin</div><div class="display-area"><div class="p17-container"><div id="p17" class="text-element p17-text"></div></div></div></div>
+  </div>
+
+  <script>
+    const msgs = [
+      'take a small break',
+      'rest ur eyes',
+      'stretch ur back',
+      'have a sip of water',
+      'breathe slowly'
+    ];
+
+    // --- 1. Simple Fade ---
+    let p1Index = 0; const p1El = document.getElementById('p1');
+    function updateP1() {
+      p1El.classList.remove('active');
+      setTimeout(() => { p1Index = (p1Index + 1) % msgs.length; p1El.textContent = msgs[p1Index]; p1El.classList.add('active'); }, 1000);
+    }
+    p1El.textContent = msgs[0]; p1El.classList.add('active');
+    setInterval(updateP1, 3500);
+
+    // --- 2. Typewriter ---
+    let p2Idx = 0, charIdx = 0, isDel = false; const p2El = document.getElementById('p2');
+    function type() {
+      const msg = msgs[p2Idx];
+      p2El.textContent = isDel ? msg.substring(0, charIdx - 1) : msg.substring(0, charIdx + 1);
+      charIdx += isDel ? -1 : 1;
+      let spd = isDel ? 30 : 70;
+      if (!isDel && charIdx === msg.length) { spd = 1500; isDel = true; }
+      else if (isDel && charIdx === 0) { isDel = false; p2Idx = (p2Idx + 1) % msgs.length; spd = 500; }
+      setTimeout(type, spd);
+    }
+    type();
+
+    // --- Synced CSS Animations (3, 4, 5, 6, 8, 9, 10, 11, 13, 14, 17) ---
+    const syncElements = [
+      { el: document.getElementById('p3'), evt: 'animationiteration' },
+      { el: document.getElementById('p4'), evt: 'animationiteration' },
+      { el: document.getElementById('p5'), evt: 'animationiteration' },
+      { el: document.getElementById('p6'), custom: renderP6 }, // Staggered wave
+      { el: document.getElementById('p8'), evt: 'animationiteration' },
+      { el: document.getElementById('p9'), evt: 'animationiteration', updateAttr: true },
+      { el: document.getElementById('p10'), evt: 'animationiteration' },
+      { el: document.getElementById('p11'), evt: 'animationiteration' },
+      { el: document.getElementById('p13-top'), custom: renderP13 },
+      { el: document.getElementById('p14'), evt: 'animationiteration', parentId: 'p14-trigger' },
+      { el: document.getElementById('p17'), evt: 'animationiteration' }
+    ];
+    
+    let syncIndices = Array(syncElements.length).fill(0);
+    
+    // 6. Staggered Wave Render
+    function renderP6(idx, msgIdx) {
+      const el = document.getElementById('p6');
+      el.innerHTML = '';
+      const text = msgs[msgIdx];
+      for (let i = 0; i < text.length; i++) {
+        const span = document.createElement('span');
+        span.textContent = text[i] === ' ' ? '\u00A0' : text[i];
+        span.className = 'p6-char';
+        span.style.animationDelay = `${i * 0.04}s`;
+        el.appendChild(span);
+      }
+    }
+
+    // 13. Slanted Slice Render
+    function renderP13(idx, msgIdx) {
+      const top = document.getElementById('p13-top');
+      const bottom = document.getElementById('p13-bottom');
+      top.textContent = msgs[msgIdx];
+      bottom.textContent = msgs[msgIdx];
+    }
+
+    syncElements.forEach((item, i) => {
+      if (item.custom) {
+        item.custom(i, 0);
+        // Bind to a generic interval since they are complex DOM rebuilds
+        setInterval(() => {
+          syncIndices[i] = (syncIndices[i] + 1) % msgs.length;
+          item.custom(i, syncIndices[i]);
+        }, 3500);
+      } else {
+        const targetEl = item.el;
+        targetEl.textContent = msgs[0];
+        if (item.updateAttr) targetEl.setAttribute('data-text', msgs[0]);
+        
+        // Listen to the animation iteration
+        const listenEl = item.parentId ? document.querySelector('.p14-text::before') || targetEl : targetEl; // fallback for pseudo
+        
+        targetEl.addEventListener('animationiteration', () => {
+          syncIndices[i] = (syncIndices[i] + 1) % msgs.length;
+          targetEl.textContent = msgs[syncIndices[i]];
+          if (item.updateAttr) targetEl.setAttribute('data-text', msgs[syncIndices[i]]);
+        });
+      }
+    });
+
+    // --- 7. Hacker Decode ---
+    const chars = "!<>-_\\\\/[]{}—=+*^?#________";
+    const p7El = document.getElementById('p7');
+    let p7Idx = 0;
+    function scramble() {
+      const target = msgs[p7Idx];
+      let iteration = 0;
+      clearInterval(p7El.dataset.interval);
+      const interval = setInterval(() => {
+        p7El.innerText = target.split('').map((letter, index) => {
+          if (index < iteration) return target[index];
+          return chars[Math.floor(Math.random() * chars.length)];
+        }).join('');
+        if (iteration >= target.length) {
+          clearInterval(interval);
+          setTimeout(() => { p7Idx = (p7Idx + 1) % msgs.length; scramble(); }, 1500);
+        }
+        iteration += 1 / 2;
+      }, 30);
+      p7El.dataset.interval = interval;
+    }
+    scramble();
+
+    // --- 12. Elastic Bounce ---
+    const p12El = document.getElementById('p12');
+    let p12Idx = 0;
+    function renderP12() {
+      p12El.innerHTML = '';
+      const words = msgs[p12Idx].split(' ');
+      words.forEach((word, i) => {
+        const span = document.createElement('span');
+        span.textContent = word;
+        span.className = 'p12-word';
+        span.style.animationDelay = `${i * 0.15}s`;
+        p12El.appendChild(span);
+      });
+    }
+    renderP12();
+    setInterval(() => { p12Idx = (p12Idx + 1) % msgs.length; renderP12(); }, 3500);
+
+    // --- 15. Flip Board ---
+    const p15El = document.getElementById('p15');
+    let p15Idx = 0;
+    function renderP15() {
+      p15El.innerHTML = '';
+      const text = msgs[p15Idx];
+      for (let i = 0; i < text.length; i++) {
+        if (text[i] === ' ') {
+          const space = document.createElement('span');
+          space.style.width = '8px';
+          p15El.appendChild(space);
+          continue;
+        }
+        const span = document.createElement('span');
+        span.textContent = text[i];
+        span.className = 'p15-char';
+        span.style.animationDelay = `${i * 0.08}s`;
+        p15El.appendChild(span);
+      }
+    }
+    renderP15();
+    setInterval(() => { p15Idx = (p15Idx + 1) % msgs.length; renderP15(); }, 3500);
+
+    // --- 16. Magnetic Scatter ---
+    const p16El = document.getElementById('p16');
+    let p16Idx = 0;
+    function renderP16() {
+      p16El.innerHTML = '';
+      const text = msgs[p16Idx];
+      for (let i = 0; i < text.length; i++) {
+        const span = document.createElement('span');
+        span.textContent = text[i] === ' ' ? '\u00A0' : text[i];
+        span.className = 'p16-char';
+        // Random starting positions
+        const rx = (Math.random() - 0.5) * 200 + 'px';
+        const ry = (Math.random() - 0.5) * 100 + 'px';
+        const rr = (Math.random() - 0.5) * 180 + 'deg';
+        span.style.setProperty('--rx', rx);
+        span.style.setProperty('--ry', ry);
+        span.style.setProperty('--rr', rr);
+        span.style.animationDelay = `${Math.random() * 0.5}s`;
+        p16El.appendChild(span);
+      }
+    }
+    renderP16();
+    setInterval(() => { p16Idx = (p16Idx + 1) % msgs.length; renderP16(); }, 3500);
+
+  </script>
+</body>
+</html>
