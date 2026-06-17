@@ -1,0 +1,47 @@
+schema_version = 1
+id = "claude"
+name = "Claude Code"
+
+[[detection]]
+type = "dir"
+path = "~/.claude"
+
+[version]
+type = "command"
+binary = "claude"
+args = ["--version"]
+timeout_ms = 1500
+parse = "first_token"
+
+[[mcp_sources]]
+id = "settings_json"
+type = "json_key_pair"
+file = "~/.claude/settings.json"
+active_key = "mcpServers"
+disabled_key = "disabledMcpServers"
+
+[[mcp_sources]]
+id = "plugins"
+type = "claude_plugins"
+installed_plugins_file = "~/.claude/plugins/installed_plugins.json"
+mcp_filename = ".mcp.json"
+
+[[mcp_sources]]
+id = "dotfile"
+type = "claude_dotfile"
+file = "~/.claude.json"
+
+[[mcp_sources]]
+id = "mcp_list"
+type = "claude_mcp_list"
+binary = "claude"
+timeout_ms = 6000
+
+[[skill_sources]]
+id = "skills_dir"
+type = "directory"
+path = "~/.claude/skills"
+disabled_subdir = ".disabled"
+
+[permissions]
+file = "~/.claude/settings.json"

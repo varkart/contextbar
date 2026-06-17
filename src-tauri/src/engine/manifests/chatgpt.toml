@@ -1,0 +1,8 @@
+schema_version = 1
+id = "chatgpt"
+name = "ChatGPT"
+
+[[detection]]
+type = "vscode_extension"
+extensions_dir = "~/.vscode/extensions"
+prefix = "openai.chatgpt-"

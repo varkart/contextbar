@@ -1,14 +1,3 @@
-mod claude;
-mod chatgpt;
-mod copilot;
-mod cursor;
-mod gemini;
-mod windsurf;
-mod aider;
-mod amazonq;
-mod r#continue;
-mod zed;
-
 use crate::models::AiTool;
 
 /// Find a binary in PATH without spawning a subprocess.
@@ -35,22 +24,7 @@ where
 }
 
 pub fn detect_all() -> Vec<AiTool> {
-    // Run all detectors in parallel — each may spawn subprocesses
-    // which makes sequential execution slow. Threads are cheap here; no shared state.
-    let fns: Vec<fn() -> AiTool> = vec![
-        claude::detect,
-        cursor::detect,
-        gemini::detect,
-        copilot::detect,
-        windsurf::detect,
-        chatgpt::detect,
-        aider::detect,
-        amazonq::detect,
-        r#continue::detect,
-        zed::detect,
-    ];
-    let handles: Vec<_> = fns.into_iter().map(|f| std::thread::spawn(f)).collect();
-    handles.into_iter().filter_map(|h| h.join().ok()).collect()
+    crate::engine::detect_all()
 }
 
 /// Parse a skill description from a skill directory or file.
@@ -134,10 +108,9 @@ fn truncate(s: String, max_chars: usize) -> String {
     }
 }
 
-/// Parse MCP servers from a JSON value representing a `mcpServers` object.
-/// Returns (mcps, error_string).
 pub fn parse_mcp_servers(
     servers_obj: &serde_json::Value,
+    active: bool,
 ) -> Vec<crate::models::McpServer> {
     let mut mcps = Vec::new();
     if let Some(obj) = servers_obj.as_object() {
@@ -171,14 +144,23 @@ pub fn parse_mcp_servers(
                 _ => (false, vec![]),
             };
 
+            // httpUrl = streamable HTTP, url = SSE — both treated as remote URL
+            let url = cfg.get("httpUrl")
+                .or_else(|| cfg.get("url"))
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string());
+
             mcps.push(crate::models::McpServer {
                 name: name.clone(),
                 command,
                 args,
+                url,
                 description,
-                active: true,
+                active,
                 has_secrets,
                 secret_key_names,
+                extension_name: None,
+                source_id: String::new(), // stamped by engine::mcp::collect()
             });
         }
     }

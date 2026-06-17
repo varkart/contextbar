@@ -4,10 +4,26 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Tauri + React + Typescript</title>
+    <title>LLM Manager</title>
+    <style>
+      #splash {
+        position: fixed;
+        inset: 0;
+        background: #09090b;
+        z-index: 9999;
+        transition: opacity 0.15s ease;
+      }
+      @media (prefers-color-scheme: light) {
+        #splash { background: #fafafa; }
+      }
+      #splash.fade-out {
+        opacity: 0;
+        pointer-events: none;
+      }
+    </style>
   </head>
-
   <body>
+    <div id="splash"></div>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

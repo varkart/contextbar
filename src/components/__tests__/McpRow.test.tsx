@@ -1,5 +1,5 @@
 import { render, screen, fireEvent } from '@testing-library/react'
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import McpRow from '../McpRow'
 import type { McpServer } from '../../types'
 
@@ -10,10 +10,7 @@ const baseMcp: McpServer = {
   active: true,
   hasSecrets: true,
   secretKeyNames: ['GITHUB_PERSONAL_ACCESS_TOKEN'],
-}
-
-function getTooltipContainer(name: string) {
-  return screen.getByText(name).closest('[class*="relative"]') as HTMLElement
+  sourceId: 'settings_json',
 }
 
 describe('McpRow', () => {
@@ -32,24 +29,37 @@ describe('McpRow', () => {
     expect(screen.queryByLabelText('has env secrets')).not.toBeInTheDocument()
   })
 
-  it('tooltip shows command + args string', () => {
+  it('lock icon title contains secret key names', () => {
     render(<McpRow mcp={baseMcp} />)
-    const container = getTooltipContainer('github')
-    fireEvent.mouseEnter(container)
-    expect(screen.getByRole('tooltip')).toHaveTextContent('npx -y @modelcontextprotocol/server-github')
+    const lockSpan = screen.getByLabelText('has env secrets').closest('span')!
+    expect(lockSpan.title).toContain('GITHUB_PERSONAL_ACCESS_TOKEN')
   })
 
-  it('tooltip shows secret key names when hasSecrets=true', () => {
+  it('no toggle button — enable/disable only from detail page', () => {
     render(<McpRow mcp={baseMcp} />)
-    const container = getTooltipContainer('github')
-    fireEvent.mouseEnter(container)
-    expect(screen.getByRole('tooltip')).toHaveTextContent('GITHUB_PERSONAL_ACCESS_TOKEN')
+    expect(screen.queryByRole('button', { name: /enable|disable/i })).toBeNull()
   })
 
-  it('tooltip does NOT contain actual secret values', () => {
-    render(<McpRow mcp={baseMcp} />)
-    const container = getTooltipContainer('github')
-    fireEvent.mouseEnter(container)
-    expect(screen.getByRole('tooltip')).not.toHaveTextContent('supersecrettoken123')
+  it('inactive mcp row has reduced opacity', () => {
+    const { container } = render(<McpRow mcp={{ ...baseMcp, active: false }} />)
+    expect(container.querySelector('.opacity-40')).toBeInTheDocument()
+  })
+
+  it('active mcp row has no opacity reduction', () => {
+    const { container } = render(<McpRow mcp={baseMcp} />)
+    expect(container.querySelector('.opacity-40')).toBeNull()
+  })
+
+  it('shows chevron when onSelect provided', () => {
+    const { container } = render(<McpRow mcp={baseMcp} onSelect={vi.fn()} />)
+    const svgs = container.querySelectorAll('svg')
+    expect(svgs.length).toBeGreaterThan(1)
+  })
+
+  it('calls onSelect when row is clicked', () => {
+    const onSelect = vi.fn()
+    render(<McpRow mcp={baseMcp} onSelect={onSelect} />)
+    fireEvent.click(screen.getByText('github'))
+    expect(onSelect).toHaveBeenCalledTimes(1)
   })
 })
