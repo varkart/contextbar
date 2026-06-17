@@ -64,40 +64,35 @@ export default function SplashScreen({ backendReady, onDismiss }: SplashScreenPr
         </p>
       </div>
 
-      {/* loading dots while backend spinning up */}
-      {!backendReady && (
-        <div className="flex gap-2">
-          {[0, 1, 2].map(i => (
-            <span
-              key={i}
-              className="w-1.5 h-1.5 rounded-full bg-violet-400/60 animate-pulse"
-              style={{ animationDelay: `${i * 180}ms` }}
-            />
-          ))}
-        </div>
-      )}
-
-      {/* Continue button */}
-      <button
-        onClick={handleContinue}
-        disabled={!backendReady || exiting}
-        className={`
-          relative px-7 py-2.5 text-[15px] font-semibold rounded-2xl
-          transition-all duration-200 select-none
-          ${backendReady && !exiting
-            ? 'splash-fade-in text-white cursor-pointer hover:scale-105 active:scale-95'
-            : 'opacity-0 pointer-events-none'
-          }
-        `}
-        style={{
-          animationDuration: '0.35s',
-          background: backendReady ? 'linear-gradient(135deg, #7c3aed 0%, #6366f1 100%)' : undefined,
-          boxShadow: backendReady ? '0 4px 24px rgba(124,58,237,0.45), 0 1px 4px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.15)' : undefined,
-        }}
-      >
-        Continue
-        <span className="ml-1.5 opacity-70">→</span>
-      </button>
+      {/* fixed-height action zone — always same height so title/tip never shift */}
+      <div className="flex items-center justify-center" style={{ minHeight: '44px' }}>
+        {!backendReady ? (
+          <div className="flex gap-2">
+            {[0, 1, 2].map(i => (
+              <span
+                key={i}
+                className="w-1.5 h-1.5 rounded-full bg-violet-400/60 animate-pulse"
+                style={{ animationDelay: `${i * 180}ms` }}
+              />
+            ))}
+          </div>
+        ) : (
+          <button
+            onClick={handleContinue}
+            disabled={exiting}
+            className="px-7 py-2.5 text-[15px] font-semibold rounded-2xl text-white
+              hover:scale-105 active:scale-95 transition-transform duration-150
+              select-none splash-fade-in"
+            style={{
+              animationDuration: '0.3s',
+              background: 'linear-gradient(135deg, #7c3aed 0%, #6366f1 100%)',
+              boxShadow: '0 4px 24px rgba(124,58,237,0.45), 0 1px 4px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.15)',
+            }}
+          >
+            Continue <span className="opacity-70">→</span>
+          </button>
+        )}
+      </div>
     </div>
   )
 }
