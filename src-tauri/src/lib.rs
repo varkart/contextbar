@@ -264,8 +264,9 @@ fn read_text_file(path: String) -> Result<String, String> {
 async fn query_mcp_tools(
     command: String,
     args: Vec<String>,
+    url: Option<String>,
 ) -> Result<Vec<mcp_client::McpTool>, String> {
-    mcp_client::query_tools(&command, &args).await
+    mcp_client::query_tools(&command, &args, url.as_deref()).await
 }
 
 // ---------------------------------------------------------------------------

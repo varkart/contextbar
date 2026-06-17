@@ -211,12 +211,8 @@ export default function McpDetailPanel({ mcp, onBack, toolName, toolId, onToggle
   const isHttp = !!mcp.url && !mcp.command
 
   useEffect(() => {
-    if (isHttp) {
-      setLoading(false)
-      return
-    }
     const t0 = Date.now()
-    invoke<McpTool[]>('query_mcp_tools', { command: mcp.command, args: mcp.args })
+    invoke<McpTool[]>('query_mcp_tools', { command: mcp.command, args: mcp.args, url: mcp.url ?? null })
       .then(result => {
         setTools(result)
         capture('mcp_query_duration', {
@@ -231,7 +227,7 @@ export default function McpDetailPanel({ mcp, onBack, toolName, toolId, onToggle
         capture('mcp_query_failed', { mcp_name: mcp.name, error: String(e) })
       })
       .finally(() => setLoading(false))
-  }, [mcp.command, mcp.args, mcp.name, isHttp])
+  }, [mcp.command, mcp.args, mcp.name, mcp.url])
 
   return (
     <div className="flex flex-col h-full bg-[var(--c-bg)] animate-slide-in-right">
