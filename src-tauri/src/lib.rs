@@ -1,6 +1,7 @@
 pub(crate) mod detectors;
 pub(crate) mod doctor;
 pub(crate) mod engine;
+pub(crate) mod error;
 pub(crate) mod installer;
 pub(crate) mod models;
 mod app_state;
@@ -469,7 +470,7 @@ async fn get_mcp_npm_latest(package_name: String) -> Option<String> {
 fn get_notifications(
     db: tauri::State<'_, db::DbState>,
 ) -> Result<Vec<db::Notification>, String> {
-    db::get_active_notifications(&db)
+    db::get_active_notifications(&db).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -477,14 +478,14 @@ fn dismiss_notification(
     db: tauri::State<'_, db::DbState>,
     id: i64,
 ) -> Result<(), String> {
-    db::dismiss_notification(&db, id)
+    db::dismiss_notification(&db, id).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 fn dismiss_all_notifications(
     db: tauri::State<'_, db::DbState>,
 ) -> Result<(), String> {
-    db::dismiss_all_notifications(&db)
+    db::dismiss_all_notifications(&db).map_err(|e| e.to_string())
 }
 
 #[derive(serde::Serialize)]

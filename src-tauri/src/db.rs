@@ -2,6 +2,8 @@ use rusqlite::Connection;
 use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use crate::error::AppError;
+
 pub struct DbState(pub Arc<Mutex<Connection>>);
 
 #[derive(serde::Serialize, Clone)]
@@ -27,16 +29,15 @@ pub fn open() -> DbState {
     }
 }
 
-fn try_open() -> Result<DbState, String> {
+fn try_open() -> Result<DbState, AppError> {
     let data_dir = dirs::data_dir()
-        .ok_or("cannot resolve data dir")?
+        .ok_or_else(|| AppError::Other("cannot resolve data dir".into()))?
         .join("llmmanager");
-    std::fs::create_dir_all(&data_dir).map_err(|e| e.to_string())?;
+    std::fs::create_dir_all(&data_dir)?;
 
     let db_path = data_dir.join("llmmanager.db");
-    let mut conn = Connection::open(&db_path).map_err(|e| e.to_string())?;
-    conn.pragma_update(None, "journal_mode", "WAL")
-        .map_err(|e| e.to_string())?;
+    let mut conn = Connection::open(&db_path)?;
+    conn.pragma_update(None, "journal_mode", "WAL")?;
     migrate(&mut conn)?;
     Ok(DbState(Arc::new(Mutex::new(conn))))
 }
@@ -47,10 +48,8 @@ pub fn migrate_for_test(conn: &mut Connection) {
     migrate(conn).expect("test DB migration failed");
 }
 
-fn migrate(conn: &mut Connection) -> Result<(), String> {
-    let version: i32 = conn
-        .query_row("PRAGMA user_version", [], |r| r.get(0))
-        .map_err(|e| e.to_string())?;
+fn migrate(conn: &mut Connection) -> Result<(), AppError> {
+    let version: i32 = conn.query_row("PRAGMA user_version", [], |r| r.get(0))?;
 
     if version < 1 {
         conn.execute_batch(
@@ -70,19 +69,13 @@ fn migrate(conn: &mut Connection) -> Result<(), String> {
                 body      TEXT    NOT NULL,
                 dismissed INTEGER NOT NULL DEFAULT 0
             );",
-        )
-        .map_err(|e| e.to_string())?;
-        conn.pragma_update(None, "user_version", 1)
-            .map_err(|e| e.to_string())?;
+        )?;
+        conn.pragma_update(None, "user_version", 1)?;
     }
 
     if version < 2 {
-        conn.execute_batch(
-            "ALTER TABLE notifications ADD COLUMN dedup_key TEXT;",
-        )
-        .map_err(|e| e.to_string())?;
-        conn.pragma_update(None, "user_version", 2)
-            .map_err(|e| e.to_string())?;
+        conn.execute_batch("ALTER TABLE notifications ADD COLUMN dedup_key TEXT;")?;
+        conn.pragma_update(None, "user_version", 2)?;
     }
 
     Ok(())
@@ -110,16 +103,14 @@ pub fn log_event(
     );
 }
 
-pub fn get_active_notifications(state: &DbState) -> Result<Vec<Notification>, String> {
-    let conn = state.0.lock().map_err(|e| e.to_string())?;
-    let mut stmt = conn
-        .prepare(
-            "SELECT id, ts_ms, level, title, body FROM notifications
-             WHERE dismissed = 0 ORDER BY ts_ms DESC LIMIT 100",
-        )
-        .map_err(|e| e.to_string())?;
+pub fn get_active_notifications(state: &DbState) -> Result<Vec<Notification>, AppError> {
+    let conn = state.0.lock().map_err(|_| AppError::MutexPoisoned)?;
+    let mut stmt = conn.prepare(
+        "SELECT id, ts_ms, level, title, body FROM notifications
+         WHERE dismissed = 0 ORDER BY ts_ms DESC LIMIT 100",
+    )?;
 
-    let mapped = stmt
+    let rows: Result<Vec<_>, _> = stmt
         .query_map([], |row| {
             Ok(Notification {
                 id: row.get(0)?,
@@ -128,27 +119,23 @@ pub fn get_active_notifications(state: &DbState) -> Result<Vec<Notification>, St
                 title: row.get(3)?,
                 body: row.get(4)?,
             })
-        })
-        .map_err(|e| e.to_string())?;
-
-    let rows: Result<Vec<_>, _> = mapped.collect();
-    rows.map_err(|e| e.to_string())
+        })?
+        .collect();
+    Ok(rows?)
 }
 
-pub fn dismiss_notification(state: &DbState, id: i64) -> Result<(), String> {
-    let conn = state.0.lock().map_err(|e| e.to_string())?;
+pub fn dismiss_notification(state: &DbState, id: i64) -> Result<(), AppError> {
+    let conn = state.0.lock().map_err(|_| AppError::MutexPoisoned)?;
     conn.execute(
         "UPDATE notifications SET dismissed = 1 WHERE id = ?1",
         rusqlite::params![id],
-    )
-    .map_err(|e| e.to_string())?;
+    )?;
     Ok(())
 }
 
-pub fn dismiss_all_notifications(state: &DbState) -> Result<(), String> {
-    let conn = state.0.lock().map_err(|e| e.to_string())?;
-    conn.execute("UPDATE notifications SET dismissed = 1 WHERE dismissed = 0", [])
-        .map_err(|e| e.to_string())?;
+pub fn dismiss_all_notifications(state: &DbState) -> Result<(), AppError> {
+    let conn = state.0.lock().map_err(|_| AppError::MutexPoisoned)?;
+    conn.execute("UPDATE notifications SET dismissed = 1 WHERE dismissed = 0", [])?;
     Ok(())
 }
 
@@ -171,8 +158,8 @@ pub fn add_notification(
     title: &str,
     body: &str,
     dedup_key: Option<&str>,
-) -> Result<bool, String> {
-    let conn = state.0.lock().map_err(|e| e.to_string())?;
+) -> Result<bool, AppError> {
+    let conn = state.0.lock().map_err(|_| AppError::MutexPoisoned)?;
 
     if let Some(key) = dedup_key {
         let exists: bool = conn
@@ -191,8 +178,7 @@ pub fn add_notification(
         "INSERT INTO notifications (ts_ms, level, title, body, dedup_key)
          VALUES (?1, ?2, ?3, ?4, ?5)",
         rusqlite::params![now_ms(), level, title, body, dedup_key],
-    )
-    .map_err(|e| e.to_string())?;
+    )?;
     Ok(true)
 }
 
