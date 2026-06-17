@@ -11,8 +11,6 @@ import { capture } from './analytics'
 import ViewManager from './components/views/ViewManager'
 import SplashScreen from './components/SplashScreen'
 
-const SPLASH_BORN = Date.now()
-const SPLASH_MIN_MS = 8000
 const isE2E = !!(globalThis as Record<string, unknown>).__skipSplash
 
 export default function App() {
@@ -48,8 +46,12 @@ export default function App() {
   useEffect(() => {
     const splash = document.getElementById('splash')
     if (splash) {
-      splash.classList.add('fade-out')
-      splash.addEventListener('transitionend', () => splash.remove(), { once: true })
+      if (isE2E) {
+        splash.remove()
+      } else {
+        splash.classList.add('fade-out')
+        splash.addEventListener('transitionend', () => splash.remove(), { once: true })
+      }
     }
   }, [])
 
@@ -58,13 +60,6 @@ export default function App() {
       setBackendReady(true)
     }
   }, [loading, backendReady])
-
-  useEffect(() => {
-    if (!backendReady || isE2E) return
-    const remaining = Math.max(0, SPLASH_MIN_MS - (Date.now() - SPLASH_BORN))
-    const t = setTimeout(() => setSplashDismissed(true), remaining)
-    return () => clearTimeout(t)
-  }, [backendReady])
 
   const updateInfo = useUpdateCheck(version)
   useToolsDiff()
