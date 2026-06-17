@@ -1,14 +1,13 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { invoke } from '@tauri-apps/api/core'
-import type { AiTool, Skill, McpServer } from './types'
 import { searchTools } from './search'
 import { useUpdateCheck } from './useUpdateCheck'
 import { useToolsDiff } from './useToolsDiff'
 import { useTheme, type ThemePreference } from './useTheme'
 import { useTools } from './useTools'
 import { useNotifications } from './useNotifications'
+import { useViewRouter } from './useViewRouter'
 import { capture } from './analytics'
-import { escapeTransition, type View } from './viewRouter'
 import McpDetailPanel from './components/McpDetailPanel'
 import PermissionsDetailPanel from './components/PermissionsDetailPanel'
 import SkillsListPanel from './components/SkillsListPanel'
@@ -28,17 +27,6 @@ const SPLASH_BORN = Date.now()
 const SPLASH_MIN_MS = 5000
 const isE2E = !!(globalThis as Record<string, unknown>).__skipSplash
 
-function useView(): [View, (v: View) => void] {
-  const [view, setViewState] = useState<View>(() =>
-    window.location.hash === '#settings' ? 'settings' : 'main'
-  )
-  const setView = useCallback((v: View) => {
-    window.location.hash = v === 'settings' ? 'settings' : ''
-    setViewState(v)
-  }, [])
-  return [view, setView]
-}
-
 function SkeletonRows() {
   return (
     <>
@@ -56,56 +44,35 @@ function SkeletonRows() {
 }
 
 export default function App() {
-  const [view, setView] = useView()
+  const {
+    view,
+    selectedTool,
+    selectedSkill,
+    selectedMcp,
+    selectTool,
+    selectSkill,
+    selectMcp,
+    selectPermissions,
+    openSkillsPage,
+    openMcpsPage,
+    goTo,
+    escape,
+    refreshSelected,
+  } = useViewRouter()
+
   const [version, setVersion] = useState('')
   const { theme, setTheme } = useTheme()
-  const [selectedTool, setSelectedTool] = useState<AiTool | null>(null)
-  const [selectedSkill, setSelectedSkill] = useState<Skill | null>(null)
-  const [selectedMcp, setSelectedMcp] = useState<McpServer | null>(null)
-  const [skillBackView, setSkillBackView] = useState<View>('tool-detail')
-  const [mcpBackView, setMcpBackView] = useState<View>('tool-detail')
   const [splashDismissed, setSplashDismissed] = useState(isE2E)
   const [backendReady, setBackendReady] = useState(false)
   const [query, setQuery] = useState('')
 
-  const { tools, loading, cloudSyncing, lastUpdated, fetchTools, refreshSelected } = useTools()
+  const { tools, loading, cloudSyncing, lastUpdated, fetchTools } = useTools()
   const { notifications, fetchNotifications } = useNotifications()
 
   const handleFetchTools = useCallback(async () => {
     const fresh = await fetchTools()
-    setSelectedTool(prev => prev ? (fresh.find(t => t.id === prev.id) ?? prev) : null)
-    const { skill, mcp } = refreshSelected(selectedSkill, selectedMcp, fresh)
-    setSelectedSkill(skill)
-    setSelectedMcp(mcp)
-  }, [fetchTools, selectedSkill, selectedMcp, refreshSelected])
-
-  const handleSelectTool = useCallback((tool: AiTool) => {
-    setSelectedTool(tool)
-    setView('tool-detail')
-    capture('tool_detail_viewed', { tool_id: tool.id })
-  }, [setView])
-
-  const handleSelectSkill = useCallback((skill: Skill, fromView: View = 'tool-detail') => {
-    setSelectedSkill(skill)
-    setSkillBackView(fromView)
-    setView('skill-detail')
-    capture('skill_detail_viewed', { skill_name: skill.name })
-  }, [setView])
-
-  const handleSelectMcp = useCallback((mcp: McpServer, fromView: View = 'tool-detail') => {
-    setSelectedMcp(mcp)
-    setMcpBackView(fromView)
-    setView('mcp-detail')
-    capture('mcp_detail_viewed', { mcp_name: mcp.name })
-  }, [setView])
-
-  const handleSelectPermissions = useCallback(() => {
-    setView('permissions-detail')
-    capture('permissions_detail_viewed', { tool_id: selectedTool?.id })
-  }, [setView, selectedTool])
-
-  const handleOpenSkillsPage = useCallback(() => { setView('skills-list') }, [setView])
-  const handleOpenMcpsPage = useCallback(() => { setView('mcps-list') }, [setView])
+    refreshSelected(fresh)
+  }, [fetchTools, refreshSelected])
 
   useEffect(() => {
     invoke<string>('get_version').then(setVersion).catch(() => setVersion('0.5.0'))
@@ -154,16 +121,10 @@ export default function App() {
   }, [])
 
   useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        const result = escapeTransition(view, skillBackView, mcpBackView, selectedTool)
-        if (result.type === 'navigate') setView(result.to)
-        else invoke('hide_window').catch(() => {})
-      }
-    }
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') escape() }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [view, setView, selectedTool, skillBackView, mcpBackView])
+  }, [escape])
 
   const installedTools = useMemo(() => tools.filter(t => t.installed), [tools])
   const searchResults = useMemo(() => searchTools(installedTools, query), [installedTools, query])
@@ -174,24 +135,24 @@ export default function App() {
         <SplashScreen backendReady={backendReady} onDismiss={() => setSplashDismissed(true)} />
       )}
       {view === 'logs' ? (
-        <LogsPanel onBack={() => setView('main')} />
+        <LogsPanel onBack={() => goTo('main')} />
       ) : view === 'notifications' ? (
         <NotificationsPanel
           notifications={notifications}
-          onBack={() => setView('main')}
+          onBack={() => goTo('main')}
           onChanged={fetchNotifications}
         />
       ) : view === 'skills-list' && selectedTool ? (
         <SkillsListPanel
           tool={selectedTool}
-          onBack={() => setView('tool-detail')}
-          onSelectSkill={skill => handleSelectSkill(skill, 'skills-list')}
+          onBack={() => goTo('tool-detail')}
+          onSelectSkill={skill => selectSkill(skill, 'skills-list')}
         />
       ) : view === 'mcps-list' && selectedTool ? (
         <McpsListPanel
           tool={selectedTool}
-          onBack={() => setView('tool-detail')}
-          onSelectMcp={mcp => handleSelectMcp(mcp, 'mcps-list')}
+          onBack={() => goTo('tool-detail')}
+          onSelectMcp={mcp => selectMcp(mcp, 'mcps-list')}
         />
       ) : view === 'skill-detail' && selectedSkill ? (
         <SkillDetailPanel
@@ -199,7 +160,7 @@ export default function App() {
           toolName={selectedTool?.name}
           toolId={selectedTool?.id}
           onToggled={handleFetchTools}
-          onBack={() => setView(skillBackView)}
+          onBack={() => escape()}
         />
       ) : view === 'mcp-detail' && selectedMcp ? (
         <McpDetailPanel
@@ -207,23 +168,23 @@ export default function App() {
           toolName={selectedTool?.name}
           toolId={selectedTool?.id}
           onToggled={handleFetchTools}
-          onBack={() => setView(mcpBackView)}
+          onBack={() => escape()}
         />
       ) : view === 'permissions-detail' && selectedTool ? (
         <PermissionsDetailPanel
           toolId={selectedTool.id}
           toolName={selectedTool.name}
-          onBack={() => setView('tool-detail')}
+          onBack={() => goTo('tool-detail')}
         />
       ) : view === 'tool-detail' && selectedTool ? (
         <ToolDetailPage
           tool={selectedTool}
-          onBack={() => setView('main')}
-          onSelectSkill={skill => handleSelectSkill(skill, 'tool-detail')}
-          onSelectMcp={mcp => handleSelectMcp(mcp, 'tool-detail')}
-          onSelectPermissions={handleSelectPermissions}
-          onOpenSkillsPage={handleOpenSkillsPage}
-          onOpenMcpsPage={handleOpenMcpsPage}
+          onBack={() => goTo('main')}
+          onSelectSkill={skill => selectSkill(skill, 'tool-detail')}
+          onSelectMcp={mcp => selectMcp(mcp, 'tool-detail')}
+          onSelectPermissions={selectPermissions}
+          onOpenSkillsPage={openSkillsPage}
+          onOpenMcpsPage={openMcpsPage}
           onToolUpdated={handleFetchTools}
           query={query || undefined}
           matchedSkills={searchResults.find(r => r.tool.id === selectedTool.id)?.matchedSkills}
@@ -231,17 +192,17 @@ export default function App() {
         />
       ) : view === 'settings' ? (
         <Settings
-          onBack={() => setView('main')}
+          onBack={() => goTo('main')}
           updateInfo={updateInfo}
           theme={theme}
           onThemeChange={(t: ThemePreference) => setTheme(t)}
-          onOpenLogs={() => setView('logs')}
+          onOpenLogs={() => goTo('logs')}
         />
       ) : (
         <>
           <Header
-            onSettingsClick={() => setView('settings')}
-            onNotificationsClick={() => setView('notifications')}
+            onSettingsClick={() => goTo('settings')}
+            onNotificationsClick={() => goTo('notifications')}
             updateAvailable={!!updateInfo}
             notificationCount={notifications.length}
           />
@@ -272,9 +233,9 @@ export default function App() {
                 <ToolRow
                   key={tool.id}
                   tool={tool}
-                  onSelectTool={handleSelectTool}
+                  onSelectTool={selectTool}
                 />
-              ))
+            ))
             )}
           </div>
           <Footer lastUpdated={lastUpdated} onRefresh={handleFetchTools} loading={loading} cloudSyncing={cloudSyncing} />
