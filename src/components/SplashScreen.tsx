@@ -1,6 +1,11 @@
 import { useState, useEffect } from 'react'
 
-const TIPS_TEXT = 'take a small break  •  rest ur eyes  •  stretch ur back  •  have a sip of water  •  breathe slowly'
+const TIPS = [
+  'take a small break',
+  'rest ur eyes',
+  'stretch ur back',
+  'have a sip of water'
+]
 
 interface SplashScreenProps {
   backendReady: boolean
@@ -9,15 +14,55 @@ interface SplashScreenProps {
 
 export default function SplashScreen({ backendReady, onDismiss }: SplashScreenProps) {
   const [exiting, setExiting] = useState(false)
-  const [scrollDone, setScrollDone] = useState(false)
+  const [cycleDone, setCycleDone] = useState(false)
+  const [text, setText] = useState('')
 
   useEffect(() => {
-    if (backendReady && scrollDone) {
+    let timeout: ReturnType<typeof setTimeout>
+    let charIdx = 0
+    let msgIdx = 0
+    let isDel = false
+
+    const type = () => {
+      const msg = TIPS[msgIdx]
+      
+      if (isDel) {
+        charIdx--
+      } else {
+        charIdx++
+      }
+      
+      setText(msg.substring(0, charIdx))
+      
+      let spd = isDel ? 30 : 70
+      
+      if (!isDel && charIdx === msg.length) {
+        spd = 1500
+        isDel = true
+        if (msgIdx === TIPS.length - 1) {
+          setCycleDone(true)
+        }
+      } else if (isDel && charIdx === 0) {
+        isDel = false
+        msgIdx = (msgIdx + 1) % TIPS.length
+        spd = 500
+      }
+      
+      timeout = setTimeout(type, spd)
+    }
+    
+    type()
+    
+    return () => clearTimeout(timeout)
+  }, [])
+
+  useEffect(() => {
+    if (backendReady && cycleDone) {
       setExiting(true)
       const t = setTimeout(onDismiss, 280)
       return () => clearTimeout(t)
     }
-  }, [backendReady, scrollDone, onDismiss])
+  }, [backendReady, cycleDone, onDismiss])
 
   return (
     <div
@@ -41,25 +86,28 @@ export default function SplashScreen({ backendReady, onDismiss }: SplashScreenPr
         />
       </div>
 
-      {/* title + scrolling tip */}
-      <div className="flex flex-col items-center gap-2 text-center w-full overflow-hidden">
+      {/* title + typewriter tip */}
+      <div className="flex flex-col items-center gap-2 text-center w-full">
         <p className="text-[22px] font-bold text-[var(--c-text)] tracking-[-0.02em]">
           LLM Manager
         </p>
-        <div className="w-full relative h-[20px] overflow-hidden">
-          <p
-            className="text-[14px] text-[var(--c-text-3)] whitespace-nowrap absolute"
-            style={{ animation: 'splash-scroll 7s linear forwards' }}
-            onAnimationEnd={() => setScrollDone(true)}
-          >
-            {TIPS_TEXT}
-          </p>
+        <div className="flex items-center justify-center h-[20px]">
+          <span className="text-[14px] text-[var(--c-text-3)] mr-1.5">
+            we are loading, until then
+          </span>
+          <span className="font-mono text-[14px] text-violet-400 dark:text-violet-400">
+            {text}
+          </span>
+          <span 
+            className="inline-block w-2 h-4 bg-violet-400 ml-1"
+            style={{ animation: 'sp-blink 0.8s step-end infinite' }} 
+          />
         </div>
       </div>
 
       {/* fixed-height action zone — shows dots if backend not ready or animation still going */}
       <div className="flex items-center justify-center" style={{ minHeight: '44px' }}>
-        {(!backendReady || !scrollDone) && (
+        {(!backendReady || !cycleDone) && (
           <div className="flex gap-2">
             {[0, 1, 2].map(i => (
               <span
