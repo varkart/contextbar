@@ -45,8 +45,8 @@ fn read_directory(dir: &std::path::Path, disabled_subdir: Option<&str>) -> Vec<S
 
     if let Ok(entries) = std::fs::read_dir(dir) {
         for entry in entries.flatten() {
-            let name = entry.file_name().to_string_lossy().to_string();
-            if name.starts_with('.') {
+            let raw_name = entry.file_name().to_string_lossy().to_string();
+            if raw_name.starts_with('.') {
                 continue;
             }
             let path = entry.path();
@@ -54,6 +54,18 @@ fn read_directory(dir: &std::path::Path, disabled_subdir: Option<&str>) -> Vec<S
             if path.is_symlink() && !path.exists() {
                 continue;
             }
+            // plain files must be .md; skip everything else (e.g. .json, .sh)
+            if path.is_file() && path.extension().and_then(|e| e.to_str()) != Some("md") {
+                continue;
+            }
+            // strip .md extension for flat skill files so name = "ios-testing" not "ios-testing.md"
+            let name = if path.is_file() {
+                path.file_stem()
+                    .map(|s| s.to_string_lossy().into_owned())
+                    .unwrap_or(raw_name)
+            } else {
+                raw_name
+            };
             let description = parse_skill_description(&path);
             let full_description = read_skill_file_content(&path);
             skills.push(Skill {
@@ -71,8 +83,8 @@ fn read_directory(dir: &std::path::Path, disabled_subdir: Option<&str>) -> Vec<S
         let disabled_dir = dir.join(sub);
         if let Ok(entries) = std::fs::read_dir(&disabled_dir) {
             for entry in entries.flatten() {
-                let name = entry.file_name().to_string_lossy().to_string();
-                if name.starts_with('.') {
+                let raw_name = entry.file_name().to_string_lossy().to_string();
+                if raw_name.starts_with('.') {
                     continue;
                 }
                 let path = entry.path();
@@ -80,6 +92,16 @@ fn read_directory(dir: &std::path::Path, disabled_subdir: Option<&str>) -> Vec<S
                 if path.is_symlink() && !path.exists() {
                     continue;
                 }
+                if path.is_file() && path.extension().and_then(|e| e.to_str()) != Some("md") {
+                    continue;
+                }
+                let name = if path.is_file() {
+                    path.file_stem()
+                        .map(|s| s.to_string_lossy().into_owned())
+                        .unwrap_or(raw_name)
+                } else {
+                    raw_name
+                };
                 let description = parse_skill_description(&path);
                 let full_description = read_skill_file_content(&path);
                 skills.push(Skill {

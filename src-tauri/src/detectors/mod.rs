@@ -36,6 +36,13 @@ pub fn detect_all() -> Vec<AiTool> {
 /// Falls back to the first non-empty, non-heading, non-separator line.
 /// Truncates to 120 characters.
 fn skill_md_candidates(skill_path: &std::path::Path) -> Option<[std::path::PathBuf; 2]> {
+    if skill_path.is_file() {
+        // Flat .md skill file — the file itself is the content
+        let stem = skill_path.file_stem()?.to_string_lossy().into_owned();
+        let sibling = skill_path.with_file_name(format!("{}.md", stem));
+        return Some([skill_path.to_path_buf(), sibling]);
+    }
+    // Directory-based skill: look for SKILL.md inside, then sibling .md file
     let mut p = skill_path.to_path_buf();
     let stem = p.file_name()?.to_string_lossy().into_owned();
     p.set_file_name(format!("{}.md", stem));
