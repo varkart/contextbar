@@ -1,0 +1,77 @@
+import { describe, it, expect } from 'vitest'
+import { escapeTransition } from '../viewRouter'
+import type { AiTool } from '../types'
+
+const tool = { id: 'claude', name: 'Claude Code', installed: true, skills: [], mcps: [] } as AiTool
+
+describe('escapeTransition', () => {
+  it('skill-detail → skillBackView', () => {
+    expect(escapeTransition('skill-detail', 'skills-list', 'tool-detail', tool))
+      .toEqual({ type: 'navigate', to: 'skills-list' })
+  })
+
+  it('skill-detail with tool-detail backView', () => {
+    expect(escapeTransition('skill-detail', 'tool-detail', 'tool-detail', tool))
+      .toEqual({ type: 'navigate', to: 'tool-detail' })
+  })
+
+  it('mcp-detail → mcpBackView', () => {
+    expect(escapeTransition('mcp-detail', 'tool-detail', 'mcps-list', tool))
+      .toEqual({ type: 'navigate', to: 'mcps-list' })
+  })
+
+  it('permissions-detail with selectedTool → tool-detail', () => {
+    expect(escapeTransition('permissions-detail', 'tool-detail', 'tool-detail', tool))
+      .toEqual({ type: 'navigate', to: 'tool-detail' })
+  })
+
+  it('permissions-detail without selectedTool → main', () => {
+    expect(escapeTransition('permissions-detail', 'tool-detail', 'tool-detail', null))
+      .toEqual({ type: 'navigate', to: 'main' })
+  })
+
+  it('skills-list with selectedTool → tool-detail', () => {
+    expect(escapeTransition('skills-list', 'tool-detail', 'tool-detail', tool))
+      .toEqual({ type: 'navigate', to: 'tool-detail' })
+  })
+
+  it('skills-list without selectedTool → main', () => {
+    expect(escapeTransition('skills-list', 'tool-detail', 'tool-detail', null))
+      .toEqual({ type: 'navigate', to: 'main' })
+  })
+
+  it('mcps-list with selectedTool → tool-detail', () => {
+    expect(escapeTransition('mcps-list', 'tool-detail', 'tool-detail', tool))
+      .toEqual({ type: 'navigate', to: 'tool-detail' })
+  })
+
+  it('mcps-list without selectedTool → main', () => {
+    expect(escapeTransition('mcps-list', 'tool-detail', 'tool-detail', null))
+      .toEqual({ type: 'navigate', to: 'main' })
+  })
+
+  it('tool-detail → main', () => {
+    expect(escapeTransition('tool-detail', 'tool-detail', 'tool-detail', tool))
+      .toEqual({ type: 'navigate', to: 'main' })
+  })
+
+  it('settings → main', () => {
+    expect(escapeTransition('settings', 'tool-detail', 'tool-detail', null))
+      .toEqual({ type: 'navigate', to: 'main' })
+  })
+
+  it('notifications → main', () => {
+    expect(escapeTransition('notifications', 'tool-detail', 'tool-detail', null))
+      .toEqual({ type: 'navigate', to: 'main' })
+  })
+
+  it('logs → main', () => {
+    expect(escapeTransition('logs', 'tool-detail', 'tool-detail', null))
+      .toEqual({ type: 'navigate', to: 'main' })
+  })
+
+  it('main → hide', () => {
+    expect(escapeTransition('main', 'tool-detail', 'tool-detail', null))
+      .toEqual({ type: 'hide' })
+  })
+})

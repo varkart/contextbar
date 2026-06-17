@@ -12,7 +12,7 @@ vi.mock('@tauri-apps/plugin-notification', () => ({
 }))
 vi.mock('../analytics', () => ({ capture: vi.fn(), captureException: vi.fn() }))
 
-const mockFetchTools = vi.fn()
+const mockFetchTools = vi.fn().mockResolvedValue([])
 const mockFetchNotifications = vi.fn()
 const mockRefreshSelected = vi.fn(() => ({ skill: null, mcp: null }))
 
