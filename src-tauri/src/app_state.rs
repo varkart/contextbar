@@ -200,6 +200,105 @@ pub fn update_permissions_file(
 }
 
 /// Move a skill folder between active and .disabled locations.
+/// Add a new MCP entry to the `active_key` section of a JSON config file.
+/// Returns Err if an entry with the same name already exists.
+pub fn add_mcp_to_config(
+    config_path: &str,
+    active_key: &str,
+    name: &str,
+    entry: serde_json::Value,
+) -> Result<(), String> {
+    let lock = config_lock(config_path);
+    let _guard = lock.lock().unwrap();
+
+    if let Err(e) = crate::backup::snapshot(config_path) {
+        eprintln!("[backup] snapshot failed for {config_path}: {e}");
+    }
+
+    let content = std::fs::read_to_string(config_path).unwrap_or_else(|_| "{}".to_string());
+    let mut json: serde_json::Value =
+        serde_json::from_str(&content).map_err(|e| format!("cannot parse {config_path}: {e}"))?;
+
+    let obj = json.as_object_mut().ok_or("config is not a JSON object")?;
+    let section = obj
+        .entry(active_key)
+        .or_insert_with(|| serde_json::Value::Object(serde_json::Map::new()));
+    let map = section.as_object_mut().ok_or("mcpServers is not a JSON object")?;
+
+    if map.contains_key(name) {
+        return Err(format!("MCP '{name}' already exists"));
+    }
+    map.insert(name.to_string(), entry);
+
+    let updated =
+        serde_json::to_string_pretty(&json).map_err(|e| format!("serialization error: {e}"))?;
+
+    if let Some(parent) = std::path::Path::new(config_path).parent() {
+        std::fs::create_dir_all(parent).map_err(|e| format!("cannot create dir: {e}"))?;
+    }
+
+    let tmp_path = format!("{config_path}.tmp");
+    std::fs::write(&tmp_path, &updated).map_err(|e| format!("cannot write temp file: {e}"))?;
+    std::fs::rename(&tmp_path, config_path).map_err(|e| {
+        let _ = std::fs::remove_file(&tmp_path);
+        format!("cannot atomically replace {config_path}: {e}")
+    })?;
+
+    Ok(())
+}
+
+/// Remove an MCP entry from both `active_key` and optionally `disabled_key` sections.
+pub fn remove_mcp_from_config(
+    config_path: &str,
+    active_key: &str,
+    disabled_key: Option<&str>,
+    name: &str,
+) -> Result<(), String> {
+    let lock = config_lock(config_path);
+    let _guard = lock.lock().unwrap();
+
+    if let Err(e) = crate::backup::snapshot(config_path) {
+        eprintln!("[backup] snapshot failed for {config_path}: {e}");
+    }
+
+    let content = std::fs::read_to_string(config_path)
+        .map_err(|e| format!("cannot read {config_path}: {e}"))?;
+    let mut json: serde_json::Value =
+        serde_json::from_str(&content).map_err(|e| format!("cannot parse {config_path}: {e}"))?;
+
+    let obj = json.as_object_mut().ok_or("config is not a JSON object")?;
+
+    let mut found = false;
+    if let Some(section) = obj.get_mut(active_key).and_then(|v| v.as_object_mut()) {
+        if section.remove(name).is_some() {
+            found = true;
+        }
+    }
+    if let Some(dk) = disabled_key {
+        if let Some(section) = obj.get_mut(dk).and_then(|v| v.as_object_mut()) {
+            if section.remove(name).is_some() {
+                found = true;
+            }
+        }
+    }
+
+    if !found {
+        return Err(format!("MCP '{name}' not found in config"));
+    }
+
+    let updated =
+        serde_json::to_string_pretty(&json).map_err(|e| format!("serialization error: {e}"))?;
+
+    let tmp_path = format!("{config_path}.tmp");
+    std::fs::write(&tmp_path, &updated).map_err(|e| format!("cannot write temp file: {e}"))?;
+    std::fs::rename(&tmp_path, config_path).map_err(|e| {
+        let _ = std::fs::remove_file(&tmp_path);
+        format!("cannot atomically replace {config_path}: {e}")
+    })?;
+
+    Ok(())
+}
+
 pub fn move_skill_folder(skill_path: &str, skill_name: &str, active: bool) -> Result<(), String> {
     let current = std::path::Path::new(skill_path);
     if active {
@@ -240,6 +339,161 @@ mod tests {
         let path = dir.join(filename);
         fs::write(&path, serde_json::to_string_pretty(&json).unwrap()).unwrap();
         path.to_string_lossy().to_string()
+    }
+
+    // ── add_mcp_to_config ───────────────────────────────────────────────────
+
+    #[test]
+    fn add_mcp_inserts_entry_into_active_key() {
+        let tmp = TempDir::new().unwrap();
+        let config_path = make_mcp_config(
+            tmp.path(),
+            "settings.json",
+            serde_json::json!({ "mcpServers": {} }),
+        );
+
+        add_mcp_to_config(
+            &config_path,
+            "mcpServers",
+            "new-server",
+            serde_json::json!({ "command": "npx", "args": ["-y", "new-server"] }),
+        )
+        .unwrap();
+
+        let content: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(&config_path).unwrap()).unwrap();
+        assert_eq!(content["mcpServers"]["new-server"]["command"], "npx");
+    }
+
+    #[test]
+    fn add_mcp_creates_active_key_when_missing() {
+        let tmp = TempDir::new().unwrap();
+        let config_path = make_mcp_config(tmp.path(), "settings.json", serde_json::json!({}));
+
+        add_mcp_to_config(
+            &config_path,
+            "mcpServers",
+            "srv",
+            serde_json::json!({ "command": "node", "args": [] }),
+        )
+        .unwrap();
+
+        let content: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(&config_path).unwrap()).unwrap();
+        assert!(content["mcpServers"]["srv"].is_object());
+    }
+
+    #[test]
+    fn add_mcp_fails_when_name_already_exists() {
+        let tmp = TempDir::new().unwrap();
+        let config_path = make_mcp_config(
+            tmp.path(),
+            "settings.json",
+            serde_json::json!({ "mcpServers": { "existing": { "command": "npx", "args": [] } } }),
+        );
+
+        let result = add_mcp_to_config(
+            &config_path,
+            "mcpServers",
+            "existing",
+            serde_json::json!({ "command": "node", "args": [] }),
+        );
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("already exists"));
+    }
+
+    #[test]
+    fn add_mcp_creates_file_when_missing() {
+        let tmp = TempDir::new().unwrap();
+        let config_path = tmp
+            .path()
+            .join("settings.json")
+            .to_string_lossy()
+            .to_string();
+
+        add_mcp_to_config(
+            &config_path,
+            "mcpServers",
+            "brand-new",
+            serde_json::json!({ "command": "npx", "args": [] }),
+        )
+        .unwrap();
+
+        assert!(std::path::Path::new(&config_path).exists());
+    }
+
+    // ── remove_mcp_from_config ──────────────────────────────────────────────
+
+    #[test]
+    fn remove_mcp_removes_from_active_key() {
+        let tmp = TempDir::new().unwrap();
+        let config_path = make_mcp_config(
+            tmp.path(),
+            "settings.json",
+            serde_json::json!({
+                "mcpServers": { "target": { "command": "npx", "args": [] } }
+            }),
+        );
+
+        remove_mcp_from_config(&config_path, "mcpServers", Some("disabledMcpServers"), "target")
+            .unwrap();
+
+        let content: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(&config_path).unwrap()).unwrap();
+        assert!(content["mcpServers"].get("target").is_none());
+    }
+
+    #[test]
+    fn remove_mcp_removes_from_disabled_key() {
+        let tmp = TempDir::new().unwrap();
+        let config_path = make_mcp_config(
+            tmp.path(),
+            "settings.json",
+            serde_json::json!({
+                "mcpServers": {},
+                "disabledMcpServers": { "target": { "command": "npx", "args": [] } }
+            }),
+        );
+
+        remove_mcp_from_config(&config_path, "mcpServers", Some("disabledMcpServers"), "target")
+            .unwrap();
+
+        let content: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(&config_path).unwrap()).unwrap();
+        assert!(content["disabledMcpServers"].get("target").is_none());
+    }
+
+    #[test]
+    fn remove_mcp_not_found_returns_err() {
+        let tmp = TempDir::new().unwrap();
+        let config_path = make_mcp_config(
+            tmp.path(),
+            "settings.json",
+            serde_json::json!({ "mcpServers": {} }),
+        );
+
+        let result =
+            remove_mcp_from_config(&config_path, "mcpServers", Some("disabledMcpServers"), "ghost");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("not found"));
+    }
+
+    #[test]
+    fn remove_mcp_works_without_disabled_key() {
+        let tmp = TempDir::new().unwrap();
+        let config_path = make_mcp_config(
+            tmp.path(),
+            "settings.json",
+            serde_json::json!({
+                "mcpServers": { "srv": { "command": "npx", "args": [] } }
+            }),
+        );
+
+        remove_mcp_from_config(&config_path, "mcpServers", None, "srv").unwrap();
+
+        let content: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(&config_path).unwrap()).unwrap();
+        assert!(content["mcpServers"].get("srv").is_none());
     }
 
     // ── move_skill_folder ────────────────────────────────────────────────────
