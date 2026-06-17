@@ -135,12 +135,10 @@ function ExpandableDescription({ skill }: { skill: Skill }) {
       for (const p of candidates) {
         try {
           const text = await invoke<string>('read_text_file', { path: p })
-          if (text.trim()) {
-            setFullContent(text)
-            setExpanded(true)
-            capture('skill_description_expanded', { skill_name: skill.name })
-            return
-          }
+          setFullContent(text)
+          setExpanded(true)
+          capture('skill_description_expanded', { skill_name: skill.name })
+          return
         } catch (e) { lastErr = String(e) }
       }
       setLoadError(lastErr || 'File not found')
@@ -172,7 +170,7 @@ function ExpandableDescription({ skill }: { skill: Skill }) {
           </p>
           {loadError ? (
             <p className="text-[12px] text-[var(--c-text-3)] mt-1.5 leading-relaxed">
-              Could not load full file —{' '}
+              {loadError} —{' '}
               <button
                 onClick={loadFull}
                 className="text-indigo-500 hover:text-indigo-400 transition-colors"
