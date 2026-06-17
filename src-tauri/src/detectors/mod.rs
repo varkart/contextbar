@@ -35,22 +35,36 @@ pub fn detect_all() -> Vec<AiTool> {
 /// Looks for YAML frontmatter (--- ... ---) and extracts the `description:` field.
 /// Falls back to the first non-empty, non-heading, non-separator line.
 /// Truncates to 120 characters.
-pub fn parse_skill_description(skill_path: &std::path::Path) -> Option<String> {
-    let candidates = [skill_path.join("SKILL.md"), {
-        let mut p = skill_path.to_path_buf();
-        let stem = p.file_name()?.to_string_lossy().into_owned();
-        p.set_file_name(format!("{}.md", stem));
-        p
-    }];
+fn skill_md_candidates(skill_path: &std::path::Path) -> Option<[std::path::PathBuf; 2]> {
+    let mut p = skill_path.to_path_buf();
+    let stem = p.file_name()?.to_string_lossy().into_owned();
+    p.set_file_name(format!("{}.md", stem));
+    Some([skill_path.join("SKILL.md"), p])
+}
 
-    for candidate in &candidates {
+pub fn parse_skill_description(skill_path: &std::path::Path) -> Option<String> {
+    for candidate in skill_md_candidates(skill_path)?.iter() {
         if !candidate.exists() {
             continue;
         }
-        let content = std::fs::read_to_string(candidate).ok()?;
-        let desc = extract_description(&content);
-        if desc.is_some() {
-            return desc;
+        if let Ok(content) = std::fs::read_to_string(candidate) {
+            if let Some(desc) = extract_description(&content) {
+                return Some(desc);
+            }
+        }
+    }
+    None
+}
+
+pub fn read_skill_file_content(skill_path: &std::path::Path) -> Option<String> {
+    for candidate in skill_md_candidates(skill_path)?.iter() {
+        if !candidate.exists() {
+            continue;
+        }
+        if let Ok(content) = std::fs::read_to_string(candidate) {
+            if !content.is_empty() {
+                return Some(content);
+            }
         }
     }
     None
