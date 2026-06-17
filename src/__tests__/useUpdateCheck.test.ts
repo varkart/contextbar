@@ -2,7 +2,7 @@ import { renderHook, waitFor } from '@testing-library/react'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { useUpdateCheck } from '../useUpdateCheck'
 
-function mockRelease(tag: string, url = 'https://github.com/varkart/aicontextbar/releases/tag/' + tag) {
+function mockRelease(tag: string, url = 'https://github.com/varkart/llmmanager/releases/tag/' + tag) {
   vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
     json: () => Promise.resolve({ tag_name: tag, html_url: url }),
   }))
@@ -81,7 +81,7 @@ describe('useUpdateCheck', () => {
 
     const { unmount } = renderHook(() => useUpdateCheck('0.5.0'))
     await waitFor(() => {
-      expect(localStorage.getItem('aicontextbar:updateCheck')).not.toBeNull()
+      expect(localStorage.getItem('llmmanager:updateCheck')).not.toBeNull()
     })
     unmount()
 

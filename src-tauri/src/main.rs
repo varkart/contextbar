@@ -2,5 +2,5 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 fn main() {
-    aicontextbar_lib::run()
+    llmmanager_lib::run()
 }

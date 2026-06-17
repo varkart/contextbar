@@ -1,0 +1,25 @@
+schema_version = 1
+id = "cursor"
+name = "Cursor"
+
+[[detection]]
+type = "dir"
+path = "~/.cursor"
+
+[version]
+type = "json_key"
+file = "~/.cursor/argv.json"
+key_path = ["version"]
+
+[[mcp_sources]]
+id = "mcp_json"
+type = "json_key_pair"
+file = "~/.cursor/mcp.json"
+active_key = "mcpServers"
+disabled_key = "disabledMcpServers"
+
+[[skill_sources]]
+id = "skills_dir"
+type = "directory"
+path = "~/.cursor/skills-cursor"
+disabled_subdir = ".disabled"

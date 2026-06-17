@@ -11,8 +11,11 @@ pub struct McpTool {
 }
 
 /// Spawn an MCP server via stdio, run initialize + tools/list, return tool list.
-/// Times out after 8 seconds total.
+/// Times out after 8 seconds total. Returns empty list for HTTP MCPs (no command).
 pub async fn query_tools(command: &str, args: &[String]) -> Result<Vec<McpTool>, String> {
+    if command.is_empty() {
+        return Ok(vec![]);
+    }
     let mut child = AsyncCommand::new(command)
         .args(args)
         .stdin(Stdio::piped())
@@ -34,7 +37,7 @@ pub async fn query_tools(command: &str, args: &[String]) -> Result<Vec<McpTool>,
         "params": {
             "protocolVersion": "2024-11-05",
             "capabilities": {},
-            "clientInfo": { "name": "aicontextbar", "version": env!("CARGO_PKG_VERSION") }
+            "clientInfo": { "name": "LLM Manager", "version": env!("CARGO_PKG_VERSION") }
         }
     });
     stdin
