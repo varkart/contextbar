@@ -53,7 +53,7 @@ const installedTool = {
   version: '1.0',
   installed: true,
   skills: [
-    { name: 'graphify', path: '~/.claude/skills/graphify', description: 'g', active: true, sourceId: 's' },
+    { name: 'graphify', path: '~/.claude/skills/graphify', description: 'g', hasFullDescription: false, active: true, sourceId: 's' },
   ],
   mcps: [
     { name: 'github', command: 'npx', args: [], active: true, hasSecrets: true, secretKeyNames: ['TOKEN'], sourceId: 'settings_json' },
