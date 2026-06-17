@@ -1,22 +1,21 @@
+mod app_state;
+pub(crate) mod backup;
+pub(crate) mod db;
 pub(crate) mod detectors;
 pub(crate) mod doctor;
 pub(crate) mod engine;
 pub(crate) mod error;
 pub(crate) mod installer;
-pub(crate) mod models;
-mod app_state;
-pub(crate) mod backup;
-pub(crate) mod db;
-pub(crate) mod permissions;
 mod mcp_client;
+pub(crate) mod models;
+pub(crate) mod permissions;
 mod watcher;
 
 use crate::models::AiTool;
 use tauri::{
-    Emitter, Manager,
     menu::{Menu, MenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    WebviewUrl, WebviewWindowBuilder,
+    Emitter, Manager, WebviewUrl, WebviewWindowBuilder,
 };
 use tauri_plugin_autostart::MacosLauncher;
 use tauri_plugin_positioner::{Position, WindowExt};
@@ -44,8 +43,7 @@ fn write_settings(val: serde_json::Value) -> Result<(), String> {
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     }
-    std::fs::write(&path, serde_json::to_string_pretty(&val).unwrap())
-        .map_err(|e| e.to_string())
+    std::fs::write(&path, serde_json::to_string_pretty(&val).unwrap()).map_err(|e| e.to_string())
 }
 
 // ---------------------------------------------------------------------------
@@ -75,7 +73,6 @@ fn get_tools(app: tauri::AppHandle) -> Vec<AiTool> {
 fn hide_window(window: tauri::WebviewWindow) {
     let _ = window.hide();
 }
-
 
 #[tauri::command]
 fn get_version() -> String {
@@ -118,7 +115,9 @@ fn set_shortcut(app: tauri::AppHandle, shortcut: String) -> Result<(), String> {
     use tauri_plugin_global_shortcut::GlobalShortcutExt;
 
     // Unregister all currently registered shortcuts managed by this plugin
-    app.global_shortcut().unregister_all().map_err(|e| e.to_string())?;
+    app.global_shortcut()
+        .unregister_all()
+        .map_err(|e| e.to_string())?;
 
     // Parse and register the new shortcut
     let parsed: tauri_plugin_global_shortcut::Shortcut =
@@ -255,7 +254,10 @@ fn read_text_file(path: String) -> Result<String, String> {
 // ---------------------------------------------------------------------------
 
 #[tauri::command]
-async fn query_mcp_tools(command: String, args: Vec<String>) -> Result<Vec<mcp_client::McpTool>, String> {
+async fn query_mcp_tools(
+    command: String,
+    args: Vec<String>,
+) -> Result<Vec<mcp_client::McpTool>, String> {
     mcp_client::query_tools(&command, &args).await
 }
 
@@ -296,12 +298,23 @@ fn set_mcp_active(
         .ok_or_else(|| format!("no manifest for '{tool_id}'"))?;
 
     for (idx, source) in manifest.mcp_sources.iter().enumerate() {
-        let eff_id = source.id.clone().unwrap_or_else(|| format!("source_{}", idx));
-        if eff_id != source_id { continue; }
+        let eff_id = source
+            .id
+            .clone()
+            .unwrap_or_else(|| format!("source_{}", idx));
+        if eff_id != source_id {
+            continue;
+        }
 
         let result = match &source.spec {
-            McpSourceSpec::JsonKeyPair { file, active_key, disabled_key, .. } => {
-                let dk = disabled_key.as_deref()
+            McpSourceSpec::JsonKeyPair {
+                file,
+                active_key,
+                disabled_key,
+                ..
+            } => {
+                let dk = disabled_key
+                    .as_deref()
                     .ok_or("source has no disabled_key; toggling not supported for this source")?;
                 let path = expand_home(file, &home);
                 app_state::move_mcp_in_config(
@@ -312,15 +325,15 @@ fn set_mcp_active(
                     dk,
                 )
             }
-            McpSourceSpec::ExtensionDir { enablement_file: Some(ef), .. } => {
-                let ext_name = extension_name.as_deref()
+            McpSourceSpec::ExtensionDir {
+                enablement_file: Some(ef),
+                ..
+            } => {
+                let ext_name = extension_name
+                    .as_deref()
                     .ok_or("extension_name required for extension-dir MCP toggle")?;
                 let ef_path = expand_home(ef, &home);
-                app_state::toggle_extension_active(
-                    &ef_path.to_string_lossy(),
-                    ext_name,
-                    active,
-                )
+                app_state::toggle_extension_active(&ef_path.to_string_lossy(), ext_name, active)
             }
             _ => Err(format!("source '{source_id}' does not support toggling")),
         };
@@ -331,7 +344,9 @@ fn set_mcp_active(
         return result;
     }
 
-    Err(format!("source '{source_id}' not found in '{tool_id}' manifest"))
+    Err(format!(
+        "source '{source_id}' not found in '{tool_id}' manifest"
+    ))
 }
 
 // ---------------------------------------------------------------------------
@@ -343,7 +358,8 @@ fn get_permissions(tool_id: String) -> Result<permissions::ToolPermissions, Stri
     let home = dirs::home_dir().ok_or("cannot find home dir")?;
     let manifest = crate::engine::load_manifest(&tool_id)
         .ok_or_else(|| format!("no manifest for '{tool_id}'"))?;
-    let spec = manifest.permissions
+    let spec = manifest
+        .permissions
         .ok_or_else(|| format!("'{tool_id}' manifest has no permissions section"))?;
     permissions::read(&spec, &home)
 }
@@ -357,7 +373,8 @@ fn add_permission_rule(
     let home = dirs::home_dir().ok_or("cannot find home dir")?;
     let manifest = crate::engine::load_manifest(&tool_id)
         .ok_or_else(|| format!("no manifest for '{tool_id}'"))?;
-    let spec = manifest.permissions
+    let spec = manifest
+        .permissions
         .ok_or_else(|| format!("'{tool_id}' manifest has no permissions section"))?;
     permissions::add_rule(&spec, &home, &rule, section)
 }
@@ -371,7 +388,8 @@ fn remove_permission_rule(
     let home = dirs::home_dir().ok_or("cannot find home dir")?;
     let manifest = crate::engine::load_manifest(&tool_id)
         .ok_or_else(|| format!("no manifest for '{tool_id}'"))?;
-    let spec = manifest.permissions
+    let spec = manifest
+        .permissions
         .ok_or_else(|| format!("'{tool_id}' manifest has no permissions section"))?;
     permissions::remove_rule(&spec, &home, &rule, section)
 }
@@ -438,8 +456,14 @@ struct NpmInstallState {
 fn get_mcp_install_state(command: String, args: Vec<String>) -> NpmInstallState {
     let package = installer::npm_package_from_mcp(&command, &args);
     let is_npx = package.is_some();
-    let installed_version = package.as_deref().and_then(installer::get_npm_installed_version);
-    NpmInstallState { package, installed_version, is_npx }
+    let installed_version = package
+        .as_deref()
+        .and_then(installer::get_npm_installed_version);
+    NpmInstallState {
+        package,
+        installed_version,
+        is_npx,
+    }
 }
 
 #[tauri::command]
@@ -450,7 +474,10 @@ async fn install_mcp_npm(
     package_name: String,
 ) -> Result<String, String> {
     let version = installer::install_npm_global(&package_name).await?;
-    let detail = format!(r#"{{"version":"{}","package":"{}"}}"#, version, package_name);
+    let detail = format!(
+        r#"{{"version":"{}","package":"{}"}}"#,
+        version, package_name
+    );
     let db = app.state::<db::DbState>();
     db::log_event(&db, "mcp_npm_installed", &tool_id, &mcp_name, Some(&detail));
     let _ = app.emit("tools-changed", ());
@@ -467,24 +494,17 @@ async fn get_mcp_npm_latest(package_name: String) -> Option<String> {
 // ---------------------------------------------------------------------------
 
 #[tauri::command]
-fn get_notifications(
-    db: tauri::State<'_, db::DbState>,
-) -> Result<Vec<db::Notification>, String> {
+fn get_notifications(db: tauri::State<'_, db::DbState>) -> Result<Vec<db::Notification>, String> {
     db::get_active_notifications(&db).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-fn dismiss_notification(
-    db: tauri::State<'_, db::DbState>,
-    id: i64,
-) -> Result<(), String> {
+fn dismiss_notification(db: tauri::State<'_, db::DbState>, id: i64) -> Result<(), String> {
     db::dismiss_notification(&db, id).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-fn dismiss_all_notifications(
-    db: tauri::State<'_, db::DbState>,
-) -> Result<(), String> {
+fn dismiss_all_notifications(db: tauri::State<'_, db::DbState>) -> Result<(), String> {
     db::dismiss_all_notifications(&db).map_err(|e| e.to_string())
 }
 
@@ -533,12 +553,18 @@ fn get_audit_log(
 // ---------------------------------------------------------------------------
 
 #[tauri::command]
-fn debug_add_notification(db: tauri::State<'_, db::DbState>, app: tauri::AppHandle) -> Result<(), String> {
+fn debug_add_notification(
+    db: tauri::State<'_, db::DbState>,
+    app: tauri::AppHandle,
+) -> Result<(), String> {
     // Use a timestamp-based key so each click creates a new notification
-    let key = format!("debug:test:{}", std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_millis());
+    let key = format!(
+        "debug:test:{}",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis()
+    );
     db::add_notification(
         &db,
         "warn",
@@ -593,7 +619,10 @@ pub fn run() {
         }))
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_positioner::init())
-        .plugin(tauri_plugin_autostart::init(MacosLauncher::LaunchAgent, None))
+        .plugin(tauri_plugin_autostart::init(
+            MacosLauncher::LaunchAgent,
+            None,
+        ))
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
@@ -751,7 +780,7 @@ fn open_main_window(app: &tauri::AppHandle, hash: Option<&str>) {
 
     #[cfg(target_os = "macos")]
     if get_vibrancy() {
-        use window_vibrancy::{NSVisualEffectMaterial, apply_vibrancy};
+        use window_vibrancy::{apply_vibrancy, NSVisualEffectMaterial};
         let _ = apply_vibrancy(&window, NSVisualEffectMaterial::HudWindow, None, None);
     }
 

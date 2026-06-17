@@ -1,15 +1,26 @@
-use crate::models::Skill;
-use crate::detectors::parse_skill_description;
 use super::manifest::{SkillSource, SkillSourceSpec};
 use super::resolve::{expand_home, version_in_range};
+use crate::detectors::parse_skill_description;
+use crate::models::Skill;
 
-pub fn collect(sources: &[SkillSource], version: Option<&str>, home: &std::path::Path) -> Vec<Skill> {
+pub fn collect(
+    sources: &[SkillSource],
+    version: Option<&str>,
+    home: &std::path::Path,
+) -> Vec<Skill> {
     let mut all = Vec::new();
     for (idx, entry) in sources.iter().enumerate() {
-        if !version_in_range(version, entry.min_version.as_deref(), entry.max_version.as_deref()) {
+        if !version_in_range(
+            version,
+            entry.min_version.as_deref(),
+            entry.max_version.as_deref(),
+        ) {
             continue;
         }
-        let source_id = entry.id.clone().unwrap_or_else(|| format!("source_{}", idx));
+        let source_id = entry
+            .id
+            .clone()
+            .unwrap_or_else(|| format!("source_{}", idx));
         let mut skills = read_source(&entry.spec, home);
         for skill in &mut skills {
             skill.source_id = source_id.clone();
@@ -22,9 +33,10 @@ pub fn collect(sources: &[SkillSource], version: Option<&str>, home: &std::path:
 
 fn read_source(source: &SkillSourceSpec, home: &std::path::Path) -> Vec<Skill> {
     match source {
-        SkillSourceSpec::Directory { path, disabled_subdir } => {
-            read_directory(&expand_home(path, home), disabled_subdir.as_deref())
-        }
+        SkillSourceSpec::Directory {
+            path,
+            disabled_subdir,
+        } => read_directory(&expand_home(path, home), disabled_subdir.as_deref()),
     }
 }
 
@@ -34,10 +46,18 @@ fn read_directory(dir: &std::path::Path, disabled_subdir: Option<&str>) -> Vec<S
     if let Ok(entries) = std::fs::read_dir(dir) {
         for entry in entries.flatten() {
             let name = entry.file_name().to_string_lossy().to_string();
-            if name.starts_with('.') { continue; }
+            if name.starts_with('.') {
+                continue;
+            }
             let path = entry.path();
             let description = parse_skill_description(&path);
-            skills.push(Skill { name, path: path.to_string_lossy().to_string(), description, active: true, source_id: String::new() });
+            skills.push(Skill {
+                name,
+                path: path.to_string_lossy().to_string(),
+                description,
+                active: true,
+                source_id: String::new(),
+            });
         }
     }
 
@@ -46,10 +66,18 @@ fn read_directory(dir: &std::path::Path, disabled_subdir: Option<&str>) -> Vec<S
         if let Ok(entries) = std::fs::read_dir(&disabled_dir) {
             for entry in entries.flatten() {
                 let name = entry.file_name().to_string_lossy().to_string();
-                if name.starts_with('.') { continue; }
+                if name.starts_with('.') {
+                    continue;
+                }
                 let path = entry.path();
                 let description = parse_skill_description(&path);
-                skills.push(Skill { name, path: path.to_string_lossy().to_string(), description, active: false, source_id: String::new() });
+                skills.push(Skill {
+                    name,
+                    path: path.to_string_lossy().to_string(),
+                    description,
+                    active: false,
+                    source_id: String::new(),
+                });
             }
         }
     }
@@ -59,13 +87,18 @@ fn read_directory(dir: &std::path::Path, disabled_subdir: Option<&str>) -> Vec<S
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::manifest::SkillSource;
+    use super::*;
     use std::fs;
     use tempfile::TempDir;
 
     fn wrap(spec: SkillSourceSpec) -> SkillSource {
-        SkillSource { id: None, min_version: None, max_version: None, spec }
+        SkillSource {
+            id: None,
+            min_version: None,
+            max_version: None,
+            spec,
+        }
     }
 
     fn make_skill_dir(parent: &std::path::Path, name: &str) {
@@ -162,6 +195,9 @@ mod tests {
             },
         };
         let skills = collect(&[source], Some("2.9"), tmp.path());
-        assert!(skills.is_empty(), "version 2.9 below min 3.0 should skip source");
+        assert!(
+            skills.is_empty(),
+            "version 2.9 below min 3.0 should skip source"
+        );
     }
 }

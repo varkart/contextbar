@@ -43,7 +43,11 @@ fn find_npm() -> Option<PathBuf> {
     std::env::var("PATH").ok().and_then(|path_var| {
         path_var.split(':').find_map(|dir| {
             let p = std::path::Path::new(dir).join("npm");
-            if p.exists() { Some(p) } else { None }
+            if p.exists() {
+                Some(p)
+            } else {
+                None
+            }
         })
     })
 }
@@ -124,8 +128,8 @@ pub async fn install_npm_global(package_name: &str) -> Result<String, String> {
     }
 
     // Re-query installed version to confirm
-    let version = get_npm_installed_version(package_name)
-        .unwrap_or_else(|| "installed".to_string());
+    let version =
+        get_npm_installed_version(package_name).unwrap_or_else(|| "installed".to_string());
     Ok(version)
 }
 
@@ -165,7 +169,11 @@ pub async fn get_npm_latest_version(package_name: &str) -> Option<String> {
         return None;
     }
     let version = String::from_utf8_lossy(&output.stdout).trim().to_string();
-    if version.is_empty() { None } else { Some(version) }
+    if version.is_empty() {
+        None
+    } else {
+        Some(version)
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -191,7 +199,8 @@ mod tests {
 
     #[test]
     fn npx_with_y_flag_extracts_package() {
-        let pkg = npm_package_from_mcp("npx", &args(&["-y", "@modelcontextprotocol/server-github"]));
+        let pkg =
+            npm_package_from_mcp("npx", &args(&["-y", "@modelcontextprotocol/server-github"]));
         assert_eq!(pkg, Some("@modelcontextprotocol/server-github".into()));
     }
 
@@ -225,7 +234,11 @@ mod tests {
     fn npx_extra_args_after_package_ignored() {
         let pkg = npm_package_from_mcp(
             "npx",
-            &args(&["-y", "@modelcontextprotocol/server-filesystem", "/home/user"]),
+            &args(&[
+                "-y",
+                "@modelcontextprotocol/server-filesystem",
+                "/home/user",
+            ]),
         );
         assert_eq!(pkg, Some("@modelcontextprotocol/server-filesystem".into()));
     }

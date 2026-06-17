@@ -42,8 +42,7 @@ pub fn snapshot(config_path: &str) -> Result<(), String> {
     let ext = src.extension().and_then(|e| e.to_str()).unwrap_or("bak");
     let dest = dir.join(format!("{ts}.{ext}"));
 
-    std::fs::copy(src, &dest)
-        .map_err(|e| format!("backup copy failed: {e}"))?;
+    std::fs::copy(src, &dest).map_err(|e| format!("backup copy failed: {e}"))?;
 
     prune_old(&dir, MAX_SNAPSHOTS);
     Ok(())
@@ -79,8 +78,7 @@ pub fn restore_snapshot(config_path: &str, timestamp_ms: u128) -> Result<(), Str
         .ok_or_else(|| format!("snapshot {timestamp_ms} not found for {config_path}"))?;
 
     let tmp = format!("{config_path}.restore_tmp");
-    std::fs::copy(&src, &tmp)
-        .map_err(|e| format!("cannot stage restore: {e}"))?;
+    std::fs::copy(&src, &tmp).map_err(|e| format!("cannot stage restore: {e}"))?;
     std::fs::rename(&tmp, config_path).map_err(|e| {
         let _ = std::fs::remove_file(&tmp);
         format!("cannot atomically restore {config_path}: {e}")
@@ -132,7 +130,11 @@ mod tests {
     #[test]
     fn snapshot_missing_file_returns_ok() {
         let tmp = TempDir::new().unwrap();
-        let path = tmp.path().join("nonexistent.json").to_string_lossy().to_string();
+        let path = tmp
+            .path()
+            .join("nonexistent.json")
+            .to_string_lossy()
+            .to_string();
         assert!(snapshot(&path).is_ok());
         assert!(list_snapshots(&path).is_empty());
     }
