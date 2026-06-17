@@ -30,7 +30,9 @@ pub struct PermissionsSpec {
     pub key: String,
 }
 
-fn default_permissions_key() -> String { "permissions".to_string() }
+fn default_permissions_key() -> String {
+    "permissions".to_string()
+}
 
 /// Wrapper that pairs an MCP source spec with optional version bounds.
 /// Both bounds are inclusive. Absent bound = unbounded.
@@ -88,9 +90,7 @@ pub enum McpToggleSpec {
 pub enum SkillToggleSpec {
     /// Move the skill directory into/out of a disabled subdirectory.
     #[allow(dead_code)]
-    DirMove {
-        disabled_subdir: String,
-    },
+    DirMove { disabled_subdir: String },
 }
 
 /// Each spec is one candidate. Tool is installed if ANY spec matches.
@@ -98,12 +98,21 @@ pub enum SkillToggleSpec {
 #[derive(Debug, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum DetectionSpec {
-    Dir { path: String },
-    File { path: String },
-    Binary { name: String },
+    Dir {
+        path: String,
+    },
+    File {
+        path: String,
+    },
+    Binary {
+        name: String,
+    },
     /// VSCode-style extension dir: `{extensions_dir}/{prefix}{version}` must exist.
     /// Detected version = the suffix after prefix in the dir name.
-    VscodeExtension { extensions_dir: String, prefix: String },
+    VscodeExtension {
+        extensions_dir: String,
+        prefix: String,
+    },
 }
 
 #[derive(Debug, Deserialize)]
@@ -122,14 +131,15 @@ pub enum VersionSpec {
         parse: String,
     },
     /// Read a string value from a JSON file at a nested key path.
-    JsonKey {
-        file: String,
-        key_path: Vec<String>,
-    },
+    JsonKey { file: String, key_path: Vec<String> },
 }
 
-fn default_timeout_ms() -> u64 { 800 }
-fn default_parse_mode() -> String { "first_line".to_string() }
+fn default_timeout_ms() -> u64 {
+    800
+}
+fn default_parse_mode() -> String {
+    "first_line".to_string()
+}
 
 #[derive(Debug, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
@@ -152,10 +162,7 @@ pub enum McpSourceSpec {
         jsonc: bool,
     },
     /// Zed's context_servers schema: command nested as {command: {path, args}}.
-    ZedContextServers {
-        file: String,
-        key_path: Vec<String>,
-    },
+    ZedContextServers { file: String, key_path: Vec<String> },
     /// Directory of extension subdirs each containing a manifest JSON file.
     ExtensionDir {
         dir: String,
@@ -183,9 +190,7 @@ pub enum McpSourceSpec {
     },
     /// Claude Code's ~/.claude.json: collects mcpServers from all projects entries,
     /// deduplicated by name (first occurrence wins).
-    ClaudeDotfile {
-        file: String,
-    },
+    ClaudeDotfile { file: String },
     /// Run `claude mcp list` and parse its output to capture cloud-synced MCPs
     /// (e.g. claude.ai Context7, Google Drive) that have no local config file.
     ClaudeMcpList {
@@ -196,10 +201,16 @@ pub enum McpSourceSpec {
     },
 }
 
-fn default_claude_binary() -> String { "claude".to_string() }
-fn default_mcp_list_timeout_ms() -> u64 { 6000 }
+fn default_claude_binary() -> String {
+    "claude".to_string()
+}
+fn default_mcp_list_timeout_ms() -> u64 {
+    6000
+}
 
-fn default_mcp_key() -> String { "mcpServers".to_string() }
+fn default_mcp_key() -> String {
+    "mcpServers".to_string()
+}
 
 #[derive(Debug, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]

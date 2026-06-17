@@ -1,7 +1,7 @@
-use std::collections::HashSet;
-use tauri::{AppHandle, Emitter};
 use crate::db::{self, DbState};
 use crate::models::AiTool;
+use std::collections::HashSet;
+use tauri::{AppHandle, Emitter};
 
 const KEY_PREFIX: &str = "doctor:mcp:";
 
@@ -67,9 +67,9 @@ pub(crate) fn command_on_path(command: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::models::{AiTool, McpServer};
     use rusqlite::Connection;
     use std::sync::{Arc, Mutex};
-    use crate::models::{AiTool, McpServer};
 
     fn test_db() -> DbState {
         let mut conn = Connection::open_in_memory().unwrap();
@@ -114,7 +114,9 @@ mod tests {
 
     #[test]
     fn unknown_binary_not_on_path() {
-        assert!(!command_on_path("__llmmanager_definitely_not_real_binary__"));
+        assert!(!command_on_path(
+            "__llmmanager_definitely_not_real_binary__"
+        ));
     }
 
     #[test]
@@ -189,7 +191,10 @@ mod tests {
         let db = test_db();
         let tool = || make_tool("t", vec![make_mcp("bad", "__not_real__", true)]);
         check(&[tool()], &db);
-        assert!(!check(&[tool()], &db), "second run with same issue: no change");
+        assert!(
+            !check(&[tool()], &db),
+            "second run with same issue: no change"
+        );
         assert_eq!(db::get_active_notifications(&db).unwrap().len(), 1);
     }
 
@@ -197,7 +202,10 @@ mod tests {
     fn resolves_stale_notification_when_issue_fixed() {
         let db = test_db();
         // First run: binary missing
-        check(&[make_tool("t", vec![make_mcp("mcp1", "__not_real__", true)])], &db);
+        check(
+            &[make_tool("t", vec![make_mcp("mcp1", "__not_real__", true)])],
+            &db,
+        );
         assert_eq!(db::get_active_notifications(&db).unwrap().len(), 1);
 
         // Second run: binary now found
@@ -209,10 +217,13 @@ mod tests {
     #[test]
     fn only_bad_mcps_get_notifications() {
         let db = test_db();
-        let tool = make_tool("t", vec![
-            make_mcp("good", "ls",            true),
-            make_mcp("bad",  "__not_real__",  true),
-        ]);
+        let tool = make_tool(
+            "t",
+            vec![
+                make_mcp("good", "ls", true),
+                make_mcp("bad", "__not_real__", true),
+            ],
+        );
         check(&[tool], &db);
         let notifs = db::get_active_notifications(&db).unwrap();
         assert_eq!(notifs.len(), 1);

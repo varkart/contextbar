@@ -19,7 +19,9 @@ where
     T: Send + 'static,
 {
     let (tx, rx) = std::sync::mpsc::channel();
-    std::thread::spawn(move || { let _ = tx.send(f()); });
+    std::thread::spawn(move || {
+        let _ = tx.send(f());
+    });
     rx.recv_timeout(dur).ok().flatten()
 }
 
@@ -34,15 +36,12 @@ pub fn detect_all() -> Vec<AiTool> {
 /// Falls back to the first non-empty, non-heading, non-separator line.
 /// Truncates to 120 characters.
 pub fn parse_skill_description(skill_path: &std::path::Path) -> Option<String> {
-    let candidates = [
-        skill_path.join("SKILL.md"),
-        {
-            let mut p = skill_path.to_path_buf();
-            let stem = p.file_name()?.to_string_lossy().into_owned();
-            p.set_file_name(format!("{}.md", stem));
-            p
-        },
-    ];
+    let candidates = [skill_path.join("SKILL.md"), {
+        let mut p = skill_path.to_path_buf();
+        let stem = p.file_name()?.to_string_lossy().into_owned();
+        p.set_file_name(format!("{}.md", stem));
+        p
+    }];
 
     for candidate in &candidates {
         if !candidate.exists() {
@@ -145,7 +144,8 @@ pub fn parse_mcp_servers(
             };
 
             // httpUrl = streamable HTTP, url = SSE — both treated as remote URL
-            let url = cfg.get("httpUrl")
+            let url = cfg
+                .get("httpUrl")
                 .or_else(|| cfg.get("url"))
                 .and_then(|v| v.as_str())
                 .map(|s| s.to_string());
@@ -220,7 +220,10 @@ mod tests {
         )
         .unwrap();
         let desc = parse_skill_description(&skill_dir);
-        assert_eq!(desc, Some("Keep a PR merge-ready by triaging comments.".to_string()));
+        assert_eq!(
+            desc,
+            Some("Keep a PR merge-ready by triaging comments.".to_string())
+        );
     }
 
     #[test]

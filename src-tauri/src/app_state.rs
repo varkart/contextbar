@@ -32,8 +32,8 @@ pub fn move_mcp_in_config(
 
     let content = std::fs::read_to_string(config_path)
         .map_err(|e| format!("cannot read {config_path}: {e}"))?;
-    let mut json: serde_json::Value = serde_json::from_str(&content)
-        .map_err(|e| format!("cannot parse {config_path}: {e}"))?;
+    let mut json: serde_json::Value =
+        serde_json::from_str(&content).map_err(|e| format!("cannot parse {config_path}: {e}"))?;
 
     let obj = json.as_object_mut().ok_or("config is not a JSON object")?;
 
@@ -52,14 +52,13 @@ pub fn move_mcp_in_config(
         .ok_or("destination section is not an object")?
         .insert(mcp_name.to_string(), entry);
 
-    let updated = serde_json::to_string_pretty(&json)
-        .map_err(|e| format!("serialization error: {e}"))?;
+    let updated =
+        serde_json::to_string_pretty(&json).map_err(|e| format!("serialization error: {e}"))?;
 
     // Atomic write: write to sibling temp file, then rename.
     // On the same filesystem (always true for config files) rename is atomic.
     let tmp_path = format!("{config_path}.tmp");
-    std::fs::write(&tmp_path, &updated)
-        .map_err(|e| format!("cannot write temp file: {e}"))?;
+    std::fs::write(&tmp_path, &updated).map_err(|e| format!("cannot write temp file: {e}"))?;
     std::fs::rename(&tmp_path, config_path).map_err(|e| {
         let _ = std::fs::remove_file(&tmp_path);
         format!("cannot atomically replace {config_path}: {e}")
@@ -71,7 +70,11 @@ pub fn move_mcp_in_config(
 /// Toggle an extension in extension-enablement.json.
 /// Disabled entries are preserved under a `_disabled` key so re-enabling
 /// restores any previous overrides.
-pub fn toggle_extension_active(enablement_path: &str, extension_name: &str, active: bool) -> Result<(), String> {
+pub fn toggle_extension_active(
+    enablement_path: &str,
+    extension_name: &str,
+    active: bool,
+) -> Result<(), String> {
     let lock = config_lock(enablement_path);
     let _guard = lock.lock().unwrap();
 
@@ -84,7 +87,9 @@ pub fn toggle_extension_active(enablement_path: &str, extension_name: &str, acti
     let mut json: serde_json::Value = serde_json::from_str(&json_str)
         .map_err(|e| format!("cannot parse {enablement_path}: {e}"))?;
 
-    let obj = json.as_object_mut().ok_or("enablement file is not a JSON object")?;
+    let obj = json
+        .as_object_mut()
+        .ok_or("enablement file is not a JSON object")?;
 
     if active {
         // Move from _disabled back to root
@@ -96,7 +101,8 @@ pub fn toggle_extension_active(enablement_path: &str, extension_name: &str, acti
         obj.insert(extension_name.to_string(), entry);
     } else {
         // Move from root to _disabled (preserve any existing overrides)
-        let entry = obj.remove(extension_name)
+        let entry = obj
+            .remove(extension_name)
             .ok_or_else(|| format!("extension '{extension_name}' not found in enablement file"))?;
         obj.entry("_disabled")
             .or_insert_with(|| serde_json::Value::Object(serde_json::Map::new()))
@@ -105,8 +111,8 @@ pub fn toggle_extension_active(enablement_path: &str, extension_name: &str, acti
             .insert(extension_name.to_string(), entry);
     }
 
-    let updated = serde_json::to_string_pretty(&json)
-        .map_err(|e| format!("serialization error: {e}"))?;
+    let updated =
+        serde_json::to_string_pretty(&json).map_err(|e| format!("serialization error: {e}"))?;
 
     // Ensure parent directory exists (file may not exist yet)
     if let Some(parent) = std::path::Path::new(enablement_path).parent() {
@@ -114,8 +120,7 @@ pub fn toggle_extension_active(enablement_path: &str, extension_name: &str, acti
     }
 
     let tmp_path = format!("{enablement_path}.tmp");
-    std::fs::write(&tmp_path, &updated)
-        .map_err(|e| format!("cannot write temp file: {e}"))?;
+    std::fs::write(&tmp_path, &updated).map_err(|e| format!("cannot write temp file: {e}"))?;
     std::fs::rename(&tmp_path, enablement_path).map_err(|e| {
         let _ = std::fs::remove_file(&tmp_path);
         format!("cannot atomically replace {enablement_path}: {e}")
@@ -141,19 +146,31 @@ pub fn update_permissions_file(
 
     // Read existing file or start with empty object
     let raw = std::fs::read_to_string(config_path).unwrap_or_else(|_| "{}".to_string());
-    let mut json: serde_json::Value = serde_json::from_str(&raw)
-        .map_err(|e| format!("cannot parse {config_path}: {e}"))?;
+    let mut json: serde_json::Value =
+        serde_json::from_str(&raw).map_err(|e| format!("cannot parse {config_path}: {e}"))?;
 
     let obj = json.as_object_mut().ok_or("config is not a JSON object")?;
 
     // Extract current permissions (default empty)
     let perms_val = obj.get(permissions_key).cloned().unwrap_or_default();
     let mut perms = crate::permissions::ToolPermissions {
-        allow: perms_val.get("allow").and_then(|v| v.as_array())
-            .map(|a| a.iter().filter_map(|v| v.as_str().map(|s| s.to_string())).collect())
+        allow: perms_val
+            .get("allow")
+            .and_then(|v| v.as_array())
+            .map(|a| {
+                a.iter()
+                    .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                    .collect()
+            })
             .unwrap_or_default(),
-        deny: perms_val.get("deny").and_then(|v| v.as_array())
-            .map(|a| a.iter().filter_map(|v| v.as_str().map(|s| s.to_string())).collect())
+        deny: perms_val
+            .get("deny")
+            .and_then(|v| v.as_array())
+            .map(|a| {
+                a.iter()
+                    .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                    .collect()
+            })
             .unwrap_or_default(),
     };
 
@@ -165,16 +182,15 @@ pub fn update_permissions_file(
         serde_json::json!({ "allow": perms.allow, "deny": perms.deny }),
     );
 
-    let updated = serde_json::to_string_pretty(&json)
-        .map_err(|e| format!("serialization error: {e}"))?;
+    let updated =
+        serde_json::to_string_pretty(&json).map_err(|e| format!("serialization error: {e}"))?;
 
     if let Some(parent) = std::path::Path::new(config_path).parent() {
         std::fs::create_dir_all(parent).map_err(|e| format!("cannot create dir: {e}"))?;
     }
 
     let tmp = format!("{config_path}.tmp");
-    std::fs::write(&tmp, &updated)
-        .map_err(|e| format!("cannot write temp file: {e}"))?;
+    std::fs::write(&tmp, &updated).map_err(|e| format!("cannot write temp file: {e}"))?;
     std::fs::rename(&tmp, config_path).map_err(|e| {
         let _ = std::fs::remove_file(&tmp);
         format!("cannot atomically replace {config_path}: {e}")
@@ -285,11 +301,22 @@ mod tests {
     #[test]
     fn disable_mcp_moves_to_disabled_section() {
         let tmp = TempDir::new().unwrap();
-        let config_path = make_mcp_config(tmp.path(), "settings.json", serde_json::json!({
-            "mcpServers": { "my-server": { "command": "npx", "args": [] } }
-        }));
+        let config_path = make_mcp_config(
+            tmp.path(),
+            "settings.json",
+            serde_json::json!({
+                "mcpServers": { "my-server": { "command": "npx", "args": [] } }
+            }),
+        );
 
-        move_mcp_in_config(&config_path, "my-server", false, "mcpServers", "disabledMcpServers").unwrap();
+        move_mcp_in_config(
+            &config_path,
+            "my-server",
+            false,
+            "mcpServers",
+            "disabledMcpServers",
+        )
+        .unwrap();
 
         let content: serde_json::Value =
             serde_json::from_str(&fs::read_to_string(&config_path).unwrap()).unwrap();
@@ -300,11 +327,22 @@ mod tests {
     #[test]
     fn enable_mcp_moves_back_to_active_section() {
         let tmp = TempDir::new().unwrap();
-        let config_path = make_mcp_config(tmp.path(), "settings.json", serde_json::json!({
-            "disabledMcpServers": { "my-server": { "command": "npx", "args": [] } }
-        }));
+        let config_path = make_mcp_config(
+            tmp.path(),
+            "settings.json",
+            serde_json::json!({
+                "disabledMcpServers": { "my-server": { "command": "npx", "args": [] } }
+            }),
+        );
 
-        move_mcp_in_config(&config_path, "my-server", true, "mcpServers", "disabledMcpServers").unwrap();
+        move_mcp_in_config(
+            &config_path,
+            "my-server",
+            true,
+            "mcpServers",
+            "disabledMcpServers",
+        )
+        .unwrap();
 
         let content: serde_json::Value =
             serde_json::from_str(&fs::read_to_string(&config_path).unwrap()).unwrap();
@@ -315,11 +353,21 @@ mod tests {
     #[test]
     fn move_mcp_missing_returns_err() {
         let tmp = TempDir::new().unwrap();
-        let config_path = make_mcp_config(tmp.path(), "settings.json", serde_json::json!({
-            "mcpServers": {}
-        }));
+        let config_path = make_mcp_config(
+            tmp.path(),
+            "settings.json",
+            serde_json::json!({
+                "mcpServers": {}
+            }),
+        );
 
-        let result = move_mcp_in_config(&config_path, "ghost", false, "mcpServers", "disabledMcpServers");
+        let result = move_mcp_in_config(
+            &config_path,
+            "ghost",
+            false,
+            "mcpServers",
+            "disabledMcpServers",
+        );
         assert!(result.is_err());
     }
 
@@ -328,17 +376,25 @@ mod tests {
         use std::sync::Arc;
         let tmp = TempDir::new().unwrap();
         // Two distinct MCPs in the same config file
-        let config_path = Arc::new(make_mcp_config(tmp.path(), "settings.json", serde_json::json!({
-            "mcpServers": {
-                "alpha": { "command": "npx", "args": [] },
-                "beta":  { "command": "npx", "args": [] }
-            }
-        })));
+        let config_path = Arc::new(make_mcp_config(
+            tmp.path(),
+            "settings.json",
+            serde_json::json!({
+                "mcpServers": {
+                    "alpha": { "command": "npx", "args": [] },
+                    "beta":  { "command": "npx", "args": [] }
+                }
+            }),
+        ));
 
         let p1 = config_path.clone();
         let p2 = config_path.clone();
-        let t1 = std::thread::spawn(move || move_mcp_in_config(&p1, "alpha", false, "mcpServers", "disabledMcpServers"));
-        let t2 = std::thread::spawn(move || move_mcp_in_config(&p2, "beta", false, "mcpServers", "disabledMcpServers"));
+        let t1 = std::thread::spawn(move || {
+            move_mcp_in_config(&p1, "alpha", false, "mcpServers", "disabledMcpServers")
+        });
+        let t2 = std::thread::spawn(move || {
+            move_mcp_in_config(&p2, "beta", false, "mcpServers", "disabledMcpServers")
+        });
 
         t1.join().unwrap().unwrap();
         t2.join().unwrap().unwrap();
@@ -355,11 +411,22 @@ mod tests {
     #[test]
     fn atomic_write_leaves_no_tmp_file_on_success() {
         let tmp = TempDir::new().unwrap();
-        let config_path = make_mcp_config(tmp.path(), "settings.json", serde_json::json!({
-            "mcpServers": { "srv": { "command": "node", "args": [] } }
-        }));
+        let config_path = make_mcp_config(
+            tmp.path(),
+            "settings.json",
+            serde_json::json!({
+                "mcpServers": { "srv": { "command": "node", "args": [] } }
+            }),
+        );
 
-        move_mcp_in_config(&config_path, "srv", false, "mcpServers", "disabledMcpServers").unwrap();
+        move_mcp_in_config(
+            &config_path,
+            "srv",
+            false,
+            "mcpServers",
+            "disabledMcpServers",
+        )
+        .unwrap();
 
         assert!(!std::path::Path::new(&format!("{config_path}.tmp")).exists());
     }
@@ -375,9 +442,12 @@ mod tests {
     #[test]
     fn disable_extension_moves_to_disabled_section() {
         let tmp = TempDir::new().unwrap();
-        let path = make_enablement(tmp.path(), serde_json::json!({
-            "my-ext": { "overrides": ["/Users/*"] }
-        }));
+        let path = make_enablement(
+            tmp.path(),
+            serde_json::json!({
+                "my-ext": { "overrides": ["/Users/*"] }
+            }),
+        );
 
         toggle_extension_active(&path, "my-ext", false).unwrap();
 
@@ -391,9 +461,12 @@ mod tests {
     #[test]
     fn enable_extension_restores_from_disabled_section() {
         let tmp = TempDir::new().unwrap();
-        let path = make_enablement(tmp.path(), serde_json::json!({
-            "_disabled": { "my-ext": { "overrides": ["/Users/*"] } }
-        }));
+        let path = make_enablement(
+            tmp.path(),
+            serde_json::json!({
+                "_disabled": { "my-ext": { "overrides": ["/Users/*"] } }
+            }),
+        );
 
         toggle_extension_active(&path, "my-ext", true).unwrap();
 
@@ -429,7 +502,11 @@ mod tests {
     #[test]
     fn toggle_extension_creates_file_when_missing_on_enable() {
         let tmp = TempDir::new().unwrap();
-        let path = tmp.path().join("extension-enablement.json").to_string_lossy().to_string();
+        let path = tmp
+            .path()
+            .join("extension-enablement.json")
+            .to_string_lossy()
+            .to_string();
         // File does not exist — enable should create it
         toggle_extension_active(&path, "new-ext", true).unwrap();
 

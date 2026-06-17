@@ -21,8 +21,7 @@ pub fn open() -> DbState {
         Ok(state) => state,
         Err(e) => {
             eprintln!("[db] failed to open on-disk database: {e} — using in-memory fallback");
-            let mut conn =
-                Connection::open_in_memory().expect("in-memory SQLite must always open");
+            let mut conn = Connection::open_in_memory().expect("in-memory SQLite must always open");
             let _ = migrate(&mut conn);
             DbState(Arc::new(Mutex::new(conn)))
         }
@@ -135,7 +134,10 @@ pub fn dismiss_notification(state: &DbState, id: i64) -> Result<(), AppError> {
 
 pub fn dismiss_all_notifications(state: &DbState) -> Result<(), AppError> {
     let conn = state.0.lock().map_err(|_| AppError::MutexPoisoned)?;
-    conn.execute("UPDATE notifications SET dismissed = 1 WHERE dismissed = 0", [])?;
+    conn.execute(
+        "UPDATE notifications SET dismissed = 1 WHERE dismissed = 0",
+        [],
+    )?;
     Ok(())
 }
 
@@ -188,9 +190,9 @@ pub fn active_keys_with_prefix(state: &DbState, prefix: &str) -> std::collection
     let Ok(conn) = state.0.lock() else {
         return std::collections::HashSet::new();
     };
-    let mut stmt = match conn.prepare(
-        "SELECT dedup_key FROM notifications WHERE dedup_key LIKE ?1 AND dismissed = 0",
-    ) {
+    let mut stmt = match conn
+        .prepare("SELECT dedup_key FROM notifications WHERE dedup_key LIKE ?1 AND dismissed = 0")
+    {
         Ok(s) => s,
         Err(_) => return std::collections::HashSet::new(),
     };
@@ -271,8 +273,12 @@ mod tests {
         let db = test_db();
         add_notification(&db, "info", "Keep", "B", None).unwrap();
         add_notification(&db, "warn", "Gone", "B", Some("k")).unwrap();
-        let gone_id = get_active_notifications(&db).unwrap()
-            .iter().find(|n| n.title == "Gone").unwrap().id;
+        let gone_id = get_active_notifications(&db)
+            .unwrap()
+            .iter()
+            .find(|n| n.title == "Gone")
+            .unwrap()
+            .id;
         dismiss_notification(&db, gone_id).unwrap();
 
         let active = get_active_notifications(&db).unwrap();
@@ -283,7 +289,7 @@ mod tests {
     #[test]
     fn get_active_newest_first() {
         let db = test_db();
-        add_notification(&db, "info", "First",  "B", None).unwrap();
+        add_notification(&db, "info", "First", "B", None).unwrap();
         std::thread::sleep(std::time::Duration::from_millis(5));
         add_notification(&db, "info", "Second", "B", None).unwrap();
 
@@ -376,14 +382,22 @@ mod tests {
     #[test]
     fn log_event_inserts_audit_row() {
         let db = test_db();
-        log_event(&db, "skill_toggled", "claude", "my-skill", Some(r#"{"active":true}"#));
+        log_event(
+            &db,
+            "skill_toggled",
+            "claude",
+            "my-skill",
+            Some(r#"{"active":true}"#),
+        );
 
         let conn = db.0.lock().unwrap();
-        let count: i64 = conn.query_row(
-            "SELECT COUNT(*) FROM audit_events WHERE event_type = 'skill_toggled'",
-            [],
-            |r| r.get(0),
-        ).unwrap();
+        let count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM audit_events WHERE event_type = 'skill_toggled'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
         assert_eq!(count, 1);
     }
 

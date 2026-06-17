@@ -94,10 +94,15 @@ pub async fn query_tools(command: &str, args: &[String]) -> Result<Vec<McpTool>,
             arr.iter()
                 .filter_map(|t| {
                     let name = t.get("name")?.as_str()?.to_string();
-                    if name.is_empty() { return None; }
+                    if name.is_empty() {
+                        return None;
+                    }
                     Some(McpTool {
                         name,
-                        description: t.get("description").and_then(|d| d.as_str()).map(|s| s.to_string()),
+                        description: t
+                            .get("description")
+                            .and_then(|d| d.as_str())
+                            .map(|s| s.to_string()),
                         input_schema: t.get("inputSchema").cloned(),
                     })
                 })
