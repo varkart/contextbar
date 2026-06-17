@@ -107,6 +107,13 @@ function FileTreeNode({ entry, depth }: { entry: FileEntry; depth: number }) {
   )
 }
 
+function stripFrontmatter(content: string): string {
+  if (!content.startsWith('---')) return content
+  const end = content.indexOf('\n---', 4)
+  if (end === -1) return content
+  return content.slice(end + 4).trimStart()
+}
+
 function ExpandableDescription({ skill }: { skill: Skill }) {
   const [expanded, setExpanded] = useState(false)
 
@@ -119,7 +126,7 @@ function ExpandableDescription({ skill }: { skill: Skill }) {
       {expanded && skill.fullDescription ? (
         <>
           <div className="text-[13px] text-[var(--c-text-2)] leading-relaxed overflow-x-hidden skill-md">
-            <ReactMarkdown>{skill.fullDescription}</ReactMarkdown>
+            <ReactMarkdown>{stripFrontmatter(skill.fullDescription)}</ReactMarkdown>
           </div>
           <button
             onClick={() => { setExpanded(false); capture('skill_description_collapsed', { skill_name: skill.name }) }}
