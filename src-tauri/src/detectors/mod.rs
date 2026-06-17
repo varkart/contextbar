@@ -91,10 +91,10 @@ fn extract_description(content: &str) -> Option<String> {
                             .collect::<Vec<_>>()
                             .join(" ");
                         if !block.is_empty() {
-                            return Some(truncate(block, 120));
+                            return Some(first_sentence(block, 120));
                         }
                     } else if !val.is_empty() {
-                        return Some(truncate(val, 120));
+                        return Some(first_sentence(val, 120));
                     }
                 }
             }
@@ -107,10 +107,21 @@ fn extract_description(content: &str) -> Option<String> {
         if trimmed.is_empty() || trimmed.starts_with('#') || trimmed.starts_with("---") {
             continue;
         }
-        return Some(truncate(trimmed.to_string(), 120));
+        return Some(first_sentence(trimmed.to_string(), 120));
     }
 
     None
+}
+
+fn first_sentence(s: String, max_chars: usize) -> String {
+    // Cut at first ". " boundary to avoid repeating "Use when..." boilerplate
+    if let Some(pos) = s.find(". ") {
+        let candidate = &s[..pos + 1];
+        if candidate.chars().count() <= max_chars {
+            return candidate.to_string();
+        }
+    }
+    truncate(s, max_chars)
 }
 
 fn truncate(s: String, max_chars: usize) -> String {
