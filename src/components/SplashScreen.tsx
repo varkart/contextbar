@@ -1,12 +1,6 @@
 import { useState, useEffect } from 'react'
 
-const TIPS = [
-  'take a small break',
-  'rest ur eyes',
-  'stretch ur back',
-  'have a sip of water',
-  'breathe slowly',
-]
+const TIPS_TEXT = 'take a small break  •  rest ur eyes  •  stretch ur back  •  have a sip of water  •  breathe slowly'
 
 interface SplashScreenProps {
   backendReady: boolean
@@ -15,18 +9,15 @@ interface SplashScreenProps {
 
 export default function SplashScreen({ backendReady, onDismiss }: SplashScreenProps) {
   const [exiting, setExiting] = useState(false)
-  const [tipIndex, setTipIndex] = useState(0)
+  const [scrollDone, setScrollDone] = useState(false)
 
   useEffect(() => {
-    const t = setInterval(() => setTipIndex(i => (i + 1) % TIPS.length), 2200)
-    return () => clearInterval(t)
-  }, [])
-
-  const handleContinue = () => {
-    if (!backendReady) return
-    setExiting(true)
-    setTimeout(onDismiss, 280)
-  }
+    if (backendReady && scrollDone) {
+      setExiting(true)
+      const t = setTimeout(onDismiss, 280)
+      return () => clearTimeout(t)
+    }
+  }, [backendReady, scrollDone, onDismiss])
 
   return (
     <div
@@ -50,23 +41,25 @@ export default function SplashScreen({ backendReady, onDismiss }: SplashScreenPr
         />
       </div>
 
-      {/* title + cycling tip */}
-      <div className="flex flex-col items-center gap-2 text-center px-6 w-full">
+      {/* title + scrolling tip */}
+      <div className="flex flex-col items-center gap-2 text-center w-full overflow-hidden">
         <p className="text-[22px] font-bold text-[var(--c-text)] tracking-[-0.02em]">
           LLM Manager
         </p>
-        <p
-          key={tipIndex}
-          className="text-[14px] text-[var(--c-text-3)] splash-fade-in whitespace-nowrap"
-          style={{ animationDuration: '0.35s' }}
-        >
-          {TIPS[tipIndex]}
-        </p>
+        <div className="w-full relative h-[20px] overflow-hidden">
+          <p
+            className="text-[14px] text-[var(--c-text-3)] whitespace-nowrap absolute"
+            style={{ animation: 'splash-scroll 7s linear forwards' }}
+            onAnimationEnd={() => setScrollDone(true)}
+          >
+            {TIPS_TEXT}
+          </p>
+        </div>
       </div>
 
-      {/* fixed-height action zone — always same height so title/tip never shift */}
+      {/* fixed-height action zone — shows dots if backend not ready or animation still going */}
       <div className="flex items-center justify-center" style={{ minHeight: '44px' }}>
-        {!backendReady ? (
+        {(!backendReady || !scrollDone) && (
           <div className="flex gap-2">
             {[0, 1, 2].map(i => (
               <span
@@ -76,21 +69,6 @@ export default function SplashScreen({ backendReady, onDismiss }: SplashScreenPr
               />
             ))}
           </div>
-        ) : (
-          <button
-            onClick={handleContinue}
-            disabled={exiting}
-            className="px-7 py-2.5 text-[15px] font-semibold rounded-2xl text-white
-              hover:scale-105 active:scale-95 transition-transform duration-150
-              select-none splash-fade-in"
-            style={{
-              animationDuration: '0.3s',
-              background: 'linear-gradient(135deg, #7c3aed 0%, #6366f1 100%)',
-              boxShadow: '0 4px 24px rgba(124,58,237,0.45), 0 1px 4px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.15)',
-            }}
-          >
-            Continue <span className="opacity-70">→</span>
-          </button>
         )}
       </div>
     </div>
