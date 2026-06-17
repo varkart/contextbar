@@ -24,7 +24,7 @@ import SplashScreen from './components/SplashScreen'
 import LogsPanel from './components/LogsPanel'
 
 const SPLASH_BORN = Date.now()
-const SPLASH_MIN_MS = 5000
+const SPLASH_MIN_MS = 8000
 const isE2E = !!(globalThis as Record<string, unknown>).__skipSplash
 
 function SkeletonRows() {
