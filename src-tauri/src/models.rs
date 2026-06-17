@@ -19,6 +19,8 @@ pub struct Skill {
     pub name: String,
     pub path: String,
     pub description: Option<String>,
+    /// Full raw text of the skill's SKILL.md (or sibling .md). None if no file found.
+    pub full_description: Option<String>,
     pub active: bool,
     /// Which [[skill_sources]] entry produced this skill. Matches McpSource.id or "source_{n}".
     pub source_id: String,
