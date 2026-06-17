@@ -97,9 +97,6 @@ export default function App() {
   useEffect(() => {
     if (!loading && !backendReady) {
       setBackendReady(true)
-      // Show Continue button on the HTML splash immediately (before React re-render)
-      const fn = (globalThis as Record<string, unknown>).__splashShowContinue
-      if (typeof fn === 'function') fn()
     }
   }, [loading, backendReady])
 
