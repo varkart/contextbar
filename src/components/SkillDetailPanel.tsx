@@ -168,12 +168,58 @@ function ExpandableDescription({ skill }: { skill: Skill }) {
   )
 }
 
+function SkillToggle({
+  active,
+  toggling,
+  justToggled,
+  onToggle,
+}: {
+  active: boolean
+  toggling: boolean
+  justToggled: boolean
+  onToggle: () => void
+}) {
+  return (
+    <button
+      onClick={onToggle}
+      disabled={toggling}
+      aria-label={active ? 'Disable skill' : 'Enable skill'}
+      style={{ transition: 'background-color 0.25s ease' }}
+      className={`relative w-11 h-6 rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/50 flex-shrink-0 ${
+        active ? 'bg-emerald-500' : 'bg-[var(--c-track)]'
+      } ${justToggled && active ? 'ring-2 ring-emerald-400/30' : ''}`}
+    >
+      {/* knob */}
+      <span
+        style={{ transition: 'left 0.28s cubic-bezier(0.34, 1.56, 0.64, 1)' }}
+        className={`absolute top-1 w-4 h-4 rounded-full bg-white shadow-md flex items-center justify-center ${
+          active ? 'left-6' : 'left-1'
+        }`}
+      >
+        {/* spinner while IPC in flight */}
+        {toggling && (
+          <svg className="w-2.5 h-2.5 text-zinc-400 animate-spin" viewBox="0 0 24 24" fill="none">
+            <circle cx="12" cy="12" r="8" stroke="currentColor" strokeWidth="3.5"
+              strokeDasharray="38" strokeDashoffset="9" strokeLinecap="round"/>
+          </svg>
+        )}
+        {/* checkmark on success */}
+        {justToggled && !toggling && (
+          <svg className="w-2.5 h-2.5 text-emerald-500" viewBox="0 0 24 24" fill="none"
+            stroke="currentColor" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="20 6 9 17 4 12"/>
+          </svg>
+        )}
+      </span>
+    </button>
+  )
+}
+
 export default function SkillDetailPanel({ skill, onBack, toolName, toolId, onToggled }: SkillDetailPanelProps) {
   const [active, setActive] = useState(skill.active)
   const [toggling, setToggling] = useState(false)
   const [justToggled, setJustToggled] = useState(false)
   const [toggleError, setToggleError] = useState<string | null>(null)
-  const [toggleAnim, setToggleAnim] = useState<'enable' | 'disable' | null>(null)
   const [fileTree, setFileTree] = useState<FileEntry | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -182,7 +228,6 @@ export default function SkillDetailPanel({ skill, onBack, toolName, toolId, onTo
     if (!toolId) return
     setToggling(true)
     setToggleError(null)
-    setToggleAnim(active ? 'disable' : 'enable')
     try {
       await invoke('set_skill_active', {
         toolId,
@@ -199,7 +244,7 @@ export default function SkillDetailPanel({ skill, onBack, toolName, toolId, onTo
       captureException(e)
     } finally {
       setToggling(false)
-      setTimeout(() => { setJustToggled(false); setToggleAnim(null) }, 800)
+      setTimeout(() => setJustToggled(false), 1200)
     }
   }
 
@@ -236,33 +281,36 @@ export default function SkillDetailPanel({ skill, onBack, toolName, toolId, onTo
         <span className="text-[15px] font-semibold text-[var(--c-text)] tracking-[-0.01em] truncate">
           {skill.name}
         </span>
-        {toolId && (
-          <button
-            onClick={handleToggle}
-            disabled={toggling || justToggled}
-            aria-label={active ? 'Disable skill' : 'Enable skill'}
-            className={`ml-auto text-[12px] px-2 py-0.5 rounded transition-colors flex-shrink-0 ${
-              toggling ? 'animate-toggle-busy' :
-              toggleAnim === 'enable' ? 'animate-toggle-enable' :
-              toggleAnim === 'disable' ? 'animate-toggle-disable' :
-              justToggled ? 'animate-toggle-confirm' : ''
-            } ${
-              justToggled
-                ? 'bg-emerald-500/10 text-emerald-400'
-                : active
-                  ? 'bg-red-500/10 text-red-400 hover:bg-red-500/20'
-                  : 'bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20'
-            }`}
-          >
-            {justToggled ? '✓' : active ? 'Disable' : 'Enable'}
-          </button>
-        )}
       </div>
 
-      {toggleError && (
-        <div className="mx-3 mt-1 px-3 py-1.5 rounded text-[12px] text-red-400 bg-red-500/10 flex items-center justify-between gap-2 flex-shrink-0">
-          <span className="truncate">{toggleError}</span>
-          <button onClick={() => setToggleError(null)} className="flex-shrink-0 hover:text-red-300">✕</button>
+      {/* Status + toggle strip */}
+      {toolId && (
+        <div className="flex items-center justify-between px-4 py-2.5 border-b border-[var(--c-border)] bg-[var(--c-surface)]/40 flex-shrink-0">
+          <div className="flex items-center gap-2 min-w-0">
+            {/* status dot */}
+            <span
+              style={{ transition: 'background-color 0.25s ease' }}
+              className={`w-2 h-2 rounded-full flex-shrink-0 ${active ? 'bg-emerald-400' : 'bg-[var(--c-text-3)]'}`}
+            />
+            <span
+              style={{ transition: 'color 0.25s ease' }}
+              className={`text-[13px] font-medium ${active ? 'text-emerald-400' : 'text-[var(--c-text-3)]'}`}
+            >
+              {active ? 'Active' : 'Inactive'}
+            </span>
+            {toggleError && (
+              <span className="text-[12px] text-red-400 truncate ml-1">— {toggleError}</span>
+            )}
+            {toggleError && (
+              <button onClick={() => setToggleError(null)} className="text-[11px] text-red-400/60 hover:text-red-400 flex-shrink-0 ml-1">✕</button>
+            )}
+          </div>
+          <SkillToggle
+            active={active}
+            toggling={toggling}
+            justToggled={justToggled}
+            onToggle={handleToggle}
+          />
         </div>
       )}
 
