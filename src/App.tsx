@@ -153,6 +153,7 @@ export default function App() {
           tool={selectedTool}
           onBack={() => goTo('tool-detail')}
           onSelectMcp={mcp => selectMcp(mcp, 'mcps-list')}
+          onAdded={handleFetchTools}
         />
       ) : view === 'skill-detail' && selectedSkill ? (
         <SkillDetailPanel
@@ -168,6 +169,7 @@ export default function App() {
           toolName={selectedTool?.name}
           toolId={selectedTool?.id}
           onToggled={handleFetchTools}
+          onRemoved={handleFetchTools}
           onBack={() => escape()}
         />
       ) : view === 'permissions-detail' && selectedTool ? (
