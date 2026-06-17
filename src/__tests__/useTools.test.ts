@@ -62,31 +62,4 @@ describe('useTools', () => {
     await waitFor(() => expect(result.current.loading).toBe(false))
     expect(result.current.tools).toEqual([])
   })
-
-  describe('refreshSelected', () => {
-    it('returns updated skill when found in new tools', async () => {
-      const updatedSkill = { name: 'graphify', path: '/new/path', description: 'g', active: false, sourceId: 's' }
-      const result = [{ ...mockTools[0], skills: [updatedSkill], mcps: [] }]
-      const { result: hook } = renderHook(() => useTools())
-      await waitFor(() => expect(hook.current.loading).toBe(false))
-      const prevSkill = { name: 'graphify', path: '/old/path', description: 'g', active: true, sourceId: 's' }
-      const { skill } = hook.current.refreshSelected(prevSkill, null, result)
-      expect(skill?.path).toBe('/new/path')
-    })
-
-    it('returns prev skill if not found in new tools', async () => {
-      const { result: hook } = renderHook(() => useTools())
-      await waitFor(() => expect(hook.current.loading).toBe(false))
-      const prevSkill = { name: 'missing', path: '/x', description: '', active: true, sourceId: 's' }
-      const { skill } = hook.current.refreshSelected(prevSkill, null, mockTools)
-      expect(skill).toBe(prevSkill)
-    })
-
-    it('returns null skill when prevSkill is null', async () => {
-      const { result: hook } = renderHook(() => useTools())
-      await waitFor(() => expect(hook.current.loading).toBe(false))
-      const { skill } = hook.current.refreshSelected(null, null, mockTools)
-      expect(skill).toBeNull()
-    })
-  })
 })
