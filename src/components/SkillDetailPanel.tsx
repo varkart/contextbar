@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { invoke } from '@tauri-apps/api/core'
+import ReactMarkdown from 'react-markdown'
 import type { Skill, FileEntry } from '../types'
 import { capture, captureException } from '../analytics'
 
@@ -108,56 +109,20 @@ function FileTreeNode({ entry, depth }: { entry: FileEntry; depth: number }) {
 
 function ExpandableDescription({ skill }: { skill: Skill }) {
   const [expanded, setExpanded] = useState(false)
-  const [fullContent, setFullContent] = useState<string | null>(null)
-  const [loadingContent, setLoadingContent] = useState(false)
-  const [loadError, setLoadError] = useState<string | null>(null)
-
-  const loadFull = async () => {
-    if (fullContent !== null) { setExpanded(true); return }
-    setLoadingContent(true)
-    setLoadError(null)
-    try {
-      // Rust parse_skill_description tries:
-      //   1. skill_path/SKILL.md  (directory skill)
-      //   2. skill_path.md        (sibling .md for directory, or file skills)
-      // Mirror that here. Also fall back to skill.path itself for .md file skills.
-      const sibling = skill.path.endsWith('.md')
-        ? skill.path  // already a .md file
-        : `${skill.path}.md`  // sibling .md next to the directory
-
-      const candidates = [
-        `${skill.path}/SKILL.md`,
-        sibling,
-        skill.path,
-      ]
-
-      let lastErr = ''
-      for (const p of candidates) {
-        try {
-          const text = await invoke<string>('read_text_file', { path: p })
-          setFullContent(text)
-          setExpanded(true)
-          capture('skill_description_expanded', { skill_name: skill.name })
-          return
-        } catch (e) { lastErr = String(e) }
-      }
-      setLoadError(lastErr || 'File not found')
-    } finally {
-      setLoadingContent(false)
-    }
-  }
 
   if (!skill.description) return null
 
+  const hasFullContent = !!skill.fullDescription
+
   return (
     <div className="px-4 py-3 border-b border-[var(--c-border)]">
-      {expanded && fullContent !== null ? (
+      {expanded && skill.fullDescription ? (
         <>
-          <pre className="text-[13px] text-[var(--c-text-2)] leading-relaxed whitespace-pre-wrap font-sans overflow-x-hidden">
-            {fullContent}
-          </pre>
+          <div className="text-[13px] text-[var(--c-text-2)] leading-relaxed overflow-x-hidden skill-md">
+            <ReactMarkdown>{skill.fullDescription}</ReactMarkdown>
+          </div>
           <button
-            onClick={() => setExpanded(false)}
+            onClick={() => { setExpanded(false); capture('skill_description_collapsed', { skill_name: skill.name }) }}
             className="text-[13px] text-indigo-500 hover:text-indigo-400 mt-2 transition-colors"
           >
             Show less
@@ -168,23 +133,12 @@ function ExpandableDescription({ skill }: { skill: Skill }) {
           <p className="text-[14px] text-[var(--c-text-2)] leading-relaxed line-clamp-3">
             {skill.description}
           </p>
-          {loadError ? (
-            <p className="text-[12px] text-[var(--c-text-3)] mt-1.5 leading-relaxed">
-              {loadError} —{' '}
-              <button
-                onClick={loadFull}
-                className="text-indigo-500 hover:text-indigo-400 transition-colors"
-              >
-                retry
-              </button>
-            </p>
-          ) : (
+          {hasFullContent && (
             <button
-              onClick={loadFull}
-              disabled={loadingContent}
-              className="text-[13px] text-indigo-500 hover:text-indigo-400 mt-1.5 transition-colors disabled:opacity-50"
+              onClick={() => { setExpanded(true); capture('skill_description_expanded', { skill_name: skill.name }) }}
+              className="text-[13px] text-indigo-500 hover:text-indigo-400 mt-1.5 transition-colors"
             >
-              {loadingContent ? 'Loading…' : 'Show full description →'}
+              Show full description →
             </button>
           )}
         </>
