@@ -1,7 +1,7 @@
 use notify_debouncer_mini::{new_debouncer, DebouncedEventKind};
 use std::collections::{HashMap, HashSet};
 use std::time::Duration;
-use tauri::{AppHandle, Emitter};
+use tauri::{AppHandle, Emitter, Manager};
 use serde::Serialize;
 
 #[derive(Debug, Clone, Serialize)]
@@ -22,11 +22,11 @@ pub struct DiffItem {
 type SkillSnapshot = HashMap<String, HashSet<String>>;
 type McpSnapshot = HashMap<String, HashSet<String>>;
 
-fn take_snapshot(_app: &AppHandle) -> (SkillSnapshot, McpSnapshot) {
+fn take_snapshot(_app: &AppHandle) -> (Vec<crate::models::AiTool>, SkillSnapshot, McpSnapshot) {
     let tools = crate::detectors::detect_all();
     let mut skills: SkillSnapshot = HashMap::new();
     let mut mcps: McpSnapshot = HashMap::new();
-    for tool in tools {
+    for tool in &tools {
         if !tool.installed { continue; }
         skills.insert(
             tool.id.clone(),
@@ -37,7 +37,7 @@ fn take_snapshot(_app: &AppHandle) -> (SkillSnapshot, McpSnapshot) {
             tool.mcps.iter().map(|m| m.name.clone()).collect(),
         );
     }
-    (skills, mcps)
+    (tools, skills, mcps)
 }
 
 fn diff_snapshots(
@@ -91,28 +91,30 @@ pub fn start(app: AppHandle) {
             Err(_) => return,
         };
 
-        let paths: Vec<std::path::PathBuf> = {
-            let home = match dirs::home_dir() {
-                Some(h) => h,
-                None => return,
-            };
-            vec![
-                home.join(".claude").join("settings.json"),
-                home.join(".claude").join("skills"),
-                home.join(".cursor").join("mcp.json"),
-                home.join(".cursor").join("skills-cursor"),
-                home.join(".config").join("gemini"),
-                home.join("Library").join("Application Support")
-                    .join("Code").join("User").join("settings.json"),
-                home.join("Library").join("Application Support")
-                    .join("Windsurf").join("User").join("settings.json"),
-            ]
+        let home = match dirs::home_dir() {
+            Some(h) => h,
+            None => return,
         };
 
+        // Watch the deepest existing ancestor so we catch installs that happen after startup.
+        // E.g. if ~/.cursor doesn't exist yet, watch ~ so creating ~/.cursor/mcp.json fires events.
+        let watch_targets: Vec<std::path::PathBuf> = vec![
+            home.join(".claude"),
+            home.join(".cursor"),
+            home.join(".gemini"),
+            home.join(".windsurf"),
+            home.join(".codeium"),
+            home.join("Library").join("Application Support").join("Code").join("User"),
+            home.join("Library").join("Application Support").join("Windsurf").join("User"),
+        ];
+
         use notify::RecursiveMode;
-        for path in &paths {
-            if path.exists() {
-                let _ = debouncer.watcher().watch(path, RecursiveMode::Recursive);
+        for target in &watch_targets {
+            // Walk up to the first existing ancestor, then watch it recursively
+            let watchable = std::iter::successors(Some(target.as_path()), |p| p.parent())
+                .find(|p| p.exists());
+            if let Some(p) = watchable {
+                let _ = debouncer.watcher().watch(p, RecursiveMode::Recursive);
             }
         }
 
@@ -127,59 +129,37 @@ pub fn start(app: AppHandle) {
         ].iter().map(|(k, v)| (k.to_string(), v.to_string())).collect();
 
         // Take initial snapshot
-        let (mut last_skills, mut last_mcps) = take_snapshot(&app);
+        let (_, mut last_skills, mut last_mcps) = take_snapshot(&app);
 
-        loop {
-            match rx.recv() {
-                Ok(Ok(events)) => {
-                    let relevant = events.iter().any(|e| {
-                        matches!(e.kind, DebouncedEventKind::Any)
-                    });
-                    if !relevant { continue; }
+        while let Ok(Ok(events)) = rx.recv() {
+            let relevant = events.iter().any(|e| {
+                matches!(e.kind, DebouncedEventKind::Any)
+            });
+            if !relevant { continue; }
 
-                    let (new_skills, new_mcps) = take_snapshot(&app);
-                    let diff = diff_snapshots(
-                        &last_skills, &new_skills,
-                        &last_mcps, &new_mcps,
-                        &tool_names,
-                    );
+            let (new_tools, new_skills, new_mcps) = take_snapshot(&app);
+            let diff = diff_snapshots(
+                &last_skills, &new_skills,
+                &last_mcps, &new_mcps,
+                &tool_names,
+            );
 
-                    // Only emit/notify if something actually changed
-                    let has_changes = !diff.added_skills.is_empty()
-                        || !diff.removed_skills.is_empty()
-                        || !diff.added_mcps.is_empty()
-                        || !diff.removed_mcps.is_empty();
+            let has_changes = !diff.added_skills.is_empty()
+                || !diff.removed_skills.is_empty()
+                || !diff.added_mcps.is_empty()
+                || !diff.removed_mcps.is_empty();
 
-                    // Always emit tools-changed so UI refreshes
-                    let _ = app.emit("tools-changed", ());
-
-                    if has_changes {
-                        let _ = app.emit("tools-diff", &diff);
-
-                        // Fire macOS notifications
-                        use tauri_plugin_notification::NotificationExt;
-                        for item in &diff.added_skills {
-                            let _ = app.notification()
-                                .builder()
-                                .title("aicontextbar")
-                                .body(format!("{}: skill {} added", item.tool_name, item.item_name))
-                                .show();
-                        }
-                        for item in &diff.added_mcps {
-                            let _ = app.notification()
-                                .builder()
-                                .title("aicontextbar")
-                                .body(format!("{}: MCP {} added", item.tool_name, item.item_name))
-                                .show();
-                        }
-                        // Don't notify on removals (too noisy)
-                    }
-
-                    last_skills = new_skills;
-                    last_mcps = new_mcps;
-                }
-                Ok(Err(_)) | Err(_) => break,
+            if has_changes {
+                let _ = app.emit("tools-changed", ());
+                let _ = app.emit("tools-diff", &diff);
             }
+
+            // Re-run Doctor on every relevant FS event (catches command edits too)
+            let db = app.state::<crate::db::DbState>();
+            crate::doctor::run(&new_tools, &db, &app);
+
+            last_skills = new_skills;
+            last_mcps = new_mcps;
         }
     });
 }

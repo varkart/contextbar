@@ -1,0 +1,42 @@
+schema_version = 1
+id = "kiro"
+name = "Kiro"
+
+[version]
+type = "command"
+binary = "kiro-cli"
+args = ["--version"]
+timeout_ms = 1500
+parse = "last_token"
+
+# Kiro replaced Amazon Q Developer; check both new Kiro paths and legacy Q paths
+[[detection]]
+type = "binary"
+name = "kiro"
+
+[[detection]]
+type = "dir"
+path = "~/.kiro"
+
+# Legacy Amazon Q paths (still valid on older installs)
+[[detection]]
+type = "dir"
+path = "~/.aws/amazonq"
+
+[[detection]]
+type = "dir"
+path = "~/.q"
+
+# Global MCP config
+[[mcp_sources]]
+id = "mcp_json"
+type = "json_key_pair"
+file = "~/.kiro/settings/mcp.json"
+active_key = "mcpServers"
+
+# Legacy Amazon Q MCP config
+[[mcp_sources]]
+id = "amazonq_mcp_json"
+type = "json_key_pair"
+file = "~/.aws/amazonq/mcp.json"
+active_key = "mcpServers"

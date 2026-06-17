@@ -1,14 +1,14 @@
-# aicontextbar
+# llmmanager
 
 > macOS menu bar app — unified view of LLM skills and MCP servers.
 
-[![Release](https://img.shields.io/github/v/release/varkart/aicontextbar)](https://github.com/varkart/aicontextbar/releases/latest)
-[![Platform](https://img.shields.io/badge/platform-macOS-lightgrey)](https://github.com/varkart/aicontextbar/releases/latest)
-[![License](https://img.shields.io/github/license/varkart/aicontextbar)](LICENSE)
-[![Build](https://img.shields.io/github/actions/workflow/status/varkart/aicontextbar/release.yml)](https://github.com/varkart/aicontextbar/actions)
+[![Release](https://img.shields.io/github/v/release/varkart/llmmanager)](https://github.com/varkart/llmmanager/releases/latest)
+[![Platform](https://img.shields.io/badge/platform-macOS-lightgrey)](https://github.com/varkart/llmmanager/releases/latest)
+[![License](https://img.shields.io/github/license/varkart/llmmanager)](LICENSE)
+[![Build](https://img.shields.io/github/actions/workflow/status/varkart/llmmanager/release.yml)](https://github.com/varkart/llmmanager/actions)
 
 <p align="center">
-  <img src=".github/assets/demo.gif" width="380" alt="aicontextbar demo">
+  <img src=".github/assets/demo.gif" width="380" alt="llmmanager demo">
 </p>
 
 ---
@@ -17,7 +17,7 @@
 
 If you use multiple AI coding tools, you probably have skills scattered across `~/.claude/`, `~/.cursor/`, MCPs configured in three different JSON files, and no clear picture of what's active where.
 
-aicontextbar sits in your menu bar and gives you one place to see all of it — instantly, with no configuration.
+llmmanager sits in your menu bar and gives you one place to see all of it — instantly, with no configuration.
 
 ---
 
@@ -46,16 +46,16 @@ Claude Code, Cursor, Gemini CLI, GitHub Copilot, Windsurf, ChatGPT, Aider, Conti
 
 ## Install
 
-1. Download `aicontextbar_vX.X.X_universal.dmg` from [Releases](https://github.com/varkart/aicontextbar/releases/latest)
-2. Open the DMG and drag aicontextbar to Applications
-3. Launch aicontextbar from Applications
+1. Download `llmmanager_vX.X.X_universal.dmg` from [Releases](https://github.com/varkart/llmmanager/releases/latest)
+2. Open the DMG and drag llmmanager to Applications
+3. Launch llmmanager from Applications
 
 **macOS security prompt:**
 
-Because aicontextbar is not notarized with an Apple Developer certificate, macOS may block the first launch. Run this once:
+Because llmmanager is not notarized with an Apple Developer certificate, macOS may block the first launch. Run this once:
 
 ```bash
-xattr -d com.apple.quarantine /Applications/aicontextbar.app
+xattr -d com.apple.quarantine /Applications/llmmanager.app
 ```
 
 Or: System Settings → Privacy & Security → scroll down → **Open Anyway**
@@ -78,8 +78,8 @@ Or: System Settings → Privacy & Security → scroll down → **Open Anyway**
 - Xcode Command Line Tools: `xcode-select --install`
 
 ```bash
-git clone https://github.com/varkart/aicontextbar.git
-cd aicontextbar
+git clone https://github.com/varkart/llmmanager.git
+cd llmmanager
 npm install
 npm run tauri dev     # development with hot reload
 npm run tauri build   # production build → src-tauri/target/release/bundle/
@@ -97,7 +97,7 @@ npm run tauri build -- --target universal-apple-darwin
 ## Project structure
 
 ```
-aicontextbar/
+llmmanager/
 ├── src/                    # React frontend (TypeScript + Tailwind v4)
 │   └── components/         # UI components
 ├── src-tauri/

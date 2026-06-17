@@ -38,3 +38,8 @@ src-tauri/gen/
 # Local-only knowledge (not for public repo)
 .local/
 docs/
+
+# Test output
+coverage/
+playwright-report/
+test-results/

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 
-const STORAGE_KEY = 'aicontextbar:expandedTools'
+const STORAGE_KEY = 'llmmanager:expandedTools'
 
 function loadExpanded(): Set<string> {
   try {

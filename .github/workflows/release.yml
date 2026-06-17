@@ -70,18 +70,18 @@ jobs:
           APP=$(find src-tauri/target/universal-apple-darwin/release/bundle/macos -name "*.app" -maxdepth 1 | head -1)
           APP_NAME=$(basename "$APP" .app)
           DMG="${APP_NAME}_${VERSION}_universal.dmg"
-          STAGING="/tmp/aicontextbar_dmg"
+          STAGING="/tmp/llmmanager_dmg"
           mkdir -p "$STAGING"
           cp -r "$APP" "$STAGING/"
           ln -s /Applications "$STAGING/Applications"
 
           # Install note shown alongside the app in the DMG
           cat > "$STAGING/INSTALL.txt" << 'INSTALLEOF'
-          Drag aicontextbar to Applications, then launch it.
+          Drag LLM Manager to Applications, then launch it.
 
           If macOS blocks the app on first launch, run this once in Terminal:
 
-              xattr -d com.apple.quarantine /Applications/aicontextbar.app
+              xattr -d com.apple.quarantine /Applications/LLM Manager.app
 
           Or: System Settings → Privacy & Security → Open Anyway
           INSTALLEOF
@@ -96,13 +96,13 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          name: "aicontextbar ${{ github.ref_name }}"
+          name: "LLM Manager ${{ github.ref_name }}"
           body: |
             ${{ steps.tag.outputs.notes }}
 
             ---
             **Install:** Download the `.dmg` below.
-            **macOS security prompt:** run `xattr -d com.apple.quarantine /Applications/aicontextbar.app`
+            **macOS security prompt:** run `xattr -d com.apple.quarantine /Applications/LLM Manager.app`
           files: ${{ env.DMG_NAME }}
           draft: false
           prerelease: false
