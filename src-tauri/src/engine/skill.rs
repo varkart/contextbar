@@ -1,6 +1,6 @@
 use super::manifest::{SkillSource, SkillSourceSpec};
 use super::resolve::{expand_home, version_in_range};
-use crate::detectors::parse_skill_description;
+use crate::detectors::{parse_skill_description, read_skill_file_content};
 use crate::models::Skill;
 
 pub fn collect(
@@ -55,10 +55,12 @@ fn read_directory(dir: &std::path::Path, disabled_subdir: Option<&str>) -> Vec<S
                 continue;
             }
             let description = parse_skill_description(&path);
+            let full_description = read_skill_file_content(&path);
             skills.push(Skill {
                 name,
                 path: path.to_string_lossy().to_string(),
                 description,
+                full_description,
                 active: true,
                 source_id: String::new(),
             });
@@ -79,10 +81,12 @@ fn read_directory(dir: &std::path::Path, disabled_subdir: Option<&str>) -> Vec<S
                     continue;
                 }
                 let description = parse_skill_description(&path);
+                let full_description = read_skill_file_content(&path);
                 skills.push(Skill {
                     name,
                     path: path.to_string_lossy().to_string(),
                     description,
+                    full_description,
                     active: false,
                     source_id: String::new(),
                 });
