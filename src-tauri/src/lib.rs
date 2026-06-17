@@ -350,6 +350,96 @@ fn set_mcp_active(
 }
 
 // ---------------------------------------------------------------------------
+// IPC commands – MCP add / remove (v1.1)
+// ---------------------------------------------------------------------------
+
+#[tauri::command]
+fn add_mcp(
+    db: tauri::State<'_, db::DbState>,
+    tool_id: String,
+    name: String,
+    command: Option<String>,
+    args: Option<Vec<String>>,
+    url: Option<String>,
+) -> Result<(), String> {
+    use crate::engine::manifest::McpSourceSpec;
+    use crate::engine::resolve::expand_home;
+
+    let home = dirs::home_dir().ok_or("cannot find home dir")?;
+    let manifest = crate::engine::load_manifest(&tool_id)
+        .ok_or_else(|| format!("no manifest for '{tool_id}'"))?;
+
+    for source in &manifest.mcp_sources {
+        if let McpSourceSpec::JsonKeyPair { file, active_key, .. } = &source.spec {
+            let path = expand_home(file, &home);
+            let entry = if let Some(u) = &url {
+                serde_json::json!({ "url": u })
+            } else {
+                serde_json::json!({
+                    "command": command.as_deref().unwrap_or(""),
+                    "args": args.as_deref().unwrap_or(&[]),
+                })
+            };
+            let result =
+                app_state::add_mcp_to_config(&path.to_string_lossy(), active_key, &name, entry);
+            if result.is_ok() {
+                db::log_event(&db, "mcp_added", &tool_id, &name, None);
+            }
+            return result;
+        }
+    }
+    Err(format!("'{tool_id}' has no writable MCP source"))
+}
+
+#[tauri::command]
+fn remove_mcp(
+    db: tauri::State<'_, db::DbState>,
+    tool_id: String,
+    mcp_name: String,
+    source_id: String,
+) -> Result<(), String> {
+    use crate::engine::manifest::McpSourceSpec;
+    use crate::engine::resolve::expand_home;
+
+    let home = dirs::home_dir().ok_or("cannot find home dir")?;
+    let manifest = crate::engine::load_manifest(&tool_id)
+        .ok_or_else(|| format!("no manifest for '{tool_id}'"))?;
+
+    for (idx, source) in manifest.mcp_sources.iter().enumerate() {
+        let eff_id = source
+            .id
+            .clone()
+            .unwrap_or_else(|| format!("source_{}", idx));
+        if eff_id != source_id {
+            continue;
+        }
+        if let McpSourceSpec::JsonKeyPair {
+            file,
+            active_key,
+            disabled_key,
+            ..
+        } = &source.spec
+        {
+            let path = expand_home(file, &home);
+            let result = app_state::remove_mcp_from_config(
+                &path.to_string_lossy(),
+                active_key,
+                disabled_key.as_deref(),
+                &mcp_name,
+            );
+            if result.is_ok() {
+                db::log_event(&db, "mcp_removed", &tool_id, &mcp_name, None);
+            }
+            return result;
+        }
+        return Err(format!("source '{source_id}' does not support MCP removal"));
+    }
+    Err(format!(
+        "source '{source_id}' not found in '{tool_id}' manifest"
+    ))
+}
+
+// ---------------------------------------------------------------------------
 // IPC commands – permissions (v0.11)
 // ---------------------------------------------------------------------------
 
@@ -715,6 +805,8 @@ pub fn run() {
             query_mcp_tools,
             set_skill_active,
             set_mcp_active,
+            add_mcp,
+            remove_mcp,
             list_config_backups,
             restore_config_backup,
             read_backup_content,
