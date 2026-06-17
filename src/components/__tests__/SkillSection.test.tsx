@@ -7,6 +7,7 @@ const skill = (name: string, active = true): Skill => ({
   name,
   path: `/skills/${name}`,
   description: undefined,
+  hasFullDescription: false,
   active,
   sourceId: 'skills_dir',
 })

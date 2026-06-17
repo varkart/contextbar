@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
@@ -117,18 +117,42 @@ function stripFrontmatter(content: string): string {
 
 function ExpandableDescription({ skill }: { skill: Skill }) {
   const [expanded, setExpanded] = useState(false)
+  const [fullContent, setFullContent] = useState<string | null>(null)
+  const [loadingContent, setLoadingContent] = useState(false)
+  const loadedForPath = useRef<string | null>(null)
 
   if (!skill.description) return null
 
-  const hasFullContent = !!skill.fullDescription
+  const handleExpand = async () => {
+    setExpanded(true)
+    capture('skill_description_expanded', { skill_name: skill.name })
+    if (loadedForPath.current === skill.path) return
+    setLoadingContent(true)
+    try {
+      const content = await invoke<string | null>('get_skill_full_description', { path: skill.path })
+      setFullContent(content)
+      loadedForPath.current = skill.path
+    } catch (e) {
+      console.error('get_skill_full_description failed:', e)
+    } finally {
+      setLoadingContent(false)
+    }
+  }
 
   return (
     <div className="px-4 py-3 border-b border-[var(--c-border)]">
-      {expanded && skill.fullDescription ? (
+      {expanded ? (
         <>
-          <div className="text-[13px] text-[var(--c-text-2)] leading-relaxed overflow-x-hidden skill-md">
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>{stripFrontmatter(skill.fullDescription)}</ReactMarkdown>
-          </div>
+          {loadingContent && (
+            <div className="flex gap-1.5 py-2">
+              {[0,1,2].map(i => <span key={i} className="w-1 h-1 rounded-full bg-[var(--c-text-3)] animate-pulse" style={{ animationDelay: `${i * 150}ms` }} />)}
+            </div>
+          )}
+          {fullContent && !loadingContent && (
+            <div className="text-[13px] text-[var(--c-text-2)] leading-relaxed overflow-x-hidden skill-md">
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>{stripFrontmatter(fullContent)}</ReactMarkdown>
+            </div>
+          )}
           <button
             onClick={() => { setExpanded(false); capture('skill_description_collapsed', { skill_name: skill.name }) }}
             className="text-[13px] text-indigo-500 hover:text-indigo-400 mt-2 transition-colors"
@@ -141,9 +165,9 @@ function ExpandableDescription({ skill }: { skill: Skill }) {
           <p className="text-[14px] text-[var(--c-text-2)] leading-relaxed line-clamp-3">
             {skill.description}
           </p>
-          {hasFullContent && (
+          {skill.hasFullDescription && (
             <button
-              onClick={() => { setExpanded(true); capture('skill_description_expanded', { skill_name: skill.name }) }}
+              onClick={handleExpand}
               className="text-[13px] text-indigo-500 hover:text-indigo-400 mt-1.5 transition-colors"
             >
               Show full description →
