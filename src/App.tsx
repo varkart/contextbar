@@ -1,11 +1,12 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { invoke } from '@tauri-apps/api/core'
-import { listen } from '@tauri-apps/api/event'
-import type { AiTool, Skill, McpServer, Notification } from './types'
+import type { AiTool, Skill, McpServer } from './types'
 import { searchTools } from './search'
 import { useUpdateCheck } from './useUpdateCheck'
 import { useToolsDiff } from './useToolsDiff'
 import { useTheme, type ThemePreference } from './useTheme'
+import { useTools } from './useTools'
+import { useNotifications } from './useNotifications'
 import { capture } from './analytics'
 import McpDetailPanel from './components/McpDetailPanel'
 import PermissionsDetailPanel from './components/PermissionsDetailPanel'
@@ -57,11 +58,6 @@ function SkeletonRows() {
 
 export default function App() {
   const [view, setView] = useView()
-  const [tools, setTools] = useState<AiTool[]>([])
-  const [loading, setLoading] = useState(true)
-  const [cloudSyncing, setCloudSyncing] = useState(false)
-  const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
-  const [query, setQuery] = useState('')
   const [version, setVersion] = useState('')
   const { theme, setTheme } = useTheme()
   const [selectedTool, setSelectedTool] = useState<AiTool | null>(null)
@@ -69,9 +65,20 @@ export default function App() {
   const [selectedMcp, setSelectedMcp] = useState<McpServer | null>(null)
   const [skillBackView, setSkillBackView] = useState<View>('tool-detail')
   const [mcpBackView, setMcpBackView] = useState<View>('tool-detail')
-  const [notifications, setNotifications] = useState<Notification[]>([])
   const [splashDismissed, setSplashDismissed] = useState(isE2E)
   const [backendReady, setBackendReady] = useState(false)
+  const [query, setQuery] = useState('')
+
+  const { tools, loading, cloudSyncing, lastUpdated, fetchTools, refreshSelected } = useTools()
+  const { notifications, fetchNotifications } = useNotifications()
+
+  const handleFetchTools = useCallback(async () => {
+    await fetchTools()
+    setSelectedTool(prev => prev ? (tools.find(t => t.id === prev.id) ?? prev) : null)
+    const { skill, mcp } = refreshSelected(selectedSkill, selectedMcp, tools)
+    setSelectedSkill(skill)
+    setSelectedMcp(mcp)
+  }, [fetchTools, tools, selectedSkill, selectedMcp, refreshSelected])
 
   const handleSelectTool = useCallback((tool: AiTool) => {
     setSelectedTool(tool)
@@ -98,13 +105,8 @@ export default function App() {
     capture('permissions_detail_viewed', { tool_id: selectedTool?.id })
   }, [setView, selectedTool])
 
-  const handleOpenSkillsPage = useCallback(() => {
-    setView('skills-list')
-  }, [setView])
-
-  const handleOpenMcpsPage = useCallback(() => {
-    setView('mcps-list')
-  }, [setView])
+  const handleOpenSkillsPage = useCallback(() => { setView('skills-list') }, [setView])
+  const handleOpenMcpsPage = useCallback(() => { setView('mcps-list') }, [setView])
 
   useEffect(() => {
     invoke<string>('get_version').then(setVersion).catch(() => setVersion('0.5.0'))
@@ -118,7 +120,6 @@ export default function App() {
     }).catch(() => {})
   }, [])
 
-  // Remove HTML pre-splash immediately once React is mounted
   useEffect(() => {
     const splash = document.getElementById('splash')
     if (splash) {
@@ -127,7 +128,6 @@ export default function App() {
     }
   }, [])
 
-  // Signal backend ready; then wait out whatever remains of the 5s minimum
   useEffect(() => {
     if (!loading && !backendReady) setBackendReady(true)
   }, [loading, backendReady])
@@ -142,78 +142,9 @@ export default function App() {
   const updateInfo = useUpdateCheck(version)
   useToolsDiff()
 
-  const fetchTools = useCallback(async () => {
-    setLoading(true)
-    const t0 = Date.now()
-    try {
-      const result = await invoke<AiTool[]>('get_tools')
-      const duration_ms = Date.now() - t0
-      setTools(result)
-      setLastUpdated(new Date())
-      setSelectedTool(prev => prev ? (result.find(t => t.id === prev.id) ?? prev) : null)
-      // Refresh selected skill/mcp with updated paths from detector (paths change on enable/disable)
-      setSelectedSkill(prev => {
-        if (!prev) return null
-        for (const tool of result) {
-          const found = tool.skills.find(s => s.name === prev.name)
-          if (found) return found
-        }
-        return prev
-      })
-      setSelectedMcp(prev => {
-        if (!prev) return null
-        for (const tool of result) {
-          const found = tool.mcps.find(m => m.name === prev.name)
-          if (found) return found
-        }
-        return prev
-      })
-      capture('tools_loaded', {
-        tool_count: result.length,
-        installed_count: result.filter(t => t.installed).length,
-        tools_detected: result.filter(t => t.installed).map(t => t.id),
-      })
-      capture('tools_load_duration', {
-        duration_ms,
-        tool_count: result.length,
-      })
-      // Fire detector_failed for any tool that returned an error
-      result.filter(t => t.installed && t.error).forEach(t =>
-        capture('detector_failed', { tool_id: t.id, error: t.error })
-      )
-    } catch (e) {
-      console.error('get_tools failed:', e)
-    } finally {
-      setLoading(false)
-    }
-  }, [])
-
-  const fetchNotifications = useCallback(async () => {
-    try {
-      const result = await invoke<Notification[]>('get_notifications')
-      setNotifications(result)
-    } catch {
-      // DB may not be available; silently ignore
-    }
-  }, [])
-
-  useEffect(() => { fetchTools() }, [fetchTools])
-  useEffect(() => { fetchNotifications() }, [fetchNotifications])
-
   useEffect(() => {
-    const unlisten = listen('tools-changed', () => { setCloudSyncing(false); fetchTools() })
-    return () => { unlisten.then(fn => fn()) }
-  }, [fetchTools])
-
-  useEffect(() => {
-    const unlisten = listen('cloud-mcps-loading', () => setCloudSyncing(true))
-    return () => { unlisten.then(fn => fn()) }
-  }, [])
-
-  useEffect(() => {
-    const unlisten = listen('notifications-changed', fetchNotifications)
-    return () => { unlisten.then(fn => fn()) }
-  }, [fetchNotifications])
+    if (view === 'settings') capture('settings_opened')
+  }, [view])
 
   useEffect(() => {
     const onVisibility = () => {
@@ -222,10 +153,6 @@ export default function App() {
     document.addEventListener('visibilitychange', onVisibility)
     return () => document.removeEventListener('visibilitychange', onVisibility)
   }, [])
-
-  useEffect(() => {
-    if (view === 'settings') capture('settings_opened')
-  }, [view])
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -275,7 +202,7 @@ export default function App() {
           skill={selectedSkill}
           toolName={selectedTool?.name}
           toolId={selectedTool?.id}
-          onToggled={fetchTools}
+          onToggled={handleFetchTools}
           onBack={() => setView(skillBackView)}
         />
       ) : view === 'mcp-detail' && selectedMcp ? (
@@ -283,7 +210,7 @@ export default function App() {
           mcp={selectedMcp}
           toolName={selectedTool?.name}
           toolId={selectedTool?.id}
-          onToggled={fetchTools}
+          onToggled={handleFetchTools}
           onBack={() => setView(mcpBackView)}
         />
       ) : view === 'permissions-detail' && selectedTool ? (
@@ -301,7 +228,7 @@ export default function App() {
           onSelectPermissions={handleSelectPermissions}
           onOpenSkillsPage={handleOpenSkillsPage}
           onOpenMcpsPage={handleOpenMcpsPage}
-          onToolUpdated={fetchTools}
+          onToolUpdated={handleFetchTools}
           query={query || undefined}
           matchedSkills={searchResults.find(r => r.tool.id === selectedTool.id)?.matchedSkills}
           matchedMcps={searchResults.find(r => r.tool.id === selectedTool.id)?.matchedMcps}
@@ -354,7 +281,7 @@ export default function App() {
               ))
             )}
           </div>
-          <Footer lastUpdated={lastUpdated} onRefresh={fetchTools} loading={loading} cloudSyncing={cloudSyncing} />
+          <Footer lastUpdated={lastUpdated} onRefresh={handleFetchTools} loading={loading} cloudSyncing={cloudSyncing} />
         </>
       )}
     </div>
