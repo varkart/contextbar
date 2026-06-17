@@ -227,3 +227,25 @@ body {
 }
 .skill-md strong { font-weight: 600; color: var(--c-text); }
 .skill-md em { font-style: italic; }
+.skill-md table {
+  display: table;
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  margin: 0.5em 0;
+}
+.skill-md thead { display: table-header-group; }
+.skill-md tbody { display: table-row-group; }
+.skill-md tr { display: table-row; }
+.skill-md th, .skill-md td {
+  display: table-cell;
+  padding: 4px 8px;
+  border: 1px solid var(--c-border);
+  text-align: left;
+  vertical-align: top;
+}
+.skill-md th {
+  font-weight: 600;
+  color: var(--c-text);
+  background: var(--c-surface);
+}

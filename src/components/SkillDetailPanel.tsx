@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 import type { Skill, FileEntry } from '../types'
 import { capture, captureException } from '../analytics'
 
@@ -126,7 +127,7 @@ function ExpandableDescription({ skill }: { skill: Skill }) {
       {expanded && skill.fullDescription ? (
         <>
           <div className="text-[13px] text-[var(--c-text-2)] leading-relaxed overflow-x-hidden skill-md">
-            <ReactMarkdown>{stripFrontmatter(skill.fullDescription)}</ReactMarkdown>
+            <ReactMarkdown remarkPlugins={[remarkGfm]}>{stripFrontmatter(skill.fullDescription)}</ReactMarkdown>
           </div>
           <button
             onClick={() => { setExpanded(false); capture('skill_description_collapsed', { skill_name: skill.name }) }}
