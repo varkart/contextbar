@@ -14,7 +14,6 @@ vi.mock('../analytics', () => ({ capture: vi.fn(), captureException: vi.fn() }))
 
 const mockFetchTools = vi.fn().mockResolvedValue([])
 const mockFetchNotifications = vi.fn()
-const mockRefreshSelected = vi.fn(() => ({ skill: null, mcp: null }))
 
 vi.mock('../useTools', () => ({
   useTools: vi.fn(() => ({
@@ -23,7 +22,6 @@ vi.mock('../useTools', () => ({
     cloudSyncing: false,
     lastUpdated: null,
     fetchTools: mockFetchTools,
-    refreshSelected: mockRefreshSelected,
   })),
 }))
 
@@ -73,7 +71,6 @@ beforeEach(() => {
     cloudSyncing: false,
     lastUpdated: null,
     fetchTools: mockFetchTools,
-    refreshSelected: mockRefreshSelected,
   })
   mockUseNotifications.mockReturnValue({
     notifications: [],
@@ -109,7 +106,6 @@ describe('App — main view', () => {
       cloudSyncing: false,
       lastUpdated: null,
       fetchTools: mockFetchTools,
-      refreshSelected: mockRefreshSelected,
     })
     const { container } = render(<App />)
     expect(container.querySelectorAll('.animate-pulse').length).toBeGreaterThan(0)
@@ -122,7 +118,6 @@ describe('App — main view', () => {
       cloudSyncing: false,
       lastUpdated: null,
       fetchTools: mockFetchTools,
-      refreshSelected: mockRefreshSelected,
     })
     render(<App />)
     expect(screen.getByText('Claude Code')).toBeInTheDocument()
@@ -135,7 +130,6 @@ describe('App — main view', () => {
       cloudSyncing: false,
       lastUpdated: null,
       fetchTools: mockFetchTools,
-      refreshSelected: mockRefreshSelected,
     })
     render(<App />)
     fireEvent.change(screen.getByPlaceholderText(/Search tools/), { target: { value: 'zzznomatch' } })
@@ -163,7 +157,6 @@ describe('App — navigation', () => {
       cloudSyncing: false,
       lastUpdated: null,
       fetchTools: mockFetchTools,
-      refreshSelected: mockRefreshSelected,
     })
     render(<App />)
     fireEvent.click(screen.getByText('Claude Code'))
@@ -192,7 +185,6 @@ describe('App — navigation', () => {
       cloudSyncing: false,
       lastUpdated: null,
       fetchTools: mockFetchTools,
-      refreshSelected: mockRefreshSelected,
     })
     render(<App />)
     fireEvent.click(screen.getByText('Claude Code'))
