@@ -110,23 +110,40 @@ function ExpandableDescription({ skill }: { skill: Skill }) {
   const [expanded, setExpanded] = useState(false)
   const [fullContent, setFullContent] = useState<string | null>(null)
   const [loadingContent, setLoadingContent] = useState(false)
-  const [readFailed, setReadFailed] = useState(false)
+  const [loadError, setLoadError] = useState<string | null>(null)
 
   const loadFull = async () => {
     if (fullContent !== null) { setExpanded(true); return }
     setLoadingContent(true)
+    setLoadError(null)
     try {
-      const candidates = [`${skill.path}/SKILL.md`, skill.path]
+      // Rust parse_skill_description tries:
+      //   1. skill_path/SKILL.md  (directory skill)
+      //   2. skill_path.md        (sibling .md for directory, or file skills)
+      // Mirror that here. Also fall back to skill.path itself for .md file skills.
+      const sibling = skill.path.endsWith('.md')
+        ? skill.path  // already a .md file
+        : `${skill.path}.md`  // sibling .md next to the directory
+
+      const candidates = [
+        `${skill.path}/SKILL.md`,
+        sibling,
+        skill.path,
+      ]
+
+      let lastErr = ''
       for (const p of candidates) {
         try {
           const text = await invoke<string>('read_text_file', { path: p })
-          setFullContent(text)
-          setExpanded(true)
-          capture('skill_description_expanded', { skill_name: skill.name })
-          return
-        } catch { /* try next */ }
+          if (text.trim()) {
+            setFullContent(text)
+            setExpanded(true)
+            capture('skill_description_expanded', { skill_name: skill.name })
+            return
+          }
+        } catch (e) { lastErr = String(e) }
       }
-      setReadFailed(true)
+      setLoadError(lastErr || 'File not found')
     } finally {
       setLoadingContent(false)
     }
@@ -153,7 +170,17 @@ function ExpandableDescription({ skill }: { skill: Skill }) {
           <p className="text-[14px] text-[var(--c-text-2)] leading-relaxed line-clamp-3">
             {skill.description}
           </p>
-          {!readFailed && (
+          {loadError ? (
+            <p className="text-[12px] text-[var(--c-text-3)] mt-1.5 leading-relaxed">
+              Could not load full file —{' '}
+              <button
+                onClick={loadFull}
+                className="text-indigo-500 hover:text-indigo-400 transition-colors"
+              >
+                retry
+              </button>
+            </p>
+          ) : (
             <button
               onClick={loadFull}
               disabled={loadingContent}
