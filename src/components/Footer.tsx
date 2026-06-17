@@ -31,7 +31,8 @@ function RefreshIcon({ spinning }: { spinning: boolean }) {
 export default function Footer({ lastUpdated, onRefresh, loading, cloudSyncing }: FooterProps) {
   const [, setTick] = useState(0);
   useEffect(() => {
-    const id = setInterval(() => setTick(t => t + 1), 1000);
+    // Only re-render every minute instead of every second to reduce React reconciliation lag
+    const id = setInterval(() => setTick(t => t + 1), 60000);
     return () => clearInterval(id);
   }, []);
 
