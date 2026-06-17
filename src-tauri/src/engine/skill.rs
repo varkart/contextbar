@@ -50,6 +50,10 @@ fn read_directory(dir: &std::path::Path, disabled_subdir: Option<&str>) -> Vec<S
                 continue;
             }
             let path = entry.path();
+            // skip broken symlinks — target doesn't exist, not usable
+            if path.is_symlink() && !path.exists() {
+                continue;
+            }
             let description = parse_skill_description(&path);
             skills.push(Skill {
                 name,
@@ -70,6 +74,10 @@ fn read_directory(dir: &std::path::Path, disabled_subdir: Option<&str>) -> Vec<S
                     continue;
                 }
                 let path = entry.path();
+                // skip broken symlinks
+                if path.is_symlink() && !path.exists() {
+                    continue;
+                }
                 let description = parse_skill_description(&path);
                 skills.push(Skill {
                     name,
