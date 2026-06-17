@@ -47,12 +47,13 @@ describe('useTools', () => {
     expect(result.current.cloudSyncing).toBe(false)
   })
 
-  it('fetchTools can be called manually', async () => {
+  it('fetchTools can be called manually and returns fresh tools', async () => {
     const { result } = renderHook(() => useTools())
     await waitFor(() => expect(result.current.loading).toBe(false))
     mockInvoke.mockResolvedValue([mockTools[0]])
-    await act(() => result.current.fetchTools())
+    const fresh = await act(() => result.current.fetchTools())
     expect(result.current.tools).toEqual([mockTools[0]])
+    expect(fresh).toEqual([mockTools[0]])
   })
 
   it('handles fetch error gracefully', async () => {

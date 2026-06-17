@@ -8,6 +8,7 @@ import { useTheme, type ThemePreference } from './useTheme'
 import { useTools } from './useTools'
 import { useNotifications } from './useNotifications'
 import { capture } from './analytics'
+import { escapeTransition, type View } from './viewRouter'
 import McpDetailPanel from './components/McpDetailPanel'
 import PermissionsDetailPanel from './components/PermissionsDetailPanel'
 import SkillsListPanel from './components/SkillsListPanel'
@@ -26,8 +27,6 @@ import LogsPanel from './components/LogsPanel'
 const SPLASH_BORN = Date.now()
 const SPLASH_MIN_MS = 5000
 const isE2E = !!(globalThis as Record<string, unknown>).__skipSplash
-
-type View = 'main' | 'settings' | 'tool-detail' | 'skills-list' | 'mcps-list' | 'skill-detail' | 'mcp-detail' | 'permissions-detail' | 'notifications' | 'logs'
 
 function useView(): [View, (v: View) => void] {
   const [view, setViewState] = useState<View>(() =>
@@ -73,12 +72,12 @@ export default function App() {
   const { notifications, fetchNotifications } = useNotifications()
 
   const handleFetchTools = useCallback(async () => {
-    await fetchTools()
-    setSelectedTool(prev => prev ? (tools.find(t => t.id === prev.id) ?? prev) : null)
-    const { skill, mcp } = refreshSelected(selectedSkill, selectedMcp, tools)
+    const fresh = await fetchTools()
+    setSelectedTool(prev => prev ? (fresh.find(t => t.id === prev.id) ?? prev) : null)
+    const { skill, mcp } = refreshSelected(selectedSkill, selectedMcp, fresh)
     setSelectedSkill(skill)
     setSelectedMcp(mcp)
-  }, [fetchTools, tools, selectedSkill, selectedMcp, refreshSelected])
+  }, [fetchTools, selectedSkill, selectedMcp, refreshSelected])
 
   const handleSelectTool = useCallback((tool: AiTool) => {
     setSelectedTool(tool)
@@ -157,11 +156,8 @@ export default function App() {
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        if (view === 'skill-detail') setView(skillBackView)
-        else if (view === 'mcp-detail') setView(mcpBackView)
-        else if (view === 'permissions-detail' || view === 'skills-list' || view === 'mcps-list') setView(selectedTool ? 'tool-detail' : 'main')
-        else if (view === 'tool-detail') setView('main')
-        else if (view === 'settings' || view === 'notifications' || view === 'logs') setView('main')
+        const result = escapeTransition(view, skillBackView, mcpBackView, selectedTool)
+        if (result.type === 'navigate') setView(result.to)
         else invoke('hide_window').catch(() => {})
       }
     }
