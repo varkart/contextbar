@@ -228,6 +228,8 @@ export default function SkillDetailPanel({ skill, onBack, toolName, toolId, onTo
     if (!toolId) return
     setToggling(true)
     setToggleError(null)
+    // yield one frame so React paints the spinner before the IPC call blocks
+    await new Promise<void>(r => requestAnimationFrame(() => r()))
     try {
       await invoke('set_skill_active', {
         toolId,
