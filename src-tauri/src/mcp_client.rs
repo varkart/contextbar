@@ -1,6 +1,6 @@
 use std::process::Stdio;
-use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
-use tokio::process::Command as AsyncCommand;
+use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader, Lines};
+use tokio::process::{ChildStdout, Command as AsyncCommand};
 use tokio::time::{timeout, Duration};
 
 #[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
@@ -45,12 +45,10 @@ pub async fn query_tools(command: &str, args: &[String]) -> Result<Vec<McpTool>,
         .await
         .map_err(|e| e.to_string())?;
 
-    // 2. Read initialize response
-    timeout(Duration::from_secs(5), lines.next_line())
+    // 2. Read initialize response — skip notifications/log lines until id=1 response arrives
+    wait_for_response(&mut lines, 1, Duration::from_secs(5))
         .await
-        .map_err(|_| "timeout on initialize")?
-        .map_err(|e| e.to_string())?
-        .ok_or("server closed stdout before initialize response")?;
+        .map_err(|e| format!("initialize: {e}"))?;
 
     // 3. Send initialized notification
     let notif = serde_json::json!({
@@ -75,12 +73,10 @@ pub async fn query_tools(command: &str, args: &[String]) -> Result<Vec<McpTool>,
         .await
         .map_err(|e| e.to_string())?;
 
-    // 5. Read tools/list response
-    let line = timeout(Duration::from_secs(5), lines.next_line())
+    // 5. Read tools/list response — skip notifications until id=2 response arrives
+    let line = wait_for_response(&mut lines, 2, Duration::from_secs(5))
         .await
-        .map_err(|_| "timeout on tools/list")?
-        .map_err(|e| e.to_string())?
-        .ok_or("server closed stdout before tools/list response")?;
+        .map_err(|e| format!("tools/list: {e}"))?;
 
     let _ = child.kill().await;
 
@@ -111,4 +107,42 @@ pub async fn query_tools(command: &str, args: &[String]) -> Result<Vec<McpTool>,
         .unwrap_or_default();
 
     Ok(tools)
+}
+
+/// Read lines until one is a JSON-RPC response with the given `id`.
+/// Skips notifications (no `id`) and log lines (non-JSON).
+/// Returns the matching line or an error if timeout or stream closes.
+async fn wait_for_response(
+    lines: &mut Lines<BufReader<ChildStdout>>,
+    id: u64,
+    dur: Duration,
+) -> Result<String, String> {
+    let deadline = tokio::time::Instant::now() + dur;
+    loop {
+        let remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
+        if remaining.is_zero() {
+            return Err(format!("timeout waiting for id={id}"));
+        }
+        let line = timeout(remaining, lines.next_line())
+            .await
+            .map_err(|_| format!("timeout waiting for id={id}"))?
+            .map_err(|e| e.to_string())?
+            .ok_or_else(|| format!("server closed stdout waiting for id={id}"))?;
+
+        // Skip empty lines and non-JSON (log output, etc.)
+        let trimmed = line.trim();
+        if trimmed.is_empty() || !trimmed.starts_with('{') {
+            continue;
+        }
+        // Skip notifications (they have "method" but no numeric "id")
+        if let Ok(v) = serde_json::from_str::<serde_json::Value>(trimmed) {
+            match v.get("id") {
+                Some(serde_json::Value::Number(n)) if n.as_u64() == Some(id) => {
+                    return Ok(line);
+                }
+                Some(serde_json::Value::Number(_)) => continue, // different id
+                _ => continue, // notification or non-matching
+            }
+        }
+    }
 }
