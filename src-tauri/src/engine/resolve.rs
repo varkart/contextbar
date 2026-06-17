@@ -17,7 +17,9 @@ pub fn replace_var(s: &str, var: &str, value: &str) -> String {
 /// Compare two dotted version strings (e.g. "1.2.3" vs "0.9"). Returns Ordering.
 pub fn semver_cmp(a: &str, b: &str) -> std::cmp::Ordering {
     let parse = |s: &str| -> Vec<u64> {
-        s.split('.').map(|p| p.parse::<u64>().unwrap_or(0)).collect()
+        s.split('.')
+            .map(|p| p.parse::<u64>().unwrap_or(0))
+            .collect()
     };
     let va = parse(a);
     let vb = parse(b);
@@ -60,18 +62,28 @@ mod tests {
     #[test]
     fn expands_tilde() {
         let home = std::path::Path::new("/Users/test");
-        assert_eq!(expand_home("~/.claude", home), std::path::PathBuf::from("/Users/test/.claude"));
+        assert_eq!(
+            expand_home("~/.claude", home),
+            std::path::PathBuf::from("/Users/test/.claude")
+        );
     }
 
     #[test]
     fn leaves_absolute_path_unchanged() {
         let home = std::path::Path::new("/Users/test");
-        assert_eq!(expand_home("/Applications/Zed.app", home), std::path::PathBuf::from("/Applications/Zed.app"));
+        assert_eq!(
+            expand_home("/Applications/Zed.app", home),
+            std::path::PathBuf::from("/Applications/Zed.app")
+        );
     }
 
     #[test]
     fn replaces_var() {
-        let result = replace_var("${extensionPath}/dist/index.js", "${extensionPath}", "/home/.gemini/extensions/foo");
+        let result = replace_var(
+            "${extensionPath}/dist/index.js",
+            "${extensionPath}",
+            "/home/.gemini/extensions/foo",
+        );
         assert_eq!(result, "/home/.gemini/extensions/foo/dist/index.js");
     }
 }

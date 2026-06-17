@@ -1,7 +1,7 @@
-pub mod manifest;
-pub mod resolve;
 pub mod jsonc;
+pub mod manifest;
 pub mod mcp;
+pub mod resolve;
 pub mod skill;
 
 use crate::models::AiTool;
@@ -18,14 +18,14 @@ macro_rules! manifest_toml {
 
 fn all_manifest_strs() -> &'static [(&'static str, &'static str)] {
     &[
-        ("claude",   manifest_toml!("claude")),
-        ("cursor",   manifest_toml!("cursor")),
-        ("gemini",   manifest_toml!("gemini")),
-        ("copilot",  manifest_toml!("copilot")),
+        ("claude", manifest_toml!("claude")),
+        ("cursor", manifest_toml!("cursor")),
+        ("gemini", manifest_toml!("gemini")),
+        ("copilot", manifest_toml!("copilot")),
         ("windsurf", manifest_toml!("windsurf")),
-        ("chatgpt",  manifest_toml!("chatgpt")),
-        ("kiro",     manifest_toml!("kiro")),
-        ("codex",    manifest_toml!("codex")),
+        ("chatgpt", manifest_toml!("chatgpt")),
+        ("kiro", manifest_toml!("kiro")),
+        ("codex", manifest_toml!("codex")),
     ]
 }
 
@@ -92,7 +92,9 @@ fn detect_from_manifest(m: &Manifest) -> AiTool {
         return not_installed(m);
     }
 
-    let version = m.version.as_ref()
+    let version = m
+        .version
+        .as_ref()
         .and_then(|v| run_version(v, &home, &dr))
         .or(dr.detected_version.clone());
 
@@ -132,7 +134,11 @@ fn run_detection(specs: &[DetectionSpec], home: &std::path::Path) -> DetectionRe
             return dr;
         }
     }
-    DetectionResult { install_path: None, detected_version: None, detected_binary: None }
+    DetectionResult {
+        install_path: None,
+        detected_version: None,
+        detected_binary: None,
+    }
 }
 
 fn try_spec(spec: &DetectionSpec, home: &std::path::Path) -> Option<DetectionResult> {
@@ -168,7 +174,10 @@ fn try_spec(spec: &DetectionSpec, home: &std::path::Path) -> Option<DetectionRes
                 detected_binary: Some(bin_path),
             })
         }
-        DetectionSpec::VscodeExtension { extensions_dir, prefix } => {
+        DetectionSpec::VscodeExtension {
+            extensions_dir,
+            prefix,
+        } => {
             let dir = expand_home(extensions_dir, home);
             find_latest_vscode_extension(&dir, prefix).map(|(path, ver)| DetectionResult {
                 install_path: Some(path),
@@ -189,7 +198,11 @@ fn find_latest_vscode_extension(
         .filter_map(|e| {
             let name = e.file_name().to_string_lossy().to_string();
             let ver = name.strip_prefix(prefix)?.to_string();
-            if e.path().is_dir() { Some((name, ver)) } else { None }
+            if e.path().is_dir() {
+                Some((name, ver))
+            } else {
+                None
+            }
         })
         .collect();
 
@@ -211,8 +224,14 @@ fn semver_cmp(a: &str, b: &str) -> std::cmp::Ordering {
 
 fn run_version(spec: &VersionSpec, home: &std::path::Path, dr: &DetectionResult) -> Option<String> {
     match spec {
-        VersionSpec::Command { binary, args, timeout_ms, parse } => {
-            let bin = binary.clone()
+        VersionSpec::Command {
+            binary,
+            args,
+            timeout_ms,
+            parse,
+        } => {
+            let bin = binary
+                .clone()
                 .or_else(|| dr.detected_binary.clone())
                 .or_else(|| dr.install_path.clone())?;
             let args = args.clone();
@@ -242,8 +261,12 @@ fn run_command_version(binary: &str, args: &[String], parse: &str) -> Option<Str
 fn run_command_version_from_str(stdout: &str, parse: &str) -> Option<String> {
     match parse {
         "first_token" => stdout.split_whitespace().next().map(|s| s.to_string()),
-        "last_token"  => stdout.split_whitespace().last().map(|s| s.to_string()),
-        _ => stdout.lines().next().map(|l| l.trim().to_string()).filter(|s| !s.is_empty()),
+        "last_token" => stdout.split_whitespace().last().map(|s| s.to_string()),
+        _ => stdout
+            .lines()
+            .next()
+            .map(|l| l.trim().to_string())
+            .filter(|s| !s.is_empty()),
     }
 }
 
@@ -266,7 +289,11 @@ mod tests {
     fn all_manifests_parse_without_error() {
         for (id, toml_str) in all_manifest_strs() {
             let result = toml::from_str::<Manifest>(toml_str);
-            assert!(result.is_ok(), "manifest '{id}' failed to parse: {:?}", result.err());
+            assert!(
+                result.is_ok(),
+                "manifest '{id}' failed to parse: {:?}",
+                result.err()
+            );
         }
     }
 
@@ -283,7 +310,10 @@ mod tests {
     fn all_manifests_have_schema_version() {
         for (id, toml_str) in all_manifest_strs() {
             let m: Manifest = toml::from_str(toml_str).unwrap();
-            assert!(m.schema_version >= 1, "manifest '{id}' missing schema_version");
+            assert!(
+                m.schema_version >= 1,
+                "manifest '{id}' missing schema_version"
+            );
         }
     }
 

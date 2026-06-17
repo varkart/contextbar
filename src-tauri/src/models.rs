@@ -28,7 +28,7 @@ pub struct Skill {
 #[serde(rename_all = "camelCase")]
 pub struct McpServer {
     pub name: String,
-    pub command: String,     // empty string for HTTP-only MCPs
+    pub command: String, // empty string for HTTP-only MCPs
     pub args: Vec<String>,
     pub url: Option<String>, // set for HTTP MCPs (e.g. Gemini github extension)
     pub description: Option<String>,
@@ -47,5 +47,5 @@ pub struct FileEntry {
     pub path: String,
     pub is_dir: bool,
     pub children: Vec<FileEntry>,
-    pub extension: Option<String>,  // e.g. "md", "mjs", "ts" — None for dirs
+    pub extension: Option<String>, // e.g. "md", "mjs", "ts" — None for dirs
 }

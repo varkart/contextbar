@@ -1,8 +1,8 @@
-use crate::models::McpServer;
-use crate::detectors::parse_mcp_servers;
+use super::jsonc::strip_comments;
 use super::manifest::{McpSource, McpSourceSpec};
 use super::resolve::{expand_home, replace_var, version_in_range};
-use super::jsonc::strip_comments;
+use crate::detectors::parse_mcp_servers;
+use crate::models::McpServer;
 
 pub fn collect(
     sources: &[McpSource],
@@ -13,10 +13,17 @@ pub fn collect(
     let mut first_error: Option<String> = None;
 
     for (idx, entry) in sources.iter().enumerate() {
-        if !version_in_range(version, entry.min_version.as_deref(), entry.max_version.as_deref()) {
+        if !version_in_range(
+            version,
+            entry.min_version.as_deref(),
+            entry.max_version.as_deref(),
+        ) {
             continue;
         }
-        let source_id = entry.id.clone().unwrap_or_else(|| format!("source_{}", idx));
+        let source_id = entry
+            .id
+            .clone()
+            .unwrap_or_else(|| format!("source_{}", idx));
         let (mut mcps, err) = read_source(&entry.spec, home);
 
         for mcp in &mut mcps {
@@ -28,8 +35,10 @@ pub fn collect(
         if matches!(entry.spec, McpSourceSpec::ClaudeMcpList { .. }) {
             let existing_names: std::collections::HashSet<String> =
                 all.iter().map(|m: &McpServer| m.name.clone()).collect();
-            let existing_urls: std::collections::HashSet<String> =
-                all.iter().filter_map(|m: &McpServer| m.url.clone()).collect();
+            let existing_urls: std::collections::HashSet<String> = all
+                .iter()
+                .filter_map(|m: &McpServer| m.url.clone())
+                .collect();
             for mcp in mcps {
                 let name_seen = existing_names.contains(&mcp.name);
                 let url_seen = mcp.url.as_ref().is_some_and(|u| existing_urls.contains(u));
@@ -52,40 +61,50 @@ pub fn collect(
 
 fn read_source(source: &McpSourceSpec, home: &std::path::Path) -> (Vec<McpServer>, Option<String>) {
     match source {
-        McpSourceSpec::JsonKeyPair { file, active_key, disabled_key, jsonc } => {
-            read_json_key_pair(
-                &expand_home(file, home),
-                active_key,
-                disabled_key.as_deref(),
-                *jsonc,
-            )
-        }
-        McpSourceSpec::JsonNested { file, key_path, jsonc } => {
-            read_json_nested(&expand_home(file, home), key_path, *jsonc)
-        }
+        McpSourceSpec::JsonKeyPair {
+            file,
+            active_key,
+            disabled_key,
+            jsonc,
+        } => read_json_key_pair(
+            &expand_home(file, home),
+            active_key,
+            disabled_key.as_deref(),
+            *jsonc,
+        ),
+        McpSourceSpec::JsonNested {
+            file,
+            key_path,
+            jsonc,
+        } => read_json_nested(&expand_home(file, home), key_path, *jsonc),
         McpSourceSpec::ZedContextServers { file, key_path } => {
             read_zed_context_servers(&expand_home(file, home), key_path)
         }
-        McpSourceSpec::ExtensionDir { dir, manifest_file, enablement_file, extension_path_var } => {
-            read_extension_dir(
-                &expand_home(dir, home),
-                manifest_file,
-                enablement_file.as_deref().map(|f| expand_home(f, home)).as_deref(),
-                extension_path_var.as_deref(),
-            )
-        }
-        McpSourceSpec::ClaudePlugins { installed_plugins_file, mcp_filename } => {
-            read_claude_plugins(&expand_home(installed_plugins_file, home), mcp_filename)
-        }
+        McpSourceSpec::ExtensionDir {
+            dir,
+            manifest_file,
+            enablement_file,
+            extension_path_var,
+        } => read_extension_dir(
+            &expand_home(dir, home),
+            manifest_file,
+            enablement_file
+                .as_deref()
+                .map(|f| expand_home(f, home))
+                .as_deref(),
+            extension_path_var.as_deref(),
+        ),
+        McpSourceSpec::ClaudePlugins {
+            installed_plugins_file,
+            mcp_filename,
+        } => read_claude_plugins(&expand_home(installed_plugins_file, home), mcp_filename),
         McpSourceSpec::YamlKeyPair { file, active_key } => {
             read_yaml_key_pair(&expand_home(file, home), active_key)
         }
         McpSourceSpec::TomlKeyPair { file, active_key } => {
             read_toml_key_pair(&expand_home(file, home), active_key)
         }
-        McpSourceSpec::ClaudeDotfile { file } => {
-            read_claude_dotfile(&expand_home(file, home))
-        }
+        McpSourceSpec::ClaudeDotfile { file } => read_claude_dotfile(&expand_home(file, home)),
         McpSourceSpec::ClaudeMcpList { binary, timeout_ms } => {
             read_claude_mcp_list(binary, *timeout_ms, home)
         }
@@ -96,8 +115,7 @@ fn parse_json(path: &std::path::Path, jsonc: bool) -> Result<serde_json::Value, 
     let raw = std::fs::read_to_string(path)
         .map_err(|e| format!("cannot read {}: {}", path.display(), e))?;
     let content = if jsonc { strip_comments(&raw) } else { raw };
-    serde_json::from_str(&content)
-        .map_err(|e| format!("cannot parse {}: {}", path.display(), e))
+    serde_json::from_str(&content).map_err(|e| format!("cannot parse {}: {}", path.display(), e))
 }
 
 fn read_json_key_pair(
@@ -183,10 +201,17 @@ fn normalize_zed_servers(servers: &serde_json::Value) -> serde_json::Value {
     };
     let mut out = serde_json::Map::new();
     for (name, cfg) in obj {
-        let path = cfg.get("command").and_then(|c| c.get("path"))
-            .and_then(|v| v.as_str()).unwrap_or("").to_string();
-        let args = cfg.get("command").and_then(|c| c.get("args"))
-            .cloned().unwrap_or(serde_json::Value::Array(vec![]));
+        let path = cfg
+            .get("command")
+            .and_then(|c| c.get("path"))
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
+        let args = cfg
+            .get("command")
+            .and_then(|c| c.get("args"))
+            .cloned()
+            .unwrap_or(serde_json::Value::Array(vec![]));
         let mut entry = serde_json::json!({ "command": path, "args": args });
         if let Some(env) = cfg.get("command").and_then(|c| c.get("env")) {
             entry["env"] = env.clone();
@@ -240,7 +265,8 @@ fn read_extension_dir(
             Err(_) => continue,
         };
 
-        let active = enablement.as_ref()
+        let active = enablement
+            .as_ref()
             .map(|e| e.contains_key(&ext_name))
             .unwrap_or(true); // if no enablement file, all active
 
@@ -258,14 +284,20 @@ fn read_extension_dir(
         };
 
         for (name, cfg) in obj {
-            let url = cfg.get("httpUrl").and_then(|v| v.as_str()).map(|s| s.to_string());
+            let url = cfg
+                .get("httpUrl")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string());
 
             // Resolve ${extensionPath} in command args
-            let command = cfg.get("command").and_then(|v| v.as_str())
+            let command = cfg
+                .get("command")
+                .and_then(|v| v.as_str())
                 .map(|s| maybe_replace_var(s, extension_path_var, &ext_path_str))
                 .unwrap_or_default();
 
-            let args: Vec<String> = cfg.get("args")
+            let args: Vec<String> = cfg
+                .get("args")
                 .and_then(|v| v.as_array())
                 .map(|arr| {
                     arr.iter()
@@ -275,8 +307,11 @@ fn read_extension_dir(
                 })
                 .unwrap_or_default();
 
-            let description = cfg.get("description").and_then(|v| v.as_str())
-                .map(|s| s.to_string()).filter(|s| !s.trim().is_empty());
+            let description = cfg
+                .get("description")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string())
+                .filter(|s| !s.trim().is_empty());
 
             // Secrets: headers object (e.g. Authorization: Bearer $TOKEN)
             let headers = cfg.get("headers");
@@ -291,7 +326,7 @@ fn read_extension_dir(
                         Some(serde_json::Value::Object(e)) if !e.is_empty() => {
                             (true, e.keys().cloned().collect())
                         }
-                        _ => (false, vec![])
+                        _ => (false, vec![]),
                     }
                 }
             };
@@ -341,11 +376,21 @@ fn read_yaml_key_pair(
     }
     let raw = match std::fs::read_to_string(path) {
         Ok(s) => s,
-        Err(e) => return (vec![], Some(format!("cannot read {}: {}", path.display(), e))),
+        Err(e) => {
+            return (
+                vec![],
+                Some(format!("cannot read {}: {}", path.display(), e)),
+            )
+        }
     };
     let yaml: serde_yaml::Value = match serde_yaml::from_str(&raw) {
         Ok(v) => v,
-        Err(e) => return (vec![], Some(format!("cannot parse YAML {}: {}", path.display(), e))),
+        Err(e) => {
+            return (
+                vec![],
+                Some(format!("cannot parse YAML {}: {}", path.display(), e)),
+            )
+        }
     };
     let servers = match yaml.get(active_key) {
         Some(v) => v,
@@ -372,11 +417,21 @@ fn read_toml_key_pair(
     }
     let raw = match std::fs::read_to_string(path) {
         Ok(s) => s,
-        Err(e) => return (vec![], Some(format!("cannot read {}: {}", path.display(), e))),
+        Err(e) => {
+            return (
+                vec![],
+                Some(format!("cannot read {}: {}", path.display(), e)),
+            )
+        }
     };
     let toml_val: toml::Value = match toml::from_str(&raw) {
         Ok(v) => v,
-        Err(e) => return (vec![], Some(format!("cannot parse TOML {}: {}", path.display(), e))),
+        Err(e) => {
+            return (
+                vec![],
+                Some(format!("cannot parse TOML {}: {}", path.display(), e)),
+            )
+        }
     };
     let servers = match toml_val.get(active_key) {
         Some(v) => v,
@@ -423,7 +478,10 @@ pub fn is_claude_mcp_cache_cold() -> bool {
 /// Intended to be called from a background thread; guards against concurrent runs.
 pub fn warm_claude_mcp_list(home: &std::path::Path) {
     use std::sync::atomic::Ordering;
-    if CLAUDE_MCP_WARMING.compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire).is_err() {
+    if CLAUDE_MCP_WARMING
+        .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+        .is_err()
+    {
         return; // another thread is already warming
     }
     run_claude_mcp_list("claude", 6000, home);
@@ -448,11 +506,7 @@ fn read_claude_mcp_list(
     (vec![], None)
 }
 
-fn run_claude_mcp_list(
-    binary: &str,
-    timeout_ms: u64,
-    home: &std::path::Path,
-) {
+fn run_claude_mcp_list(binary: &str, timeout_ms: u64, home: &std::path::Path) {
     // Try the given binary, then common install paths if it fails
     let candidates: Vec<std::path::PathBuf> = {
         let mut v = vec![std::path::PathBuf::from(binary)];
@@ -535,11 +589,12 @@ fn parse_mcp_list_output(output: &str) -> Vec<McpServer> {
         let active = status.contains("Connected");
 
         // Only set url if it looks like a URL; stdio MCPs have command we don't know
-        let (url, command) = if url_clean.starts_with("http://") || url_clean.starts_with("https://") {
-            (Some(url_clean.to_string()), String::new())
-        } else {
-            (None, String::new())
-        };
+        let (url, command) =
+            if url_clean.starts_with("http://") || url_clean.starts_with("https://") {
+                (Some(url_clean.to_string()), String::new())
+            } else {
+                (None, String::new())
+            };
 
         mcps.push(McpServer {
             name: name.trim().to_string(),
@@ -557,9 +612,7 @@ fn parse_mcp_list_output(output: &str) -> Vec<McpServer> {
     mcps
 }
 
-fn read_claude_dotfile(
-    path: &std::path::Path,
-) -> (Vec<McpServer>, Option<String>) {
+fn read_claude_dotfile(path: &std::path::Path) -> (Vec<McpServer>, Option<String>) {
     if !path.exists() {
         return (vec![], None);
     }
@@ -601,7 +654,12 @@ fn read_claude_plugins(
     };
     let json: serde_json::Value = match serde_json::from_str(&raw) {
         Ok(v) => v,
-        Err(e) => return (vec![], Some(format!("cannot parse installed_plugins.json: {e}"))),
+        Err(e) => {
+            return (
+                vec![],
+                Some(format!("cannot parse installed_plugins.json: {e}")),
+            )
+        }
     };
 
     let plugins = match json.get("plugins").and_then(|p| p.as_object()) {
@@ -642,7 +700,7 @@ fn read_claude_plugins(
         } else if let Some(obj) = mcp_json.as_object() {
             obj.clone()
         } else {
-            continue
+            continue;
         };
 
         let mcps = crate::detectors::parse_mcp_servers(&serde_json::Value::Object(servers), true);
@@ -665,7 +723,12 @@ mod tests {
     }
 
     fn wrap(spec: McpSourceSpec) -> super::super::manifest::McpSource {
-        super::super::manifest::McpSource { id: None, min_version: None, max_version: None, spec }
+        super::super::manifest::McpSource {
+            id: None,
+            min_version: None,
+            max_version: None,
+            spec,
+        }
     }
 
     #[allow(dead_code)]
@@ -687,7 +750,11 @@ mod tests {
         write_json(tmp.path(), "settings.json", settings);
 
         let source = McpSourceSpec::JsonKeyPair {
-            file: tmp.path().join("settings.json").to_string_lossy().to_string(),
+            file: tmp
+                .path()
+                .join("settings.json")
+                .to_string_lossy()
+                .to_string(),
             active_key: "mcpServers".to_string(),
             disabled_key: Some("disabledMcpServers".to_string()),
             jsonc: false,
@@ -696,7 +763,7 @@ mod tests {
         assert!(err.is_none());
         assert_eq!(mcps.len(), 2);
         let alpha = mcps.iter().find(|m| m.name == "alpha").unwrap();
-        let beta  = mcps.iter().find(|m| m.name == "beta").unwrap();
+        let beta = mcps.iter().find(|m| m.name == "beta").unwrap();
         assert!(alpha.active);
         assert!(!beta.active);
     }
@@ -705,7 +772,11 @@ mod tests {
     fn json_key_pair_missing_file_returns_empty() {
         let tmp = TempDir::new().unwrap();
         let source = McpSourceSpec::JsonKeyPair {
-            file: tmp.path().join("missing.json").to_string_lossy().to_string(),
+            file: tmp
+                .path()
+                .join("missing.json")
+                .to_string_lossy()
+                .to_string(),
             active_key: "mcpServers".to_string(),
             disabled_key: None,
             jsonc: false,
@@ -726,7 +797,11 @@ mod tests {
 }"#;
         fs::write(tmp.path().join("settings.json"), jsonc).unwrap();
         let source = McpSourceSpec::JsonKeyPair {
-            file: tmp.path().join("settings.json").to_string_lossy().to_string(),
+            file: tmp
+                .path()
+                .join("settings.json")
+                .to_string_lossy()
+                .to_string(),
             active_key: "mcpServers".to_string(),
             disabled_key: None,
             jsonc: true,
@@ -750,7 +825,11 @@ mod tests {
         });
         write_json(tmp.path(), "settings.json", settings);
         let source = McpSourceSpec::JsonKeyPair {
-            file: tmp.path().join("settings.json").to_string_lossy().to_string(),
+            file: tmp
+                .path()
+                .join("settings.json")
+                .to_string_lossy()
+                .to_string(),
             active_key: "mcpServers".to_string(),
             disabled_key: None,
             jsonc: false,
@@ -778,7 +857,11 @@ mod tests {
         });
         write_json(tmp.path(), "settings.json", settings);
         let source = McpSourceSpec::JsonNested {
-            file: tmp.path().join("settings.json").to_string_lossy().to_string(),
+            file: tmp
+                .path()
+                .join("settings.json")
+                .to_string_lossy()
+                .to_string(),
             key_path: vec!["mcp".to_string(), "servers".to_string()],
             jsonc: false,
         };
@@ -792,9 +875,17 @@ mod tests {
     #[test]
     fn json_nested_missing_key_path_returns_empty() {
         let tmp = TempDir::new().unwrap();
-        write_json(tmp.path(), "settings.json", serde_json::json!({ "other": {} }));
+        write_json(
+            tmp.path(),
+            "settings.json",
+            serde_json::json!({ "other": {} }),
+        );
         let source = McpSourceSpec::JsonNested {
-            file: tmp.path().join("settings.json").to_string_lossy().to_string(),
+            file: tmp
+                .path()
+                .join("settings.json")
+                .to_string_lossy()
+                .to_string(),
             key_path: vec!["mcp".to_string(), "servers".to_string()],
             jsonc: false,
         };
@@ -822,7 +913,11 @@ mod tests {
         });
         write_json(tmp.path(), "settings.json", settings);
         let source = McpSourceSpec::ZedContextServers {
-            file: tmp.path().join("settings.json").to_string_lossy().to_string(),
+            file: tmp
+                .path()
+                .join("settings.json")
+                .to_string_lossy()
+                .to_string(),
             key_path: vec!["assistant".to_string(), "context_servers".to_string()],
         };
         let (mcps, err) = collect(&[wrap(source)], None, tmp.path());
@@ -840,13 +935,17 @@ mod tests {
         let ext_dir = tmp.path().join("extensions");
         let my_ext = ext_dir.join("my-ext");
         fs::create_dir_all(&my_ext).unwrap();
-        write_json(&my_ext, "gemini-extension.json", serde_json::json!({
-            "name": "my-ext",
-            "version": "1.0.0",
-            "mcpServers": {
-                "my-tool": { "command": "node", "args": ["server.js"] }
-            }
-        }));
+        write_json(
+            &my_ext,
+            "gemini-extension.json",
+            serde_json::json!({
+                "name": "my-ext",
+                "version": "1.0.0",
+                "mcpServers": {
+                    "my-tool": { "command": "node", "args": ["server.js"] }
+                }
+            }),
+        );
 
         let source = McpSourceSpec::ExtensionDir {
             dir: ext_dir.to_string_lossy().to_string(),
@@ -865,7 +964,7 @@ mod tests {
     fn extension_dir_active_status_from_enablement_file() {
         let tmp = TempDir::new().unwrap();
         let ext_dir = tmp.path().join("extensions");
-        let enabled_ext  = ext_dir.join("enabled-ext");
+        let enabled_ext = ext_dir.join("enabled-ext");
         let disabled_ext = ext_dir.join("disabled-ext");
         fs::create_dir_all(&enabled_ext).unwrap();
         fs::create_dir_all(&disabled_ext).unwrap();
@@ -873,24 +972,33 @@ mod tests {
         let manifest = serde_json::json!({
             "mcpServers": { "tool": { "command": "node", "args": [] } }
         });
-        write_json(&enabled_ext,  "ext.json", manifest.clone());
+        write_json(&enabled_ext, "ext.json", manifest.clone());
         write_json(&disabled_ext, "ext.json", manifest);
 
         // Only enabled-ext is in the enablement file
-        write_json(&ext_dir, "enablement.json", serde_json::json!({
-            "enabled-ext": { "overrides": ["/Users/*"] }
-        }));
+        write_json(
+            &ext_dir,
+            "enablement.json",
+            serde_json::json!({
+                "enabled-ext": { "overrides": ["/Users/*"] }
+            }),
+        );
 
         let source = McpSourceSpec::ExtensionDir {
             dir: ext_dir.to_string_lossy().to_string(),
             manifest_file: "ext.json".to_string(),
-            enablement_file: Some(ext_dir.join("enablement.json").to_string_lossy().to_string()),
+            enablement_file: Some(
+                ext_dir
+                    .join("enablement.json")
+                    .to_string_lossy()
+                    .to_string(),
+            ),
             extension_path_var: None,
         };
         let (mcps, _) = collect(&[wrap(source)], None, tmp.path());
         assert_eq!(mcps.len(), 2);
         // Both extensions have a "tool" server, one active one not
-        let active_count   = mcps.iter().filter(|m| m.active).count();
+        let active_count = mcps.iter().filter(|m| m.active).count();
         let inactive_count = mcps.iter().filter(|m| !m.active).count();
         assert_eq!(active_count, 1);
         assert_eq!(inactive_count, 1);
@@ -900,13 +1008,17 @@ mod tests {
     fn extension_dir_resolves_extension_path_var() {
         let tmp = TempDir::new().unwrap();
         let ext_dir = tmp.path().join("extensions");
-        let my_ext  = ext_dir.join("my-ext");
+        let my_ext = ext_dir.join("my-ext");
         fs::create_dir_all(&my_ext).unwrap();
-        write_json(&my_ext, "ext.json", serde_json::json!({
-            "mcpServers": {
-                "tool": { "command": "node", "args": ["${extensionPath}/dist/index.js"] }
-            }
-        }));
+        write_json(
+            &my_ext,
+            "ext.json",
+            serde_json::json!({
+                "mcpServers": {
+                    "tool": { "command": "node", "args": ["${extensionPath}/dist/index.js"] }
+                }
+            }),
+        );
 
         let source = McpSourceSpec::ExtensionDir {
             dir: ext_dir.to_string_lossy().to_string(),
@@ -924,16 +1036,20 @@ mod tests {
     fn extension_dir_http_mcp_sets_url() {
         let tmp = TempDir::new().unwrap();
         let ext_dir = tmp.path().join("extensions");
-        let my_ext  = ext_dir.join("github-ext");
+        let my_ext = ext_dir.join("github-ext");
         fs::create_dir_all(&my_ext).unwrap();
-        write_json(&my_ext, "ext.json", serde_json::json!({
-            "mcpServers": {
-                "github": {
-                    "httpUrl": "https://api.github.com/mcp/",
-                    "headers": { "Authorization": "Bearer $TOKEN" }
+        write_json(
+            &my_ext,
+            "ext.json",
+            serde_json::json!({
+                "mcpServers": {
+                    "github": {
+                        "httpUrl": "https://api.github.com/mcp/",
+                        "headers": { "Authorization": "Bearer $TOKEN" }
+                    }
                 }
-            }
-        }));
+            }),
+        );
 
         let source = McpSourceSpec::ExtensionDir {
             dir: ext_dir.to_string_lossy().to_string(),
@@ -946,7 +1062,9 @@ mod tests {
         assert_eq!(mcps[0].url.as_deref(), Some("https://api.github.com/mcp/"));
         assert_eq!(mcps[0].command, "");
         assert!(mcps[0].has_secrets);
-        assert!(mcps[0].secret_key_names.contains(&"Authorization".to_string()));
+        assert!(mcps[0]
+            .secret_key_names
+            .contains(&"Authorization".to_string()));
         // Secret value must not be serialised
         let serialized = serde_json::to_string(&mcps[0]).unwrap();
         assert!(!serialized.contains("$TOKEN"));
@@ -958,12 +1076,16 @@ mod tests {
         let ext_dir = tmp.path().join("extensions");
         // One ext with manifest, one without
         let good_ext = ext_dir.join("good-ext");
-        let bad_ext  = ext_dir.join("no-manifest-ext");
+        let bad_ext = ext_dir.join("no-manifest-ext");
         fs::create_dir_all(&good_ext).unwrap();
         fs::create_dir_all(&bad_ext).unwrap();
-        write_json(&good_ext, "ext.json", serde_json::json!({
-            "mcpServers": { "tool": { "command": "node", "args": [] } }
-        }));
+        write_json(
+            &good_ext,
+            "ext.json",
+            serde_json::json!({
+                "mcpServers": { "tool": { "command": "node", "args": [] } }
+            }),
+        );
         // bad_ext has no ext.json
 
         let source = McpSourceSpec::ExtensionDir {
@@ -973,7 +1095,11 @@ mod tests {
             extension_path_var: None,
         };
         let (mcps, err) = collect(&[wrap(source)], None, tmp.path());
-        assert!(err.is_none(), "should not error on missing manifest: {:?}", err);
+        assert!(
+            err.is_none(),
+            "should not error on missing manifest: {:?}",
+            err
+        );
         assert_eq!(mcps.len(), 1);
         assert_eq!(mcps[0].name, "tool");
     }
@@ -1014,15 +1140,23 @@ mod tests {
     #[test]
     fn version_gate_skips_source_outside_range() {
         let tmp = TempDir::new().unwrap();
-        write_json(tmp.path(), "settings.json", serde_json::json!({
-            "mcpServers": { "srv": { "command": "node", "args": [] } }
-        }));
+        write_json(
+            tmp.path(),
+            "settings.json",
+            serde_json::json!({
+                "mcpServers": { "srv": { "command": "node", "args": [] } }
+            }),
+        );
         let source = super::super::manifest::McpSource {
             id: None,
             min_version: Some("2.0".to_string()),
             max_version: None,
             spec: McpSourceSpec::JsonKeyPair {
-                file: tmp.path().join("settings.json").to_string_lossy().to_string(),
+                file: tmp
+                    .path()
+                    .join("settings.json")
+                    .to_string_lossy()
+                    .to_string(),
                 active_key: "mcpServers".to_string(),
                 disabled_key: None,
                 jsonc: false,
@@ -1037,15 +1171,23 @@ mod tests {
     #[test]
     fn version_gate_includes_source_in_range() {
         let tmp = TempDir::new().unwrap();
-        write_json(tmp.path(), "settings.json", serde_json::json!({
-            "mcpServers": { "srv": { "command": "node", "args": [] } }
-        }));
+        write_json(
+            tmp.path(),
+            "settings.json",
+            serde_json::json!({
+                "mcpServers": { "srv": { "command": "node", "args": [] } }
+            }),
+        );
         let source = super::super::manifest::McpSource {
             id: None,
             min_version: Some("2.0".to_string()),
             max_version: Some("3.0".to_string()),
             spec: McpSourceSpec::JsonKeyPair {
-                file: tmp.path().join("settings.json").to_string_lossy().to_string(),
+                file: tmp
+                    .path()
+                    .join("settings.json")
+                    .to_string_lossy()
+                    .to_string(),
                 active_key: "mcpServers".to_string(),
                 disabled_key: None,
                 jsonc: false,
@@ -1066,12 +1208,21 @@ mod tests {
             plugin:posthog:posthog: https://mcp.posthog.com/mcp (HTTP) - ✔ Connected\n";
         let mcps = parse_mcp_list_output(output);
         assert_eq!(mcps.len(), 3);
-        let ctx7 = mcps.iter().find(|m| m.name == "claude.ai Context7").unwrap();
+        let ctx7 = mcps
+            .iter()
+            .find(|m| m.name == "claude.ai Context7")
+            .unwrap();
         assert_eq!(ctx7.url.as_deref(), Some("https://mcp.context7.com/mcp"));
         assert!(ctx7.active);
-        let drive = mcps.iter().find(|m| m.name == "claude.ai Google Drive").unwrap();
+        let drive = mcps
+            .iter()
+            .find(|m| m.name == "claude.ai Google Drive")
+            .unwrap();
         assert!(!drive.active);
-        let posthog = mcps.iter().find(|m| m.name == "plugin:posthog:posthog").unwrap();
+        let posthog = mcps
+            .iter()
+            .find(|m| m.name == "plugin:posthog:posthog")
+            .unwrap();
         assert_eq!(posthog.url.as_deref(), Some("https://mcp.posthog.com/mcp"));
         assert!(posthog.active);
     }
@@ -1103,7 +1254,8 @@ mod tests {
 
         // Simulate: github already collected from settings.json
         let existing_names: std::collections::HashSet<&str> = ["github"].iter().copied().collect();
-        let new_mcps: Vec<_> = from_list.into_iter()
+        let new_mcps: Vec<_> = from_list
+            .into_iter()
             .filter(|m| !existing_names.contains(m.name.as_str()))
             .collect();
         assert_eq!(new_mcps.len(), 1);
@@ -1131,7 +1283,11 @@ mod tests {
         });
         write_json(tmp.path(), ".claude.json", dotfile);
         let source = McpSourceSpec::ClaudeDotfile {
-            file: tmp.path().join(".claude.json").to_string_lossy().to_string(),
+            file: tmp
+                .path()
+                .join(".claude.json")
+                .to_string_lossy()
+                .to_string(),
         };
         let (mcps, err) = collect(&[wrap(source)], None, tmp.path());
         assert!(err.is_none());
@@ -1159,7 +1315,11 @@ mod tests {
         });
         write_json(tmp.path(), ".claude.json", dotfile);
         let source = McpSourceSpec::ClaudeDotfile {
-            file: tmp.path().join(".claude.json").to_string_lossy().to_string(),
+            file: tmp
+                .path()
+                .join(".claude.json")
+                .to_string_lossy()
+                .to_string(),
         };
         let (mcps, err) = collect(&[wrap(source)], None, tmp.path());
         assert!(err.is_none());
@@ -1170,7 +1330,11 @@ mod tests {
     fn claude_dotfile_missing_file_returns_empty() {
         let tmp = TempDir::new().unwrap();
         let source = McpSourceSpec::ClaudeDotfile {
-            file: tmp.path().join(".claude.json").to_string_lossy().to_string(),
+            file: tmp
+                .path()
+                .join(".claude.json")
+                .to_string_lossy()
+                .to_string(),
         };
         let (mcps, err) = collect(&[wrap(source)], None, tmp.path());
         assert!(mcps.is_empty());
@@ -1191,7 +1355,11 @@ mod tests {
         });
         write_json(tmp.path(), ".claude.json", dotfile);
         let source = McpSourceSpec::ClaudeDotfile {
-            file: tmp.path().join(".claude.json").to_string_lossy().to_string(),
+            file: tmp
+                .path()
+                .join(".claude.json")
+                .to_string_lossy()
+                .to_string(),
         };
         let (mcps, err) = collect(&[wrap(source)], None, tmp.path());
         assert!(err.is_none());
@@ -1202,15 +1370,23 @@ mod tests {
     #[test]
     fn version_gate_unknown_version_runs_all_sources() {
         let tmp = TempDir::new().unwrap();
-        write_json(tmp.path(), "settings.json", serde_json::json!({
-            "mcpServers": { "srv": { "command": "node", "args": [] } }
-        }));
+        write_json(
+            tmp.path(),
+            "settings.json",
+            serde_json::json!({
+                "mcpServers": { "srv": { "command": "node", "args": [] } }
+            }),
+        );
         let source = super::super::manifest::McpSource {
             id: None,
             min_version: Some("99.0".to_string()),
             max_version: None,
             spec: McpSourceSpec::JsonKeyPair {
-                file: tmp.path().join("settings.json").to_string_lossy().to_string(),
+                file: tmp
+                    .path()
+                    .join("settings.json")
+                    .to_string_lossy()
+                    .to_string(),
                 active_key: "mcpServers".to_string(),
                 disabled_key: None,
                 jsonc: false,
@@ -1241,14 +1417,19 @@ mod tests {
         write_json(tmp.path(), "plugin_mcp.json", plugin_settings);
 
         let file_source = wrap(McpSourceSpec::JsonKeyPair {
-            file: tmp.path().join("plugin_mcp.json").to_string_lossy().to_string(),
+            file: tmp
+                .path()
+                .join("plugin_mcp.json")
+                .to_string_lossy()
+                .to_string(),
             active_key: "mcpServers".to_string(),
             disabled_key: None,
             jsonc: false,
         });
 
         // ClaudeMcpList output with same URL but different name
-        let cli_output = "plugin:posthog:posthog: https://mcp.posthog.com/mcp (HTTP) - ✔ Connected\n\
+        let cli_output =
+            "plugin:posthog:posthog: https://mcp.posthog.com/mcp (HTTP) - ✔ Connected\n\
             sentry: https://mcp.sentry.dev/mcp (HTTP) - ✔ Connected\n";
         let list_mcps = parse_mcp_list_output(cli_output);
         assert_eq!(list_mcps.len(), 2);
@@ -1263,7 +1444,8 @@ mod tests {
         let existing_urls: std::collections::HashSet<String> =
             file_mcps.iter().filter_map(|m| m.url.clone()).collect();
 
-        let added: Vec<_> = list_mcps.into_iter()
+        let added: Vec<_> = list_mcps
+            .into_iter()
             .filter(|m| {
                 let name_seen = existing_names.contains(&m.name);
                 let url_seen = m.url.as_ref().is_some_and(|u| existing_urls.contains(u));

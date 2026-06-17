@@ -13,7 +13,9 @@ fn strip_trailing_commas(input: &str) -> String {
         if bytes[i] == b',' {
             // Look ahead: skip whitespace, check for } or ]
             let mut j = i + 1;
-            while j < bytes.len() && (bytes[j] == b' ' || bytes[j] == b'\t' || bytes[j] == b'\n' || bytes[j] == b'\r') {
+            while j < bytes.len()
+                && (bytes[j] == b' ' || bytes[j] == b'\t' || bytes[j] == b'\n' || bytes[j] == b'\r')
+            {
                 j += 1;
             }
             if j < bytes.len() && (bytes[j] == b'}' || bytes[j] == b']') {
@@ -43,22 +45,36 @@ fn strip_comments_raw(input: &str) -> String {
 
         if in_string {
             match c {
-                '\\' => { escape_next = true; out.push(c); }
-                '"'  => { in_string = false; out.push(c); }
-                _    => { out.push(c); }
+                '\\' => {
+                    escape_next = true;
+                    out.push(c);
+                }
+                '"' => {
+                    in_string = false;
+                    out.push(c);
+                }
+                _ => {
+                    out.push(c);
+                }
             }
             continue;
         }
 
         // Not in string
         match c {
-            '"' => { in_string = true; out.push(c); }
+            '"' => {
+                in_string = true;
+                out.push(c);
+            }
             '/' => match chars.peek() {
                 Some('/') => {
                     // Line comment — consume until newline
                     chars.next();
                     for ch in chars.by_ref() {
-                        if ch == '\n' { out.push('\n'); break; }
+                        if ch == '\n' {
+                            out.push('\n');
+                            break;
+                        }
                     }
                 }
                 Some('*') => {
@@ -66,16 +82,23 @@ fn strip_comments_raw(input: &str) -> String {
                     chars.next();
                     loop {
                         match chars.next() {
-                            Some('*') if chars.peek() == Some(&'/') => { chars.next(); break; }
+                            Some('*') if chars.peek() == Some(&'/') => {
+                                chars.next();
+                                break;
+                            }
                             Some('\n') => out.push('\n'), // preserve line count
                             None => break,
                             _ => {}
                         }
                     }
                 }
-                _ => { out.push(c); }
+                _ => {
+                    out.push(c);
+                }
             },
-            _ => { out.push(c); }
+            _ => {
+                out.push(c);
+            }
         }
     }
     out
