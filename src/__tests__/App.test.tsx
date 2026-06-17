@@ -64,7 +64,10 @@ const installedTool = {
 beforeEach(() => {
   vi.clearAllMocks()
   window.location.hash = ''
-  mockInvoke.mockResolvedValue('0.7.0')
+  mockInvoke.mockImplementation(async (cmd) => {
+    if (cmd === 'get_permissions') return { allow: [], deny: [] }
+    return '0.7.0'
+  })
   mockUseTools.mockReturnValue({
     tools: [],
     loading: false,
@@ -211,6 +214,54 @@ describe('App — navigation', () => {
     fireEvent.click(screen.getByText('Activity Log'))
     fireEvent.keyDown(window, { key: 'Escape' })
     expect(screen.getByPlaceholderText(/Search tools/)).toBeInTheDocument()
+  })
+
+  it('navigates to skills-list and skill-detail', async () => {
+    mockUseTools.mockReturnValue({
+      tools: [installedTool],
+      loading: false, cloudSyncing: false, lastUpdated: null, fetchTools: mockFetchTools,
+    })
+    render(<App />)
+    fireEvent.click(screen.getByText('Claude Code'))
+    fireEvent.click(screen.getByLabelText('Open skills page'))
+    // Should be in skills list (header text is just "Skills")
+    expect(screen.getByRole('button', { name: 'Claude Code' })).toBeInTheDocument()
+    expect(screen.getByText('Skills')).toBeInTheDocument()
+    // Click specific skill
+    fireEvent.click(screen.getByText('graphify'))
+    // Should be in skill-detail
+    expect(screen.getByText('Files')).toBeInTheDocument()
+  })
+
+  it('navigates to mcps-list and mcp-detail', async () => {
+    mockUseTools.mockReturnValue({
+      tools: [installedTool],
+      loading: false, cloudSyncing: false, lastUpdated: null, fetchTools: mockFetchTools,
+    })
+    render(<App />)
+    fireEvent.click(screen.getByText('Claude Code'))
+    fireEvent.click(screen.getByLabelText('Open MCPs page'))
+    // Should be in mcps list
+    expect(screen.getByRole('button', { name: 'Claude Code' })).toBeInTheDocument()
+    expect(screen.getByText('MCPs')).toBeInTheDocument()
+    // Click specific mcp
+    fireEvent.click(screen.getByText('github'))
+    // Should be in mcp-detail
+    expect(screen.getByText('github')).toBeInTheDocument()
+  })
+
+  it('navigates to permissions-detail', async () => {
+    mockUseTools.mockReturnValue({
+      tools: [installedTool],
+      loading: false, cloudSyncing: false, lastUpdated: null, fetchTools: mockFetchTools,
+    })
+    render(<App />)
+    fireEvent.click(screen.getByText('Claude Code'))
+    // Wait for the mock get_permissions to resolve so the button appears
+    await waitFor(() => expect(screen.getByLabelText('Open permissions')).toBeInTheDocument())
+    fireEvent.click(screen.getByLabelText('Open permissions'))
+    // Should be in permissions-detail
+    expect(screen.getByText('Permissions')).toBeInTheDocument()
   })
 })
 
