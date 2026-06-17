@@ -9,6 +9,7 @@ interface McpDetailPanelProps {
   toolName?: string
   toolId?: string
   onToggled?: () => void
+  onRemoved?: () => void
 }
 
 function ToolItem({ tool }: { tool: McpTool }) {
@@ -151,11 +152,13 @@ function NpmInstallSection({ mcp, toolId }: { mcp: McpServer; toolId?: string })
   )
 }
 
-export default function McpDetailPanel({ mcp, onBack, toolName, toolId, onToggled }: McpDetailPanelProps) {
+export default function McpDetailPanel({ mcp, onBack, toolName, toolId, onToggled, onRemoved }: McpDetailPanelProps) {
   const [active, setActive] = useState(mcp.active)
   const [toggling, setToggling] = useState(false)
   const [justToggled, setJustToggled] = useState(false)
   const [toggleError, setToggleError] = useState<string | null>(null)
+  const [removing, setRemoving] = useState(false)
+  const [removeError, setRemoveError] = useState<string | null>(null)
   const [tools, setTools] = useState<McpTool[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -182,6 +185,23 @@ export default function McpDetailPanel({ mcp, onBack, toolName, toolId, onToggle
     } finally {
       setToggling(false)
       setTimeout(() => setJustToggled(false), 800)
+    }
+  }
+
+  const handleRemove = async () => {
+    if (!toolId) return
+    setRemoving(true)
+    setRemoveError(null)
+    try {
+      await invoke('remove_mcp', { toolId, mcpName: mcp.name, sourceId: mcp.sourceId })
+      capture('mcp_removed', { tool_id: toolId, mcp_name: mcp.name })
+      await onRemoved?.()
+      onBack()
+    } catch (e) {
+      setRemoveError(String(e))
+      captureException(e)
+    } finally {
+      setRemoving(false)
     }
   }
 
@@ -254,6 +274,23 @@ export default function McpDetailPanel({ mcp, onBack, toolName, toolId, onToggle
               {toggling ? '…' : justToggled ? '✓' : active ? 'Disable' : 'Enable'}
             </button>
           )}
+          {toolId && (
+            <button
+              onClick={handleRemove}
+              disabled={removing}
+              aria-label="Remove MCP"
+              className="p-0.5 text-[var(--c-text-3)] hover:text-red-400 transition-colors disabled:opacity-50"
+              title="Remove MCP"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+                stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+                className="w-3.5 h-3.5">
+                <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/>
+                <path d="M10 11v6"/><path d="M14 11v6"/>
+                <path d="M9 6V4h6v2"/>
+              </svg>
+            </button>
+          )}
           <span className="text-[12px] bg-violet-500/10 text-violet-400 px-1.5 py-0.5 rounded font-mono">MCP</span>
         </div>
       </div>
@@ -262,6 +299,12 @@ export default function McpDetailPanel({ mcp, onBack, toolName, toolId, onToggle
         <div className="mx-3 mt-1 px-3 py-1.5 rounded text-[12px] text-red-400 bg-red-500/10 flex items-center justify-between gap-2 flex-shrink-0">
           <span className="truncate">{toggleError}</span>
           <button onClick={() => setToggleError(null)} className="flex-shrink-0 hover:text-red-300">✕</button>
+        </div>
+      )}
+      {removeError && (
+        <div className="mx-3 mt-1 px-3 py-1.5 rounded text-[12px] text-red-400 bg-red-500/10 flex items-center justify-between gap-2 flex-shrink-0">
+          <span className="truncate">{removeError}</span>
+          <button onClick={() => setRemoveError(null)} className="flex-shrink-0 hover:text-red-300">✕</button>
         </div>
       )}
 

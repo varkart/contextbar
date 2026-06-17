@@ -1,10 +1,13 @@
 import { useState } from 'react'
+import { invoke } from '@tauri-apps/api/core'
 import type { AiTool, McpServer } from '../types'
+import { capture, captureException } from '../analytics'
 
 interface McpsListPanelProps {
   tool: AiTool
   onBack: () => void
   onSelectMcp: (mcp: McpServer) => void
+  onAdded?: () => void
 }
 
 function LockIcon() {
@@ -19,8 +22,131 @@ function LockIcon() {
   )
 }
 
-export default function McpsListPanel({ tool, onBack, onSelectMcp }: McpsListPanelProps) {
+function AddMcpForm({ toolId, onDone, onCancel }: { toolId: string; onDone: () => void; onCancel: () => void }) {
+  const [name, setName] = useState('')
+  const [command, setCommand] = useState('')
+  const [argsStr, setArgsStr] = useState('')
+  const [url, setUrl] = useState('')
+  const [isHttp, setIsHttp] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    const trimmedName = name.trim()
+    if (!trimmedName) return
+
+    setSaving(true)
+    setError(null)
+    try {
+      if (isHttp) {
+        await invoke('add_mcp', { toolId, name: trimmedName, url: url.trim() || undefined })
+      } else {
+        const args = argsStr.trim() ? argsStr.trim().split(/\s+/) : []
+        await invoke('add_mcp', {
+          toolId,
+          name: trimmedName,
+          command: command.trim() || undefined,
+          args,
+        })
+      }
+      capture('mcp_added', { tool_id: toolId, mcp_name: trimmedName })
+      await onDone()
+    } catch (e) {
+      setError(String(e))
+      captureException(e)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <form
+      onSubmit={handleSubmit}
+      className="px-3 py-2.5 border-b border-[var(--c-border)] bg-[var(--c-surface)] flex-shrink-0"
+      aria-label="Add MCP form"
+    >
+      <div className="flex items-center gap-1.5 mb-2">
+        <span className="text-[12px] font-semibold text-[var(--c-text-2)]">Add MCP</span>
+        <div className="ml-auto flex items-center gap-1">
+          <button
+            type="button"
+            onClick={() => setIsHttp(v => !v)}
+            className={`text-[11px] px-1.5 py-0.5 rounded transition-colors ${isHttp ? 'bg-violet-500/20 text-violet-400' : 'text-[var(--c-text-3)] hover:text-[var(--c-text-2)]'}`}
+          >
+            {isHttp ? 'HTTP' : 'stdio'}
+          </button>
+        </div>
+      </div>
+
+      <input
+        type="text"
+        value={name}
+        onChange={e => setName(e.target.value)}
+        placeholder="Name (e.g. github)"
+        required
+        className="w-full bg-[var(--c-bg)] text-[13px] text-[var(--c-text)] placeholder-[var(--c-text-3)] rounded px-2 py-1 outline-none focus:ring-1 focus:ring-violet-400/40 mb-1.5"
+        aria-label="MCP name"
+      />
+
+      {isHttp ? (
+        <input
+          type="url"
+          value={url}
+          onChange={e => setUrl(e.target.value)}
+          placeholder="URL (e.g. https://mcp.example.com)"
+          className="w-full bg-[var(--c-bg)] text-[13px] text-[var(--c-text)] placeholder-[var(--c-text-3)] rounded px-2 py-1 outline-none focus:ring-1 focus:ring-violet-400/40 mb-1.5"
+          aria-label="MCP URL"
+        />
+      ) : (
+        <>
+          <input
+            type="text"
+            value={command}
+            onChange={e => setCommand(e.target.value)}
+            placeholder="Command (e.g. npx)"
+            className="w-full bg-[var(--c-bg)] text-[13px] text-[var(--c-text)] placeholder-[var(--c-text-3)] rounded px-2 py-1 outline-none focus:ring-1 focus:ring-violet-400/40 mb-1.5"
+            aria-label="MCP command"
+          />
+          <input
+            type="text"
+            value={argsStr}
+            onChange={e => setArgsStr(e.target.value)}
+            placeholder="Args (space-separated, e.g. -y @modelcontextprotocol/server-github)"
+            className="w-full bg-[var(--c-bg)] text-[13px] text-[var(--c-text)] placeholder-[var(--c-text-3)] rounded px-2 py-1 outline-none focus:ring-1 focus:ring-violet-400/40 mb-1.5"
+            aria-label="MCP args"
+          />
+        </>
+      )}
+
+      {error && (
+        <p className="text-[12px] text-red-400 mb-1.5 leading-relaxed">{error}</p>
+      )}
+
+      <div className="flex gap-1.5">
+        <button
+          type="submit"
+          disabled={saving || !name.trim()}
+          className="text-[12px] bg-violet-500/20 text-violet-400 hover:bg-violet-500/30 px-2.5 py-0.5 rounded transition-colors disabled:opacity-50"
+        >
+          {saving ? 'Adding…' : 'Add'}
+        </button>
+        <button
+          type="button"
+          onClick={onCancel}
+          className="text-[12px] text-[var(--c-text-3)] hover:text-[var(--c-text-2)] px-2 py-0.5 rounded transition-colors"
+        >
+          Cancel
+        </button>
+      </div>
+    </form>
+  )
+}
+
+export default function McpsListPanel({ tool, onBack, onSelectMcp, onAdded }: McpsListPanelProps) {
   const [q, setQ] = useState('')
+  const [showAdd, setShowAdd] = useState(false)
+
   const filtered = q
     ? tool.mcps.filter(m => m.name.toLowerCase().includes(q.toLowerCase()))
     : tool.mcps
@@ -47,8 +173,33 @@ export default function McpsListPanel({ tool, onBack, onSelectMcp }: McpsListPan
         </button>
         <span className="text-[12px] text-[var(--c-text-3)]">›</span>
         <span className="text-[15px] font-semibold text-[var(--c-text)] tracking-[-0.01em]">MCPs</span>
-        <span className="ml-auto text-[12px] text-[var(--c-text-3)] tabular-nums flex-shrink-0">{filtered.length}</span>
+        <div className="ml-auto flex items-center gap-1.5 flex-shrink-0">
+          <span className="text-[12px] text-[var(--c-text-3)] tabular-nums">{filtered.length}</span>
+          <button
+            onClick={() => setShowAdd(v => !v)}
+            aria-label="Add MCP"
+            className={`p-0.5 rounded transition-colors ${showAdd ? 'text-violet-400' : 'text-[var(--c-text-3)] hover:text-[var(--c-text-2)]'}`}
+            title="Add MCP"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
+              className="w-3.5 h-3.5">
+              <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+            </svg>
+          </button>
+        </div>
       </div>
+
+      {showAdd && (
+        <AddMcpForm
+          toolId={tool.id}
+          onDone={async () => {
+            setShowAdd(false)
+            await onAdded?.()
+          }}
+          onCancel={() => setShowAdd(false)}
+        />
+      )}
 
       {tool.mcps.length > 5 && (
         <div className="px-3 py-1.5 border-b border-[var(--c-border)] flex-shrink-0">
