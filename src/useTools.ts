@@ -9,7 +9,7 @@ export interface UseToolsResult {
   loading: boolean
   cloudSyncing: boolean
   lastUpdated: Date | null
-  fetchTools: () => Promise<void>
+  fetchTools: () => Promise<AiTool[]>
   refreshSelected: (
     prevSkill: Skill | null,
     prevMcp: McpServer | null,
@@ -45,7 +45,7 @@ export function useTools(): UseToolsResult {
     return { skill, mcp }
   }, [])
 
-  const fetchTools = useCallback(async () => {
+  const fetchTools = useCallback(async (): Promise<AiTool[]> => {
     setLoading(true)
     const t0 = Date.now()
     try {
@@ -62,8 +62,10 @@ export function useTools(): UseToolsResult {
       result.filter(t => t.installed && t.error).forEach(t =>
         capture('detector_failed', { tool_id: t.id, error: t.error })
       )
+      return result
     } catch (e) {
       console.error('get_tools failed:', e)
+      return []
     } finally {
       setLoading(false)
     }
