@@ -1,9 +1,11 @@
+import { useRef, useCallback } from 'react';
 import SearchBar from '../SearchBar';
 import Header from '../Header';
 import Footer from '../Footer';
 import ToolRow from '../ToolRow';
 import type { AiTool, Notification } from '../../types';
-import type { SearchResult } from '../../search';
+import type { ToolMatch } from '../../search';
+import { useRovingFocus } from '../../useRovingFocus';
 
 interface MainViewProps {
   query: string;
@@ -11,10 +13,10 @@ interface MainViewProps {
   loading: boolean;
   tools: AiTool[];
   installedTools: AiTool[];
-  searchResults: SearchResult[];
+  searchResults: ToolMatch[];
   notifications: Notification[];
   updateInfo: any;
-  lastUpdated: number;
+  lastUpdated: Date | null;
   cloudSyncing: boolean;
   onSelectTool: (tool: AiTool) => void;
   onFetchTools: () => Promise<void>;
@@ -52,6 +54,30 @@ export default function MainView({
   onFetchTools,
   onGoTo
 }: MainViewProps) {
+  const navigableTools = searchResults.filter(r => r.tool.installed);
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
+
+  const { getItemProps, setFocusedIndex } = useRovingFocus({
+    count: navigableTools.length,
+    onSelect: (index) => {
+      const tool = navigableTools[index]?.tool;
+      if (tool) onSelectTool(tool);
+    },
+  });
+
+  // When Tab is pressed in the search input, move focus to the first list item
+  const handleSearchKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Tab' && !e.shiftKey && navigableTools.length > 0) {
+      e.preventDefault();
+      setFocusedIndex(0);
+      // The roving focus hook will call focus() on next render — trigger it via getItemProps
+      // by programmatically focusing: we need a small workaround since getItemProps creates refs
+      // Instead, dispatch arrow-down equivalent by setting index 0 and focusing
+      const firstItem = document.querySelector<HTMLElement>('[data-tool-list-item="0"]');
+      firstItem?.focus();
+    }
+  }, [navigableTools.length, setFocusedIndex]);
+
   return (
     <>
       <Header
@@ -60,7 +86,12 @@ export default function MainView({
         updateAvailable={!!updateInfo}
         notificationCount={notifications.length}
       />
-      <SearchBar value={query} onChange={setQuery} />
+      <SearchBar
+        value={query}
+        onChange={setQuery}
+        inputRef={searchInputRef}
+        onKeyDown={handleSearchKeyDown}
+      />
       <div className="flex-1 overflow-y-auto divide-y divide-[var(--c-border-sub)]">
         {loading && tools.length === 0 ? (
           <SkeletonRows />
@@ -83,13 +114,24 @@ export default function MainView({
             </p>
           </div>
         ) : (
-          searchResults.map(({ tool }) => (
-            <ToolRow
-              key={tool.id}
-              tool={tool}
-              onSelectTool={onSelectTool}
-            />
-        ))
+          searchResults.map(({ tool }) => {
+            const navIdx = navigableTools.findIndex(r => r.tool.id === tool.id);
+            const itemProps = navIdx >= 0 ? getItemProps(navIdx) : undefined;
+            return (
+              <ToolRow
+                key={tool.id}
+                tool={tool}
+                onSelectTool={onSelectTool}
+                tabIndex={itemProps?.tabIndex}
+                onKeyDown={itemProps?.onKeyDown as React.KeyboardEventHandler<HTMLButtonElement> | undefined}
+                rowRef={(el) => {
+                  itemProps?.ref(el);
+                  if (el && navIdx >= 0) el.setAttribute('data-tool-list-item', String(navIdx));
+                }}
+                onFocus={itemProps?.onFocus}
+              />
+            );
+          })
         )}
       </div>
       <Footer lastUpdated={lastUpdated} onRefresh={onFetchTools} loading={loading} cloudSyncing={cloudSyncing} />

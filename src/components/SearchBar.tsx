@@ -1,9 +1,13 @@
+import type React from 'react'
+
 interface SearchBarProps {
   value: string
   onChange: (v: string) => void
+  inputRef?: React.RefObject<HTMLInputElement | null>
+  onKeyDown?: (e: React.KeyboardEvent<HTMLInputElement>) => void
 }
 
-export default function SearchBar({ value, onChange }: SearchBarProps) {
+export default function SearchBar({ value, onChange, inputRef, onKeyDown }: SearchBarProps) {
   return (
     <div className="px-3 py-2 border-b border-[var(--c-border)] flex-shrink-0">
       <div className="relative flex items-center">
@@ -13,9 +17,11 @@ export default function SearchBar({ value, onChange }: SearchBarProps) {
           <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
         </svg>
         <input
+          ref={inputRef}
           type="text"
           value={value}
           onChange={e => onChange(e.target.value)}
+          onKeyDown={onKeyDown}
           placeholder="Search tools, skills, MCPs…"
           className="w-full bg-[var(--c-input)] border border-[var(--c-border)] rounded-md pl-7 pr-7 py-1.5 text-[14px] text-[var(--c-text)] placeholder-[var(--c-text-3)] outline-none focus:border-[var(--c-text-2)] transition-colors"
           autoComplete="off"
