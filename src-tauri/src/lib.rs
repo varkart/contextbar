@@ -506,8 +506,106 @@ fn set_mcp_active(
 }
 
 // ---------------------------------------------------------------------------
-// IPC commands – MCP add / remove (v1.1)
+// IPC commands – MCP validation + add / remove (v1.1)
 // ---------------------------------------------------------------------------
+
+#[derive(serde::Serialize)]
+pub struct McpValidation {
+    pub ok: bool,
+    pub name_error: Option<String>,
+    pub command_error: Option<String>,
+    pub url_error: Option<String>,
+}
+
+impl McpValidation {
+    fn pass() -> Self { Self { ok: true, name_error: None, command_error: None, url_error: None } }
+    fn fail(self) -> Self { Self { ok: false, ..self } }
+}
+
+/// Resolve a binary against PATH.
+fn which_in_path(bin: &str) -> bool {
+    let path_val = std::env::var("PATH").unwrap_or_default();
+    std::env::split_paths(&path_val)
+        .any(|dir| {
+            let p = dir.join(bin);
+            p.exists() && p.metadata().map(|m| !m.is_dir()).unwrap_or(false)
+        })
+}
+
+#[tauri::command]
+fn validate_mcp(
+    tool_id: String,
+    name: String,
+    command: Option<String>,
+    url: Option<String>,
+) -> McpValidation {
+    use crate::engine::manifest::McpSourceSpec;
+    use crate::engine::resolve::expand_home;
+
+    let mut v = McpValidation::pass();
+
+    // --- name ---
+    let trimmed_name = name.trim();
+    if trimmed_name.is_empty() {
+        v.name_error = Some("Name is required".into());
+    } else if !trimmed_name.chars().all(|c| c.is_alphanumeric() || matches!(c, '-' | '_' | '.')) {
+        v.name_error = Some("Name may only contain letters, numbers, hyphens, underscores, dots".into());
+    } else if let Ok(home) = dirs::home_dir().ok_or("") {
+        // Check for existing name in tool's config
+        if let Some(manifest) = crate::engine::load_manifest(&tool_id) {
+            for source in &manifest.mcp_sources {
+                if let McpSourceSpec::JsonKeyPair { file, active_key, disabled_key, .. } = &source.spec {
+                    let path = expand_home(file, &home);
+                    if let Ok(raw) = std::fs::read_to_string(&path) {
+                        if let Ok(val) = serde_json::from_str::<serde_json::Value>(&raw) {
+                            let check_key = |key: &str| {
+                                val.get(key)
+                                    .and_then(|v| v.as_object())
+                                    .map(|obj| obj.contains_key(trimmed_name))
+                                    .unwrap_or(false)
+                            };
+                            if check_key(active_key) || disabled_key.as_deref().map(check_key).unwrap_or(false) {
+                                v.name_error = Some(format!("MCP '{trimmed_name}' already exists in this tool"));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // --- command (stdio) ---
+    if url.is_none() {
+        if let Some(cmd) = command.as_deref() {
+            let cmd = cmd.trim();
+            if cmd.is_empty() {
+                v.command_error = Some("Command is required for stdio MCPs".into());
+            } else if !which_in_path(cmd) {
+                v.command_error = Some(format!(
+                    "'{cmd}' not found on PATH — make sure it is installed and in your shell PATH"
+                ));
+            }
+        }
+    }
+
+    // --- url (HTTP) ---
+    if let Some(u) = url.as_deref() {
+        let u = u.trim();
+        if u.is_empty() {
+            v.url_error = Some("URL is required".into());
+        } else if !u.starts_with("http://") && !u.starts_with("https://") {
+            v.url_error = Some("URL must start with http:// or https://".into());
+        } else if !u.contains('.') && !u.contains("localhost") {
+            v.url_error = Some("URL does not look valid — missing hostname".into());
+        }
+    }
+
+    if v.name_error.is_some() || v.command_error.is_some() || v.url_error.is_some() {
+        v.fail()
+    } else {
+        v
+    }
+}
 
 #[tauri::command]
 fn add_mcp(
@@ -965,6 +1063,7 @@ pub fn run() {
             query_mcp_tools,
             set_skill_active,
             set_mcp_active,
+            validate_mcp,
             add_mcp,
             remove_mcp,
             list_config_backups,
