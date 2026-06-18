@@ -1,3 +1,4 @@
+import type React from 'react';
 import StatusDot from './StatusDot';
 import type { AiTool } from '../types';
 import { TOOL_COLORS } from '../constants/toolColors';
@@ -34,17 +35,25 @@ function getStatusState(tool: AiTool): 'installed' | 'no-config' | 'not-installe
 interface ToolRowProps {
   tool: AiTool;
   onSelectTool: (tool: AiTool) => void;
+  tabIndex?: number;
+  onKeyDown?: (e: React.KeyboardEvent<HTMLButtonElement>) => void;
+  rowRef?: React.RefCallback<HTMLElement>;
+  onFocus?: () => void;
 }
 
-export default function ToolRow({ tool, onSelectTool }: ToolRowProps) {
+export default function ToolRow({ tool, onSelectTool, tabIndex, onKeyDown, rowRef, onFocus }: ToolRowProps) {
   const statusState = getStatusState(tool);
   const canNavigate = tool.installed;
 
   return (
     <button
+      ref={rowRef as React.RefCallback<HTMLButtonElement>}
       onClick={() => canNavigate && onSelectTool(tool)}
       disabled={!canNavigate}
-      className={`w-full flex items-center gap-2.5 px-4 py-2.5 text-left transition-colors duration-100 ${
+      tabIndex={tabIndex}
+      onKeyDown={onKeyDown}
+      onFocus={onFocus}
+      className={`w-full flex items-center gap-2.5 px-4 py-2.5 text-left transition-colors duration-100 focus-visible:bg-[var(--c-hover)] focus-visible:outline-none ${
         canNavigate ? 'hover:bg-[var(--c-hover)] cursor-pointer' : 'cursor-default'
       }`}
     >

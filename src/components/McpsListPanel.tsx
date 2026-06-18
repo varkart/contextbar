@@ -1,5 +1,7 @@
-import { useState } from 'react'
+import { useState, useRef, useCallback } from 'react'
+import type React from 'react'
 import type { AiTool, McpServer } from '../types'
+import { useRovingFocus } from '../useRovingFocus'
 
 interface McpsListPanelProps {
   tool: AiTool
@@ -22,10 +24,27 @@ function LockIcon() {
 
 export default function McpsListPanel({ tool, onBack, onSelectMcp, onAddMcp }: McpsListPanelProps) {
   const [q, setQ] = useState('')
+  const filterInputRef = useRef<HTMLInputElement | null>(null)
 
   const filtered = q
     ? tool.mcps.filter(m => m.name.toLowerCase().includes(q.toLowerCase()))
     : tool.mcps
+
+  const { getItemProps, setFocusedIndex } = useRovingFocus({
+    count: filtered.length,
+    onSelect: (index) => {
+      const mcp = filtered[index]
+      if (mcp) onSelectMcp(mcp)
+    },
+  })
+
+  const handleFilterKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Tab' && !e.shiftKey && filtered.length > 0) {
+      e.preventDefault()
+      setFocusedIndex(0)
+      document.querySelector<HTMLElement>('[data-mcp-item="0"]')?.focus()
+    }
+  }, [filtered.length, setFocusedIndex])
 
   return (
     <div className="flex flex-col h-full bg-[var(--c-bg)] animate-slide-in-right">
@@ -69,9 +88,11 @@ export default function McpsListPanel({ tool, onBack, onSelectMcp, onAddMcp }: M
       {tool.mcps.length > 5 && (
         <div className="px-3 py-1.5 border-b border-[var(--c-border)] flex-shrink-0">
           <input
+            ref={filterInputRef}
             type="text"
             value={q}
             onChange={e => setQ(e.target.value)}
+            onKeyDown={handleFilterKeyDown}
             placeholder="Filter MCPs…"
             className="w-full bg-[var(--c-hover)] text-[13px] text-[var(--c-text)] placeholder-[var(--c-text-3)] rounded px-2.5 py-1 outline-none focus:ring-1 focus:ring-violet-400/40"
           />
@@ -84,11 +105,17 @@ export default function McpsListPanel({ tool, onBack, onSelectMcp, onAddMcp }: M
             {q ? `No MCPs matching "${q}"` : 'No MCPs'}
           </p>
         ) : (
-          filtered.map(mcp => (
+          filtered.map((mcp, idx) => {
+            const itemProps = getItemProps(idx)
+            return (
             <button
               key={mcp.name}
+              ref={(el) => { itemProps.ref(el); if (el) el.setAttribute('data-mcp-item', String(idx)) }}
+              tabIndex={itemProps.tabIndex}
+              onKeyDown={itemProps.onKeyDown as React.KeyboardEventHandler<HTMLButtonElement>}
+              onFocus={itemProps.onFocus}
               onClick={() => onSelectMcp(mcp)}
-              className={`group w-full flex items-center gap-2 py-[3px] pl-[18px] pr-2 border-l-2 border-transparent hover:border-violet-400/50 hover:bg-[var(--c-hover)] hover:translate-x-[1px] transition-all duration-150 ease-out text-left ${!mcp.active ? 'opacity-40' : ''}`}
+              className={`group w-full flex items-center gap-2 py-[3px] pl-[18px] pr-2 border-l-2 border-transparent hover:border-violet-400/50 hover:bg-[var(--c-hover)] focus-visible:border-violet-400/50 focus-visible:bg-[var(--c-hover)] focus-visible:outline-none hover:translate-x-[1px] focus-visible:translate-x-[1px] transition-all duration-150 ease-out text-left ${!mcp.active ? 'opacity-40' : ''}`}
             >
               <span className="w-[3px] h-[3px] rounded-full bg-violet-400/60 flex-shrink-0" aria-hidden="true" />
               <span className="text-[14px] font-mono text-[var(--c-text-2)] truncate flex-1 leading-5">{mcp.name}</span>
@@ -106,7 +133,8 @@ export default function McpsListPanel({ tool, onBack, onSelectMcp, onAddMcp }: M
                 <polyline points="9 18 15 12 9 6"/>
               </svg>
             </button>
-          ))
+            )
+          })
         )}
       </div>
     </div>
