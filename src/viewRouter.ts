@@ -3,8 +3,8 @@ import type { AiTool, Skill, McpServer } from './types'
 export type View =
   | 'main'
   | 'llms-list'
-  | 'skills-aggregated'
-  | 'mcps-aggregated'
+  | 'add-skill'
+  | 'add-mcp'
   | 'settings'
   | 'tool-detail'
   | 'skills-list'
@@ -15,8 +15,11 @@ export type View =
   | 'notifications'
   | 'logs'
 
+export type LlmsListMode = 'default' | 'skills' | 'mcps'
+
 export interface RouterState {
   view: View
+  llmsListMode: LlmsListMode
   selectedTool: AiTool | null
   selectedSkill: Skill | null
   selectedMcp: McpServer | null
@@ -26,10 +29,11 @@ export interface RouterState {
 
 export type RouterAction =
   | { type: 'SELECT_TOOL'; tool: AiTool }
+  | { type: 'OPEN_LLMS_LIST'; mode: LlmsListMode }
+  | { type: 'OPEN_SKILLS_LIST_FOR_TOOL'; tool: AiTool }
+  | { type: 'OPEN_MCPS_LIST_FOR_TOOL'; tool: AiTool }
   | { type: 'SELECT_SKILL'; skill: Skill; fromView: View }
-  | { type: 'SELECT_SKILL_WITH_TOOL'; skill: Skill; tool: AiTool; fromView: View }
   | { type: 'SELECT_MCP'; mcp: McpServer; fromView: View }
-  | { type: 'SELECT_MCP_WITH_TOOL'; mcp: McpServer; tool: AiTool; fromView: View }
   | { type: 'SELECT_PERMISSIONS' }
   | { type: 'OPEN_SKILLS_PAGE' }
   | { type: 'OPEN_MCPS_PAGE' }
@@ -42,17 +46,20 @@ export type EscapeResult =
 
 export function escapeTransition(
   view: View,
+  llmsListMode: LlmsListMode,
   skillBackView: View,
   mcpBackView: View,
   selectedTool: AiTool | null,
 ): EscapeResult {
   if (view === 'skill-detail') return { type: 'navigate', to: skillBackView }
   if (view === 'mcp-detail') return { type: 'navigate', to: mcpBackView }
-  if (view === 'permissions-detail' || view === 'skills-list' || view === 'mcps-list')
-    return { type: 'navigate', to: selectedTool ? 'tool-detail' : 'main' }
+  if (view === 'permissions-detail') return { type: 'navigate', to: selectedTool ? 'tool-detail' : 'main' }
+  if (view === 'skills-list') return { type: 'navigate', to: llmsListMode === 'skills' ? 'llms-list' : 'tool-detail' }
+  if (view === 'mcps-list') return { type: 'navigate', to: llmsListMode === 'mcps' ? 'llms-list' : 'tool-detail' }
   if (view === 'tool-detail') return { type: 'navigate', to: 'llms-list' }
-  if (view === 'llms-list' || view === 'skills-aggregated' || view === 'mcps-aggregated')
-    return { type: 'navigate', to: 'main' }
+  if (view === 'add-skill') return { type: 'navigate', to: 'llms-list' }
+  if (view === 'add-mcp') return { type: 'navigate', to: 'llms-list' }
+  if (view === 'llms-list') return { type: 'navigate', to: 'main' }
   if (view === 'settings' || view === 'notifications' || view === 'logs')
     return { type: 'navigate', to: 'main' }
   return { type: 'hide' }
@@ -61,6 +68,7 @@ export function escapeTransition(
 export function initialRouterState(hash = ''): RouterState {
   return {
     view: hash === '#settings' ? 'settings' : 'main',
+    llmsListMode: 'default',
     selectedTool: null,
     selectedSkill: null,
     selectedMcp: null,
@@ -74,17 +82,20 @@ export function routerReducer(state: RouterState, action: RouterAction): RouterS
     case 'SELECT_TOOL':
       return { ...state, selectedTool: action.tool, view: 'tool-detail' }
 
+    case 'OPEN_LLMS_LIST':
+      return { ...state, llmsListMode: action.mode, view: 'llms-list' }
+
+    case 'OPEN_SKILLS_LIST_FOR_TOOL':
+      return { ...state, selectedTool: action.tool, view: 'skills-list' }
+
+    case 'OPEN_MCPS_LIST_FOR_TOOL':
+      return { ...state, selectedTool: action.tool, view: 'mcps-list' }
+
     case 'SELECT_SKILL':
       return { ...state, selectedSkill: action.skill, skillBackView: action.fromView, view: 'skill-detail' }
 
-    case 'SELECT_SKILL_WITH_TOOL':
-      return { ...state, selectedTool: action.tool, selectedSkill: action.skill, skillBackView: action.fromView, view: 'skill-detail' }
-
     case 'SELECT_MCP':
       return { ...state, selectedMcp: action.mcp, mcpBackView: action.fromView, view: 'mcp-detail' }
-
-    case 'SELECT_MCP_WITH_TOOL':
-      return { ...state, selectedTool: action.tool, selectedMcp: action.mcp, mcpBackView: action.fromView, view: 'mcp-detail' }
 
     case 'SELECT_PERMISSIONS':
       return { ...state, view: 'permissions-detail' }
