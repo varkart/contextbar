@@ -8,21 +8,23 @@ import ToolDetailPage from '../ToolDetailPage'
 import Settings from '../Settings'
 import MainView from './MainView'
 import LlmsListView from './LlmsListView'
-import SkillsAggregatedView from './SkillsAggregatedView'
-import McpsAggregatedView from './McpsAggregatedView'
+import AddSkillView from './AddSkillView'
+import AddMcpView from './AddMcpView'
 
 import type { ThemePreference } from '../../useTheme'
 
 export default function ViewManager({
   view,
+  llmsListMode,
   selectedTool,
   selectedSkill,
   selectedMcp,
   selectTool,
+  openLlmsList,
+  openSkillsListForTool,
+  openMcpsListForTool,
   selectSkill,
-  selectSkillWithTool,
   selectMcp,
-  selectMcpWithTool,
   openSkillsPage,
   openMcpsPage,
   goTo,
@@ -53,31 +55,36 @@ export default function ViewManager({
       />
     )
   }
+  if (view === 'add-skill') {
+    return (
+      <AddSkillView
+        installedTools={installedTools}
+        onBack={() => goTo('llms-list')}
+        onCreated={handleFetchTools}
+      />
+    )
+  }
+  if (view === 'add-mcp') {
+    return (
+      <AddMcpView
+        installedTools={installedTools}
+        onBack={() => goTo('llms-list')}
+        onAdded={handleFetchTools}
+      />
+    )
+  }
   if (view === 'llms-list') {
     return (
       <LlmsListView
         tools={tools}
         loading={loading}
+        mode={llmsListMode}
         onBack={() => goTo('main')}
         onSelectTool={selectTool}
-      />
-    )
-  }
-  if (view === 'skills-aggregated') {
-    return (
-      <SkillsAggregatedView
-        installedTools={installedTools}
-        onBack={() => goTo('main')}
-        onSelectSkill={(skill, tool) => selectSkillWithTool(skill, tool, 'skills-aggregated')}
-      />
-    )
-  }
-  if (view === 'mcps-aggregated') {
-    return (
-      <McpsAggregatedView
-        installedTools={installedTools}
-        onBack={() => goTo('main')}
-        onSelectMcp={(mcp, tool) => selectMcpWithTool(mcp, tool, 'mcps-aggregated')}
+        onOpenSkillsForTool={openSkillsListForTool}
+        onOpenMcpsForTool={openMcpsListForTool}
+        onAddSkill={() => goTo('add-skill')}
+        onAddMcp={() => goTo('add-mcp')}
       />
     )
   }
@@ -85,7 +92,7 @@ export default function ViewManager({
     return (
       <SkillsListPanel
         tool={selectedTool}
-        onBack={() => goTo('tool-detail')}
+        onBack={() => escape()}
         onSelectSkill={skill => selectSkill(skill, 'skills-list')}
       />
     )
@@ -94,7 +101,7 @@ export default function ViewManager({
     return (
       <McpsListPanel
         tool={selectedTool}
-        onBack={() => goTo('tool-detail')}
+        onBack={() => escape()}
         onSelectMcp={mcp => selectMcp(mcp, 'mcps-list')}
         onAdded={handleFetchTools}
       />
@@ -163,6 +170,7 @@ export default function ViewManager({
       cloudSyncing={cloudSyncing}
       onFetchTools={handleFetchTools}
       onGoTo={goTo}
+      onOpenLlmsList={openLlmsList}
     />
   )
 }

@@ -2,6 +2,7 @@ import Header from '../Header';
 import Footer from '../Footer';
 import type { AiTool, Notification } from '../../types';
 import type { ToolMatch } from '../../search';
+import type { LlmsListMode } from '../../useViewRouter';
 import { TOOL_COLORS } from '../../constants/toolColors';
 
 interface MainViewProps {
@@ -15,6 +16,7 @@ interface MainViewProps {
   cloudSyncing: boolean;
   onFetchTools: () => Promise<void>;
   onGoTo: (view: any) => void;
+  onOpenLlmsList: (mode: LlmsListMode) => void;
 }
 
 function ChevronRight() {
@@ -55,6 +57,7 @@ export default function MainView({
   cloudSyncing,
   onFetchTools,
   onGoTo,
+  onOpenLlmsList,
 }: MainViewProps) {
   const totalSkills = installedTools.reduce((n, t) => n + t.skills.length, 0);
   const activeSkills = installedTools.reduce((n, t) => n + t.skills.filter(s => s.active).length, 0);
@@ -73,7 +76,7 @@ export default function MainView({
       <div className="flex-1 overflow-y-auto flex flex-col gap-3 p-3">
         {/* LLMs tile — full width */}
         <button
-          onClick={() => onGoTo('llms-list')}
+          onClick={() => onOpenLlmsList('default')}
           className="w-full flex items-center gap-3 px-4 py-3.5 rounded-xl bg-[var(--c-surface)] hover:bg-[var(--c-hover)] border border-[var(--c-border-sub)] transition-colors text-left group"
         >
           <div className="flex-1 min-w-0">
@@ -102,7 +105,7 @@ export default function MainView({
         <div className="grid grid-cols-2 gap-3">
           {/* Skills tile */}
           <button
-            onClick={() => onGoTo('skills-aggregated')}
+            onClick={() => onOpenLlmsList('skills')}
             className="flex flex-col gap-2 px-4 py-3.5 rounded-xl bg-[var(--c-surface)] hover:bg-[var(--c-hover)] border border-[var(--c-border-sub)] transition-colors text-left group"
           >
             <div className="flex items-center justify-between">
@@ -121,7 +124,7 @@ export default function MainView({
 
           {/* MCPs tile */}
           <button
-            onClick={() => onGoTo('mcps-aggregated')}
+            onClick={() => onOpenLlmsList('mcps')}
             className="flex flex-col gap-2 px-4 py-3.5 rounded-xl bg-[var(--c-surface)] hover:bg-[var(--c-hover)] border border-[var(--c-border-sub)] transition-colors text-left group"
           >
             <div className="flex items-center justify-between">
