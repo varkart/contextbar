@@ -7,6 +7,9 @@ import McpDetailPanel from '../McpDetailPanel'
 import ToolDetailPage from '../ToolDetailPage'
 import Settings from '../Settings'
 import MainView from './MainView'
+import LlmsListView from './LlmsListView'
+import SkillsAggregatedView from './SkillsAggregatedView'
+import McpsAggregatedView from './McpsAggregatedView'
 
 import type { ThemePreference } from '../../useTheme'
 
@@ -17,13 +20,14 @@ export default function ViewManager({
   selectedMcp,
   selectTool,
   selectSkill,
+  selectSkillWithTool,
   selectMcp,
+  selectMcpWithTool,
   openSkillsPage,
   openMcpsPage,
   goTo,
   escape,
   query,
-  setQuery,
   loading,
   tools,
   installedTools,
@@ -46,6 +50,34 @@ export default function ViewManager({
         notifications={notifications}
         onBack={() => goTo('main')}
         onChanged={fetchNotifications}
+      />
+    )
+  }
+  if (view === 'llms-list') {
+    return (
+      <LlmsListView
+        tools={tools}
+        loading={loading}
+        onBack={() => goTo('main')}
+        onSelectTool={selectTool}
+      />
+    )
+  }
+  if (view === 'skills-aggregated') {
+    return (
+      <SkillsAggregatedView
+        installedTools={installedTools}
+        onBack={() => goTo('main')}
+        onSelectSkill={(skill, tool) => selectSkillWithTool(skill, tool, 'skills-aggregated')}
+      />
+    )
+  }
+  if (view === 'mcps-aggregated') {
+    return (
+      <McpsAggregatedView
+        installedTools={installedTools}
+        onBack={() => goTo('main')}
+        onSelectMcp={(mcp, tool) => selectMcpWithTool(mcp, tool, 'mcps-aggregated')}
       />
     )
   }
@@ -91,11 +123,11 @@ export default function ViewManager({
       />
     )
   }
-if (view === 'tool-detail' && selectedTool) {
+  if (view === 'tool-detail' && selectedTool) {
     return (
       <ToolDetailPage
         tool={selectedTool}
-        onBack={() => goTo('main')}
+        onBack={() => goTo('llms-list')}
         onSelectSkill={skill => selectSkill(skill, 'tool-detail')}
         onSelectMcp={mcp => selectMcp(mcp, 'tool-detail')}
         onOpenSkillsPage={openSkillsPage}
@@ -121,8 +153,6 @@ if (view === 'tool-detail' && selectedTool) {
 
   return (
     <MainView
-      query={query}
-      setQuery={setQuery}
       loading={loading}
       tools={tools}
       installedTools={installedTools}
@@ -131,7 +161,6 @@ if (view === 'tool-detail' && selectedTool) {
       updateInfo={updateInfo}
       lastUpdated={lastUpdated}
       cloudSyncing={cloudSyncing}
-      onSelectTool={selectTool}
       onFetchTools={handleFetchTools}
       onGoTo={goTo}
     />
