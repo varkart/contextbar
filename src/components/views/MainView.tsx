@@ -3,7 +3,7 @@ import Header from '../Header';
 import Footer from '../Footer';
 import ToolRow from '../ToolRow';
 import type { AiTool, Notification } from '../../types';
-import type { SearchResult } from '../../search';
+import type { ToolMatch } from '../../search';
 
 interface MainViewProps {
   query: string;
@@ -11,10 +11,10 @@ interface MainViewProps {
   loading: boolean;
   tools: AiTool[];
   installedTools: AiTool[];
-  searchResults: SearchResult[];
+  searchResults: ToolMatch[];
   notifications: Notification[];
   updateInfo: any;
-  lastUpdated: number;
+  lastUpdated: Date | null;
   cloudSyncing: boolean;
   onSelectTool: (tool: AiTool) => void;
   onFetchTools: () => Promise<void>;
