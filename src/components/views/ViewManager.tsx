@@ -94,6 +94,7 @@ export default function ViewManager({
         tool={selectedTool}
         onBack={() => escape()}
         onSelectSkill={skill => selectSkill(skill, 'skills-list')}
+        onAddSkill={() => goTo('add-skill')}
       />
     )
   }
@@ -103,7 +104,7 @@ export default function ViewManager({
         tool={selectedTool}
         onBack={() => escape()}
         onSelectMcp={mcp => selectMcp(mcp, 'mcps-list')}
-        onAdded={handleFetchTools}
+        onAddMcp={() => goTo('add-mcp')}
       />
     )
   }
