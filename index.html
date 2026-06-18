@@ -28,26 +28,10 @@
         pointer-events: none;
       }
 
-      #splash-glow-wrap {
-        position: relative;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-      }
-      #splash-glow {
-        position: absolute;
-        width: 192px;
-        height: 192px;
-        border-radius: 50%;
-        background: radial-gradient(circle, rgba(139,92,246,0.35) 0%, rgba(139,92,246,0) 70%);
-        animation: sp-glow 3.2s ease-in-out infinite;
-      }
       #splash-logo {
-        position: relative;
         width: 128px;
         height: 128px;
         object-fit: contain;
-        filter: drop-shadow(0 4px 12px rgba(0,0,0,0.4));
         animation: sp-float 3.2s ease-in-out infinite;
       }
       .splash-text-wrap {
@@ -111,11 +95,7 @@
         0%, 100% { transform: translateY(0); }
         50%       { transform: translateY(-8px); }
       }
-      @keyframes sp-glow {
-        0%, 100% { opacity: 0.3; transform: scale(1); }
-        50%       { opacity: 0.6; transform: scale(1.08); }
-      }
-      @keyframes sp-dot {
+@keyframes sp-dot {
         0%, 80%, 100% { opacity: 0.3; transform: scale(0.8); }
         40%           { opacity: 1;   transform: scale(1); }
       }
@@ -127,10 +107,7 @@
   </head>
   <body>
     <div id="splash">
-      <div id="splash-glow-wrap">
-        <div id="splash-glow"></div>
-        <img id="splash-logo" src="/sloth.png" alt="LLM Manager" draggable="false" />
-      </div>
+      <img id="splash-logo" src="/sloth.png" alt="LLM Manager" draggable="false" />
       <div class="splash-text-wrap">
         <p id="splash-title">LLM Manager</p>
         <div id="splash-tip-container">

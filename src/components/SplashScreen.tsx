@@ -69,22 +69,12 @@ export default function SplashScreen({ backendReady, onDismiss }: SplashScreenPr
       className={`fixed inset-0 z-50 flex flex-col items-center justify-center gap-6 bg-[var(--c-bg)] ${exiting ? 'splash-out' : 'splash-fade-in'}`}
       style={{ animationFillMode: 'forwards' }}
     >
-      {/* glow ring + logo */}
-      <div className="relative flex items-center justify-center">
-        <div
-          className="splash-glow absolute w-48 h-48 rounded-full"
-          style={{
-            background: 'radial-gradient(circle, rgba(139,92,246,0.45) 0%, rgba(99,102,241,0.15) 50%, rgba(139,92,246,0) 75%)',
-          }}
-        />
-        <img
-          src="/sloth.png"
-          alt="LLM Manager"
-          className="splash-float relative w-32 h-32 object-contain"
-          style={{ filter: 'drop-shadow(0 8px 24px rgba(139,92,246,0.5)) drop-shadow(0 4px 8px rgba(0,0,0,0.4))' }}
-          draggable={false}
-        />
-      </div>
+      <img
+        src="/sloth.png"
+        alt="LLM Manager"
+        className="splash-float w-32 h-32 object-contain"
+        draggable={false}
+      />
 
       {/* title + typewriter tip */}
       <div className="flex flex-col items-center gap-2 text-center w-full">
