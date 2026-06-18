@@ -5,9 +5,10 @@ interface SkillsListPanelProps {
   tool: AiTool
   onBack: () => void
   onSelectSkill: (skill: Skill) => void
+  onAddSkill: () => void
 }
 
-export default function SkillsListPanel({ tool, onBack, onSelectSkill }: SkillsListPanelProps) {
+export default function SkillsListPanel({ tool, onBack, onSelectSkill, onAddSkill }: SkillsListPanelProps) {
   const [q, setQ] = useState('')
   const filtered = q
     ? tool.skills.filter(s => s.name.toLowerCase().includes(q.toLowerCase()))
@@ -35,7 +36,21 @@ export default function SkillsListPanel({ tool, onBack, onSelectSkill }: SkillsL
         </button>
         <span className="text-[12px] text-[var(--c-text-3)]">›</span>
         <span className="text-[15px] font-semibold text-[var(--c-text)] tracking-[-0.01em]">Skills</span>
-        <span className="ml-auto text-[12px] text-[var(--c-text-3)] tabular-nums flex-shrink-0">{filtered.length}</span>
+        <div className="ml-auto flex items-center gap-1.5 flex-shrink-0">
+          <span className="text-[12px] text-[var(--c-text-3)] tabular-nums">{filtered.length}</span>
+          <button
+            onClick={onAddSkill}
+            aria-label="Add Skill"
+            className="p-0.5 rounded transition-colors text-[var(--c-text-3)] hover:text-indigo-400"
+            title="Add Skill"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
+              className="w-3.5 h-3.5">
+              <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+            </svg>
+          </button>
+        </div>
       </div>
 
       {tool.skills.length > 5 && (
