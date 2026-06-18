@@ -1,3 +1,4 @@
+import { useRovingFocus } from '../../useRovingFocus';
 import Header from '../Header';
 import Footer from '../Footer';
 import type { AiTool, Notification } from '../../types';
@@ -64,6 +65,17 @@ export default function MainView({
   const totalMcps = installedTools.reduce((n, t) => n + t.mcps.length, 0);
   const activeMcps = installedTools.reduce((n, t) => n + t.mcps.filter(m => m.active).length, 0);
 
+  const tileActions = [
+    () => onOpenLlmsList('default'),
+    () => onOpenLlmsList('skills'),
+    () => onOpenLlmsList('mcps'),
+  ];
+  const { getItemProps } = useRovingFocus({
+    count: tileActions.length,
+    onSelect: (i) => tileActions[i](),
+    horizontal: true,
+  });
+
   return (
     <>
       <Header
@@ -76,8 +88,9 @@ export default function MainView({
       <div className="flex-1 overflow-y-auto flex flex-col gap-3 p-3">
         {/* LLMs tile — full width */}
         <button
+          {...getItemProps(0)}
           onClick={() => onOpenLlmsList('default')}
-          className="w-full flex items-center gap-3 px-4 py-3.5 rounded-xl bg-[var(--c-surface)] hover:bg-[var(--c-hover)] border border-[var(--c-border-sub)] transition-colors text-left group"
+          className="w-full flex items-center gap-3 px-4 py-3.5 rounded-xl bg-[var(--c-surface)] hover:bg-[var(--c-hover)] focus-visible:bg-[var(--c-hover)] focus-visible:outline-none border border-[var(--c-border-sub)] transition-colors text-left group"
         >
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 mb-1.5">
@@ -105,8 +118,9 @@ export default function MainView({
         <div className="grid grid-cols-2 gap-3">
           {/* Skills tile */}
           <button
+            {...getItemProps(1)}
             onClick={() => onOpenLlmsList('skills')}
-            className="flex flex-col gap-2 px-4 py-3.5 rounded-xl bg-[var(--c-surface)] hover:bg-[var(--c-hover)] border border-[var(--c-border-sub)] transition-colors text-left group"
+            className="flex flex-col gap-2 px-4 py-3.5 rounded-xl bg-[var(--c-surface)] hover:bg-[var(--c-hover)] focus-visible:bg-[var(--c-hover)] focus-visible:outline-none border border-[var(--c-border-sub)] transition-colors text-left group"
           >
             <div className="flex items-center justify-between">
               <span className="text-[13px] font-semibold text-[var(--c-text-3)] uppercase tracking-wider">Skills</span>
@@ -124,8 +138,9 @@ export default function MainView({
 
           {/* MCPs tile */}
           <button
+            {...getItemProps(2)}
             onClick={() => onOpenLlmsList('mcps')}
-            className="flex flex-col gap-2 px-4 py-3.5 rounded-xl bg-[var(--c-surface)] hover:bg-[var(--c-hover)] border border-[var(--c-border-sub)] transition-colors text-left group"
+            className="flex flex-col gap-2 px-4 py-3.5 rounded-xl bg-[var(--c-surface)] hover:bg-[var(--c-hover)] focus-visible:bg-[var(--c-hover)] focus-visible:outline-none border border-[var(--c-border-sub)] transition-colors text-left group"
           >
             <div className="flex items-center justify-between">
               <span className="text-[13px] font-semibold text-[var(--c-text-3)] uppercase tracking-wider">MCPs</span>
