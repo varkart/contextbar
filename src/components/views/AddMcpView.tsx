@@ -10,33 +10,179 @@ interface AddMcpViewProps {
   onAdded: () => void;
 }
 
+type McpType = 'npx' | 'http' | 'command' | 'docker' | 'local';
+
+const MCP_TYPES: { value: McpType; label: string; description: string }[] = [
+  { value: 'npx',     label: 'npx package',    description: 'Install from npm registry via npx' },
+  { value: 'http',    label: 'HTTP / SSE',      description: 'Remote server via HTTP or SSE URL' },
+  { value: 'command', label: 'Custom command',  description: 'Any command with arguments' },
+  { value: 'docker',  label: 'Docker',          description: 'Run in a Docker container' },
+  { value: 'local',   label: 'Local script',    description: 'Local binary or script file' },
+];
+
+function ToolMultiSelect({
+  tools,
+  selected,
+  onChange,
+}: {
+  tools: AiTool[];
+  selected: Set<string>;
+  onChange: (ids: Set<string>) => void;
+}) {
+  const toggle = (id: string) => {
+    const next = new Set(selected);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    onChange(next);
+  };
+
+  return (
+    <div>
+      <label className="block text-[12px] font-semibold text-[var(--c-text-3)] uppercase tracking-wider mb-2">
+        Install to
+      </label>
+      <div className="flex flex-wrap gap-2">
+        {tools.map(tool => {
+          const colors = TOOL_COLORS[tool.id] ?? { bg: 'bg-zinc-500/10', text: 'text-zinc-500' };
+          const active = selected.has(tool.id);
+          return (
+            <button
+              key={tool.id}
+              type="button"
+              onClick={() => toggle(tool.id)}
+              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border transition-colors text-[13px] font-medium ${
+                active
+                  ? `${colors.bg} ${colors.text} border-transparent ring-1 ring-current ring-opacity-30`
+                  : 'border-[var(--c-border)] text-[var(--c-text-3)] hover:text-[var(--c-text-2)] hover:bg-[var(--c-hover)]'
+              }`}
+            >
+              <span className={`inline-flex items-center justify-center w-[16px] h-[16px] rounded text-[10px] font-bold ${colors.bg} ${colors.text}`}>
+                {tool.name[0].toUpperCase()}
+              </span>
+              {tool.name}
+              {active && (
+                <svg className="w-3 h-3 opacity-70" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                  <polyline points="20 6 9 17 4 12" />
+                </svg>
+              )}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function TypeDropdown({ value, onChange }: { value: McpType; onChange: (t: McpType) => void }) {
+  const [open, setOpen] = useState(false);
+  const selected = MCP_TYPES.find(t => t.value === value)!;
+
+  return (
+    <div>
+      <label className="block text-[12px] font-semibold text-[var(--c-text-3)] uppercase tracking-wider mb-2">
+        Type
+      </label>
+      <div className="relative">
+        <button
+          type="button"
+          onClick={() => setOpen(o => !o)}
+          className="w-full flex items-center justify-between px-3 py-2 bg-[var(--c-surface)] border border-[var(--c-border)] rounded-lg text-[14px] text-[var(--c-text)] hover:bg-[var(--c-hover)] transition-colors"
+        >
+          <span>{selected.label}</span>
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={`w-4 h-4 text-[var(--c-text-3)] transition-transform ${open ? 'rotate-180' : ''}`}>
+            <polyline points="6 9 12 15 18 9" />
+          </svg>
+        </button>
+        {open && (
+          <div className="absolute top-full left-0 right-0 mt-1 bg-[var(--c-surface)] border border-[var(--c-border)] rounded-lg shadow-lg z-10 overflow-hidden">
+            {MCP_TYPES.map(t => (
+              <button
+                key={t.value}
+                type="button"
+                onClick={() => { onChange(t.value); setOpen(false); }}
+                className={`w-full flex flex-col px-3 py-2.5 text-left hover:bg-[var(--c-hover)] transition-colors border-b border-[var(--c-border-sub)] last:border-0 ${t.value === value ? 'text-violet-400' : 'text-[var(--c-text)]'}`}
+              >
+                <span className="text-[13px] font-medium">{t.label}</span>
+                <span className="text-[11px] text-[var(--c-text-3)]">{t.description}</span>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function buildMcpPayload(type: McpType, fields: Record<string, string>): {
+  command?: string;
+  args?: string[];
+  url?: string;
+} {
+  switch (type) {
+    case 'npx': {
+      const pkg = fields.package?.trim() ?? '';
+      return { command: 'npx', args: ['-y', pkg] };
+    }
+    case 'http':
+      return { url: fields.url?.trim() };
+    case 'command': {
+      const args = fields.args?.trim() ? fields.args.trim().split(/\s+/) : [];
+      return { command: fields.command?.trim(), args };
+    }
+    case 'docker': {
+      const image = fields.image?.trim() ?? '';
+      const extraArgs = fields.dockerArgs?.trim() ? fields.dockerArgs.trim().split(/\s+/) : [];
+      return { command: 'docker', args: ['run', '--rm', '-i', image, ...extraArgs] };
+    }
+    case 'local': {
+      const interpreter = fields.interpreter?.trim();
+      const path = fields.path?.trim() ?? '';
+      if (interpreter) {
+        return { command: interpreter, args: [path] };
+      }
+      return { command: path, args: [] };
+    }
+  }
+}
+
 export default function AddMcpView({ installedTools, onBack, onAdded }: AddMcpViewProps) {
-  const [selectedToolId, setSelectedToolId] = useState<string>(installedTools[0]?.id ?? '');
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(
+    new Set(installedTools.slice(0, 1).map(t => t.id))
+  );
+  const [mcpType, setMcpType] = useState<McpType>('npx');
   const [name, setName] = useState('');
-  const [command, setCommand] = useState('');
-  const [argsStr, setArgsStr] = useState('');
-  const [url, setUrl] = useState('');
-  const [isHttp, setIsHttp] = useState(false);
+  const [fields, setFields] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [addedCount, setAddedCount] = useState<number | null>(null);
+
+  const setField = (key: string, val: string) => setFields(f => ({ ...f, [key]: val }));
+  const toolIds = Array.from(selectedIds);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (toolIds.length === 0) { setError('Select at least one tool'); return; }
     const trimmedName = name.trim();
-    if (!trimmedName || !selectedToolId) return;
+    if (!trimmedName) { setError('Name is required'); return; }
 
     setSaving(true);
     setError(null);
     try {
-      if (isHttp) {
-        await invoke('add_mcp', { toolId: selectedToolId, name: trimmedName, url: url.trim() || undefined });
-      } else {
-        const args = argsStr.trim() ? argsStr.trim().split(/\s+/) : [];
-        await invoke('add_mcp', { toolId: selectedToolId, name: trimmedName, command: command.trim() || undefined, args });
+      const payload = buildMcpPayload(mcpType, fields);
+      let count = 0;
+      for (const toolId of toolIds) {
+        await invoke('add_mcp', {
+          toolId,
+          name: trimmedName,
+          command: payload.command,
+          args: payload.args,
+          url: payload.url,
+        });
+        count++;
       }
-      capture('mcp_added', { tool_id: selectedToolId, mcp_name: trimmedName });
+      capture('mcp_added', { tool_ids: toolIds, mcp_name: trimmedName, mcp_type: mcpType });
+      setAddedCount(count);
       await onAdded();
-      onBack();
     } catch (e) {
       setError(String(e));
       captureException(e);
@@ -45,17 +191,42 @@ export default function AddMcpView({ installedTools, onBack, onAdded }: AddMcpVi
     }
   };
 
+  if (addedCount !== null) {
+    return (
+      <div className="flex flex-col h-full bg-[var(--c-bg)] animate-slide-in-right">
+        <div className="flex items-center gap-2 px-4 py-2.5 border-b border-[var(--c-border)] flex-shrink-0">
+          <button onClick={onBack} className="text-[var(--c-text-2)] hover:text-[var(--c-text)] transition-colors p-0.5 -ml-0.5 rounded" aria-label="Back">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5">
+              <polyline points="15 18 9 12 15 6" />
+            </svg>
+          </button>
+          <span className="text-[13px] text-[var(--c-text-3)]">MCPs</span>
+          <span className="text-[12px] text-[var(--c-text-3)]">›</span>
+          <span className="text-[15px] font-semibold text-[var(--c-text)] tracking-[-0.01em]">MCP Added</span>
+        </div>
+        <div className="flex-1 flex flex-col items-center justify-center p-6 text-center gap-4">
+          <div className="w-12 h-12 rounded-xl bg-green-500/10 flex items-center justify-center">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-6 h-6 text-green-400">
+              <polyline points="20 6 9 17 4 12" />
+            </svg>
+          </div>
+          <div>
+            <p className="text-[15px] font-semibold text-[var(--c-text)] mb-1">{name}</p>
+            <p className="text-[12px] text-[var(--c-text-3)]">Added to {addedCount} tool{addedCount !== 1 ? 's' : ''}</p>
+          </div>
+          <button onClick={onBack} className="px-6 py-2 rounded-lg bg-violet-500/20 text-violet-400 text-[14px] font-medium hover:bg-violet-500/30 transition-colors">
+            Done
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col h-full bg-[var(--c-bg)] animate-slide-in-right">
       <div className="flex items-center gap-2 px-4 py-2.5 border-b border-[var(--c-border)] flex-shrink-0">
-        <button
-          onClick={onBack}
-          className="text-[var(--c-text-2)] hover:text-[var(--c-text)] transition-colors p-0.5 -ml-0.5 rounded"
-          aria-label="Back"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
-            stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
-            className="w-3.5 h-3.5">
+        <button onClick={onBack} className="text-[var(--c-text-2)] hover:text-[var(--c-text)] transition-colors p-0.5 -ml-0.5 rounded" aria-label="Back">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5">
             <polyline points="15 18 9 12 15 6" />
           </svg>
         </button>
@@ -65,133 +236,155 @@ export default function AddMcpView({ installedTools, onBack, onAdded }: AddMcpVi
       </div>
 
       <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-4 space-y-4">
-        {/* Tool selector */}
+        {/* Multi-select tools */}
+        <ToolMultiSelect tools={installedTools} selected={selectedIds} onChange={setSelectedIds} />
+
+        {/* Type dropdown */}
+        <TypeDropdown value={mcpType} onChange={t => { setMcpType(t); setFields({}); }} />
+
+        {/* Name — always shown */}
         <div>
-          <label className="block text-[12px] font-semibold text-[var(--c-text-3)] uppercase tracking-wider mb-2">
-            Tool
-          </label>
-          <div className="flex flex-wrap gap-2">
-            {installedTools.map(tool => {
-              const colors = TOOL_COLORS[tool.id] ?? { bg: 'bg-zinc-500/10', text: 'text-zinc-500' };
-              const selected = tool.id === selectedToolId;
-              return (
-                <button
-                  key={tool.id}
-                  type="button"
-                  onClick={() => setSelectedToolId(tool.id)}
-                  className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border transition-colors text-[13px] font-medium ${
-                    selected
-                      ? `${colors.bg} ${colors.text} border-transparent`
-                      : 'border-[var(--c-border)] text-[var(--c-text-3)] hover:text-[var(--c-text-2)] hover:bg-[var(--c-hover)]'
-                  }`}
-                >
-                  <span className={`inline-flex items-center justify-center w-[16px] h-[16px] rounded text-[10px] font-bold ${selected ? colors.bg : 'bg-[var(--c-surface)]'} ${colors.text}`}>
-                    {tool.name[0].toUpperCase()}
-                  </span>
-                  {tool.name}
-                </button>
-              );
-            })}
-          </div>
+          <label className="block text-[12px] font-semibold text-[var(--c-text-3)] uppercase tracking-wider mb-1.5">Name *</label>
+          <input
+            type="text"
+            value={name}
+            onChange={e => setName(e.target.value)}
+            placeholder="e.g. github"
+            required
+            className="w-full bg-[var(--c-surface)] border border-[var(--c-border)] rounded-lg px-3 py-2 text-[14px] text-[var(--c-text)] placeholder-[var(--c-text-3)] outline-none focus:border-violet-400/60 transition-colors"
+          />
         </div>
 
-        {/* Type toggle */}
-        <div>
-          <label className="block text-[12px] font-semibold text-[var(--c-text-3)] uppercase tracking-wider mb-2">
-            Type
-          </label>
-          <div className="flex gap-1 bg-[var(--c-surface)] rounded-lg p-1 w-fit">
-            <button
-              type="button"
-              onClick={() => setIsHttp(false)}
-              className={`px-3 py-1 rounded text-[13px] font-medium transition-colors ${!isHttp ? 'bg-[var(--c-bg)] text-[var(--c-text)] shadow-sm' : 'text-[var(--c-text-3)] hover:text-[var(--c-text-2)]'}`}
-            >
-              stdio
-            </button>
-            <button
-              type="button"
-              onClick={() => setIsHttp(true)}
-              className={`px-3 py-1 rounded text-[13px] font-medium transition-colors ${isHttp ? 'bg-[var(--c-bg)] text-[var(--c-text)] shadow-sm' : 'text-[var(--c-text-3)] hover:text-[var(--c-text-2)]'}`}
-            >
-              HTTP
-            </button>
-          </div>
-        </div>
-
-        {/* Fields */}
-        <div className="space-y-2">
+        {/* Type-specific fields */}
+        {mcpType === 'npx' && (
           <div>
-            <label className="block text-[12px] font-semibold text-[var(--c-text-3)] uppercase tracking-wider mb-1.5">
-              Name
-            </label>
+            <label className="block text-[12px] font-semibold text-[var(--c-text-3)] uppercase tracking-wider mb-1.5">Package *</label>
             <input
               type="text"
-              value={name}
-              onChange={e => setName(e.target.value)}
-              placeholder="e.g. github"
+              value={fields.package ?? ''}
+              onChange={e => setField('package', e.target.value)}
+              placeholder="@modelcontextprotocol/server-github"
               required
-              className="w-full bg-[var(--c-surface)] border border-[var(--c-border)] rounded-lg px-3 py-2 text-[14px] text-[var(--c-text)] placeholder-[var(--c-text-3)] outline-none focus:border-violet-400/60 transition-colors"
+              className="w-full bg-[var(--c-surface)] border border-[var(--c-border)] rounded-lg px-3 py-2 text-[14px] text-[var(--c-text)] placeholder-[var(--c-text-3)] outline-none focus:border-violet-400/60 transition-colors font-mono text-[13px]"
             />
+            {fields.package && (
+              <p className="mt-1.5 text-[11px] text-[var(--c-text-3)] font-mono">npx -y {fields.package}</p>
+            )}
           </div>
-
-          {isHttp ? (
-            <div>
-              <label className="block text-[12px] font-semibold text-[var(--c-text-3)] uppercase tracking-wider mb-1.5">
-                URL
-              </label>
-              <input
-                type="url"
-                value={url}
-                onChange={e => setUrl(e.target.value)}
-                placeholder="https://mcp.example.com"
-                className="w-full bg-[var(--c-surface)] border border-[var(--c-border)] rounded-lg px-3 py-2 text-[14px] text-[var(--c-text)] placeholder-[var(--c-text-3)] outline-none focus:border-violet-400/60 transition-colors"
-              />
-            </div>
-          ) : (
-            <>
-              <div>
-                <label className="block text-[12px] font-semibold text-[var(--c-text-3)] uppercase tracking-wider mb-1.5">
-                  Command
-                </label>
-                <input
-                  type="text"
-                  value={command}
-                  onChange={e => setCommand(e.target.value)}
-                  placeholder="e.g. npx"
-                  className="w-full bg-[var(--c-surface)] border border-[var(--c-border)] rounded-lg px-3 py-2 text-[14px] text-[var(--c-text)] placeholder-[var(--c-text-3)] outline-none focus:border-violet-400/60 transition-colors"
-                />
-              </div>
-              <div>
-                <label className="block text-[12px] font-semibold text-[var(--c-text-3)] uppercase tracking-wider mb-1.5">
-                  Args
-                </label>
-                <input
-                  type="text"
-                  value={argsStr}
-                  onChange={e => setArgsStr(e.target.value)}
-                  placeholder="-y @modelcontextprotocol/server-github"
-                  className="w-full bg-[var(--c-surface)] border border-[var(--c-border)] rounded-lg px-3 py-2 text-[14px] text-[var(--c-text)] placeholder-[var(--c-text-3)] outline-none focus:border-violet-400/60 transition-colors font-mono text-[13px]"
-                />
-              </div>
-            </>
-          )}
-        </div>
-
-        {error && (
-          <p className="text-[13px] text-red-400 leading-relaxed">{error}</p>
         )}
 
+        {mcpType === 'http' && (
+          <div>
+            <label className="block text-[12px] font-semibold text-[var(--c-text-3)] uppercase tracking-wider mb-1.5">URL *</label>
+            <input
+              type="url"
+              value={fields.url ?? ''}
+              onChange={e => setField('url', e.target.value)}
+              placeholder="https://mcp.example.com/sse"
+              required
+              className="w-full bg-[var(--c-surface)] border border-[var(--c-border)] rounded-lg px-3 py-2 text-[14px] text-[var(--c-text)] placeholder-[var(--c-text-3)] outline-none focus:border-violet-400/60 transition-colors font-mono text-[13px]"
+            />
+          </div>
+        )}
+
+        {mcpType === 'command' && (
+          <div className="space-y-3">
+            <div>
+              <label className="block text-[12px] font-semibold text-[var(--c-text-3)] uppercase tracking-wider mb-1.5">Command *</label>
+              <input
+                type="text"
+                value={fields.command ?? ''}
+                onChange={e => setField('command', e.target.value)}
+                placeholder="node"
+                required
+                className="w-full bg-[var(--c-surface)] border border-[var(--c-border)] rounded-lg px-3 py-2 text-[14px] text-[var(--c-text)] placeholder-[var(--c-text-3)] outline-none focus:border-violet-400/60 transition-colors font-mono text-[13px]"
+              />
+            </div>
+            <div>
+              <label className="block text-[12px] font-semibold text-[var(--c-text-3)] uppercase tracking-wider mb-1.5">Args</label>
+              <input
+                type="text"
+                value={fields.args ?? ''}
+                onChange={e => setField('args', e.target.value)}
+                placeholder="/path/to/server.js --port 8080"
+                className="w-full bg-[var(--c-surface)] border border-[var(--c-border)] rounded-lg px-3 py-2 text-[14px] text-[var(--c-text)] placeholder-[var(--c-text-3)] outline-none focus:border-violet-400/60 transition-colors font-mono text-[13px]"
+              />
+            </div>
+            {(fields.command || fields.args) && (
+              <p className="text-[11px] text-[var(--c-text-3)] font-mono">{fields.command} {fields.args}</p>
+            )}
+          </div>
+        )}
+
+        {mcpType === 'docker' && (
+          <div className="space-y-3">
+            <div>
+              <label className="block text-[12px] font-semibold text-[var(--c-text-3)] uppercase tracking-wider mb-1.5">Docker image *</label>
+              <input
+                type="text"
+                value={fields.image ?? ''}
+                onChange={e => setField('image', e.target.value)}
+                placeholder="ghcr.io/user/mcp-server:latest"
+                required
+                className="w-full bg-[var(--c-surface)] border border-[var(--c-border)] rounded-lg px-3 py-2 text-[14px] text-[var(--c-text)] placeholder-[var(--c-text-3)] outline-none focus:border-violet-400/60 transition-colors font-mono text-[13px]"
+              />
+            </div>
+            <div>
+              <label className="block text-[12px] font-semibold text-[var(--c-text-3)] uppercase tracking-wider mb-1.5">Extra args</label>
+              <input
+                type="text"
+                value={fields.dockerArgs ?? ''}
+                onChange={e => setField('dockerArgs', e.target.value)}
+                placeholder="-e API_KEY=... --network host"
+                className="w-full bg-[var(--c-surface)] border border-[var(--c-border)] rounded-lg px-3 py-2 text-[14px] text-[var(--c-text)] placeholder-[var(--c-text-3)] outline-none focus:border-violet-400/60 transition-colors font-mono text-[13px]"
+              />
+            </div>
+            {fields.image && (
+              <p className="text-[11px] text-[var(--c-text-3)] font-mono">docker run --rm -i {fields.dockerArgs} {fields.image}</p>
+            )}
+          </div>
+        )}
+
+        {mcpType === 'local' && (
+          <div className="space-y-3">
+            <div>
+              <label className="block text-[12px] font-semibold text-[var(--c-text-3)] uppercase tracking-wider mb-1.5">Script path *</label>
+              <input
+                type="text"
+                value={fields.path ?? ''}
+                onChange={e => setField('path', e.target.value)}
+                placeholder="~/scripts/mcp-server.py"
+                required
+                className="w-full bg-[var(--c-surface)] border border-[var(--c-border)] rounded-lg px-3 py-2 text-[14px] text-[var(--c-text)] placeholder-[var(--c-text-3)] outline-none focus:border-violet-400/60 transition-colors font-mono text-[13px]"
+              />
+            </div>
+            <div>
+              <label className="block text-[12px] font-semibold text-[var(--c-text-3)] uppercase tracking-wider mb-1.5">Interpreter</label>
+              <input
+                type="text"
+                value={fields.interpreter ?? ''}
+                onChange={e => setField('interpreter', e.target.value)}
+                placeholder="python3  (leave blank if script is executable)"
+                className="w-full bg-[var(--c-surface)] border border-[var(--c-border)] rounded-lg px-3 py-2 text-[14px] text-[var(--c-text)] placeholder-[var(--c-text-3)] outline-none focus:border-violet-400/60 transition-colors font-mono text-[13px]"
+              />
+            </div>
+            {fields.path && (
+              <p className="text-[11px] text-[var(--c-text-3)] font-mono">
+                {fields.interpreter ? `${fields.interpreter} ${fields.path}` : fields.path}
+              </p>
+            )}
+          </div>
+        )}
+
+        {error && <p className="text-[13px] text-red-400 leading-relaxed">{error}</p>}
+
         <div className="flex gap-2 pt-1">
-          <button
-            type="button"
-            onClick={onBack}
-            className="flex-1 py-2 rounded-lg border border-[var(--c-border)] text-[14px] text-[var(--c-text-2)] hover:bg-[var(--c-hover)] transition-colors"
-          >
+          <button type="button" onClick={onBack} className="flex-1 py-2 rounded-lg border border-[var(--c-border)] text-[14px] text-[var(--c-text-2)] hover:bg-[var(--c-hover)] transition-colors">
             Cancel
           </button>
           <button
             type="submit"
-            disabled={saving || !name.trim() || !selectedToolId}
+            disabled={saving || selectedIds.size === 0}
             className="flex-1 py-2 rounded-lg bg-violet-500/20 text-violet-400 text-[14px] font-medium hover:bg-violet-500/30 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
           >
             {saving ? 'Adding…' : 'Add MCP'}

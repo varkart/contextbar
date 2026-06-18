@@ -228,52 +228,152 @@ fn open_path(path: String) -> Result<(), String> {
     tauri_plugin_opener::open_path(path, None::<&str>).map_err(|e| e.to_string())
 }
 
-#[tauri::command]
-fn create_skill(tool_id: String, name: String, description: Option<String>) -> Result<String, String> {
+/// Returns the first writable skills directory for `tool_id`, or an error.
+fn skill_dir_for(tool_id: &str) -> Result<std::path::PathBuf, String> {
     use crate::engine::manifest::SkillSourceSpec;
     use crate::engine::resolve::expand_home;
-
     let home = dirs::home_dir().ok_or("cannot find home dir")?;
-    let manifest = crate::engine::load_manifest(&tool_id)
+    let manifest = crate::engine::load_manifest(tool_id)
         .ok_or_else(|| format!("no manifest for '{tool_id}'"))?;
-
     for source in &manifest.skill_sources {
         let SkillSourceSpec::Directory { path, .. } = &source.spec;
-        let dir = expand_home(path, &home);
-        {
-            std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
-
-            // Sanitise name → filename
-            let slug: String = name
-                .to_lowercase()
-                .chars()
-                .map(|c| if c.is_alphanumeric() || c == '-' { c } else { '-' })
-                .collect::<String>()
-                .trim_matches('-')
-                .to_string();
-            if slug.is_empty() {
-                return Err("invalid skill name".into());
-            }
-
-            let file_path = dir.join(format!("{slug}.md"));
-            if file_path.exists() {
-                return Err(format!("skill '{slug}.md' already exists"));
-            }
-
-            let desc_line = description
-                .as_deref()
-                .filter(|d| !d.trim().is_empty())
-                .map(|d| format!("description: {d}\n"))
-                .unwrap_or_default();
-
-            let content = format!(
-                "---\nname: {name}\n{desc_line}---\n\n# {name}\n\n<!-- Describe what this skill does -->\n"
-            );
-            std::fs::write(&file_path, content).map_err(|e| e.to_string())?;
-            return Ok(file_path.to_string_lossy().into_owned());
-        }
+        return Ok(expand_home(path, &home));
     }
     Err(format!("'{tool_id}' has no writable skill source"))
+}
+
+/// Slugify a name for use as a filename.
+fn slugify(name: &str) -> String {
+    name.to_lowercase()
+        .chars()
+        .map(|c| if c.is_alphanumeric() || c == '-' { c } else { '-' })
+        .collect::<String>()
+        .split('-')
+        .filter(|s| !s.is_empty())
+        .collect::<Vec<_>>()
+        .join("-")
+}
+
+/// Write `content` as `{slug}.md` inside `dir`. Returns the created path.
+fn write_skill_file(dir: &std::path::Path, slug: &str, content: &str) -> Result<String, String> {
+    std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
+    let file_path = dir.join(format!("{slug}.md"));
+    if file_path.exists() {
+        return Err(format!("skill '{slug}.md' already exists in {}", dir.display()));
+    }
+    std::fs::write(&file_path, content).map_err(|e| e.to_string())?;
+    Ok(file_path.to_string_lossy().into_owned())
+}
+
+#[tauri::command]
+fn create_skill(
+    tool_ids: Vec<String>,
+    name: String,
+    description: Option<String>,
+) -> Result<Vec<String>, String> {
+    if name.trim().is_empty() {
+        return Err("skill name cannot be empty".into());
+    }
+    let slug = slugify(name.trim());
+    if slug.is_empty() {
+        return Err("invalid skill name".into());
+    }
+    let desc_line = description
+        .as_deref()
+        .filter(|d| !d.trim().is_empty())
+        .map(|d| format!("description: {d}\n"))
+        .unwrap_or_default();
+    let content = format!(
+        "---\nname: {name}\n{desc_line}---\n\n# {name}\n\n<!-- Describe what this skill does -->\n"
+    );
+
+    let mut paths = Vec::new();
+    for tool_id in &tool_ids {
+        let dir = skill_dir_for(tool_id)?;
+        let path = write_skill_file(&dir, &slug, &content)?;
+        paths.push(path);
+    }
+    Ok(paths)
+}
+
+#[tauri::command]
+async fn install_skill_from_url(
+    tool_ids: Vec<String>,
+    url: String,
+    name: Option<String>,
+) -> Result<Vec<String>, String> {
+    // Fetch content
+    let response = reqwest::get(&url).await.map_err(|e| e.to_string())?;
+    if !response.status().is_success() {
+        return Err(format!("HTTP {}: {}", response.status(), url));
+    }
+    let content = response.text().await.map_err(|e| e.to_string())?;
+
+    // Derive name from URL if not provided
+    let derived_name = name.unwrap_or_else(|| {
+        url.split('/')
+            .last()
+            .unwrap_or("skill")
+            .trim_end_matches(".md")
+            .to_string()
+    });
+    let slug = slugify(derived_name.trim());
+    if slug.is_empty() {
+        return Err("could not derive a valid skill name from URL".into());
+    }
+
+    let mut paths = Vec::new();
+    for tool_id in &tool_ids {
+        let dir = skill_dir_for(tool_id)?;
+        let path = write_skill_file(&dir, &slug, &content)?;
+        paths.push(path);
+    }
+    Ok(paths)
+}
+
+#[tauri::command]
+fn install_skill_from_path(
+    tool_ids: Vec<String>,
+    src_path: String,
+    name: Option<String>,
+) -> Result<Vec<String>, String> {
+    let src = std::path::Path::new(&src_path);
+    if !src.exists() {
+        return Err(format!("path not found: {src_path}"));
+    }
+
+    let content = if src.is_file() {
+        std::fs::read_to_string(src).map_err(|e| e.to_string())?
+    } else if src.is_dir() {
+        // Look for SKILL.md inside directory
+        let skill_md = src.join("SKILL.md");
+        if skill_md.exists() {
+            std::fs::read_to_string(&skill_md).map_err(|e| e.to_string())?
+        } else {
+            return Err(format!("directory has no SKILL.md: {src_path}"));
+        }
+    } else {
+        return Err(format!("unsupported path type: {src_path}"));
+    };
+
+    let derived_name = name.unwrap_or_else(|| {
+        src.file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or("skill")
+            .to_string()
+    });
+    let slug = slugify(derived_name.trim());
+    if slug.is_empty() {
+        return Err("could not derive a valid skill name from path".into());
+    }
+
+    let mut paths = Vec::new();
+    for tool_id in &tool_ids {
+        let dir = skill_dir_for(tool_id)?;
+        let path = write_skill_file(&dir, &slug, &content)?;
+        paths.push(path);
+    }
+    Ok(paths)
 }
 
 #[tauri::command]
@@ -858,6 +958,8 @@ pub fn run() {
             read_skill_dir,
             open_path,
             create_skill,
+            install_skill_from_url,
+            install_skill_from_path,
             read_text_file,
             check_for_update,
             query_mcp_tools,
