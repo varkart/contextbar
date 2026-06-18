@@ -1,4 +1,4 @@
-import { useState } from 'react';
+
 import type { AiTool, Skill, McpServer } from '../types';
 import ToolDetails from './ToolDetails';
 import { TOOL_COLORS } from '../constants/toolColors';
@@ -8,7 +8,6 @@ interface ToolDetailPageProps {
   onBack: () => void;
   onSelectSkill: (skill: Skill) => void;
   onSelectMcp: (mcp: McpServer) => void;
-  onSelectPermissions: () => void;
   onOpenSkillsPage: () => void;
   onOpenMcpsPage: () => void;
   onToolUpdated: () => void;
@@ -17,9 +16,8 @@ interface ToolDetailPageProps {
   matchedMcps?: Set<string>;
 }
 
-export default function ToolDetailPage({ tool, onBack, onSelectSkill, onSelectMcp, onSelectPermissions, onOpenSkillsPage, onOpenMcpsPage, query, matchedSkills, matchedMcps }: ToolDetailPageProps) {
+export default function ToolDetailPage({ tool, onBack, onSelectSkill, onSelectMcp, onOpenSkillsPage, onOpenMcpsPage, query, matchedSkills, matchedMcps }: ToolDetailPageProps) {
   const colors = TOOL_COLORS[tool.id] ?? { bg: 'bg-zinc-500/10', text: 'text-zinc-500' };
-  const [refreshKey] = useState(0);
 
   return (
     <div className="flex flex-col h-full bg-[var(--c-bg)] animate-slide-in-right">
@@ -65,10 +63,8 @@ export default function ToolDetailPage({ tool, onBack, onSelectSkill, onSelectMc
           matchedMcps={matchedMcps}
           onSelectSkill={onSelectSkill}
           onSelectMcp={onSelectMcp}
-          onSelectPermissions={onSelectPermissions}
           onOpenSkillsPage={onOpenSkillsPage}
           onOpenMcpsPage={onOpenMcpsPage}
-          refreshKey={refreshKey}
         />
       </div>
     </div>

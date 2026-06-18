@@ -4,7 +4,6 @@ import SkillsListPanel from '../SkillsListPanel'
 import McpsListPanel from '../McpsListPanel'
 import SkillDetailPanel from '../SkillDetailPanel'
 import McpDetailPanel from '../McpDetailPanel'
-import PermissionsDetailPanel from '../PermissionsDetailPanel'
 import ToolDetailPage from '../ToolDetailPage'
 import Settings from '../Settings'
 import MainView from './MainView'
@@ -19,7 +18,6 @@ export default function ViewManager({
   selectTool,
   selectSkill,
   selectMcp,
-  selectPermissions,
   openSkillsPage,
   openMcpsPage,
   goTo,
@@ -93,23 +91,13 @@ export default function ViewManager({
       />
     )
   }
-  if (view === 'permissions-detail' && selectedTool) {
-    return (
-      <PermissionsDetailPanel
-        toolId={selectedTool.id}
-        toolName={selectedTool.name}
-        onBack={() => goTo('tool-detail')}
-      />
-    )
-  }
-  if (view === 'tool-detail' && selectedTool) {
+if (view === 'tool-detail' && selectedTool) {
     return (
       <ToolDetailPage
         tool={selectedTool}
         onBack={() => goTo('main')}
         onSelectSkill={skill => selectSkill(skill, 'tool-detail')}
         onSelectMcp={mcp => selectMcp(mcp, 'tool-detail')}
-        onSelectPermissions={selectPermissions}
         onOpenSkillsPage={openSkillsPage}
         onOpenMcpsPage={openMcpsPage}
         onToolUpdated={handleFetchTools}
