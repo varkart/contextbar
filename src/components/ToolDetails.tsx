@@ -1,6 +1,5 @@
 import SkillSection from './SkillSection';
 import McpSection from './McpSection';
-import PermissionsSection from './PermissionsSection';
 import type { AiTool, Skill, McpServer } from '../types';
 
 interface ToolDetailsProps {
@@ -10,13 +9,11 @@ interface ToolDetailsProps {
   matchedMcps?: Set<string>;
   onSelectSkill?: (skill: Skill) => void;
   onSelectMcp?: (mcp: McpServer) => void;
-  onSelectPermissions?: () => void;
   onOpenSkillsPage?: () => void;
   onOpenMcpsPage?: () => void;
-  refreshKey?: number;
 }
 
-export default function ToolDetails({ tool, query, matchedSkills, matchedMcps, onSelectSkill, onSelectMcp, onSelectPermissions, onOpenSkillsPage, onOpenMcpsPage, refreshKey }: ToolDetailsProps) {
+export default function ToolDetails({ tool, query, matchedSkills, matchedMcps, onSelectSkill, onSelectMcp, onOpenSkillsPage, onOpenMcpsPage }: ToolDetailsProps) {
   return (
     <div className="px-2 pt-1 pb-3 space-y-3">
       {(tool.version || tool.error) && (
@@ -47,7 +44,6 @@ export default function ToolDetails({ tool, query, matchedSkills, matchedMcps, o
         onSelectMcp={onSelectMcp}
         onOpenPage={onOpenMcpsPage}
       />
-      <PermissionsSection toolId={tool.id} refreshKey={refreshKey} onOpen={onSelectPermissions} />
     </div>
   );
 }
