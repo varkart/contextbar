@@ -348,7 +348,30 @@ export default function McpDetailPanel({ mcp, onBack, toolName, toolId, onToggle
               </div>
             )}
             {error && (
-              <p className="text-[13px] text-red-400 px-2 py-2 leading-relaxed">{error}</p>
+              <div className="px-2 py-2 space-y-1">
+                <p className="text-[13px] text-red-400 leading-relaxed">
+                  {error.includes('timeout')
+                    ? 'Server took too long to respond. On first run, package managers like uvx or npx may need to download dependencies — try again in a moment.'
+                    : error.includes('failed to start')
+                    ? `Could not launch server: ${error.replace('failed to start MCP server: ', '')}`
+                    : error}
+                </p>
+                {error.includes('timeout') && (
+                  <button
+                    onClick={() => {
+                      setError(null);
+                      setLoading(true);
+                      invoke<McpTool[]>('query_mcp_tools', { command: mcp.command, args: mcp.args, url: mcp.url ?? null })
+                        .then(setTools)
+                        .catch(e => setError(String(e)))
+                        .finally(() => setLoading(false));
+                    }}
+                    className="text-[12px] text-violet-400 hover:text-violet-300 transition-colors"
+                  >
+                    Retry
+                  </button>
+                )}
+              </div>
             )}
             {!loading && !error && tools.length === 0 && (
               <p className="text-[13px] text-[var(--c-text-3)] px-2 py-2">No tools returned</p>
