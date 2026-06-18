@@ -229,6 +229,54 @@ fn open_path(path: String) -> Result<(), String> {
 }
 
 #[tauri::command]
+fn create_skill(tool_id: String, name: String, description: Option<String>) -> Result<String, String> {
+    use crate::engine::manifest::SkillSourceSpec;
+    use crate::engine::resolve::expand_home;
+
+    let home = dirs::home_dir().ok_or("cannot find home dir")?;
+    let manifest = crate::engine::load_manifest(&tool_id)
+        .ok_or_else(|| format!("no manifest for '{tool_id}'"))?;
+
+    for source in &manifest.skill_sources {
+        let SkillSourceSpec::Directory { path, .. } = &source.spec;
+        let dir = expand_home(path, &home);
+        {
+            std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+
+            // Sanitise name → filename
+            let slug: String = name
+                .to_lowercase()
+                .chars()
+                .map(|c| if c.is_alphanumeric() || c == '-' { c } else { '-' })
+                .collect::<String>()
+                .trim_matches('-')
+                .to_string();
+            if slug.is_empty() {
+                return Err("invalid skill name".into());
+            }
+
+            let file_path = dir.join(format!("{slug}.md"));
+            if file_path.exists() {
+                return Err(format!("skill '{slug}.md' already exists"));
+            }
+
+            let desc_line = description
+                .as_deref()
+                .filter(|d| !d.trim().is_empty())
+                .map(|d| format!("description: {d}\n"))
+                .unwrap_or_default();
+
+            let content = format!(
+                "---\nname: {name}\n{desc_line}---\n\n# {name}\n\n<!-- Describe what this skill does -->\n"
+            );
+            std::fs::write(&file_path, content).map_err(|e| e.to_string())?;
+            return Ok(file_path.to_string_lossy().into_owned());
+        }
+    }
+    Err(format!("'{tool_id}' has no writable skill source"))
+}
+
+#[tauri::command]
 fn read_text_file(path: String) -> Result<String, String> {
     let p = std::path::Path::new(&path);
 
@@ -809,6 +857,7 @@ pub fn run() {
             set_vibrancy,
             read_skill_dir,
             open_path,
+            create_skill,
             read_text_file,
             check_for_update,
             query_mcp_tools,

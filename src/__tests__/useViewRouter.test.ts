@@ -108,21 +108,6 @@ describe('useViewRouter — selectMcp', () => {
   })
 })
 
-describe('useViewRouter — selectPermissions', () => {
-  it('navigates to permissions-detail', () => {
-    const { result } = renderHook(() => useViewRouter())
-    act(() => { result.current.selectTool(tool) })
-    act(() => { result.current.selectPermissions() })
-    expect(result.current.view).toBe('permissions-detail')
-  })
-
-  it('fires capture with tool_id', () => {
-    const { result } = renderHook(() => useViewRouter())
-    act(() => { result.current.selectTool(tool) })
-    act(() => { result.current.selectPermissions() })
-    expect(mockCapture).toHaveBeenCalledWith('permissions_detail_viewed', { tool_id: 'claude' })
-  })
-})
 
 describe('useViewRouter — openSkillsPage / openMcpsPage', () => {
   it('openSkillsPage navigates to skills-list', () => {
