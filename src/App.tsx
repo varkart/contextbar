@@ -86,7 +86,7 @@ export default function App() {
   const searchResults = useMemo(() => searchTools(installedTools, query), [installedTools, query])
 
   return (
-    <div className="w-[380px] h-[520px] bg-[var(--c-bg)] text-[var(--c-text)] flex flex-col overflow-hidden select-none">
+    <div className="w-[380px] h-[520px] bg-[var(--c-bg)] text-[var(--c-text)] flex flex-col overflow-hidden">
       {!splashDismissed && (
         <SplashScreen backendReady={backendReady} onDismiss={() => setSplashDismissed(true)} />
       )}
