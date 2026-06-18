@@ -15,7 +15,9 @@ export type { View }
 export interface UseViewRouterResult extends RouterState {
   selectTool: (tool: AiTool) => void
   selectSkill: (skill: Skill, fromView?: View) => void
+  selectSkillWithTool: (skill: Skill, tool: AiTool, fromView?: View) => void
   selectMcp: (mcp: McpServer, fromView?: View) => void
+  selectMcpWithTool: (mcp: McpServer, tool: AiTool, fromView?: View) => void
   selectPermissions: () => void
   openSkillsPage: () => void
   openMcpsPage: () => void
@@ -45,8 +47,18 @@ export function useViewRouter(): UseViewRouterResult {
     capture('skill_detail_viewed', { skill_name: skill.name })
   }, [])
 
+  const selectSkillWithTool = useCallback((skill: Skill, tool: AiTool, fromView: View = 'skills-aggregated') => {
+    dispatch({ type: 'SELECT_SKILL_WITH_TOOL', skill, tool, fromView })
+    capture('skill_detail_viewed', { skill_name: skill.name })
+  }, [])
+
   const selectMcp = useCallback((mcp: McpServer, fromView: View = 'tool-detail') => {
     dispatch({ type: 'SELECT_MCP', mcp, fromView })
+    capture('mcp_detail_viewed', { mcp_name: mcp.name })
+  }, [])
+
+  const selectMcpWithTool = useCallback((mcp: McpServer, tool: AiTool, fromView: View = 'mcps-aggregated') => {
+    dispatch({ type: 'SELECT_MCP_WITH_TOOL', mcp, tool, fromView })
     capture('mcp_detail_viewed', { mcp_name: mcp.name })
   }, [])
 
@@ -77,7 +89,9 @@ export function useViewRouter(): UseViewRouterResult {
     ...state,
     selectTool,
     selectSkill,
+    selectSkillWithTool,
     selectMcp,
+    selectMcpWithTool,
     selectPermissions,
     openSkillsPage,
     openMcpsPage,

@@ -1,13 +1,10 @@
-import SearchBar from '../SearchBar';
 import Header from '../Header';
 import Footer from '../Footer';
-import ToolRow from '../ToolRow';
 import type { AiTool, Notification } from '../../types';
 import type { ToolMatch } from '../../search';
+import { TOOL_COLORS } from '../../constants/toolColors';
 
 interface MainViewProps {
-  query: string;
-  setQuery: (q: string) => void;
   loading: boolean;
   tools: AiTool[];
   installedTools: AiTool[];
@@ -16,42 +13,54 @@ interface MainViewProps {
   updateInfo: any;
   lastUpdated: Date | null;
   cloudSyncing: boolean;
-  onSelectTool: (tool: AiTool) => void;
   onFetchTools: () => Promise<void>;
   onGoTo: (view: any) => void;
 }
 
-function SkeletonRows() {
+function ChevronRight() {
   return (
-    <>
-      {[1, 2, 3].map((i) => (
-        <div key={i} className="px-4 py-2.5 animate-pulse">
-          <div className="flex items-center gap-2.5">
-            <div className="w-[7px] h-[7px] rounded-full bg-[var(--c-skeleton)]" />
-            <div className="w-[20px] h-[20px] rounded bg-[var(--c-skeleton)]" />
-            <div className="h-3 bg-[var(--c-skeleton)] rounded w-28" />
-          </div>
-        </div>
-      ))}
-    </>
-  )
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+      stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+      className="w-4 h-4 text-[var(--c-text-3)] flex-shrink-0">
+      <polyline points="9 18 15 12 9 6" />
+    </svg>
+  );
+}
+
+function ToolDots({ tools }: { tools: AiTool[] }) {
+  return (
+    <div className="flex items-center gap-1.5 flex-wrap">
+      {tools.map(t => {
+        const colors = TOOL_COLORS[t.id] ?? { bg: 'bg-zinc-500/10', text: 'text-zinc-500' };
+        return (
+          <span
+            key={t.id}
+            className={`inline-flex items-center justify-center w-[22px] h-[22px] rounded text-[11px] font-bold flex-shrink-0 ${colors.bg} ${colors.text}`}
+            title={t.name}
+          >
+            {t.name[0].toUpperCase()}
+          </span>
+        );
+      })}
+    </div>
+  );
 }
 
 export default function MainView({
-  query,
-  setQuery,
   loading,
-  tools,
   installedTools,
-  searchResults,
   notifications,
   updateInfo,
   lastUpdated,
   cloudSyncing,
-  onSelectTool,
   onFetchTools,
-  onGoTo
+  onGoTo,
 }: MainViewProps) {
+  const totalSkills = installedTools.reduce((n, t) => n + t.skills.length, 0);
+  const activeSkills = installedTools.reduce((n, t) => n + t.skills.filter(s => s.active).length, 0);
+  const totalMcps = installedTools.reduce((n, t) => n + t.mcps.length, 0);
+  const activeMcps = installedTools.reduce((n, t) => n + t.mcps.filter(m => m.active).length, 0);
+
   return (
     <>
       <Header
@@ -60,38 +69,77 @@ export default function MainView({
         updateAvailable={!!updateInfo}
         notificationCount={notifications.length}
       />
-      <SearchBar value={query} onChange={setQuery} />
-      <div className="flex-1 overflow-y-auto divide-y divide-[var(--c-border-sub)]">
-        {loading && tools.length === 0 ? (
-          <SkeletonRows />
-        ) : searchResults.length === 0 && query ? (
-          <div className="px-4 py-8 text-center">
-            <p className="text-[14px] text-[var(--c-text-3)]">No results for "{query}"</p>
-          </div>
-        ) : !loading && installedTools.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full px-6 py-12 text-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-[var(--c-surface)] flex items-center justify-center mb-1">
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
-                stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"
-                className="w-5 h-5 text-[var(--c-text-3)]">
-                <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
-              </svg>
+
+      <div className="flex-1 overflow-y-auto flex flex-col gap-3 p-3">
+        {/* LLMs tile — full width */}
+        <button
+          onClick={() => onGoTo('llms-list')}
+          className="w-full flex items-center gap-3 px-4 py-3.5 rounded-xl bg-[var(--c-surface)] hover:bg-[var(--c-hover)] border border-[var(--c-border-sub)] transition-colors text-left group"
+        >
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 mb-1.5">
+              <span className="text-[13px] font-semibold text-[var(--c-text-3)] uppercase tracking-wider">LLMs</span>
+              <span className="text-[12px] text-[var(--c-text-3)] tabular-nums">
+                {loading ? '…' : `${installedTools.length} installed`}
+              </span>
             </div>
-            <p className="text-[15px] font-semibold text-[var(--c-text)]">No AI tools detected</p>
-            <p className="text-[13px] text-[var(--c-text-3)] leading-relaxed max-w-[240px]">
-              Install Claude Code, Cursor, Gemini CLI, or GitHub Copilot and LLM Manager will pick them up automatically.
-            </p>
+            {!loading && installedTools.length > 0 ? (
+              <ToolDots tools={installedTools} />
+            ) : !loading ? (
+              <span className="text-[13px] text-[var(--c-text-3)]">No tools detected</span>
+            ) : (
+              <div className="flex gap-1.5">
+                {[1, 2, 3].map(i => (
+                  <div key={i} className="w-[22px] h-[22px] rounded bg-[var(--c-skeleton)] animate-pulse" />
+                ))}
+              </div>
+            )}
           </div>
-        ) : (
-          searchResults.map(({ tool }) => (
-            <ToolRow
-              key={tool.id}
-              tool={tool}
-              onSelectTool={onSelectTool}
-            />
-        ))
-        )}
+          <ChevronRight />
+        </button>
+
+        {/* Skills + MCPs row */}
+        <div className="grid grid-cols-2 gap-3">
+          {/* Skills tile */}
+          <button
+            onClick={() => onGoTo('skills-aggregated')}
+            className="flex flex-col gap-2 px-4 py-3.5 rounded-xl bg-[var(--c-surface)] hover:bg-[var(--c-hover)] border border-[var(--c-border-sub)] transition-colors text-left group"
+          >
+            <div className="flex items-center justify-between">
+              <span className="text-[13px] font-semibold text-[var(--c-text-3)] uppercase tracking-wider">Skills</span>
+              <ChevronRight />
+            </div>
+            {loading ? (
+              <div className="h-7 w-10 bg-[var(--c-skeleton)] rounded animate-pulse" />
+            ) : (
+              <>
+                <span className="text-[28px] font-bold text-[var(--c-text)] leading-none tabular-nums">{totalSkills}</span>
+                <span className="text-[12px] text-[var(--c-text-3)]">{activeSkills} active</span>
+              </>
+            )}
+          </button>
+
+          {/* MCPs tile */}
+          <button
+            onClick={() => onGoTo('mcps-aggregated')}
+            className="flex flex-col gap-2 px-4 py-3.5 rounded-xl bg-[var(--c-surface)] hover:bg-[var(--c-hover)] border border-[var(--c-border-sub)] transition-colors text-left group"
+          >
+            <div className="flex items-center justify-between">
+              <span className="text-[13px] font-semibold text-[var(--c-text-3)] uppercase tracking-wider">MCPs</span>
+              <ChevronRight />
+            </div>
+            {loading ? (
+              <div className="h-7 w-10 bg-[var(--c-skeleton)] rounded animate-pulse" />
+            ) : (
+              <>
+                <span className="text-[28px] font-bold text-[var(--c-text)] leading-none tabular-nums">{totalMcps}</span>
+                <span className="text-[12px] text-[var(--c-text-3)]">{activeMcps} active</span>
+              </>
+            )}
+          </button>
+        </div>
       </div>
+
       <Footer lastUpdated={lastUpdated} onRefresh={onFetchTools} loading={loading} cloudSyncing={cloudSyncing} />
     </>
   );
