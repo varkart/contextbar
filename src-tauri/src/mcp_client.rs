@@ -92,8 +92,10 @@ async fn query_stdio_tools(command: &str, args: &[String]) -> Result<Vec<McpTool
         .await
         .map_err(|e| e.to_string())?;
 
-    // 2. Wait for initialize response — skip notifications/log lines
-    wait_for_response(&mut lines, 1, Duration::from_secs(5))
+    // 2. Wait for initialize response — skip notifications/log lines.
+    // Use a generous timeout: on first run, uvx/pipx/cargo-based servers may
+    // need to download or compile before responding.
+    wait_for_response(&mut lines, 1, Duration::from_secs(20))
         .await
         .map_err(|e| format!("initialize: {e}"))?;
 
