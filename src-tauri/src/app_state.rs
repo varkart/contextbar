@@ -1,6 +1,49 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, OnceLock};
 
+fn strip_jsonc(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    let chars: Vec<char> = s.chars().collect();
+    let len = chars.len();
+    let mut i = 0;
+    let mut in_string = false;
+
+    while i < len {
+        let c = chars[i];
+        if in_string {
+            if c == '\\' && i + 1 < len {
+                out.push(c);
+                out.push(chars[i + 1]);
+                i += 2;
+                continue;
+            }
+            if c == '"' {
+                in_string = false;
+            }
+            out.push(c);
+            i += 1;
+        } else if c == '"' {
+            in_string = true;
+            out.push(c);
+            i += 1;
+        } else if c == '/' && i + 1 < len && chars[i + 1] == '/' {
+            while i < len && chars[i] != '\n' {
+                i += 1;
+            }
+        } else if c == '/' && i + 1 < len && chars[i + 1] == '*' {
+            i += 2;
+            while i + 1 < len && !(chars[i] == '*' && chars[i + 1] == '/') {
+                i += 1;
+            }
+            i += 2;
+        } else {
+            out.push(c);
+            i += 1;
+        }
+    }
+    out
+}
+
 /// Returns a per-path mutex so concurrent MCP toggles on the same config file
 /// are serialized. Different config files get independent locks.
 fn config_lock(path: &str) -> Arc<Mutex<()>> {
@@ -32,8 +75,9 @@ pub fn move_mcp_in_config(
 
     let content = std::fs::read_to_string(config_path)
         .map_err(|e| format!("cannot read {config_path}: {e}"))?;
+    let stripped = strip_jsonc(&content);
     let mut json: serde_json::Value =
-        serde_json::from_str(&content).map_err(|e| format!("cannot parse {config_path}: {e}"))?;
+        serde_json::from_str(&stripped).map_err(|e| format!("cannot parse {config_path}: {e}"))?;
 
     let obj = json.as_object_mut().ok_or("config is not a JSON object")?;
 
@@ -216,8 +260,9 @@ pub fn add_mcp_to_config(
     }
 
     let content = std::fs::read_to_string(config_path).unwrap_or_else(|_| "{}".to_string());
+    let stripped = strip_jsonc(&content);
     let mut json: serde_json::Value =
-        serde_json::from_str(&content).map_err(|e| format!("cannot parse {config_path}: {e}"))?;
+        serde_json::from_str(&stripped).map_err(|e| format!("cannot parse {config_path}: {e}"))?;
 
     let obj = json.as_object_mut().ok_or("config is not a JSON object")?;
     let section = obj
@@ -263,8 +308,9 @@ pub fn remove_mcp_from_config(
 
     let content = std::fs::read_to_string(config_path)
         .map_err(|e| format!("cannot read {config_path}: {e}"))?;
+    let stripped = strip_jsonc(&content);
     let mut json: serde_json::Value =
-        serde_json::from_str(&content).map_err(|e| format!("cannot parse {config_path}: {e}"))?;
+        serde_json::from_str(&stripped).map_err(|e| format!("cannot parse {config_path}: {e}"))?;
 
     let obj = json.as_object_mut().ok_or("config is not a JSON object")?;
 
