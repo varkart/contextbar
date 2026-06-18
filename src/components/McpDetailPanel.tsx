@@ -162,6 +162,7 @@ export default function McpDetailPanel({ mcp, onBack, toolName, toolId, onToggle
   const [toggleAnim, setToggleAnim] = useState<'enable' | 'disable' | null>(null)
   const [tools, setTools] = useState<McpTool[]>([])
   const [loading, setLoading] = useState(true)
+  const [elapsed, setElapsed] = useState(0)
   const [error, setError] = useState<string | null>(null)
 
   const handleToggle = async () => {
@@ -209,6 +210,13 @@ export default function McpDetailPanel({ mcp, onBack, toolName, toolId, onToggle
 
   const commandStr = [mcp.command, ...mcp.args].join(' ')
   const isHttp = !!mcp.url && !mcp.command
+
+  useEffect(() => {
+    if (!loading) return
+    setElapsed(0)
+    const interval = setInterval(() => setElapsed(s => s + 1), 1000)
+    return () => clearInterval(interval)
+  }, [loading])
 
   useEffect(() => {
     const t0 = Date.now()
@@ -343,8 +351,25 @@ export default function McpDetailPanel({ mcp, onBack, toolName, toolId, onToggle
               Live tools {!loading && !error && `(${tools.length})`}
             </p>
             {loading && (
-              <div className="px-2 py-4 animate-pulse space-y-2">
-                {[1,2,3].map(i => <div key={i} className="h-3 bg-[var(--c-skeleton)] rounded w-3/4"/>)}
+              <div className="px-2 py-4 flex flex-col gap-2">
+                <div className="flex items-center gap-2 text-[13px] text-[var(--c-text-3)]">
+                  <svg className="w-3.5 h-3.5 text-violet-400 animate-spin flex-shrink-0" viewBox="0 0 24 24" fill="none">
+                    <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2.5" strokeOpacity="0.25"/>
+                    <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"/>
+                  </svg>
+                  <span>
+                    {elapsed < 4
+                      ? 'Starting server…'
+                      : elapsed < 12
+                      ? 'Waiting for server to respond…'
+                      : 'Downloading dependencies — this only happens once…'}
+                  </span>
+                </div>
+                {elapsed >= 4 && (
+                  <p className="text-[11px] text-[var(--c-text-3)] font-mono pl-5 truncate opacity-60">
+                    {commandStr}
+                  </p>
+                )}
               </div>
             )}
             {error && (
