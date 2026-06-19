@@ -301,7 +301,25 @@ fn create_skill(
     Ok(paths)
 }
 
-#[tauri::command]
+/// Reject content that is clearly not a SKILL.md file.
+fn validate_skill_content(content: &str) -> Result<(), String> {
+    let trimmed = content.trim_start();
+    if trimmed.is_empty() {
+        return Err("file is empty".into());
+    }
+    if trimmed.starts_with("<!DOCTYPE") || trimmed.starts_with("<html") || trimmed.starts_with("<HTML") {
+        return Err(
+            "fetched content is an HTML page, not a SKILL.md file.\n\
+             Paste the GitHub repo URL (e.g. https://github.com/owner/repo) \
+             or a direct link to a raw .md file.".into(),
+        );
+    }
+    if trimmed.starts_with('{') || trimmed.starts_with('[') {
+        return Err("fetched content looks like JSON, not a SKILL.md file.".into());
+    }
+    Ok(())
+}
+
 /// Convert a GitHub repo or blob URL to a fetchable raw URL pointing at SKILL.md.
 ///
 /// Handles:
@@ -354,6 +372,7 @@ async fn install_skill_from_url(
         return Err(format!("HTTP {}: {}", response.status(), fetch_url));
     }
     let content = response.text().await.map_err(|e| e.to_string())?;
+    validate_skill_content(&content)?;
 
     // Derive name from URL if not provided
     let derived_name = name.unwrap_or_else(|| {
@@ -389,6 +408,12 @@ fn install_skill_from_path(
     }
 
     let content = if src.is_file() {
+        let ext = src.extension().and_then(|e| e.to_str()).unwrap_or("");
+        if ext != "md" {
+            return Err(format!(
+                "expected a .md file, got .{ext} — point to a SKILL.md file or a directory containing one"
+            ));
+        }
         std::fs::read_to_string(src).map_err(|e| e.to_string())?
     } else if src.is_dir() {
         // Look for SKILL.md inside directory
@@ -396,11 +421,12 @@ fn install_skill_from_path(
         if skill_md.exists() {
             std::fs::read_to_string(&skill_md).map_err(|e| e.to_string())?
         } else {
-            return Err(format!("directory has no SKILL.md: {src_path}"));
+            return Err(format!("no SKILL.md found in {src_path}"));
         }
     } else {
         return Err(format!("unsupported path type: {src_path}"));
     };
+    validate_skill_content(&content)?;
 
     let derived_name = name.unwrap_or_else(|| {
         src.file_stem()
@@ -1255,7 +1281,31 @@ fn open_main_window(app: &tauri::AppHandle, hash: Option<&str>) {
 
 #[cfg(test)]
 mod tests {
-    use super::resolve_github_raw_url;
+    use super::{resolve_github_raw_url, validate_skill_content};
+
+    #[test]
+    fn valid_markdown_passes() {
+        assert!(validate_skill_content("# My Skill\n\nDoes things.").is_ok());
+        assert!(validate_skill_content("---\nname: my-skill\n---\n# Heading").is_ok());
+    }
+
+    #[test]
+    fn html_page_rejected() {
+        assert!(validate_skill_content("<!DOCTYPE html><html>...</html>").is_err());
+        assert!(validate_skill_content("<html lang=\"en\">...</html>").is_err());
+    }
+
+    #[test]
+    fn json_rejected() {
+        assert!(validate_skill_content("{ \"key\": 1 }").is_err());
+        assert!(validate_skill_content("[1, 2, 3]").is_err());
+    }
+
+    #[test]
+    fn empty_content_rejected() {
+        assert!(validate_skill_content("").is_err());
+        assert!(validate_skill_content("   \n  ").is_err());
+    }
 
     #[test]
     fn github_repo_url_becomes_skill_md() {
