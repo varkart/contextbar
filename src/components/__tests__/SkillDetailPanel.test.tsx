@@ -102,60 +102,73 @@ describe('SkillDetailPanel', () => {
     expect(mockInvoke).toHaveBeenCalledWith('read_skill_dir', { path: skill.path })
   })
 
-  // ── enable / disable toggle ──────────────────────────────────────────────
+  // ── full description overlay ─────────────────────────────────────────────
 
-  it('shows Disable button when toolId provided and skill is active', async () => {
+  it('shows full description button when hasFullDescription is true', async () => {
+    const richSkill = { ...skill, hasFullDescription: true }
     mockInvoke.mockResolvedValue(fileTree)
-    render(<SkillDetailPanel skill={skill} onBack={vi.fn()} toolId="claude" />)
+    render(<SkillDetailPanel skill={richSkill} onBack={vi.fn()} />)
     await waitFor(() => expect(screen.getByText('SKILL.md')).toBeInTheDocument())
-    expect(screen.getByRole('button', { name: /disable skill/i })).toBeInTheDocument()
+    expect(screen.getByText('Show full description →')).toBeInTheDocument()
   })
 
-  it('hides toggle button when toolId not provided', async () => {
+  it('does not show full description button when hasFullDescription is false', async () => {
     mockInvoke.mockResolvedValue(fileTree)
     render(<SkillDetailPanel skill={skill} onBack={vi.fn()} />)
     await waitFor(() => expect(screen.getByText('SKILL.md')).toBeInTheDocument())
-    expect(screen.queryByRole('button', { name: /disable skill/i })).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /enable skill/i })).not.toBeInTheDocument()
+    expect(screen.queryByText('Show full description →')).not.toBeInTheDocument()
   })
 
-  it('shows Enable button for inactive skill', async () => {
-    const inactiveSkill = { ...skill, active: false }
-    mockInvoke.mockResolvedValue(fileTree)
-    render(<SkillDetailPanel skill={inactiveSkill} onBack={vi.fn()} toolId="claude" />)
-    await waitFor(() => expect(screen.getByText('SKILL.md')).toBeInTheDocument())
-    expect(screen.getByRole('button', { name: /enable skill/i })).toBeInTheDocument()
-  })
-
-  it('toggle calls set_skill_active with correct args', async () => {
+  it('clicking Show full description opens overlay and fetches content', async () => {
+    const richSkill = { ...skill, hasFullDescription: true }
     mockInvoke.mockImplementation((cmd: string) => {
       if (cmd === 'read_skill_dir') return Promise.resolve(fileTree)
-      if (cmd === 'set_skill_active') return Promise.resolve(null)
+      if (cmd === 'get_skill_full_description') return Promise.resolve('# Full\nSome detail.')
       return Promise.resolve(null)
     })
-    const onToggled = vi.fn()
-    render(<SkillDetailPanel skill={skill} onBack={vi.fn()} toolId="claude" onToggled={onToggled} />)
-    await waitFor(() => screen.getByRole('button', { name: /disable skill/i }))
-    fireEvent.click(screen.getByRole('button', { name: /disable skill/i }))
-    await waitFor(() =>
-      expect(mockInvoke).toHaveBeenCalledWith('set_skill_active', {
-        toolId: 'claude',
-        skillName: 'impeccable',
-        skillPath: '~/.claude/skills/impeccable',
-        active: false,
-      })
-    )
-    expect(onToggled).toHaveBeenCalled()
+    render(<SkillDetailPanel skill={richSkill} onBack={vi.fn()} />)
+    await waitFor(() => expect(screen.getByText('Show full description →')).toBeInTheDocument())
+    fireEvent.click(screen.getByText('Show full description →'))
+    await waitFor(() => expect(screen.getByText('Show less')).toBeInTheDocument())
+    expect(mockInvoke).toHaveBeenCalledWith('get_skill_full_description', { path: skill.path })
   })
 
-  it('shows error when toggle fails', async () => {
+  it('Show less button closes the overlay', async () => {
+    const richSkill = { ...skill, hasFullDescription: true }
     mockInvoke.mockImplementation((cmd: string) => {
       if (cmd === 'read_skill_dir') return Promise.resolve(fileTree)
-      return Promise.reject(new Error('permission denied'))
+      if (cmd === 'get_skill_full_description') return Promise.resolve('# Full\nSome detail.')
+      return Promise.resolve(null)
     })
-    render(<SkillDetailPanel skill={skill} onBack={vi.fn()} toolId="claude" />)
-    await waitFor(() => screen.getByRole('button', { name: /disable skill/i }))
-    fireEvent.click(screen.getByRole('button', { name: /disable skill/i }))
-    await waitFor(() => expect(screen.getByText(/permission denied/i)).toBeInTheDocument())
+    render(<SkillDetailPanel skill={richSkill} onBack={vi.fn()} />)
+    await waitFor(() => expect(screen.getByText('Show full description →')).toBeInTheDocument())
+    fireEvent.click(screen.getByText('Show full description →'))
+    await waitFor(() => expect(screen.getByText('Show less')).toBeInTheDocument())
+    fireEvent.click(screen.getByText('Show less'))
+    await waitFor(() => expect(screen.queryByText('Show less')).not.toBeInTheDocument())
+  })
+
+  it('Escape key closes the description overlay', async () => {
+    const richSkill = { ...skill, hasFullDescription: true }
+    mockInvoke.mockImplementation((cmd: string) => {
+      if (cmd === 'read_skill_dir') return Promise.resolve(fileTree)
+      if (cmd === 'get_skill_full_description') return Promise.resolve('# Full\nSome detail.')
+      return Promise.resolve(null)
+    })
+    render(<SkillDetailPanel skill={richSkill} onBack={vi.fn()} />)
+    await waitFor(() => expect(screen.getByText('Show full description →')).toBeInTheDocument())
+    fireEvent.click(screen.getByText('Show full description →'))
+    await waitFor(() => expect(screen.getByText('Show less')).toBeInTheDocument())
+    fireEvent.keyDown(window, { key: 'Escape', bubbles: true })
+    await waitFor(() => expect(screen.queryByText('Show less')).not.toBeInTheDocument())
+  })
+
+  it('Escape key does not call onBack when overlay is closed', async () => {
+    mockInvoke.mockResolvedValue(fileTree)
+    const onBack = vi.fn()
+    render(<SkillDetailPanel skill={skill} onBack={onBack} />)
+    await waitFor(() => expect(screen.getByText('SKILL.md')).toBeInTheDocument())
+    fireEvent.keyDown(window, { key: 'Escape', bubbles: true })
+    expect(onBack).not.toHaveBeenCalled()
   })
 })
