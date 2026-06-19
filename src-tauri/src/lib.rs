@@ -365,12 +365,35 @@ fn parse_github_repo_url(url: &str) -> Option<(String, String, String)> {
 async fn github_find_skill_mds(
     owner: &str,
     repo: &str,
-    branch: &str,
+    branch_hint: &str, // "HEAD" means resolve from API
 ) -> Result<Vec<(String, String)>, String> {
     let client = reqwest::Client::builder()
         .user_agent("llmmanager")
         .build()
         .map_err(|e| e.to_string())?;
+
+    // Resolve "HEAD" → actual default branch name (the trees API rejects "HEAD")
+    let branch = if branch_hint == "HEAD" {
+        let repo_resp = client
+            .get(format!("https://api.github.com/repos/{owner}/{repo}"))
+            .header("Accept", "application/vnd.github+json")
+            .send()
+            .await
+            .map_err(|e| e.to_string())?;
+        if !repo_resp.status().is_success() {
+            return Err(format!(
+                "GitHub API error {} for {owner}/{repo} — repo may be private or not exist",
+                repo_resp.status()
+            ));
+        }
+        let meta: serde_json::Value = repo_resp.json().await.map_err(|e| e.to_string())?;
+        meta["default_branch"]
+            .as_str()
+            .unwrap_or("main")
+            .to_string()
+    } else {
+        branch_hint.to_string()
+    };
 
     let raw_base = format!("https://raw.githubusercontent.com/{owner}/{repo}/{branch}");
     let api_url = format!(
@@ -386,7 +409,7 @@ async fn github_find_skill_mds(
 
     if !tree_resp.status().is_success() {
         return Err(format!(
-            "GitHub API error {} for {owner}/{repo} — repo may be private or not exist",
+            "GitHub API error {} fetching tree for {owner}/{repo}@{branch}",
             tree_resp.status()
         ));
     }
@@ -464,15 +487,17 @@ async fn install_skill_from_url(
     // GitHub repo/tree URL → search the repo with the API
     if let Some((owner, repo, branch)) = parse_github_repo_url(&url) {
         let skills = github_find_skill_mds(&owner, &repo, &branch).await?;
+        let multi = skills.len() > 1;
         let mut all_paths = Vec::new();
         for (skill_name, content) in skills {
-            let override_name = if let Some(ref n) = name {
-                // Only apply name override when there is a single skill
-                n.clone()
-            } else {
-                skill_name
+            // Single skill: name param replaces the dir name entirely.
+            // Multiple skills: name param becomes a prefix → "{prefix}-{dir_name}".
+            let final_name = match &name {
+                Some(prefix) if multi => format!("{}-{}", prefix.trim(), skill_name),
+                Some(n) => n.trim().to_string(),
+                None => skill_name,
             };
-            let slug = slugify(override_name.trim());
+            let slug = slugify(&final_name);
             if slug.is_empty() {
                 continue;
             }
