@@ -185,7 +185,7 @@ export default function AddSkillView({ installedTools, onBack, onCreated }: AddS
 
   const handleReveal = async () => {
     if (!createdPaths?.[0]) return;
-    await invoke('open_path', { path: createdPaths[0] }).catch(() => {});
+    await invoke('reveal_in_finder', { path: createdPaths[0] }).catch(() => {});
   };
 
   const sourceLabel = sourceType === 'template' ? 'Template' : sourceType === 'url' ? 'URL' : sourceType === 'github' ? 'GitHub' : 'Local';

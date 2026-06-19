@@ -229,6 +229,16 @@ fn open_path(path: String) -> Result<(), String> {
 }
 
 #[tauri::command]
+fn reveal_in_finder(path: String) -> Result<(), String> {
+    std::process::Command::new("open")
+        .arg("-R")
+        .arg(&path)
+        .spawn()
+        .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
 fn open_url(url: String) -> Result<(), String> {
     tauri_plugin_opener::open_url(url, None::<&str>).map_err(|e| e.to_string())
 }
@@ -1372,6 +1382,7 @@ pub fn run() {
             set_vibrancy,
             read_skill_dir,
             open_path,
+            reveal_in_finder,
             open_url,
             create_skill,
             install_skill_from_url,
