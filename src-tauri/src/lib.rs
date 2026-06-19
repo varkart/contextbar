@@ -366,6 +366,7 @@ async fn github_find_skill_mds(
     owner: &str,
     repo: &str,
     branch_hint: &str, // "HEAD" means resolve from API
+    max_depth: usize,  // max path segments, e.g. 2 = "dir/SKILL.md"
 ) -> Result<Vec<(String, String)>, String> {
     let client = reqwest::Client::builder()
         .user_agent("llmmanager")
@@ -429,7 +430,7 @@ async fn github_find_skill_mds(
                 return None;
             }
             let parts: Vec<&str> = path.split('/').collect();
-            if parts.len() <= 2 && *parts.last().unwrap() == "SKILL.md" {
+            if parts.len() <= max_depth && *parts.last().unwrap() == "SKILL.md" {
                 Some(path.to_string())
             } else {
                 None
@@ -483,10 +484,13 @@ async fn install_skill_from_url(
     tool_ids: Vec<String>,
     url: String,
     name: Option<String>,
+    max_depth: Option<u32>,
 ) -> Result<Vec<String>, String> {
+    let depth = max_depth.unwrap_or(2).clamp(1, 10) as usize;
+
     // GitHub repo/tree URL → search the repo with the API
     if let Some((owner, repo, branch)) = parse_github_repo_url(&url) {
-        let skills = github_find_skill_mds(&owner, &repo, &branch).await?;
+        let skills = github_find_skill_mds(&owner, &repo, &branch, depth).await?;
         let multi = skills.len() > 1;
         let mut all_paths = Vec::new();
         for (skill_name, content) in skills {
