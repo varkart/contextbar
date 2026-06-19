@@ -310,7 +310,7 @@ export default function AddSkillView({ installedTools, onBack, onCreated }: AddS
                 />
               </div>
               <p className="text-[12px] text-[var(--c-text-3)]">
-                Paste a GitHub repo URL or a direct link to a <span className="font-mono">.md</span> file. GitHub repo URLs automatically resolve to <span className="font-mono">SKILL.md</span>.
+                Paste a GitHub repo URL or a direct link to a <span className="font-mono">.md</span> file. For repos with multiple skills, all are installed — name override becomes a prefix (e.g. <span className="font-mono">matt</span> → <span className="font-mono">matt-qa</span>, <span className="font-mono">matt-implement</span>).
               </p>
             </div>
           )}
