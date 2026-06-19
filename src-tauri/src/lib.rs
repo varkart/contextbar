@@ -228,6 +228,11 @@ fn open_path(path: String) -> Result<(), String> {
     tauri_plugin_opener::open_path(path, None::<&str>).map_err(|e| e.to_string())
 }
 
+#[tauri::command]
+fn open_url(url: String) -> Result<(), String> {
+    tauri_plugin_opener::open_url(url, None::<&str>).map_err(|e| e.to_string())
+}
+
 /// Returns the first writable skills directory for `tool_id`, or an error.
 fn skill_dir_for(tool_id: &str) -> Result<std::path::PathBuf, String> {
     use crate::engine::manifest::SkillSourceSpec;
@@ -297,15 +302,56 @@ fn create_skill(
 }
 
 #[tauri::command]
+/// Convert a GitHub repo or blob URL to a fetchable raw URL pointing at SKILL.md.
+///
+/// Handles:
+/// - https://github.com/owner/repo              → raw.githubusercontent.com/owner/repo/HEAD/SKILL.md
+/// - https://github.com/owner/repo/tree/branch  → raw.githubusercontent.com/owner/repo/branch/SKILL.md
+/// - https://github.com/owner/repo/blob/branch/path.md → raw.githubusercontent.com/.../path.md
+/// - https://raw.githubusercontent.com/...      → unchanged
+fn resolve_github_raw_url(url: &str) -> String {
+    // Already raw — pass through
+    if url.contains("raw.githubusercontent.com") {
+        return url.to_string();
+    }
+    // Must be a github.com URL
+    if !url.contains("github.com/") {
+        return url.to_string();
+    }
+    // Strip scheme + host, leaving /owner/repo[/...]
+    let path = url
+        .split("github.com/")
+        .nth(1)
+        .unwrap_or("")
+        .trim_end_matches('/');
+    let parts: Vec<&str> = path.split('/').collect();
+    if parts.len() < 2 {
+        return url.to_string();
+    }
+    let (owner, repo) = (parts[0], parts[1]);
+    // blob URL: /owner/repo/blob/branch/path
+    if parts.len() >= 5 && parts[2] == "blob" {
+        let branch = parts[3];
+        let file_path = parts[4..].join("/");
+        return format!("https://raw.githubusercontent.com/{owner}/{repo}/{branch}/{file_path}");
+    }
+    // tree URL: /owner/repo/tree/branch
+    let branch = if parts.len() >= 4 && parts[2] == "tree" { parts[3] } else { "HEAD" };
+    format!("https://raw.githubusercontent.com/{owner}/{repo}/{branch}/SKILL.md")
+}
+
+#[tauri::command]
 async fn install_skill_from_url(
     tool_ids: Vec<String>,
     url: String,
     name: Option<String>,
 ) -> Result<Vec<String>, String> {
+    let fetch_url = resolve_github_raw_url(&url);
+
     // Fetch content
-    let response = reqwest::get(&url).await.map_err(|e| e.to_string())?;
+    let response = reqwest::get(&fetch_url).await.map_err(|e| e.to_string())?;
     if !response.status().is_success() {
-        return Err(format!("HTTP {}: {}", response.status(), url));
+        return Err(format!("HTTP {}: {}", response.status(), fetch_url));
     }
     let content = response.text().await.map_err(|e| e.to_string())?;
 
@@ -374,6 +420,65 @@ fn install_skill_from_path(
         paths.push(path);
     }
     Ok(paths)
+}
+
+/// Map our tool ID to the agent name expected by the `skills` CLI (vercel-labs/skills).
+fn skills_agent_name(tool_id: &str) -> Option<&'static str> {
+    match tool_id {
+        "claude"  => Some("claude-code"),
+        "gemini"  => Some("gemini-cli"),
+        "cursor"  => Some("cursor"),
+        "windsurf"=> Some("windsurf"),
+        "copilot" => Some("github-copilot"),
+        _         => None,
+    }
+}
+
+
+#[tauri::command]
+async fn install_skill_from_github(
+    app: tauri::AppHandle,
+    db: tauri::State<'_, db::DbState>,
+    tool_ids: Vec<String>,
+    source: String,
+    skill_filter: Option<String>,
+) -> Result<String, String> {
+    let npx = installer::find_npx()
+        .ok_or("npx not found — install Node.js to use this feature")?;
+
+    let mut combined_output = String::new();
+
+    for tool_id in &tool_ids {
+        let agent = skills_agent_name(tool_id)
+            .ok_or_else(|| format!("'{tool_id}' is not supported by the skills CLI"))?;
+
+        let mut cmd = tokio::process::Command::new(&npx);
+        cmd.args(["skills", "add", source.trim(), "--agent", agent, "--global", "--copy", "-y"]);
+
+        if let Some(ref filter) = skill_filter {
+            let f = filter.trim();
+            if !f.is_empty() {
+                cmd.args(["--skill", f]);
+            }
+        }
+
+        let output = cmd.output().await
+            .map_err(|e| format!("failed to run npx: {e}"))?;
+
+        let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+        let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+
+        if !output.status.success() {
+            return Err(format!("skills add failed:\n{stderr}{stdout}"));
+        }
+
+        db::log_event(&db, "skill_github_installed", tool_id, source.trim(), None);
+        if !combined_output.is_empty() { combined_output.push('\n'); }
+        combined_output.push_str(stdout.trim());
+    }
+
+    let _ = app.emit("tools-changed", ());
+    Ok(combined_output)
 }
 
 #[tauri::command]
@@ -1055,9 +1160,11 @@ pub fn run() {
             set_vibrancy,
             read_skill_dir,
             open_path,
+            open_url,
             create_skill,
             install_skill_from_url,
             install_skill_from_path,
+            install_skill_from_github,
             read_text_file,
             check_for_update,
             query_mcp_tools,
@@ -1144,4 +1251,45 @@ fn open_main_window(app: &tauri::AppHandle, hash: Option<&str>) {
     let _ = window.move_window(Position::TrayCenter);
     let _ = window.show();
     let _ = window.set_focus();
+}
+
+#[cfg(test)]
+mod tests {
+    use super::resolve_github_raw_url;
+
+    #[test]
+    fn github_repo_url_becomes_skill_md() {
+        assert_eq!(
+            resolve_github_raw_url("https://github.com/obra/superpowers"),
+            "https://raw.githubusercontent.com/obra/superpowers/HEAD/SKILL.md"
+        );
+    }
+
+    #[test]
+    fn github_tree_url_uses_branch() {
+        assert_eq!(
+            resolve_github_raw_url("https://github.com/obra/superpowers/tree/main"),
+            "https://raw.githubusercontent.com/obra/superpowers/main/SKILL.md"
+        );
+    }
+
+    #[test]
+    fn github_blob_url_passes_through_file() {
+        assert_eq!(
+            resolve_github_raw_url("https://github.com/obra/superpowers/blob/main/MY-SKILL.md"),
+            "https://raw.githubusercontent.com/obra/superpowers/main/MY-SKILL.md"
+        );
+    }
+
+    #[test]
+    fn raw_url_unchanged() {
+        let raw = "https://raw.githubusercontent.com/obra/superpowers/main/SKILL.md";
+        assert_eq!(resolve_github_raw_url(raw), raw);
+    }
+
+    #[test]
+    fn non_github_url_unchanged() {
+        let other = "https://example.com/my-skill.md";
+        assert_eq!(resolve_github_raw_url(other), other);
+    }
 }
