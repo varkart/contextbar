@@ -358,17 +358,17 @@ export default function AddSkillView({ installedTools, onBack, onCreated }: AddS
                 />
               </div>
               <div>
-                <label className="block text-[12px] font-semibold text-[var(--c-text-3)] uppercase tracking-wider mb-1.5">Skill filter</label>
+                <label className="block text-[12px] font-semibold text-[var(--c-text-3)] uppercase tracking-wider mb-1.5">Skill filter <span className="normal-case font-normal">(optional)</span></label>
                 <input
                   type="text"
                   value={skillFilter}
                   onChange={e => setSkillFilter(e.target.value)}
-                  placeholder="skill-name (empty = install all)"
+                  placeholder="exact-skill-name — leave empty to install all"
                   className="w-full bg-[var(--c-surface)] border border-[var(--c-border)] rounded-lg px-3 py-2 text-[14px] text-[var(--c-text)] placeholder-[var(--c-text-3)] outline-none focus:border-indigo-400/60 transition-colors"
                 />
               </div>
               <p className="text-[12px] text-[var(--c-text-3)] leading-relaxed">
-                Runs <span className="font-mono">npx skills add</span> — requires Node.js. Supported tools: Claude Code, Gemini CLI.
+                Runs <span className="font-mono">npx skills add</span> — requires Node.js. Supported: Claude Code, Gemini CLI. Leave filter empty to install all skills from the repo.
               </p>
             </div>
           )}
