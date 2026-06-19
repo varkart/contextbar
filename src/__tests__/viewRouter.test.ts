@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { escapeTransition } from '../viewRouter'
+import { escapeTransition, ALL_VIEWS } from '../viewRouter'
 import type { AiTool } from '../types'
 
 const tool = { id: 'claude', name: 'Claude Code', installed: true, skills: [], mcps: [] } as AiTool
@@ -78,5 +78,18 @@ describe('escapeTransition', () => {
   it('main → hide', () => {
     expect(escapeTransition('main', 'default', 'tool-detail', 'tool-detail', null))
       .toEqual({ type: 'hide' })
+  })
+})
+
+describe('escape keyboard coverage — fails when a new view is missing escape handling', () => {
+  it('every view except main navigates on Escape', () => {
+    const nonMain = ALL_VIEWS.filter(v => v !== 'main')
+    for (const view of nonMain) {
+      const result = escapeTransition(view, 'default', 'tool-detail', 'tool-detail', null)
+      expect(
+        result.type,
+        `View "${view}" returns "hide" from escapeTransition — Escape will close the window instead of navigating back. Add a case for it in escapeTransition().`
+      ).toBe('navigate')
+    }
   })
 })
