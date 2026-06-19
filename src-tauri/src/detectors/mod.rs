@@ -49,6 +49,28 @@ fn skill_md_candidates(skill_path: &std::path::Path) -> Option<[std::path::PathB
     Some([skill_path.join("SKILL.md"), p])
 }
 
+/// FNV-1a 64-bit hash — no crate needed, fast, sufficient for content comparison.
+fn fnv1a(data: &[u8]) -> u64 {
+    let mut hash: u64 = 0xcbf29ce484222325;
+    for byte in data {
+        hash ^= *byte as u64;
+        hash = hash.wrapping_mul(0x100000001b3);
+    }
+    hash
+}
+
+pub fn parse_skill_content_hash(skill_path: &std::path::Path) -> Option<String> {
+    for candidate in skill_md_candidates(skill_path)?.iter() {
+        if !candidate.exists() {
+            continue;
+        }
+        if let Ok(bytes) = std::fs::read(candidate) {
+            return Some(format!("{:016x}", fnv1a(&bytes)));
+        }
+    }
+    None
+}
+
 pub fn parse_skill_description(skill_path: &std::path::Path) -> Option<String> {
     for candidate in skill_md_candidates(skill_path)?.iter() {
         if !candidate.exists() {
@@ -57,6 +79,20 @@ pub fn parse_skill_description(skill_path: &std::path::Path) -> Option<String> {
         if let Ok(content) = std::fs::read_to_string(candidate) {
             if let Some(desc) = extract_description(&content) {
                 return Some(desc);
+            }
+        }
+    }
+    None
+}
+
+pub fn parse_skill_source_url(skill_path: &std::path::Path) -> Option<String> {
+    for candidate in skill_md_candidates(skill_path)?.iter() {
+        if !candidate.exists() {
+            continue;
+        }
+        if let Ok(content) = std::fs::read_to_string(candidate) {
+            if let Some(url) = extract_frontmatter_field(&content, "source") {
+                return Some(url);
             }
         }
     }
@@ -84,6 +120,25 @@ pub fn read_skill_file_content(skill_path: &std::path::Path) -> Option<String> {
     None
 }
 
+fn extract_frontmatter_field(content: &str, key: &str) -> Option<String> {
+    let lines: Vec<&str> = content.lines().collect();
+    if lines.first().map(|l| l.trim()) != Some("---") {
+        return None;
+    }
+    let end = lines[1..].iter().position(|l| l.trim() == "---")?;
+    let prefix = format!("{}:", key);
+    for line in &lines[1..=end] {
+        let trimmed = line.trim();
+        if let Some(rest) = trimmed.strip_prefix(&prefix) {
+            let val = rest.trim().trim_matches('"').trim_matches('\'').to_string();
+            if !val.is_empty() {
+                return Some(val);
+            }
+        }
+    }
+    None
+}
+
 fn extract_description(content: &str) -> Option<String> {
     let lines: Vec<&str> = content.lines().collect();
 
@@ -105,10 +160,10 @@ fn extract_description(content: &str) -> Option<String> {
                             .collect::<Vec<_>>()
                             .join(" ");
                         if !block.is_empty() {
-                            return Some(first_sentence(block, 120));
+                            return Some(block);
                         }
                     } else if !val.is_empty() {
-                        return Some(first_sentence(val, 120));
+                        return Some(val);
                     }
                 }
             }
@@ -121,29 +176,10 @@ fn extract_description(content: &str) -> Option<String> {
         if trimmed.is_empty() || trimmed.starts_with('#') || trimmed.starts_with("---") {
             continue;
         }
-        return Some(first_sentence(trimmed.to_string(), 120));
+        return Some(trimmed.to_string());
     }
 
     None
-}
-
-fn first_sentence(s: String, max_chars: usize) -> String {
-    // Cut at first ". " boundary to avoid repeating "Use when..." boilerplate
-    if let Some(pos) = s.find(". ") {
-        let candidate = &s[..pos + 1];
-        if candidate.chars().count() <= max_chars {
-            return candidate.to_string();
-        }
-    }
-    truncate(s, max_chars)
-}
-
-fn truncate(s: String, max_chars: usize) -> String {
-    if s.chars().count() <= max_chars {
-        s
-    } else {
-        s.chars().take(max_chars).collect()
-    }
 }
 
 pub fn parse_mcp_servers(
@@ -268,6 +304,7 @@ mod tests {
     #[test]
     fn test_truncate() {
         let s = "a".repeat(200);
-        assert_eq!(truncate(s, 120).len(), 120);
+        let truncated: String = s.chars().take(120).collect();
+        assert_eq!(truncated.len(), 120);
     }
 }
