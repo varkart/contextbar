@@ -110,6 +110,7 @@ export default function AddSkillView({ installedTools, onBack, onCreated }: AddS
   const [localPath, setLocalPath] = useState('');
   const [githubSource, setGithubSource] = useState('');
   const [skillFilter, setSkillFilter] = useState('');
+  const [searchDepth, setSearchDepth] = useState(2);
   const [githubOutput, setGithubOutput] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -141,6 +142,7 @@ export default function AddSkillView({ installedTools, onBack, onCreated }: AddS
           toolIds,
           url: trimmedUrl,
           name: name.trim() || undefined,
+          maxDepth: searchDepth,
         });
         capture('skill_installed_url', { tool_ids: toolIds });
       } else if (sourceType === 'github') {
@@ -308,6 +310,26 @@ export default function AddSkillView({ installedTools, onBack, onCreated }: AddS
                   placeholder="Auto-detected from URL"
                   className="w-full bg-[var(--c-surface)] border border-[var(--c-border)] rounded-lg px-3 py-2 text-[14px] text-[var(--c-text)] placeholder-[var(--c-text-3)] outline-none focus:border-indigo-400/60 transition-colors"
                 />
+              </div>
+              <div>
+                <label className="block text-[12px] font-semibold text-[var(--c-text-3)] uppercase tracking-wider mb-1.5">Search depth</label>
+                <div className="flex gap-1">
+                  {[2, 3, 4, 5].map(d => (
+                    <button
+                      key={d}
+                      type="button"
+                      onClick={() => setSearchDepth(d)}
+                      className={`flex-1 py-1.5 rounded text-[13px] font-medium transition-colors border ${
+                        searchDepth === d
+                          ? 'bg-indigo-500/15 text-indigo-400 border-indigo-400/30'
+                          : 'border-[var(--c-border)] text-[var(--c-text-3)] hover:text-[var(--c-text-2)] hover:bg-[var(--c-hover)]'
+                      }`}
+                    >
+                      {d}
+                    </button>
+                  ))}
+                </div>
+                <p className="text-[11px] text-[var(--c-text-3)] mt-1">How many directory levels to scan for SKILL.md files.</p>
               </div>
               <p className="text-[12px] text-[var(--c-text-3)]">
                 Paste a GitHub repo URL or a direct link to a <span className="font-mono">.md</span> file. For repos with multiple skills, all are installed — name override becomes a prefix (e.g. <span className="font-mono">matt</span> → <span className="font-mono">matt-qa</span>, <span className="font-mono">matt-implement</span>).
