@@ -567,6 +567,43 @@ fn install_skill_from_path(
     Ok(paths)
 }
 
+/// Strip ANSI escape sequences and noisy CLI UI characters from `skills` CLI output.
+/// Keeps lines that contain meaningful text; drops ASCII art banners, spinner frames, and
+/// lines that are purely box-drawing / block chars.
+fn clean_skills_output(raw: &str) -> String {
+    // Remove ANSI CSI sequences: ESC [ ... m  (colours, bold, etc.)
+    let mut out = String::with_capacity(raw.len());
+    let bytes = raw.as_bytes();
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == 0x1b && i + 1 < bytes.len() && bytes[i + 1] == b'[' {
+            // skip until we hit a letter that ends the sequence
+            i += 2;
+            while i < bytes.len() && !bytes[i].is_ascii_alphabetic() {
+                i += 1;
+            }
+            i += 1; // skip the final letter
+        } else {
+            out.push(bytes[i] as char);
+            i += 1;
+        }
+    }
+
+    // Keep only lines that have at least one ASCII letter or digit,
+    // and don't look like a spinner frame (lines whose non-space content
+    // is entirely box/block/spinner Unicode).
+    out.lines()
+        .filter(|line| {
+            let trimmed = line.trim();
+            if trimmed.is_empty() { return false; }
+            // Must contain at least one ASCII alphanumeric character
+            trimmed.chars().any(|c| c.is_ascii_alphanumeric())
+        })
+        .map(|line| line.trim_end())
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
 /// Map our tool ID to the agent name expected by the `skills` CLI (vercel-labs/skills).
 fn skills_agent_name(tool_id: &str) -> Option<&'static str> {
     match tool_id {
@@ -614,12 +651,13 @@ async fn install_skill_from_github(
         let stderr = String::from_utf8_lossy(&output.stderr).to_string();
 
         if !output.status.success() {
-            return Err(format!("skills add failed:\n{stderr}{stdout}"));
+            let cleaned = clean_skills_output(&format!("{stderr}{stdout}"));
+            return Err(format!("skills add failed:\n{cleaned}"));
         }
 
         db::log_event(&db, "skill_github_installed", tool_id, source.trim(), None);
         if !combined_output.is_empty() { combined_output.push('\n'); }
-        combined_output.push_str(stdout.trim());
+        combined_output.push_str(&clean_skills_output(stdout.trim()));
     }
 
     let _ = app.emit("tools-changed", ());
