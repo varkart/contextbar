@@ -320,42 +320,139 @@ fn validate_skill_content(content: &str) -> Result<(), String> {
     Ok(())
 }
 
-/// Convert a GitHub repo or blob URL to a fetchable raw URL pointing at SKILL.md.
-///
-/// Handles:
-/// - https://github.com/owner/repo              → raw.githubusercontent.com/owner/repo/HEAD/SKILL.md
-/// - https://github.com/owner/repo/tree/branch  → raw.githubusercontent.com/owner/repo/branch/SKILL.md
-/// - https://github.com/owner/repo/blob/branch/path.md → raw.githubusercontent.com/.../path.md
-/// - https://raw.githubusercontent.com/...      → unchanged
-fn resolve_github_raw_url(url: &str) -> String {
-    // Already raw — pass through
+/// For a github.com blob URL, return the equivalent raw.githubusercontent.com URL.
+/// Returns None for repo/tree URLs (handled by the API search path).
+fn github_blob_to_raw(url: &str) -> Option<String> {
     if url.contains("raw.githubusercontent.com") {
-        return url.to_string();
+        return Some(url.to_string());
     }
-    // Must be a github.com URL
     if !url.contains("github.com/") {
-        return url.to_string();
+        return None; // not GitHub at all
     }
-    // Strip scheme + host, leaving /owner/repo[/...]
-    let path = url
-        .split("github.com/")
-        .nth(1)
-        .unwrap_or("")
-        .trim_end_matches('/');
+    let path = url.split("github.com/").nth(1)?.trim_end_matches('/');
+    let parts: Vec<&str> = path.split('/').collect();
+    if parts.len() >= 5 && parts[2] == "blob" {
+        let (owner, repo, branch) = (parts[0], parts[1], parts[3]);
+        let file_path = parts[4..].join("/");
+        return Some(format!("https://raw.githubusercontent.com/{owner}/{repo}/{branch}/{file_path}"));
+    }
+    None // repo or tree URL — caller should use the API
+}
+
+/// For a github.com repo or tree URL, return (owner, repo, branch).
+fn parse_github_repo_url(url: &str) -> Option<(String, String, String)> {
+    if url.contains("raw.githubusercontent.com") {
+        return None;
+    }
+    if !url.contains("github.com/") {
+        return None;
+    }
+    let path = url.split("github.com/").nth(1)?.trim_end_matches('/');
     let parts: Vec<&str> = path.split('/').collect();
     if parts.len() < 2 {
-        return url.to_string();
+        return None;
     }
     let (owner, repo) = (parts[0], parts[1]);
-    // blob URL: /owner/repo/blob/branch/path
-    if parts.len() >= 5 && parts[2] == "blob" {
-        let branch = parts[3];
-        let file_path = parts[4..].join("/");
-        return format!("https://raw.githubusercontent.com/{owner}/{repo}/{branch}/{file_path}");
+    if parts.len() >= 3 && parts[2] == "blob" {
+        return None; // blob → direct file, not a repo search
     }
-    // tree URL: /owner/repo/tree/branch
     let branch = if parts.len() >= 4 && parts[2] == "tree" { parts[3] } else { "HEAD" };
-    format!("https://raw.githubusercontent.com/{owner}/{repo}/{branch}/SKILL.md")
+    Some((owner.to_string(), repo.to_string(), branch.to_string()))
+}
+
+/// Search a GitHub repo for SKILL.md files up to 2 directory levels deep,
+/// fetch each one, and return (skill_name, content) pairs.
+async fn github_find_skill_mds(
+    owner: &str,
+    repo: &str,
+    branch: &str,
+) -> Result<Vec<(String, String)>, String> {
+    let client = reqwest::Client::builder()
+        .user_agent("llmmanager")
+        .build()
+        .map_err(|e| e.to_string())?;
+
+    let raw_base = format!("https://raw.githubusercontent.com/{owner}/{repo}/{branch}");
+    let api_url = format!(
+        "https://api.github.com/repos/{owner}/{repo}/git/trees/{branch}?recursive=1"
+    );
+
+    let tree_resp = client
+        .get(&api_url)
+        .header("Accept", "application/vnd.github+json")
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    if !tree_resp.status().is_success() {
+        return Err(format!(
+            "GitHub API error {} for {owner}/{repo} — repo may be private or not exist",
+            tree_resp.status()
+        ));
+    }
+
+    let tree: serde_json::Value = tree_resp.json().await.map_err(|e| e.to_string())?;
+    let items = tree["tree"]
+        .as_array()
+        .ok_or_else(|| "unexpected GitHub API response".to_string())?;
+
+    // Collect SKILL.md paths at depth ≤ 2 (e.g. "SKILL.md" or "subdir/SKILL.md")
+    let skill_paths: Vec<String> = items
+        .iter()
+        .filter_map(|item| {
+            let path = item["path"].as_str()?;
+            let type_ = item["type"].as_str()?;
+            if type_ != "blob" {
+                return None;
+            }
+            let parts: Vec<&str> = path.split('/').collect();
+            if parts.len() <= 2 && *parts.last().unwrap() == "SKILL.md" {
+                Some(path.to_string())
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    if skill_paths.is_empty() {
+        return Err(format!(
+            "no SKILL.md found in {owner}/{repo} (searched up to 2 directory levels)"
+        ));
+    }
+
+    // Fetch each SKILL.md and validate
+    let mut results = Vec::new();
+    for path in &skill_paths {
+        let raw_url = format!("{raw_base}/{path}");
+        let resp = client
+            .get(&raw_url)
+            .send()
+            .await
+            .map_err(|e| e.to_string())?;
+        if !resp.status().is_success() {
+            continue;
+        }
+        let content = resp.text().await.map_err(|e| e.to_string())?;
+        if validate_skill_content(&content).is_err() {
+            continue;
+        }
+        // Name: parent directory of SKILL.md, or repo name if at root
+        let parts: Vec<&str> = path.split('/').collect();
+        let name = if parts.len() >= 2 {
+            parts[parts.len() - 2].to_string()
+        } else {
+            repo.to_string()
+        };
+        results.push((name, content));
+    }
+
+    if results.is_empty() {
+        return Err(format!(
+            "SKILL.md files found in {owner}/{repo} but none had valid content"
+        ));
+    }
+
+    Ok(results)
 }
 
 #[tauri::command]
@@ -364,9 +461,32 @@ async fn install_skill_from_url(
     url: String,
     name: Option<String>,
 ) -> Result<Vec<String>, String> {
-    let fetch_url = resolve_github_raw_url(&url);
+    // GitHub repo/tree URL → search the repo with the API
+    if let Some((owner, repo, branch)) = parse_github_repo_url(&url) {
+        let skills = github_find_skill_mds(&owner, &repo, &branch).await?;
+        let mut all_paths = Vec::new();
+        for (skill_name, content) in skills {
+            let override_name = if let Some(ref n) = name {
+                // Only apply name override when there is a single skill
+                n.clone()
+            } else {
+                skill_name
+            };
+            let slug = slugify(override_name.trim());
+            if slug.is_empty() {
+                continue;
+            }
+            for tool_id in &tool_ids {
+                let dir = skill_dir_for(tool_id)?;
+                let path = write_skill_file(&dir, &slug, &content)?;
+                all_paths.push(path);
+            }
+        }
+        return Ok(all_paths);
+    }
 
-    // Fetch content
+    // Blob URL or raw URL or non-GitHub URL → fetch directly
+    let fetch_url = github_blob_to_raw(&url).unwrap_or_else(|| url.clone());
     let response = reqwest::get(&fetch_url).await.map_err(|e| e.to_string())?;
     if !response.status().is_success() {
         return Err(format!("HTTP {}: {}", response.status(), fetch_url));
@@ -374,7 +494,6 @@ async fn install_skill_from_url(
     let content = response.text().await.map_err(|e| e.to_string())?;
     validate_skill_content(&content)?;
 
-    // Derive name from URL if not provided
     let derived_name = name.unwrap_or_else(|| {
         url.split('/')
             .last()
@@ -1281,7 +1400,7 @@ fn open_main_window(app: &tauri::AppHandle, hash: Option<&str>) {
 
 #[cfg(test)]
 mod tests {
-    use super::{resolve_github_raw_url, validate_skill_content};
+    use super::{github_blob_to_raw, parse_github_repo_url, validate_skill_content};
 
     #[test]
     fn valid_markdown_passes() {
@@ -1307,39 +1426,55 @@ mod tests {
         assert!(validate_skill_content("   \n  ").is_err());
     }
 
+    // parse_github_repo_url tests
     #[test]
-    fn github_repo_url_becomes_skill_md() {
-        assert_eq!(
-            resolve_github_raw_url("https://github.com/obra/superpowers"),
-            "https://raw.githubusercontent.com/obra/superpowers/HEAD/SKILL.md"
-        );
+    fn repo_url_parsed() {
+        let r = parse_github_repo_url("https://github.com/obra/superpowers").unwrap();
+        assert_eq!(r, ("obra".into(), "superpowers".into(), "HEAD".into()));
     }
 
     #[test]
-    fn github_tree_url_uses_branch() {
-        assert_eq!(
-            resolve_github_raw_url("https://github.com/obra/superpowers/tree/main"),
+    fn tree_url_uses_branch() {
+        let r = parse_github_repo_url("https://github.com/obra/superpowers/tree/main").unwrap();
+        assert_eq!(r, ("obra".into(), "superpowers".into(), "main".into()));
+    }
+
+    #[test]
+    fn blob_url_returns_none_from_repo_parser() {
+        assert!(parse_github_repo_url(
+            "https://github.com/obra/superpowers/blob/main/SKILL.md"
+        ).is_none());
+    }
+
+    #[test]
+    fn raw_url_returns_none_from_repo_parser() {
+        assert!(parse_github_repo_url(
             "https://raw.githubusercontent.com/obra/superpowers/main/SKILL.md"
-        );
+        ).is_none());
     }
 
+    // github_blob_to_raw tests
     #[test]
-    fn github_blob_url_passes_through_file() {
+    fn blob_url_converts_to_raw() {
         assert_eq!(
-            resolve_github_raw_url("https://github.com/obra/superpowers/blob/main/MY-SKILL.md"),
-            "https://raw.githubusercontent.com/obra/superpowers/main/MY-SKILL.md"
+            github_blob_to_raw("https://github.com/obra/superpowers/blob/main/MY-SKILL.md"),
+            Some("https://raw.githubusercontent.com/obra/superpowers/main/MY-SKILL.md".into())
         );
     }
 
     #[test]
-    fn raw_url_unchanged() {
+    fn raw_url_passthrough() {
         let raw = "https://raw.githubusercontent.com/obra/superpowers/main/SKILL.md";
-        assert_eq!(resolve_github_raw_url(raw), raw);
+        assert_eq!(github_blob_to_raw(raw), Some(raw.into()));
     }
 
     #[test]
-    fn non_github_url_unchanged() {
-        let other = "https://example.com/my-skill.md";
-        assert_eq!(resolve_github_raw_url(other), other);
+    fn non_github_url_returns_none() {
+        assert!(github_blob_to_raw("https://example.com/my-skill.md").is_none());
+    }
+
+    #[test]
+    fn repo_url_returns_none_from_blob_parser() {
+        assert!(github_blob_to_raw("https://github.com/obra/superpowers").is_none());
     }
 }
