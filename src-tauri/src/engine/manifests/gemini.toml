@@ -20,6 +20,7 @@ id = "settings_json"
 type = "json_key_pair"
 file = "~/.gemini/settings.json"
 active_key = "mcpServers"
+disabled_key = "disabledMcpServers"
 jsonc = true
 
 # Built-in extensions from ~/.gemini/extensions/
