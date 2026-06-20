@@ -187,6 +187,7 @@ pub enum McpSourceSpec {
         file: String,
         #[serde(default = "default_mcp_key")]
         active_key: String,
+        disabled_key: Option<String>,
     },
     /// Claude Code's ~/.claude.json: collects mcpServers from all projects entries,
     /// deduplicated by name (first occurrence wins).

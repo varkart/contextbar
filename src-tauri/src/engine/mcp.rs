@@ -101,7 +101,7 @@ fn read_source(source: &McpSourceSpec, home: &std::path::Path) -> (Vec<McpServer
         McpSourceSpec::YamlKeyPair { file, active_key } => {
             read_yaml_key_pair(&expand_home(file, home), active_key)
         }
-        McpSourceSpec::TomlKeyPair { file, active_key } => {
+        McpSourceSpec::TomlKeyPair { file, active_key, .. } => {
             read_toml_key_pair(&expand_home(file, home), active_key)
         }
         McpSourceSpec::ClaudeDotfile { file } => read_claude_dotfile(&expand_home(file, home)),

@@ -39,6 +39,7 @@ id = "mcp_json"
 type = "json_key_pair"
 file = "~/.kiro/settings/mcp.json"
 active_key = "mcpServers"
+disabled_key = "disabledMcpServers"
 
 # Legacy Amazon Q MCP config
 [[mcp_sources]]
@@ -46,3 +47,4 @@ id = "amazonq_mcp_json"
 type = "json_key_pair"
 file = "~/.aws/amazonq/mcp.json"
 active_key = "mcpServers"
+disabled_key = "disabledMcpServers"

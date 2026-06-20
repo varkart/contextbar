@@ -408,6 +408,55 @@ pub fn add_mcp_to_toml_config(
     Ok(())
 }
 
+/// Move an MCP entry between `active_key` and `disabled_key` sections in a TOML config file.
+pub fn move_mcp_in_toml_config(
+    config_path: &str,
+    mcp_name: &str,
+    active: bool,
+    active_key: &str,
+    disabled_key: &str,
+) -> Result<(), String> {
+    let lock = config_lock(config_path);
+    let _guard = lock.lock().unwrap();
+
+    if let Err(e) = crate::backup::snapshot(config_path) {
+        eprintln!("[backup] snapshot failed for {config_path}: {e}");
+    }
+
+    let raw = std::fs::read_to_string(config_path)
+        .map_err(|e| format!("cannot read {config_path}: {e}"))?;
+    let mut doc: toml::Value =
+        toml::from_str(&raw).map_err(|e| format!("cannot parse {config_path}: {e}"))?;
+
+    let root = doc.as_table_mut().ok_or("TOML root is not a table")?;
+
+    let src_key = if active { disabled_key } else { active_key };
+    let dst_key = if active { active_key } else { disabled_key };
+
+    let entry = root
+        .get_mut(src_key)
+        .and_then(|v| v.as_table_mut())
+        .and_then(|m| m.remove(mcp_name))
+        .ok_or_else(|| format!("MCP '{mcp_name}' not found in [{src_key}]"))?;
+
+    root.entry(dst_key.to_string())
+        .or_insert_with(|| toml::Value::Table(toml::map::Map::new()))
+        .as_table_mut()
+        .ok_or("destination section is not a TOML table")?
+        .insert(mcp_name.to_string(), entry);
+
+    let updated = toml::to_string_pretty(&doc).map_err(|e| format!("TOML serialization error: {e}"))?;
+
+    let tmp_path = format!("{config_path}.tmp");
+    std::fs::write(&tmp_path, &updated).map_err(|e| format!("cannot write temp file: {e}"))?;
+    std::fs::rename(&tmp_path, config_path).map_err(|e| {
+        let _ = std::fs::remove_file(&tmp_path);
+        format!("cannot atomically replace {config_path}: {e}")
+    })?;
+
+    Ok(())
+}
+
 /// Remove an MCP entry from `active_key.name` in a TOML config file.
 pub fn remove_mcp_from_toml_config(
     config_path: &str,
