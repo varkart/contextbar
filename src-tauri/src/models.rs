@@ -11,6 +11,10 @@ pub struct AiTool {
     pub skills: Vec<Skill>,
     pub mcps: Vec<McpServer>,
     pub error: Option<String>,
+    /// True when the tool's manifest defines at least one [[skill_sources]] entry.
+    pub supports_skills: bool,
+    /// True when the tool's manifest defines at least one [[mcp_sources]] entry.
+    pub supports_mcps: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

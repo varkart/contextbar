@@ -4,7 +4,7 @@ import type { RouterState } from '../viewRouter'
 import type { AiTool, Skill, McpServer } from '../types'
 
 const tool = {
-  id: 'claude', name: 'Claude Code', installed: true, skills: [], mcps: [],
+  id: 'claude', name: 'Claude Code', installed: true, supportsSkills: true, supportsMcps: true, skills: [], mcps: [],
 } as AiTool
 
 const skill: Skill = {

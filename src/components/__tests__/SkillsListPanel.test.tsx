@@ -8,6 +8,8 @@ const tool: AiTool = {
   name: 'Claude Code',
   version: '1.0.0',
   installed: true,
+  supportsSkills: true,
+  supportsMcps: true,
   skills: [
     { name: 'impeccable', path: '~/.claude/skills/impeccable', description: 'UI polish', hasFullDescription: false, active: true,  sourceId: 'skills_dir' },
     { name: 'graphify',   path: '~/.claude/skills/graphify',   description: 'Graphs',    hasFullDescription: false, active: true,  sourceId: 'skills_dir' },

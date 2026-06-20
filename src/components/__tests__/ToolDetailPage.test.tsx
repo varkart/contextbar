@@ -13,6 +13,8 @@ const mockTool: AiTool = {
   name: 'Claude Code',
   version: '1.0.0',
   installed: true,
+  supportsSkills: true,
+  supportsMcps: true,
   skills: [
     { name: 'impeccable', path: '~/.claude/skills/impeccable', description: 'UI polish', hasFullDescription: false, active: true, sourceId: 'skills_dir' },
     { name: 'graphify',   path: '~/.claude/skills/.disabled/graphify', description: undefined, hasFullDescription: false, active: false, sourceId: 'skills_dir' },

@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { escapeTransition, ALL_VIEWS } from '../viewRouter'
 import type { AiTool } from '../types'
 
-const tool = { id: 'claude', name: 'Claude Code', installed: true, skills: [], mcps: [] } as AiTool
+const tool = { id: 'claude', name: 'Claude Code', installed: true, supportsSkills: true, supportsMcps: true, skills: [], mcps: [] } as AiTool
 
 describe('escapeTransition', () => {
   it('skill-detail → skillBackView', () => {
