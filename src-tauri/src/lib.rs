@@ -260,6 +260,32 @@ fn warm_skill_cache(db: tauri::State<'_, db::DbState>) {
     }
 }
 
+/// Populate mcp_cache with install info for all currently detected MCPs.
+/// Runs on startup — skips MCPs already in cache so existing entries aren't overwritten.
+#[tauri::command]
+fn warm_mcp_cache(db: tauri::State<'_, db::DbState>) {
+    let tools = detectors::detect_all();
+    for tool in tools {
+        for mcp in tool.mcps {
+            if db::is_mcp_cached(&db, &mcp.name) {
+                continue;
+            }
+            db::cache_mcp(
+                &db,
+                &mcp.name,
+                if mcp.command.is_empty() { None } else { Some(mcp.command.as_str()) },
+                &mcp.args,
+                mcp.url.as_deref(),
+            );
+        }
+    }
+}
+
+#[tauri::command]
+fn get_all_cached_mcps(db: tauri::State<'_, db::DbState>) -> Vec<db::CachedMcp> {
+    db::get_all_cached_mcps(&db)
+}
+
 /// Return cache metadata for a skill so the frontend knows whether a re-install
 /// can be attempted without user input.
 #[tauri::command]
@@ -1228,6 +1254,13 @@ fn add_mcp(
         if let Some(result) = result {
             if result.is_ok() {
                 db::log_event(&db, "mcp_added", &tool_id, &name, None);
+                db::cache_mcp(
+                    &db,
+                    &name,
+                    command.as_deref(),
+                    args.as_deref().unwrap_or(&[]),
+                    url.as_deref(),
+                );
             }
             return result;
         }
@@ -1241,6 +1274,10 @@ fn remove_mcp(
     tool_id: String,
     mcp_name: String,
     source_id: String,
+    // Install data passed from frontend so we can cache without re-detecting
+    command: Option<String>,
+    args: Option<Vec<String>>,
+    url: Option<String>,
 ) -> Result<(), String> {
     use crate::engine::manifest::McpSourceSpec;
     use crate::engine::resolve::expand_home;
@@ -1279,6 +1316,14 @@ fn remove_mcp(
         };
         if result.is_ok() {
             db::log_event(&db, "mcp_removed", &tool_id, &mcp_name, None);
+            // Cache install info so MCP can be re-added after being removed from all providers
+            db::cache_mcp(
+                &db,
+                &mcp_name,
+                command.as_deref(),
+                args.as_deref().unwrap_or(&[]),
+                url.as_deref(),
+            );
         }
         return result;
     }
@@ -1654,6 +1699,8 @@ pub fn run() {
             warm_skill_cache,
             get_skill_cache_status,
             add_skill_to_tool,
+            warm_mcp_cache,
+            get_all_cached_mcps,
             create_skill,
             install_skill_from_url,
             install_skill_from_path,

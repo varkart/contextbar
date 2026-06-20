@@ -92,6 +92,20 @@ fn migrate(conn: &mut Connection) -> Result<(), AppError> {
         conn.pragma_update(None, "user_version", 3)?;
     }
 
+    if version < 4 {
+        conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS mcp_cache (
+                name        TEXT    PRIMARY KEY,
+                command     TEXT,
+                args        TEXT    NOT NULL DEFAULT '[]',
+                url         TEXT,
+                cached_at   INTEGER NOT NULL,
+                updated_at  INTEGER NOT NULL
+            );",
+        )?;
+        conn.pragma_update(None, "user_version", 4)?;
+    }
+
     Ok(())
 }
 
@@ -160,6 +174,97 @@ pub fn is_skill_cached(state: &DbState, name: &str) -> bool {
     let Ok(conn) = state.0.lock() else { return false };
     conn.query_row(
         "SELECT EXISTS(SELECT 1 FROM skill_cache WHERE name = ?1)",
+        rusqlite::params![name],
+        |r| r.get::<_, bool>(0),
+    )
+    .unwrap_or(false)
+}
+
+// ---------------------------------------------------------------------------
+// MCP cache
+// ---------------------------------------------------------------------------
+
+#[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct CachedMcp {
+    pub name: String,
+    pub command: Option<String>,
+    pub args: Vec<String>,
+    pub url: Option<String>,
+    pub cached_at: i64,
+    pub updated_at: i64,
+}
+
+/// Upsert an MCP into the cache. Preserves existing entry if new values are empty.
+pub fn cache_mcp(
+    state: &DbState,
+    name: &str,
+    command: Option<&str>,
+    args: &[String],
+    url: Option<&str>,
+) {
+    let args_json = serde_json::to_string(args).unwrap_or_else(|_| "[]".to_string());
+    let now = now_ms();
+    let Ok(conn) = state.0.lock() else { return };
+    let _ = conn.execute(
+        "INSERT INTO mcp_cache (name, command, args, url, cached_at, updated_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?5)
+         ON CONFLICT(name) DO UPDATE SET
+           command    = COALESCE(excluded.command,    mcp_cache.command),
+           args       = CASE WHEN excluded.args != '[]' THEN excluded.args ELSE mcp_cache.args END,
+           url        = COALESCE(excluded.url,        mcp_cache.url),
+           updated_at = excluded.updated_at",
+        rusqlite::params![name, command, args_json, url, now],
+    );
+}
+
+pub fn get_cached_mcp(state: &DbState, name: &str) -> Option<CachedMcp> {
+    let conn = state.0.lock().ok()?;
+    conn.query_row(
+        "SELECT name, command, args, url, cached_at, updated_at FROM mcp_cache WHERE name = ?1",
+        rusqlite::params![name],
+        |r| {
+            let args_json: String = r.get(2)?;
+            let args: Vec<String> =
+                serde_json::from_str(&args_json).unwrap_or_default();
+            Ok(CachedMcp {
+                name: r.get(0)?,
+                command: r.get(1)?,
+                args,
+                url: r.get(3)?,
+                cached_at: r.get(4)?,
+                updated_at: r.get(5)?,
+            })
+        },
+    )
+    .ok()
+}
+
+pub fn get_all_cached_mcps(state: &DbState) -> Vec<CachedMcp> {
+    let Ok(conn) = state.0.lock() else { return vec![] };
+    let Ok(mut stmt) = conn.prepare(
+        "SELECT name, command, args, url, cached_at, updated_at FROM mcp_cache ORDER BY updated_at DESC",
+    ) else { return vec![] };
+    stmt.query_map([], |r| {
+        let args_json: String = r.get(2)?;
+        let args: Vec<String> = serde_json::from_str(&args_json).unwrap_or_default();
+        Ok(CachedMcp {
+            name: r.get(0)?,
+            command: r.get(1)?,
+            args,
+            url: r.get(3)?,
+            cached_at: r.get(4)?,
+            updated_at: r.get(5)?,
+        })
+    })
+    .map(|rows| rows.flatten().collect())
+    .unwrap_or_default()
+}
+
+pub fn is_mcp_cached(state: &DbState, name: &str) -> bool {
+    let Ok(conn) = state.0.lock() else { return false };
+    conn.query_row(
+        "SELECT EXISTS(SELECT 1 FROM mcp_cache WHERE name = ?1)",
         rusqlite::params![name],
         |r| r.get::<_, bool>(0),
     )
