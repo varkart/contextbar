@@ -10,7 +10,7 @@ interface SkillsListPanelProps {
   onAddSkill: () => void
 }
 
-export default function SkillsListPanel({ tool, onBack, onSelectSkill, onAddSkill }: SkillsListPanelProps) {
+export default function SkillsListPanel({ tool, onSelectSkill, onAddSkill }: SkillsListPanelProps) {
   const [q, setQ] = useState('')
   const filterInputRef = useRef<HTMLInputElement | null>(null)
   const filtered = q
@@ -35,41 +35,20 @@ export default function SkillsListPanel({ tool, onBack, onSelectSkill, onAddSkil
 
   return (
     <div className="flex flex-col h-full bg-[var(--c-bg)] animate-slide-in-right">
-      <div className="flex items-center gap-2 px-4 py-2.5 border-b border-[var(--c-border)] flex-shrink-0">
+      <div className="flex items-center justify-end gap-1.5 px-4 py-2 border-b border-[var(--c-border)] flex-shrink-0">
+        <span className="text-[12px] text-[var(--c-text-3)] tabular-nums">{filtered.length}</span>
         <button
-          onClick={onBack}
-          className="text-[var(--c-text-2)] hover:text-[var(--c-text)] transition-colors p-0.5 -ml-0.5 rounded"
-          aria-label="Back"
+          onClick={onAddSkill}
+          aria-label="Add Skill"
+          className="p-0.5 rounded transition-colors text-[var(--c-text-3)] hover:text-indigo-400"
+          title="Add Skill"
         >
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
             stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
             className="w-3.5 h-3.5">
-            <polyline points="15 18 9 12 15 6"/>
+            <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
           </svg>
         </button>
-        <button
-          onClick={onBack}
-          className="text-[13px] text-[var(--c-text-3)] truncate max-w-[80px] hover:text-[var(--c-text-2)] transition-colors"
-        >
-          {tool.name}
-        </button>
-        <span className="text-[12px] text-[var(--c-text-3)]">›</span>
-        <span className="text-[15px] font-semibold text-[var(--c-text)] tracking-[-0.01em]">Skills</span>
-        <div className="ml-auto flex items-center gap-1.5 flex-shrink-0">
-          <span className="text-[12px] text-[var(--c-text-3)] tabular-nums">{filtered.length}</span>
-          <button
-            onClick={onAddSkill}
-            aria-label="Add Skill"
-            className="p-0.5 rounded transition-colors text-[var(--c-text-3)] hover:text-indigo-400"
-            title="Add Skill"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
-              stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
-              className="w-3.5 h-3.5">
-              <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
-            </svg>
-          </button>
-        </div>
       </div>
 
       {tool.skills.length > 5 && (

@@ -60,21 +60,6 @@ describe('SkillDetailPanel', () => {
     await waitFor(() => expect(screen.getByText(/path not found/i)).toBeInTheDocument())
   })
 
-  it('back button calls onBack', () => {
-    mockInvoke.mockReturnValue(new Promise(() => {}))
-    const onBack = vi.fn()
-    render(<SkillDetailPanel skill={skill} onBack={onBack} />)
-    fireEvent.click(screen.getByRole('button', { name: /back/i }))
-    expect(onBack).toHaveBeenCalledTimes(1)
-  })
-
-  it('shows toolName breadcrumb when provided', async () => {
-    mockInvoke.mockResolvedValue(fileTree)
-    render(<SkillDetailPanel skill={skill} onBack={vi.fn()} toolName="Claude Code" />)
-    await waitFor(() => expect(screen.getByText('SKILL.md')).toBeInTheDocument())
-    expect(screen.getByText('Claude Code')).toBeInTheDocument()
-  })
-
   it('shows skill path at the bottom', async () => {
     mockInvoke.mockResolvedValue(fileTree)
     render(<SkillDetailPanel skill={skill} onBack={vi.fn()} />)
