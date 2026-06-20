@@ -1,4 +1,5 @@
 import LogsPanel from '../LogsPanel'
+import FeedbackView from './FeedbackView'
 import NotificationsPanel from '../NotificationsPanel'
 import SkillsListPanel from '../SkillsListPanel'
 import McpsListPanel from '../McpsListPanel'
@@ -47,6 +48,9 @@ export default function ViewManager({
 }: any) {
   if (view === 'logs') {
     return <LogsPanel onBack={() => goTo('main')} />
+  }
+  if (view === 'feedback') {
+    return <FeedbackView onBack={() => goTo('main')} />
   }
   if (view === 'notifications') {
     return (
