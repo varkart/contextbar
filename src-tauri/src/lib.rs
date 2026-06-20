@@ -1120,18 +1120,35 @@ fn add_mcp(
         .ok_or_else(|| format!("no manifest for '{tool_id}'"))?;
 
     for source in &manifest.mcp_sources {
-        if let McpSourceSpec::JsonKeyPair { file, active_key, .. } = &source.spec {
-            let path = expand_home(file, &home);
-            let entry = if let Some(u) = &url {
-                serde_json::json!({ "url": u })
-            } else {
-                serde_json::json!({
-                    "command": command.as_deref().unwrap_or(""),
-                    "args": args.as_deref().unwrap_or(&[]),
-                })
-            };
-            let result =
-                app_state::add_mcp_to_config(&path.to_string_lossy(), active_key, &name, entry);
+        let result = match &source.spec {
+            McpSourceSpec::JsonKeyPair { file, active_key, .. } => {
+                let path = expand_home(file, &home);
+                let entry = if let Some(u) = &url {
+                    serde_json::json!({ "url": u })
+                } else {
+                    serde_json::json!({
+                        "command": command.as_deref().unwrap_or(""),
+                        "args": args.as_deref().unwrap_or(&[]),
+                    })
+                };
+                Some(app_state::add_mcp_to_config(
+                    &path.to_string_lossy(), active_key, &name, entry,
+                ))
+            }
+            McpSourceSpec::TomlKeyPair { file, active_key } => {
+                let path = expand_home(file, &home);
+                Some(app_state::add_mcp_to_toml_config(
+                    &path.to_string_lossy(),
+                    active_key,
+                    &name,
+                    command.as_deref(),
+                    args.as_deref().unwrap_or(&[]),
+                    url.as_deref(),
+                ))
+            }
+            _ => None,
+        };
+        if let Some(result) = result {
             if result.is_ok() {
                 db::log_event(&db, "mcp_added", &tool_id, &name, None);
             }
@@ -1163,26 +1180,30 @@ fn remove_mcp(
         if eff_id != source_id {
             continue;
         }
-        if let McpSourceSpec::JsonKeyPair {
-            file,
-            active_key,
-            disabled_key,
-            ..
-        } = &source.spec
-        {
-            let path = expand_home(file, &home);
-            let result = app_state::remove_mcp_from_config(
-                &path.to_string_lossy(),
-                active_key,
-                disabled_key.as_deref(),
-                &mcp_name,
-            );
-            if result.is_ok() {
-                db::log_event(&db, "mcp_removed", &tool_id, &mcp_name, None);
+        let result = match &source.spec {
+            McpSourceSpec::JsonKeyPair { file, active_key, disabled_key, .. } => {
+                let path = expand_home(file, &home);
+                app_state::remove_mcp_from_config(
+                    &path.to_string_lossy(),
+                    active_key,
+                    disabled_key.as_deref(),
+                    &mcp_name,
+                )
             }
-            return result;
+            McpSourceSpec::TomlKeyPair { file, active_key } => {
+                let path = expand_home(file, &home);
+                app_state::remove_mcp_from_toml_config(
+                    &path.to_string_lossy(),
+                    active_key,
+                    &mcp_name,
+                )
+            }
+            _ => Err(format!("source '{source_id}' does not support MCP removal")),
+        };
+        if result.is_ok() {
+            db::log_event(&db, "mcp_removed", &tool_id, &mcp_name, None);
         }
-        return Err(format!("source '{source_id}' does not support MCP removal"));
+        return result;
     }
     Err(format!(
         "source '{source_id}' not found in '{tool_id}' manifest"
