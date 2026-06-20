@@ -187,7 +187,10 @@ pub enum McpSourceSpec {
         file: String,
         #[serde(default = "default_mcp_key")]
         active_key: String,
+        /// Move entries between sections to disable (e.g. "disabled_mcp_servers").
         disabled_key: Option<String>,
+        /// Set a boolean field on the entry to disable (e.g. "enabled" → false).
+        inline_toggle_field: Option<String>,
     },
     /// Claude Code's ~/.claude.json: collects mcpServers from all projects entries,
     /// deduplicated by name (first occurrence wins).
