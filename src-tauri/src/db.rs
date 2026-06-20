@@ -106,6 +106,11 @@ fn migrate(conn: &mut Connection) -> Result<(), AppError> {
         conn.pragma_update(None, "user_version", 4)?;
     }
 
+    if version < 5 {
+        conn.execute_batch("ALTER TABLE mcp_cache ADD COLUMN source_url TEXT;")?;
+        conn.pragma_update(None, "user_version", 5)?;
+    }
+
     Ok(())
 }
 
@@ -191,6 +196,8 @@ pub struct CachedMcp {
     pub command: Option<String>,
     pub args: Vec<String>,
     pub url: Option<String>,
+    /// Validated source URL: GitHub repo, homepage, or npmjs.com fallback.
+    pub source_url: Option<String>,
     pub cached_at: i64,
     pub updated_at: i64,
 }
@@ -218,22 +225,31 @@ pub fn cache_mcp(
     );
 }
 
+/// Update only the source_url for an existing cache entry (called after async URL resolution).
+pub fn update_mcp_source_url(state: &DbState, name: &str, source_url: &str) {
+    let Ok(conn) = state.0.lock() else { return };
+    let _ = conn.execute(
+        "UPDATE mcp_cache SET source_url = ?1 WHERE name = ?2",
+        rusqlite::params![source_url, name],
+    );
+}
+
 pub fn get_cached_mcp(state: &DbState, name: &str) -> Option<CachedMcp> {
     let conn = state.0.lock().ok()?;
     conn.query_row(
-        "SELECT name, command, args, url, cached_at, updated_at FROM mcp_cache WHERE name = ?1",
+        "SELECT name, command, args, url, source_url, cached_at, updated_at FROM mcp_cache WHERE name = ?1",
         rusqlite::params![name],
         |r| {
             let args_json: String = r.get(2)?;
-            let args: Vec<String> =
-                serde_json::from_str(&args_json).unwrap_or_default();
+            let args: Vec<String> = serde_json::from_str(&args_json).unwrap_or_default();
             Ok(CachedMcp {
                 name: r.get(0)?,
                 command: r.get(1)?,
                 args,
                 url: r.get(3)?,
-                cached_at: r.get(4)?,
-                updated_at: r.get(5)?,
+                source_url: r.get(4)?,
+                cached_at: r.get(5)?,
+                updated_at: r.get(6)?,
             })
         },
     )
@@ -243,7 +259,7 @@ pub fn get_cached_mcp(state: &DbState, name: &str) -> Option<CachedMcp> {
 pub fn get_all_cached_mcps(state: &DbState) -> Vec<CachedMcp> {
     let Ok(conn) = state.0.lock() else { return vec![] };
     let Ok(mut stmt) = conn.prepare(
-        "SELECT name, command, args, url, cached_at, updated_at FROM mcp_cache ORDER BY updated_at DESC",
+        "SELECT name, command, args, url, source_url, cached_at, updated_at FROM mcp_cache ORDER BY updated_at DESC",
     ) else { return vec![] };
     stmt.query_map([], |r| {
         let args_json: String = r.get(2)?;
@@ -253,8 +269,9 @@ pub fn get_all_cached_mcps(state: &DbState) -> Vec<CachedMcp> {
             command: r.get(1)?,
             args,
             url: r.get(3)?,
-            cached_at: r.get(4)?,
-            updated_at: r.get(5)?,
+            source_url: r.get(4)?,
+            cached_at: r.get(5)?,
+            updated_at: r.get(6)?,
         })
     })
     .map(|rows| rows.flatten().collect())

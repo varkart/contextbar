@@ -161,6 +161,74 @@ pub async fn uninstall_npm_global(package_name: &str) -> Result<(), String> {
 }
 
 // ---------------------------------------------------------------------------
+// npm source URL resolution (async — registry + HEAD validation)
+// ---------------------------------------------------------------------------
+
+/// Fetch the best source URL for an npm package.
+/// Strategy:
+///   1. Hit registry.npmjs.org → extract repository.url (GitHub preferred) or homepage
+///   2. HEAD-validate the extracted URL (confirm it returns < 500)
+///   3. If invalid or missing, fall back to https://www.npmjs.com/package/{pkg}
+pub async fn fetch_npm_source_url(package_name: &str) -> Option<String> {
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(8))
+        .user_agent("llmmanager")
+        .build()
+        .ok()?;
+
+    // 1. Fetch registry metadata
+    let registry_url = format!("https://registry.npmjs.org/{package_name}");
+    if let Ok(resp) = client.get(&registry_url).send().await {
+        if resp.status().is_success() {
+            if let Ok(data) = resp.json::<serde_json::Value>().await {
+                if let Some(candidate) = extract_npm_url_from_registry(&data) {
+                    // 2. Validate the extracted URL
+                    if head_ok(&client, &candidate).await {
+                        return Some(candidate);
+                    }
+                }
+            }
+        }
+    }
+
+    // 3. Fallback: canonical npmjs.com page (always valid for published packages)
+    Some(format!("https://www.npmjs.com/package/{package_name}"))
+}
+
+/// Extract repository or homepage URL from npm registry JSON.
+/// Mirrors the logic in McpDetailPanel.tsx.
+fn extract_npm_url_from_registry(data: &serde_json::Value) -> Option<String> {
+    // Prefer repository.url → clean to https GitHub link
+    if let Some(raw) = data.pointer("/repository/url").and_then(|v| v.as_str()) {
+        let cleaned = raw
+            .trim_start_matches("git+")
+            .trim_end_matches(".git")
+            .replace("git://github.com/", "https://github.com/");
+        if cleaned.starts_with("https://") {
+            return Some(cleaned);
+        }
+    }
+    // homepage as second choice
+    if let Some(hp) = data.get("homepage").and_then(|v| v.as_str()) {
+        if hp.starts_with("http") {
+            return Some(hp.to_string());
+        }
+    }
+    None
+}
+
+/// HEAD request returning true if the URL is reachable (status < 500).
+async fn head_ok(client: &reqwest::Client, url: &str) -> bool {
+    client
+        .head(url)
+        .timeout(std::time::Duration::from_secs(5))
+        .send()
+        .await
+        .map(|r| r.status().as_u16() < 500)
+        .unwrap_or(false)
+}
+
+// ---------------------------------------------------------------------------
 // Latest version from registry (async — network call)
 // ---------------------------------------------------------------------------
 
