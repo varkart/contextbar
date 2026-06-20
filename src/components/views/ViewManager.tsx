@@ -8,10 +8,12 @@ import ToolDetailPage from '../ToolDetailPage'
 import Settings from '../Settings'
 import MainView from './MainView'
 import LlmsListView from './LlmsListView'
+import AllSkillsView from './AllSkillsView'
 import AddSkillView from './AddSkillView'
 import AddMcpView from './AddMcpView'
 
 import type { ThemePreference } from '../../useTheme'
+import type { AiTool, Skill } from '../../types'
 
 export default function ViewManager({
   view,
@@ -108,14 +110,33 @@ export default function ViewManager({
       />
     )
   }
+  if (view === 'all-skills-list') {
+    return (
+      <AllSkillsView
+        tools={tools}
+        onBack={() => escape()}
+        onSelectSkill={skill => selectSkill(skill, 'all-skills-list')}
+      />
+    )
+  }
   if (view === 'skill-detail' && selectedSkill) {
+    // Compute all variants (same name, any tool) with toolId/toolName populated
+    const skillVariants = (tools as AiTool[])
+      .filter((t: AiTool) => t.installed)
+      .flatMap((t: AiTool) => t.skills
+        .filter((s: Skill) => s.name.toLowerCase() === selectedSkill.name.toLowerCase())
+        .map((s: Skill) => ({ ...s, toolId: t.id, toolName: t.name }))
+      )
     return (
       <SkillDetailPanel
         skill={selectedSkill}
-        toolName={selectedTool?.name}
-        toolId={selectedTool?.id}
+        toolName={selectedTool?.name ?? selectedSkill.toolName}
+        toolId={selectedTool?.id ?? selectedSkill.toolId}
         onToggled={handleFetchTools}
         onBack={() => escape()}
+        allTools={tools}
+        variants={skillVariants}
+        onSelectTool={selectTool}
       />
     )
   }
@@ -128,6 +149,7 @@ export default function ViewManager({
         onToggled={handleFetchTools}
         onRemoved={handleFetchTools}
         onBack={() => escape()}
+        allTools={tools}
       />
     )
   }
