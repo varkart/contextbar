@@ -136,7 +136,6 @@ export default function ViewManager({
         onBack={() => escape()}
         allTools={tools}
         variants={skillVariants}
-        onSelectTool={selectTool}
       />
     )
   }
