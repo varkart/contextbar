@@ -16,6 +16,12 @@ args = ["--version"]
 timeout_ms = 800
 parse = "first_token"
 
+[[skill_sources]]
+id = "skills_dir"
+type = "directory"
+path = "~/.codex/skills"
+disabled_subdir = ".disabled"
+
 # MCP servers defined in [mcp_servers] TOML table
 [[mcp_sources]]
 id = "config_toml"

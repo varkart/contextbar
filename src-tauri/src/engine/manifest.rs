@@ -218,5 +218,9 @@ pub enum SkillSourceSpec {
     Directory {
         path: String,
         disabled_subdir: Option<String>,
+        /// When true, skills are stored as flat `{name}.md` files rather than
+        /// `{name}/SKILL.md` subdirectories (e.g. Windsurf workflows).
+        #[serde(default)]
+        flat_files: bool,
     },
 }
