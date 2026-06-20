@@ -66,7 +66,7 @@ export default function SplashScreen({ backendReady, onDismiss }: SplashScreenPr
 
   return (
     <div
-      className={`fixed inset-0 z-50 flex flex-col items-center justify-center gap-6 bg-[var(--c-bg)] ${exiting ? 'splash-out' : 'splash-fade-in'}`}
+      className={`fixed inset-0 z-50 flex flex-col items-center justify-center gap-6 bg-[var(--c-bg)] ${exiting ? 'splash-out' : ''}`}
       style={{ animationFillMode: 'forwards' }}
     >
       <img

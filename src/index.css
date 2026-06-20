@@ -167,6 +167,30 @@ body {
 .animate-toggle-confirm { animation: toggle-confirm 0.30s cubic-bezier(0.34, 1.56, 0.64, 1) forwards; }
 .animate-toggle-busy    { animation: toggle-busy    0.55s ease-in-out infinite; }
 
+/* ── Home tile icon animations ── */
+@keyframes neuron-pulse {
+  0%,100%  { opacity:.18; transform:scale(.85); box-shadow:none }
+  50%      { opacity:1;   transform:scale(1.15); box-shadow:0 0 5px 2px rgba(16,185,129,.5) }
+}
+@keyframes line-fill {
+  0%   { transform:scaleX(0); opacity:.2 }
+  15%  { transform:scaleX(1); opacity:1  }
+  80%  { transform:scaleX(1); opacity:1  }
+  100% { transform:scaleX(0); opacity:.2 }
+}
+@keyframes conn-travel {
+  0%   { clip-path:inset(0 100% 0 0);   opacity:0   }
+  10%  { opacity:.9 }
+  50%  { clip-path:inset(0 0%   0 0)                }
+  80%  { opacity:.9 }
+  100% { clip-path:inset(0 0    0 100%); opacity:0  }
+}
+@keyframes node-ping {
+  0%   { transform:translateY(-50%) scale(1);   opacity:.7 }
+  70%  { transform:translateY(-50%) scale(2.2); opacity:0  }
+  100% { transform:translateY(-50%) scale(2.2); opacity:0  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .animate-tooltip-in { animation: none; }
   .animate-toggle-enable, .animate-toggle-disable, .animate-toggle-confirm, .animate-toggle-busy { animation: none; }
