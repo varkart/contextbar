@@ -54,6 +54,7 @@ interface PendingDisable {
 }
 
 export function SkillInstalledOn({ skill, currentToolId, allTools, onInstalled, onSelectForPath, selectedToolId }: SkillInstalledOnProps) {
+  const [collapsed, setCollapsed] = useState(false)
   const [installing, setInstalling] = useState<string | null>(null)
   const [toggling, setToggling] = useState<string | null>(null)
   const [deleting, setDeleting] = useState<string | null>(null)
@@ -144,10 +145,26 @@ export function SkillInstalledOn({ skill, currentToolId, allTools, onInstalled, 
     }
   }
 
+  const installedCount = installedTools.filter(t =>
+    t.skills.some(s => s.name.toLowerCase().trim() === skill.name.toLowerCase().trim())
+  ).length
+
   return (
     <div className="px-4 py-3 border-b border-[var(--c-border)]">
-      <p className="text-[13px] font-semibold text-indigo-500 mb-2">Installed on</p>
+      <button
+        onClick={() => setCollapsed(c => !c)}
+        className="flex items-center gap-1.5 w-full text-left mb-2 group"
+      >
+        <span className="text-[13px] font-semibold text-indigo-500">Installed on</span>
+        <span className="text-[11px] text-[var(--c-text-3)]">({installedCount})</span>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+          stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
+          className={`w-3 h-3 text-[var(--c-text-3)] ml-auto transition-transform duration-150 ${collapsed ? '-rotate-90' : ''}`}>
+          <polyline points="6 9 12 15 18 9"/>
+        </svg>
+      </button>
 
+      {!collapsed && <>
       {/* Modal: no-cache last-provider disable warning */}
       {pendingDisable && (
         <div className="mb-3 p-3 rounded-lg bg-amber-500/8 border border-amber-500/20 space-y-2">
@@ -282,6 +299,7 @@ export function SkillInstalledOn({ skill, currentToolId, allTools, onInstalled, 
           )
         })}
       </div>
+      </>}
     </div>
   )
 }
@@ -297,6 +315,7 @@ interface McpInstalledOnProps {
 }
 
 export function McpInstalledOn({ mcp, currentToolId, allTools, onInstalled, onBack }: McpInstalledOnProps) {
+  const [collapsed, setCollapsed] = useState(false)
   const [installing, setInstalling] = useState<string | null>(null)
   const [toggling, setToggling] = useState<string | null>(null)
   const [removing, setRemoving] = useState<string | null>(null)
@@ -377,9 +396,25 @@ export function McpInstalledOn({ mcp, currentToolId, allTools, onInstalled, onBa
 
   const hasSecrets = mcp.hasSecrets && mcp.secretKeyNames.length > 0
 
+  const installedMcpCount = installedTools.filter(t =>
+    t.mcps.some(m => m.name.toLowerCase().trim() === mcp.name.toLowerCase().trim())
+  ).length
+
   return (
     <div className="px-4 py-3 border-b border-[var(--c-border)]">
-      <p className="text-[13px] font-semibold text-violet-500 mb-2">Installed on</p>
+      <button
+        onClick={() => setCollapsed(c => !c)}
+        className="flex items-center gap-1.5 w-full text-left mb-2 group"
+      >
+        <span className="text-[13px] font-semibold text-violet-500">Installed on</span>
+        <span className="text-[11px] text-[var(--c-text-3)]">({installedMcpCount})</span>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+          stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
+          className={`w-3 h-3 text-[var(--c-text-3)] ml-auto transition-transform duration-150 ${collapsed ? '-rotate-90' : ''}`}>
+          <polyline points="6 9 12 15 18 9"/>
+        </svg>
+      </button>
+      {!collapsed && <>
       <div className="flex flex-col gap-1.5">
         {installedTools.map(tool => {
           const noSupport = !tool.supportsMcps
@@ -466,6 +501,7 @@ export function McpInstalledOn({ mcp, currentToolId, allTools, onInstalled, onBa
           </p>
         </div>
       )}
+      </>}
     </div>
   )
 }
