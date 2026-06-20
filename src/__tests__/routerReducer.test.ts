@@ -77,9 +77,9 @@ describe('routerReducer — SELECT_PERMISSIONS', () => {
 })
 
 describe('routerReducer — OPEN_SKILLS_PAGE', () => {
-  it('navigates to skills-list', () => {
+  it('navigates to all-skills-list', () => {
     const next = routerReducer(base, { type: 'OPEN_SKILLS_PAGE' })
-    expect(next.view).toBe('skills-list')
+    expect(next.view).toBe('all-skills-list')
   })
 })
 

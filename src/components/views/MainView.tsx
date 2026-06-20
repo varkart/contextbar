@@ -1,7 +1,5 @@
 import { useState } from 'react';
 import React from 'react';
-import Header from '../Header';
-import Footer from '../Footer';
 import type { AiTool, Notification } from '../../types';
 import type { LlmsListMode } from '../../useViewRouter';
 import { TOOL_COLORS } from '../../constants/toolColors';
@@ -306,23 +304,10 @@ function TileRow({
 export default function MainView({
   loading,
   installedTools,
-  notifications,
-  updateInfo,
-  lastUpdated,
-  cloudSyncing,
-  onFetchTools,
-  onGoTo,
   onOpenLlmsList,
 }: MainViewProps) {
   return (
     <div className="flex flex-col h-full">
-      <Header
-        onSettingsClick={() => onGoTo('settings')}
-        onNotificationsClick={() => onGoTo('notifications')}
-        updateAvailable={!!updateInfo}
-        notificationCount={notifications.length}
-      />
-
       <div className="flex-1 overflow-y-auto flex flex-col gap-2.5 p-3">
         {/* detected tools row */}
         <div className="flex items-center gap-2 px-0.5">
@@ -353,8 +338,6 @@ export default function MainView({
           ))}
         </div>
       </div>
-
-      <Footer lastUpdated={lastUpdated} onRefresh={onFetchTools} loading={loading} cloudSyncing={cloudSyncing} />
     </div>
   );
 }

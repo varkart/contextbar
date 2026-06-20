@@ -80,12 +80,6 @@ describe('NotificationsPanel', () => {
 
   // ── back button ───────────────────────────────────────────────────────────
 
-  it('back button calls onBack', () => {
-    render(<NotificationsPanel {...defaultProps} />)
-    fireEvent.click(screen.getByLabelText('Back'))
-    expect(defaultProps.onBack).toHaveBeenCalledTimes(1)
-  })
-
   // ── dismiss individual ────────────────────────────────────────────────────
 
   it('dismiss button calls dismiss_notification with correct id', async () => {
@@ -134,10 +128,4 @@ describe('NotificationsPanel', () => {
     await waitFor(() => expect(defaultProps.onChanged).toHaveBeenCalledTimes(1))
   })
 
-  // ── notifications heading ─────────────────────────────────────────────────
-
-  it('renders Notifications heading', () => {
-    render(<NotificationsPanel {...defaultProps} />)
-    expect(screen.getByText('Notifications')).toBeInTheDocument()
-  })
 })

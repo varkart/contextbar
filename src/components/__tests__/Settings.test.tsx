@@ -28,17 +28,6 @@ beforeEach(() => {
 })
 
 describe('Settings', () => {
-  it('renders Settings heading', () => {
-    render(<Settings {...defaultProps} />)
-    expect(screen.getByText('Settings')).toBeInTheDocument()
-  })
-
-  it('back button calls onBack', () => {
-    render(<Settings {...defaultProps} />)
-    fireEvent.click(screen.getByLabelText('Back'))
-    expect(defaultProps.onBack).toHaveBeenCalledTimes(1)
-  })
-
   it('shows version after load', async () => {
     render(<Settings {...defaultProps} />)
     await waitFor(() => expect(screen.getByText('v0.7.0')).toBeInTheDocument())

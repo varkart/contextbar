@@ -50,13 +50,6 @@ describe('McpDetailPanel', () => {
     expect(container.querySelector('.animate-spin')).toBeInTheDocument()
   })
 
-  it('renders MCPs breadcrumb in header', async () => {
-    mockInvoke.mockResolvedValue([])
-    render(<McpDetailPanel mcp={baseMcp} onBack={vi.fn()} />)
-    await waitFor(() => expect(screen.queryByText(/live tools \(/i)).toBeInTheDocument())
-    expect(screen.getByText('MCPs')).toBeInTheDocument()
-  })
-
   it('renders tool list after invoke resolves', async () => {
     defaultMocks(notInstalledState, [
       { name: 'search_repositories', description: 'Search GitHub repos' },
@@ -74,21 +67,6 @@ describe('McpDetailPanel', () => {
     })
     render(<McpDetailPanel mcp={baseMcp} onBack={vi.fn()} />)
     await waitFor(() => expect(screen.getByText(/connection refused/i)).toBeInTheDocument())
-  })
-
-  it('back button calls onBack', () => {
-    mockInvoke.mockReturnValue(new Promise(() => {}))
-    const onBack = vi.fn()
-    render(<McpDetailPanel mcp={baseMcp} onBack={onBack} />)
-    fireEvent.click(screen.getByRole('button', { name: /back/i }))
-    expect(onBack).toHaveBeenCalledTimes(1)
-  })
-
-  it('shows toolName breadcrumb when provided', async () => {
-    defaultMocks()
-    render(<McpDetailPanel mcp={baseMcp} onBack={vi.fn()} toolName="Claude Code" />)
-    await waitFor(() => expect(screen.queryByText(/live tools \(/i)).toBeInTheDocument())
-    expect(screen.getByText('Claude Code')).toBeInTheDocument()
   })
 
   it('expanding a tool item reveals its description', async () => {

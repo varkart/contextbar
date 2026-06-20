@@ -39,22 +39,10 @@ beforeEach(() => {
 })
 
 describe('ToolDetailPage', () => {
-  it('renders tool name in breadcrumb', () => {
-    render(<ToolDetailPage {...defaultProps} />)
-    expect(screen.getByText('Claude Code')).toBeInTheDocument()
-    expect(screen.getByText('LLM Manager')).toBeInTheDocument()
-  })
-
   it('renders both active and disabled skills', () => {
     render(<ToolDetailPage {...defaultProps} />)
     expect(screen.getByText('impeccable')).toBeInTheDocument()
     expect(screen.getByText('graphify')).toBeInTheDocument()
-  })
-
-  it('back button calls onBack', () => {
-    render(<ToolDetailPage {...defaultProps} />)
-    fireEvent.click(screen.getByLabelText('Back'))
-    expect(defaultProps.onBack).toHaveBeenCalled()
   })
 
   it('clicking a skill calls onSelectSkill', () => {

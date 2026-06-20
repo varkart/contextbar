@@ -23,16 +23,6 @@ const tool: AiTool = {
 }
 
 describe('McpsListPanel', () => {
-  it('renders tool name breadcrumb', () => {
-    render(<McpsListPanel tool={tool} onBack={vi.fn()} onSelectMcp={vi.fn()} onAddMcp={vi.fn()} />)
-    expect(screen.getByText('Claude Code')).toBeInTheDocument()
-  })
-
-  it('renders MCPs heading', () => {
-    render(<McpsListPanel tool={tool} onBack={vi.fn()} onSelectMcp={vi.fn()} onAddMcp={vi.fn()} />)
-    expect(screen.getByText('MCPs')).toBeInTheDocument()
-  })
-
   it('lists all MCPs', () => {
     render(<McpsListPanel tool={tool} onBack={vi.fn()} onSelectMcp={vi.fn()} onAddMcp={vi.fn()} />)
     expect(screen.getByText('github')).toBeInTheDocument()
@@ -55,13 +45,6 @@ describe('McpsListPanel', () => {
     const singleTool = { ...tool, mcps: [tool.mcps[1]] } // filesystem: no secrets
     render(<McpsListPanel tool={singleTool} onBack={vi.fn()} onSelectMcp={vi.fn()} onAddMcp={vi.fn()} />)
     expect(screen.queryByLabelText('has env secrets')).not.toBeInTheDocument()
-  })
-
-  it('back button calls onBack', () => {
-    const onBack = vi.fn()
-    render(<McpsListPanel tool={tool} onBack={onBack} onSelectMcp={vi.fn()} onAddMcp={vi.fn()} />)
-    fireEvent.click(screen.getByLabelText('Back'))
-    expect(onBack).toHaveBeenCalledTimes(1)
   })
 
   it('clicking MCP calls onSelectMcp', () => {

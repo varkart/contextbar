@@ -128,7 +128,7 @@ const ChevronLeft = () => (
   </svg>
 )
 
-export default function SkillDetailPanel({ skill: initialSkill, onBack, toolName, toolId, onToggled, allTools, variants }: SkillDetailPanelProps) {
+export default function SkillDetailPanel({ skill: initialSkill, toolId, onToggled, allTools, variants }: SkillDetailPanelProps) {
   // Variant switcher — active skill may change if user picks a different variant
   const hasVariants = variants && variants.length > 1 &&
     new Set(variants.map(v => v.contentHash).filter(Boolean)).size > 1
@@ -205,27 +205,6 @@ export default function SkillDetailPanel({ skill: initialSkill, onBack, toolName
 
   return (
     <div className="relative flex flex-col h-full bg-[var(--c-bg)] animate-slide-in-right">
-      {/* Header */}
-      <div className="flex items-center gap-2 px-4 py-2.5 border-b border-[var(--c-border)] flex-shrink-0">
-        <button
-          onClick={onBack}
-          className="text-[var(--c-text-2)] hover:text-[var(--c-text)] transition-colors p-0.5 -ml-0.5 rounded"
-          aria-label="Back"
-        >
-          <ChevronLeft />
-        </button>
-        {toolName && (
-          <>
-            <button onClick={onBack} className="text-[13px] text-[var(--c-text-3)] truncate max-w-[80px] hover:text-[var(--c-text-2)] transition-colors">
-              {toolName}
-            </button>
-            <span className="text-[12px] text-[var(--c-text-3)]">›</span>
-          </>
-        )}
-        <span className="text-[15px] font-semibold text-[var(--c-text)] tracking-[-0.01em] truncate">
-          Skills
-        </span>
-      </div>
 
       {/* Variant switcher — only when multiple tools have different content */}
       {hasVariants && variants && (
