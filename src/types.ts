@@ -7,6 +7,8 @@ export interface AiTool {
   skills: Skill[];
   mcps: McpServer[];
   error?: string;
+  supportsSkills: boolean;
+  supportsMcps: boolean;
 }
 
 export interface Skill {

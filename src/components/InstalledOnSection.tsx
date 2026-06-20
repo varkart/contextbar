@@ -5,8 +5,6 @@ import type { AiTool, Skill, McpServer } from '../types'
 import { TOOL_COLORS } from '../constants/toolColors'
 import { capture, captureException } from '../analytics'
 
-const NO_SKILL_SUPPORT = new Set(['copilot', 'chatgpt'])
-const NO_MCP_SUPPORT = new Set(['chatgpt'])
 
 const MIN_SPINNER_MS = 1000
 const sleep = (ms: number) => new Promise<void>(r => setTimeout(r, ms))
@@ -187,7 +185,7 @@ export function SkillInstalledOn({ skill, currentToolId, allTools, onInstalled, 
 
       <div className="flex flex-col gap-1.5">
         {installedTools.map(tool => {
-          const noSupport = NO_SKILL_SUPPORT.has(tool.id)
+          const noSupport = !tool.supportsSkills
           const match = tool.skills.find(s => s.name.toLowerCase().trim() === skill.name.toLowerCase().trim())
           const isInstalled = !!match
           const isActive = match?.active ?? false
@@ -384,7 +382,7 @@ export function McpInstalledOn({ mcp, currentToolId, allTools, onInstalled, onBa
       <p className="text-[13px] font-semibold text-violet-500 mb-2">Installed on</p>
       <div className="flex flex-col gap-1.5">
         {installedTools.map(tool => {
-          const noSupport = NO_MCP_SUPPORT.has(tool.id)
+          const noSupport = !tool.supportsMcps
           const match = tool.mcps.find(m => m.name.toLowerCase().trim() === mcp.name.toLowerCase().trim())
           const isInstalled = !!match
 

@@ -87,6 +87,8 @@ mod tests {
             skills: vec![],
             mcps,
             error: None,
+            supports_skills: false,
+            supports_mcps: true,
         }
     }
 

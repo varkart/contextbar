@@ -52,6 +52,8 @@ const installedTool = {
   name: 'Claude Code',
   version: '1.0',
   installed: true,
+  supportsSkills: true,
+  supportsMcps: true,
   skills: [
     { name: 'graphify', path: '~/.claude/skills/graphify', description: 'g', hasFullDescription: false, active: true, sourceId: 's' },
   ],

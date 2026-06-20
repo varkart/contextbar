@@ -67,6 +67,8 @@ pub fn detect_all() -> Vec<AiTool> {
                     skills: vec![],
                     mcps: vec![],
                     error: Some("detector timed out".to_string()),
+                    supports_skills: false,
+                    supports_mcps: false,
                 })
             })
         })
@@ -110,6 +112,8 @@ fn detect_from_manifest(m: &Manifest) -> AiTool {
         skills,
         mcps,
         error,
+        supports_skills: !m.skill_sources.is_empty(),
+        supports_mcps: !m.mcp_sources.is_empty(),
     }
 }
 
@@ -123,6 +127,8 @@ fn not_installed(m: &Manifest) -> AiTool {
         skills: vec![],
         mcps: vec![],
         error: None,
+        supports_skills: !m.skill_sources.is_empty(),
+        supports_mcps: !m.mcp_sources.is_empty(),
     }
 }
 
