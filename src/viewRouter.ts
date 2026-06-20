@@ -8,6 +8,7 @@ export type View =
   | 'settings'
   | 'tool-detail'
   | 'skills-list'
+  | 'all-skills-list'
   | 'mcps-list'
   | 'skill-detail'
   | 'mcp-detail'
@@ -16,6 +17,29 @@ export type View =
   | 'logs'
 
 export type LlmsListMode = 'default' | 'skills' | 'mcps'
+
+// Exhaustive map — TypeScript errors if a View variant is added here but missing from the type,
+// or if the type gains a new variant without updating this map.
+// This keeps ALL_VIEWS automatically in sync with the View union.
+const _VIEW_REGISTRY: Record<View, true> = {
+  'main': true,
+  'llms-list': true,
+  'add-skill': true,
+  'add-mcp': true,
+  'settings': true,
+  'tool-detail': true,
+  'skills-list': true,
+  'all-skills-list': true,
+  'mcps-list': true,
+  'skill-detail': true,
+  'mcp-detail': true,
+  'permissions-detail': true,
+  'notifications': true,
+  'logs': true,
+}
+
+/** Every registered view. Used by tests to assert Escape is handled for all of them. */
+export const ALL_VIEWS = Object.keys(_VIEW_REGISTRY) as View[]
 
 export interface RouterState {
   view: View
@@ -54,6 +78,7 @@ export function escapeTransition(
   if (view === 'skill-detail') return { type: 'navigate', to: skillBackView }
   if (view === 'mcp-detail') return { type: 'navigate', to: mcpBackView }
   if (view === 'permissions-detail') return { type: 'navigate', to: selectedTool ? 'tool-detail' : 'main' }
+  if (view === 'all-skills-list') return { type: 'navigate', to: 'main' }
   if (view === 'skills-list') return { type: 'navigate', to: llmsListMode === 'skills' ? 'llms-list' : 'tool-detail' }
   if (view === 'mcps-list') return { type: 'navigate', to: llmsListMode === 'mcps' ? 'llms-list' : 'tool-detail' }
   if (view === 'tool-detail') return { type: 'navigate', to: 'llms-list' }
@@ -101,7 +126,7 @@ export function routerReducer(state: RouterState, action: RouterAction): RouterS
       return { ...state, view: 'permissions-detail' }
 
     case 'OPEN_SKILLS_PAGE':
-      return { ...state, view: 'skills-list' }
+      return { ...state, view: 'all-skills-list', selectedTool: null }
 
     case 'OPEN_MCPS_PAGE':
       return { ...state, view: 'mcps-list' }
