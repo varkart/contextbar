@@ -977,6 +977,23 @@ fn set_mcp_active(
                     dk,
                 )
             }
+            McpSourceSpec::TomlKeyPair {
+                file,
+                active_key,
+                disabled_key,
+            } => {
+                let dk = disabled_key
+                    .as_deref()
+                    .ok_or("source has no disabled_key; toggling not supported for this source")?;
+                let path = expand_home(file, &home);
+                app_state::move_mcp_in_toml_config(
+                    &path.to_string_lossy(),
+                    &mcp_name,
+                    active,
+                    active_key,
+                    dk,
+                )
+            }
             McpSourceSpec::ExtensionDir {
                 enablement_file: Some(ef),
                 ..
@@ -1135,7 +1152,7 @@ fn add_mcp(
                     &path.to_string_lossy(), active_key, &name, entry,
                 ))
             }
-            McpSourceSpec::TomlKeyPair { file, active_key } => {
+            McpSourceSpec::TomlKeyPair { file, active_key, .. } => {
                 let path = expand_home(file, &home);
                 Some(app_state::add_mcp_to_toml_config(
                     &path.to_string_lossy(),
@@ -1190,7 +1207,7 @@ fn remove_mcp(
                     &mcp_name,
                 )
             }
-            McpSourceSpec::TomlKeyPair { file, active_key } => {
+            McpSourceSpec::TomlKeyPair { file, active_key, .. } => {
                 let path = expand_home(file, &home);
                 app_state::remove_mcp_from_toml_config(
                     &path.to_string_lossy(),
