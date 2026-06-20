@@ -374,21 +374,38 @@ export default function AddMcpView({ installedTools, onBack, onAdded }: AddMcpVi
             </label>
             <div className="flex flex-wrap gap-1.5">
               {cachedMcps.map(cached => (
-                <button
-                  key={cached.name}
-                  type="button"
-                  onClick={() => {
-                    const { type, fields: f } = prefillTypeAndFields(cached);
-                    setName(cached.name);
-                    setMcpType(type);
-                    setFields(f);
-                    setError(null);
-                    setValidationErrors({});
-                  }}
-                  className="flex items-center gap-1.5 px-2.5 py-1 rounded-md border border-[var(--c-border)] text-[12px] text-[var(--c-text-2)] hover:text-[var(--c-text)] hover:border-violet-400/40 hover:bg-violet-500/5 transition-colors font-mono"
-                >
-                  {cached.name}
-                </button>
+                <div key={cached.name} className="flex items-center rounded-md border border-[var(--c-border)] overflow-hidden">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const { type, fields: f } = prefillTypeAndFields(cached);
+                      setName(cached.name);
+                      setMcpType(type);
+                      setFields(f);
+                      setError(null);
+                      setValidationErrors({});
+                    }}
+                    className="px-2.5 py-1 text-[12px] text-[var(--c-text-2)] hover:text-[var(--c-text)] hover:bg-violet-500/5 transition-colors font-mono"
+                  >
+                    {cached.name}
+                  </button>
+                  {cached.sourceUrl && (
+                    <a
+                      href={cached.sourceUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={e => e.stopPropagation()}
+                      className="px-1.5 py-1 border-l border-[var(--c-border)] text-[var(--c-text-3)] hover:text-[var(--c-text-2)] transition-colors"
+                      title={cached.sourceUrl}
+                    >
+                      <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+                        <polyline points="15 3 21 3 21 9"/>
+                        <line x1="10" y1="14" x2="21" y2="3"/>
+                      </svg>
+                    </a>
+                  )}
+                </div>
               ))}
             </div>
           </div>

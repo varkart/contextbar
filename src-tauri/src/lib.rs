@@ -260,25 +260,49 @@ fn warm_skill_cache(db: tauri::State<'_, db::DbState>) {
     }
 }
 
+/// Spawn a fire-and-forget task to resolve and store the npm source URL for an MCP.
+/// Uses Option B (registry fetch + HEAD validation) with Option A (npmjs.com) fallback.
+fn enrich_mcp_source_url(app: tauri::AppHandle, mcp_name: String, package_name: String) {
+    tokio::spawn(async move {
+        if let Some(source_url) = installer::fetch_npm_source_url(&package_name).await {
+            let db = app.state::<db::DbState>();
+            db::update_mcp_source_url(&db, &mcp_name, &source_url);
+        }
+    });
+}
+
 /// Populate mcp_cache with install info for all currently detected MCPs.
 /// Runs on startup — skips MCPs already in cache so existing entries aren't overwritten.
+/// Also enriches source_url for cached MCPs that don't have one yet.
 #[tauri::command]
-fn warm_mcp_cache(db: tauri::State<'_, db::DbState>) {
-    let tools = detectors::detect_all();
+async fn warm_mcp_cache(app: tauri::AppHandle, db: tauri::State<'_, db::DbState>) -> Result<(), ()> {
+    let tools = tokio::task::spawn_blocking(detectors::detect_all)
+        .await
+        .unwrap_or_default();
     for tool in tools {
         for mcp in tool.mcps {
-            if db::is_mcp_cached(&db, &mcp.name) {
-                continue;
+            let already_cached = db::is_mcp_cached(&db, &mcp.name);
+            if !already_cached {
+                db::cache_mcp(
+                    &db,
+                    &mcp.name,
+                    if mcp.command.is_empty() { None } else { Some(mcp.command.as_str()) },
+                    &mcp.args,
+                    mcp.url.as_deref(),
+                );
             }
-            db::cache_mcp(
-                &db,
-                &mcp.name,
-                if mcp.command.is_empty() { None } else { Some(mcp.command.as_str()) },
-                &mcp.args,
-                mcp.url.as_deref(),
-            );
+            // Enrich source_url if missing (covers both new and existing cache entries)
+            let needs_url = db::get_cached_mcp(&db, &mcp.name)
+                .map(|c| c.source_url.is_none())
+                .unwrap_or(false);
+            if needs_url {
+                if let Some(pkg) = installer::npm_package_from_mcp(&mcp.command, &mcp.args) {
+                    enrich_mcp_source_url(app.clone(), mcp.name, pkg);
+                }
+            }
         }
     }
+    Ok(())
 }
 
 #[tauri::command]
@@ -1208,6 +1232,7 @@ fn validate_mcp(
 
 #[tauri::command]
 fn add_mcp(
+    app: tauri::AppHandle,
     db: tauri::State<'_, db::DbState>,
     tool_id: String,
     name: String,
@@ -1254,13 +1279,15 @@ fn add_mcp(
         if let Some(result) = result {
             if result.is_ok() {
                 db::log_event(&db, "mcp_added", &tool_id, &name, None);
-                db::cache_mcp(
-                    &db,
-                    &name,
-                    command.as_deref(),
-                    args.as_deref().unwrap_or(&[]),
-                    url.as_deref(),
-                );
+                let args_slice = args.as_deref().unwrap_or(&[]);
+                db::cache_mcp(&db, &name, command.as_deref(), args_slice, url.as_deref());
+                // Enrich with validated source URL in background
+                if let Some(pkg) = installer::npm_package_from_mcp(
+                    command.as_deref().unwrap_or(""),
+                    args_slice,
+                ) {
+                    enrich_mcp_source_url(app.clone(), name.clone(), pkg);
+                }
             }
             return result;
         }
@@ -1270,6 +1297,7 @@ fn add_mcp(
 
 #[tauri::command]
 fn remove_mcp(
+    app: tauri::AppHandle,
     db: tauri::State<'_, db::DbState>,
     tool_id: String,
     mcp_name: String,
@@ -1316,14 +1344,20 @@ fn remove_mcp(
         };
         if result.is_ok() {
             db::log_event(&db, "mcp_removed", &tool_id, &mcp_name, None);
-            // Cache install info so MCP can be re-added after being removed from all providers
-            db::cache_mcp(
-                &db,
-                &mcp_name,
-                command.as_deref(),
-                args.as_deref().unwrap_or(&[]),
-                url.as_deref(),
-            );
+            let args_slice = args.as_deref().unwrap_or(&[]);
+            db::cache_mcp(&db, &mcp_name, command.as_deref(), args_slice, url.as_deref());
+            // Enrich with validated source URL if not already cached
+            let needs_url = db::get_cached_mcp(&db, &mcp_name)
+                .map(|c| c.source_url.is_none())
+                .unwrap_or(false);
+            if needs_url {
+                if let Some(pkg) = installer::npm_package_from_mcp(
+                    command.as_deref().unwrap_or(""),
+                    args_slice,
+                ) {
+                    enrich_mcp_source_url(app.clone(), mcp_name.clone(), pkg);
+                }
+            }
         }
         return result;
     }
