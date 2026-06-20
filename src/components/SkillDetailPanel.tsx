@@ -16,7 +16,6 @@ interface SkillDetailPanelProps {
   allTools?: AiTool[]
   /** All variants of this skill across tools (same name, possibly different content). */
   variants?: Skill[]
-  onSelectTool?: (tool: AiTool) => void
 }
 
 function FileIcon({ extension, isDir }: { extension?: string; isDir: boolean }) {
@@ -129,12 +128,21 @@ const ChevronLeft = () => (
   </svg>
 )
 
-export default function SkillDetailPanel({ skill: initialSkill, onBack, toolName, toolId, onToggled, allTools, variants, onSelectTool }: SkillDetailPanelProps) {
+export default function SkillDetailPanel({ skill: initialSkill, onBack, toolName, toolId, onToggled, allTools, variants }: SkillDetailPanelProps) {
   // Variant switcher — active skill may change if user picks a different variant
   const hasVariants = variants && variants.length > 1 &&
     new Set(variants.map(v => v.contentHash).filter(Boolean)).size > 1
   const [activeVariant, setActiveVariant] = useState<Skill>(initialSkill)
   const skill = hasVariants ? activeVariant : initialSkill
+
+  // Which provider row is selected — determines which path shows at the bottom
+  const initialToolId = toolId ?? initialSkill.toolId ?? ''
+  const [selectedPathToolId, setSelectedPathToolId] = useState<string>(initialToolId)
+
+  // Derive path to display from the selected provider's variant
+  const displayedSkill = variants?.find(v => v.toolId === selectedPathToolId) ?? skill
+  const displayedPath = displayedSkill.path
+  const displayedSourceUrl = displayedSkill.sourceUrl ?? skill.sourceUrl
 
   const [fileTree, setFileTree] = useState<FileEntry | null>(null)
   const [loading, setLoading] = useState(true)
@@ -271,7 +279,8 @@ export default function SkillDetailPanel({ skill: initialSkill, onBack, toolName
             currentToolId={toolId ?? skill.toolId ?? ''}
             allTools={allTools}
             onInstalled={async () => { await onToggled?.() }}
-            onSelectTool={onSelectTool}
+            onSelectForPath={tool => setSelectedPathToolId(tool.id)}
+            selectedToolId={selectedPathToolId}
           />
         )}
 
@@ -293,12 +302,12 @@ export default function SkillDetailPanel({ skill: initialSkill, onBack, toolName
           )}
         </div>
 
-        {/* Path + source link */}
+        {/* Path + source link — updates when user selects a provider row above */}
         <div className="px-4 py-3 border-t border-[var(--c-border)] mt-auto space-y-1.5">
-          {skill.sourceUrl && (
+          {displayedSourceUrl && (
             <button
               onClick={async () => {
-                try { await invoke('open_url', { url: skill.sourceUrl }) } catch {}
+                try { await invoke('open_url', { url: displayedSourceUrl }) } catch {}
               }}
               className="flex items-center gap-1.5 text-[12px] text-indigo-400 hover:text-indigo-300 transition-colors"
             >
@@ -309,11 +318,11 @@ export default function SkillDetailPanel({ skill: initialSkill, onBack, toolName
                 <polyline points="15 3 21 3 21 9"/>
                 <line x1="10" y1="14" x2="21" y2="3"/>
               </svg>
-              <span className="truncate">{skill.sourceUrl}</span>
+              <span className="truncate">{displayedSourceUrl}</span>
             </button>
           )}
           <p className="text-[12px] text-[var(--c-text-3)] font-mono break-all leading-relaxed">
-            {skill.path}
+            {displayedPath}
           </p>
         </div>
       </div>

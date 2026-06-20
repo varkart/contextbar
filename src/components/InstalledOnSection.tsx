@@ -44,7 +44,10 @@ interface SkillInstalledOnProps {
   currentToolId: string
   allTools: AiTool[]
   onInstalled: () => void
-  onSelectTool?: (tool: AiTool) => void
+  /** Called when user clicks an installed provider row to preview its file path. */
+  onSelectForPath?: (tool: AiTool) => void
+  /** Tool id whose path is currently shown at the bottom — highlights that row. */
+  selectedToolId?: string
 }
 
 interface PendingDisable {
@@ -52,7 +55,7 @@ interface PendingDisable {
   matchedSkill: Skill
 }
 
-export function SkillInstalledOn({ skill, currentToolId, allTools, onInstalled, onSelectTool }: SkillInstalledOnProps) {
+export function SkillInstalledOn({ skill, currentToolId, allTools, onInstalled, onSelectForPath, selectedToolId }: SkillInstalledOnProps) {
   const [installing, setInstalling] = useState<string | null>(null)
   const [toggling, setToggling] = useState<string | null>(null)
   const [deleting, setDeleting] = useState<string | null>(null)
@@ -190,17 +193,22 @@ export function SkillInstalledOn({ skill, currentToolId, allTools, onInstalled, 
           const isActive = match?.active ?? false
           const isDisabled = isInstalled && !isActive
 
+          const isSelected = selectedToolId === tool.id
           return (
             <div key={tool.id}>
               <div
                 className={`flex items-center gap-2.5 px-2.5 py-1.5 rounded-md border transition-colors ${
-                  noSupport ? 'border-[var(--c-border)] opacity-30 cursor-not-allowed' : 'border-[var(--c-border)]'
+                  noSupport
+                    ? 'border-[var(--c-border)] opacity-30 cursor-not-allowed'
+                    : isSelected
+                      ? 'border-indigo-500/40 bg-indigo-500/5'
+                      : 'border-[var(--c-border)]'
                 }`}
               >
                 <button
-                  onClick={() => !noSupport && onSelectTool?.(tool)}
-                  className={`flex items-center gap-2 flex-1 min-w-0 text-left ${onSelectTool && !noSupport ? 'hover:opacity-80 transition-opacity' : ''}`}
-                  disabled={!onSelectTool || noSupport}
+                  onClick={() => !noSupport && isInstalled && onSelectForPath?.(tool)}
+                  className={`flex items-center gap-2 flex-1 min-w-0 text-left ${isInstalled && !noSupport ? 'cursor-pointer hover:opacity-80 transition-opacity' : 'cursor-default'}`}
+                  disabled={noSupport || !isInstalled}
                 >
                   <ToolAvatar tool={tool} />
                   <span className={`text-[13px] truncate ${noSupport ? 'text-[var(--c-text-3)]' : 'text-[var(--c-text-2)]'}`}>
