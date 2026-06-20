@@ -355,6 +355,9 @@ export function McpInstalledOn({ mcp, currentToolId, allTools, onInstalled, onBa
         toolId: targetTool.id,
         mcpName: matchedMcp.name,
         sourceId: matchedMcp.sourceId,
+        command: matchedMcp.command || null,
+        args: matchedMcp.args,
+        url: matchedMcp.url ?? null,
       })
       capture('mcp_removed', { tool_id: targetTool.id, mcp_name: matchedMcp.name })
     } catch (e) {
