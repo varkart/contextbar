@@ -27,6 +27,12 @@ path = "~/.aws/amazonq"
 type = "dir"
 path = "~/.q"
 
+[[skill_sources]]
+id = "skills_dir"
+type = "directory"
+path = "~/.kiro/skills"
+disabled_subdir = ".disabled"
+
 # Global MCP config
 [[mcp_sources]]
 id = "mcp_json"
