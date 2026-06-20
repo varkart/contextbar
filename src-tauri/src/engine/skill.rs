@@ -36,6 +36,7 @@ fn read_source(source: &SkillSourceSpec, home: &std::path::Path) -> Vec<Skill> {
         SkillSourceSpec::Directory {
             path,
             disabled_subdir,
+            ..
         } => read_directory(&expand_home(path, home), disabled_subdir.as_deref()),
     }
 }
@@ -156,6 +157,7 @@ mod tests {
         let source = SkillSourceSpec::Directory {
             path: tmp.path().to_string_lossy().to_string(),
             disabled_subdir: None,
+            flat_files: false,
         };
         let skills = collect(&[wrap(source)], None, tmp.path());
         assert_eq!(skills.len(), 2);
@@ -171,6 +173,7 @@ mod tests {
         let source = SkillSourceSpec::Directory {
             path: tmp.path().to_string_lossy().to_string(),
             disabled_subdir: Some(".disabled".to_string()),
+            flat_files: false,
         };
         let skills = collect(&[wrap(source)], None, tmp.path());
         assert_eq!(skills.len(), 2);
@@ -186,6 +189,7 @@ mod tests {
         let source = SkillSourceSpec::Directory {
             path: tmp.path().join("nonexistent").to_string_lossy().to_string(),
             disabled_subdir: None,
+            flat_files: false,
         };
         let skills = collect(&[wrap(source)], None, tmp.path());
         assert!(skills.is_empty());
@@ -200,6 +204,7 @@ mod tests {
         let source = SkillSourceSpec::Directory {
             path: tmp.path().to_string_lossy().to_string(),
             disabled_subdir: None,
+            flat_files: false,
         };
         let skills = collect(&[wrap(source)], None, tmp.path());
         assert_eq!(skills.len(), 1);
@@ -216,6 +221,7 @@ mod tests {
         let source = SkillSourceSpec::Directory {
             path: tmp.path().to_string_lossy().to_string(),
             disabled_subdir: None,
+            flat_files: false,
         };
         let skills = collect(&[wrap(source)], None, tmp.path());
         let names: Vec<&str> = skills.iter().map(|s| s.name.as_str()).collect();
@@ -234,6 +240,7 @@ mod tests {
             spec: SkillSourceSpec::Directory {
                 path: tmp.path().to_string_lossy().to_string(),
                 disabled_subdir: None,
+                flat_files: false,
             },
         };
         let skills = collect(&[source], Some("2.9"), tmp.path());

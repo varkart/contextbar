@@ -347,12 +347,16 @@ pub fn remove_mcp_from_config(
 
 pub fn move_skill_folder(skill_path: &str, skill_name: &str, active: bool) -> Result<(), String> {
     let current = std::path::Path::new(skill_path);
+    // Use the actual filename from the path — preserves `.md` extension for flat files.
+    let fname = current
+        .file_name()
+        .ok_or_else(|| format!("cannot get file name from: {skill_path}"))?;
     if active {
         let skills_dir = current
             .parent()
             .and_then(|p| p.parent())
             .ok_or_else(|| format!("cannot resolve skills dir from: {skill_path}"))?;
-        let target = skills_dir.join(skill_name);
+        let target = skills_dir.join(fname);
         std::fs::rename(current, &target)
             .map_err(|e| format!("failed to enable '{skill_name}': {e}"))
     } else {
@@ -362,7 +366,7 @@ pub fn move_skill_folder(skill_path: &str, skill_name: &str, active: bool) -> Re
         let disabled_dir = skills_dir.join(".disabled");
         std::fs::create_dir_all(&disabled_dir)
             .map_err(|e| format!("failed to create .disabled dir: {e}"))?;
-        let target = disabled_dir.join(skill_name);
+        let target = disabled_dir.join(fname);
         std::fs::rename(current, &target)
             .map_err(|e| format!("failed to disable '{skill_name}': {e}"))
     }
