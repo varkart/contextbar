@@ -342,15 +342,23 @@ fn open_url(url: String) -> Result<(), String> {
 }
 
 /// Returns the first writable skills directory for `tool_id`, or an error.
-fn skill_dir_for(tool_id: &str) -> Result<std::path::PathBuf, String> {
+struct SkillWriteTarget {
+    dir: std::path::PathBuf,
+    flat_files: bool,
+}
+
+fn skill_dir_for(tool_id: &str) -> Result<SkillWriteTarget, String> {
     use crate::engine::manifest::SkillSourceSpec;
     use crate::engine::resolve::expand_home;
     let home = dirs::home_dir().ok_or("cannot find home dir")?;
     let manifest = crate::engine::load_manifest(tool_id)
         .ok_or_else(|| format!("no manifest for '{tool_id}'"))?;
     for source in &manifest.skill_sources {
-        let SkillSourceSpec::Directory { path, .. } = &source.spec;
-        return Ok(expand_home(path, &home));
+        let SkillSourceSpec::Directory { path, flat_files, .. } = &source.spec;
+        return Ok(SkillWriteTarget {
+            dir: expand_home(path, &home),
+            flat_files: *flat_files,
+        });
     }
     Err(format!("'{tool_id}' has no writable skill source"))
 }
@@ -367,15 +375,28 @@ fn slugify(name: &str) -> String {
         .join("-")
 }
 
-/// Write `content` as `{slug}.md` inside `dir`. Returns the created path.
-fn write_skill_file(dir: &std::path::Path, slug: &str, content: &str) -> Result<String, String> {
-    std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
-    let file_path = dir.join(format!("{slug}.md"));
-    if file_path.exists() {
-        return Err(format!("skill '{slug}.md' already exists in {}", dir.display()));
+/// Write skill content for `slug` using the target's format. Returns the created path.
+/// - flat_files=true  → `{dir}/{slug}.md` (e.g. Windsurf workflows)
+/// - flat_files=false → `{dir}/{slug}/SKILL.md` subdirectory (e.g. Codex, Claude)
+fn write_skill_file(target: &SkillWriteTarget, slug: &str, content: &str) -> Result<String, String> {
+    if target.flat_files {
+        std::fs::create_dir_all(&target.dir).map_err(|e| e.to_string())?;
+        let file_path = target.dir.join(format!("{slug}.md"));
+        if file_path.exists() {
+            return Err(format!("skill '{slug}.md' already exists in {}", target.dir.display()));
+        }
+        std::fs::write(&file_path, content).map_err(|e| e.to_string())?;
+        Ok(file_path.to_string_lossy().into_owned())
+    } else {
+        let skill_dir = target.dir.join(slug);
+        std::fs::create_dir_all(&skill_dir).map_err(|e| e.to_string())?;
+        let file_path = skill_dir.join("SKILL.md");
+        if file_path.exists() {
+            return Err(format!("skill '{slug}' already exists in {}", target.dir.display()));
+        }
+        std::fs::write(&file_path, content).map_err(|e| e.to_string())?;
+        Ok(skill_dir.to_string_lossy().into_owned())
     }
-    std::fs::write(&file_path, content).map_err(|e| e.to_string())?;
-    Ok(file_path.to_string_lossy().into_owned())
 }
 
 #[tauri::command]
