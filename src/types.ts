@@ -18,6 +18,14 @@ export interface Skill {
   active: boolean;
   /** Which [[skill_sources]] entry produced this skill. */
   sourceId: string;
+  /** URL from the `source:` frontmatter field, if present. */
+  sourceUrl?: string;
+  /** FNV-1a hex hash of SKILL.md content — used to detect variants across tools. */
+  contentHash?: string;
+  /** Which tool this skill belongs to — populated by the aggregated skills view. */
+  toolId?: string;
+  /** Which tool name this skill belongs to — populated by the aggregated skills view. */
+  toolName?: string;
 }
 
 export interface McpServer {
