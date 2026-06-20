@@ -408,6 +408,48 @@ pub fn add_mcp_to_toml_config(
     Ok(())
 }
 
+/// Set a boolean field (e.g. `enabled`) on a TOML MCP entry to toggle it without moving sections.
+pub fn toggle_toml_mcp_enabled(
+    config_path: &str,
+    active_key: &str,
+    mcp_name: &str,
+    active: bool,
+    toggle_field: &str,
+) -> Result<(), String> {
+    let lock = config_lock(config_path);
+    let _guard = lock.lock().unwrap();
+
+    if let Err(e) = crate::backup::snapshot(config_path) {
+        eprintln!("[backup] snapshot failed for {config_path}: {e}");
+    }
+
+    let raw = std::fs::read_to_string(config_path)
+        .map_err(|e| format!("cannot read {config_path}: {e}"))?;
+    let mut doc: toml::Value =
+        toml::from_str(&raw).map_err(|e| format!("cannot parse {config_path}: {e}"))?;
+
+    let entry = doc
+        .as_table_mut()
+        .and_then(|root| root.get_mut(active_key))
+        .and_then(|section| section.as_table_mut())
+        .and_then(|map| map.get_mut(mcp_name))
+        .and_then(|entry| entry.as_table_mut())
+        .ok_or_else(|| format!("MCP '{mcp_name}' not found in [{active_key}]"))?;
+
+    entry.insert(toggle_field.to_string(), toml::Value::Boolean(active));
+
+    let updated = toml::to_string_pretty(&doc).map_err(|e| format!("TOML serialization error: {e}"))?;
+
+    let tmp_path = format!("{config_path}.tmp");
+    std::fs::write(&tmp_path, &updated).map_err(|e| format!("cannot write temp file: {e}"))?;
+    std::fs::rename(&tmp_path, config_path).map_err(|e| {
+        let _ = std::fs::remove_file(&tmp_path);
+        format!("cannot atomically replace {config_path}: {e}")
+    })?;
+
+    Ok(())
+}
+
 /// Move an MCP entry between `active_key` and `disabled_key` sections in a TOML config file.
 pub fn move_mcp_in_toml_config(
     config_path: &str,
