@@ -131,7 +131,6 @@ export default function App() {
         onRefresh={handleFetchTools}
         loading={loading}
         cloudSyncing={cloudSyncing}
-        onFeedbackClick={() => goTo('feedback')}
       />
     </div>
   )

@@ -69,9 +69,6 @@ function buildBreadcrumbs(
     case 'logs':
       return [home, { label: 'Logs' }]
 
-    case 'feedback':
-      return [home, { label: 'Feedback' }]
-
     case 'add-skill':
       return [home, { label: 'Add Skill' }]
 
