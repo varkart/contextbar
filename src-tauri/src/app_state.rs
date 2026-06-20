@@ -540,6 +540,88 @@ pub fn remove_mcp_from_toml_config(
     Ok(())
 }
 
+/// Upsert a `[[key_path]]` entry in a TOML config file to set skill enabled state.
+/// Used by Codex: each skill has an entry in `[[skills.config]]` with `path` and `enabled`.
+pub fn toggle_toml_config_skill(
+    config_path: &str,
+    key_path: &[String],
+    path_field: &str,
+    enabled_field: &str,
+    skill_dir: &str,
+    active: bool,
+) -> Result<(), String> {
+    let lock = config_lock(config_path);
+    let _guard = lock.lock().unwrap();
+
+    if let Err(e) = crate::backup::snapshot(config_path) {
+        eprintln!("[backup] snapshot failed for {config_path}: {e}");
+    }
+
+    let raw = std::fs::read_to_string(config_path).unwrap_or_default();
+    let mut doc: toml::Value = if raw.trim().is_empty() {
+        toml::Value::Table(toml::map::Map::new())
+    } else {
+        toml::from_str(&raw).map_err(|e| format!("cannot parse {config_path}: {e}"))?
+    };
+
+    // The path referenced in config is the SKILL.md file path
+    let skill_md = format!("{skill_dir}/SKILL.md");
+
+    // Navigate to the array, creating intermediate tables as needed
+    let array = navigate_or_create_toml_array(doc.as_table_mut().ok_or("TOML root is not a table")?, key_path)?;
+
+    // Find existing entry for this skill path
+    if let Some(entry) = array.iter_mut().find(|e| {
+        e.get(path_field).and_then(|v| v.as_str()) == Some(&skill_md)
+    }) {
+        // Update in place
+        if let Some(t) = entry.as_table_mut() {
+            t.insert(enabled_field.to_string(), toml::Value::Boolean(active));
+        }
+    } else if !active {
+        // Only add an entry when disabling (enabled is the default, no entry needed)
+        let mut entry = toml::map::Map::new();
+        entry.insert(path_field.to_string(), toml::Value::String(skill_md));
+        entry.insert(enabled_field.to_string(), toml::Value::Boolean(false));
+        array.push(toml::Value::Table(entry));
+    }
+    // If active=true and no existing entry, nothing to write (default is enabled)
+
+    let updated = toml::to_string_pretty(&doc).map_err(|e| format!("TOML serialization error: {e}"))?;
+
+    if let Some(parent) = std::path::Path::new(config_path).parent() {
+        std::fs::create_dir_all(parent).map_err(|e| format!("cannot create dir: {e}"))?;
+    }
+    let tmp_path = format!("{config_path}.tmp");
+    std::fs::write(&tmp_path, &updated).map_err(|e| format!("cannot write temp file: {e}"))?;
+    std::fs::rename(&tmp_path, config_path).map_err(|e| {
+        let _ = std::fs::remove_file(&tmp_path);
+        format!("cannot atomically replace {config_path}: {e}")
+    })?;
+
+    Ok(())
+}
+
+fn navigate_or_create_toml_array<'a>(
+    mut table: &'a mut toml::map::Map<String, toml::Value>,
+    key_path: &[String],
+) -> Result<&'a mut Vec<toml::Value>, String> {
+    if key_path.is_empty() {
+        return Err("key_path is empty".to_string());
+    }
+    for key in &key_path[..key_path.len() - 1] {
+        let entry = table
+            .entry(key.clone())
+            .or_insert_with(|| toml::Value::Table(toml::map::Map::new()));
+        table = entry.as_table_mut().ok_or_else(|| format!("'{key}' is not a TOML table"))?;
+    }
+    let last = key_path.last().unwrap();
+    let entry = table
+        .entry(last.clone())
+        .or_insert_with(|| toml::Value::Array(vec![]));
+    entry.as_array_mut().ok_or_else(|| format!("'{last}' is not a TOML array"))
+}
+
 pub fn move_skill_folder(skill_path: &str, skill_name: &str, active: bool) -> Result<(), String> {
     let current = std::path::Path::new(skill_path);
     // Use the actual filename from the path — preserves `.md` extension for flat files.
