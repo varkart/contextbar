@@ -6,6 +6,7 @@ interface FooterProps {
   onRefresh: () => void;
   loading: boolean;
   cloudSyncing?: boolean;
+  onFeedbackClick: () => void;
 }
 
 function formatAgo(date: Date | null): string {
@@ -28,6 +29,16 @@ function RefreshIcon({ spinning }: { spinning: boolean }) {
   );
 }
 
+function FeedbackIcon() {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+      stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
+      className="w-3 h-3">
+      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+    </svg>
+  );
+}
+
 function QuitIcon() {
   return (
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
@@ -40,7 +51,7 @@ function QuitIcon() {
   );
 }
 
-export default function Footer({ lastUpdated, onRefresh, loading, cloudSyncing }: FooterProps) {
+export default function Footer({ lastUpdated, onRefresh, loading, cloudSyncing, onFeedbackClick }: FooterProps) {
   const [, setTick] = useState(0);
   useEffect(() => {
     const id = setInterval(() => setTick(t => t + 1), 60000);
@@ -66,14 +77,24 @@ export default function Footer({ lastUpdated, onRefresh, loading, cloudSyncing }
         )}
       </span>
 
-      <button
-        onClick={() => invoke('quit_app')}
-        className="text-[var(--c-text-3)] hover:text-red-400 transition-colors p-1 -mr-1 rounded"
-        aria-label="Quit app"
-        title="Quit"
-      >
-        <QuitIcon />
-      </button>
+      <div className="flex items-center gap-0.5 -mr-1">
+        <button
+          onClick={onFeedbackClick}
+          className="text-[var(--c-text-3)] hover:text-indigo-400 transition-colors p-1 rounded"
+          aria-label="Send feedback"
+          title="Send feedback"
+        >
+          <FeedbackIcon />
+        </button>
+        <button
+          onClick={() => invoke('quit_app')}
+          className="text-[var(--c-text-3)] hover:text-red-400 transition-colors p-1 rounded"
+          aria-label="Quit app"
+          title="Quit"
+        >
+          <QuitIcon />
+        </button>
+      </div>
     </div>
   );
 }
