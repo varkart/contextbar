@@ -6,6 +6,8 @@ const makeTool = (overrides: Partial<AiTool> = {}): AiTool => ({
   id: 'claude',
   name: 'Claude Code',
   installed: true,
+  supportsSkills: true,
+  supportsMcps: true,
   skills: [],
   mcps: [],
   ...overrides,

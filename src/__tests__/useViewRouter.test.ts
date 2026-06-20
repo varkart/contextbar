@@ -13,7 +13,7 @@ const mockInvoke = vi.mocked(invoke)
 const mockCapture = vi.mocked(capture)
 
 const tool: AiTool = {
-  id: 'claude', name: 'Claude Code', installed: true, skills: [], mcps: [],
+  id: 'claude', name: 'Claude Code', installed: true, supportsSkills: true, supportsMcps: true, skills: [], mcps: [],
 }
 
 const skill: Skill = {

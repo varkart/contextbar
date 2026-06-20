@@ -8,6 +8,8 @@ const tool: AiTool = {
   name: 'Claude Code',
   version: '1.0.0',
   installed: true,
+  supportsSkills: true,
+  supportsMcps: true,
   skills: [],
   mcps: [
     { name: 'github',     command: 'npx', args: [], active: true,  hasSecrets: true,  secretKeyNames: ['GITHUB_TOKEN'], sourceId: 'settings_json' },
