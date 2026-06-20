@@ -77,7 +77,103 @@ fn migrate(conn: &mut Connection) -> Result<(), AppError> {
         conn.pragma_update(None, "user_version", 2)?;
     }
 
+    if version < 3 {
+        conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS skill_cache (
+                name            TEXT    PRIMARY KEY,
+                content         TEXT    NOT NULL,
+                content_hash    TEXT    NOT NULL,
+                install_method  TEXT    NOT NULL,
+                install_source  TEXT,
+                cached_at       INTEGER NOT NULL,
+                updated_at      INTEGER NOT NULL
+            );",
+        )?;
+        conn.pragma_update(None, "user_version", 3)?;
+    }
+
     Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Skill cache
+// ---------------------------------------------------------------------------
+
+#[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct CachedSkill {
+    pub name: String,
+    pub content: String,
+    pub content_hash: String,
+    pub install_method: String,
+    pub install_source: Option<String>,
+    pub cached_at: i64,
+    pub updated_at: i64,
+}
+
+/// Upsert a skill into the cache. `method` is one of: "url", "local", "template", "copy".
+pub fn cache_skill(
+    state: &DbState,
+    name: &str,
+    content: &str,
+    method: &str,
+    source: Option<&str>,
+) {
+    let hash = fnv1a_hex(content.as_bytes());
+    let now = now_ms();
+    let Ok(conn) = state.0.lock() else { return };
+    let _ = conn.execute(
+        "INSERT INTO skill_cache (name, content, content_hash, install_method, install_source, cached_at, updated_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?6)
+         ON CONFLICT(name) DO UPDATE SET
+           content        = excluded.content,
+           content_hash   = excluded.content_hash,
+           install_method = excluded.install_method,
+           install_source = COALESCE(excluded.install_source, skill_cache.install_source),
+           updated_at     = excluded.updated_at",
+        rusqlite::params![name, content, hash, method, source, now],
+    );
+}
+
+pub fn get_cached_skill(state: &DbState, name: &str) -> Option<CachedSkill> {
+    let conn = state.0.lock().ok()?;
+    conn.query_row(
+        "SELECT name, content, content_hash, install_method, install_source, cached_at, updated_at
+         FROM skill_cache WHERE name = ?1",
+        rusqlite::params![name],
+        |r| {
+            Ok(CachedSkill {
+                name: r.get(0)?,
+                content: r.get(1)?,
+                content_hash: r.get(2)?,
+                install_method: r.get(3)?,
+                install_source: r.get(4)?,
+                cached_at: r.get(5)?,
+                updated_at: r.get(6)?,
+            })
+        },
+    )
+    .ok()
+}
+
+pub fn is_skill_cached(state: &DbState, name: &str) -> bool {
+    let Ok(conn) = state.0.lock() else { return false };
+    conn.query_row(
+        "SELECT EXISTS(SELECT 1 FROM skill_cache WHERE name = ?1)",
+        rusqlite::params![name],
+        |r| r.get::<_, bool>(0),
+    )
+    .unwrap_or(false)
+}
+
+/// FNV-1a 32-bit hash, hex-encoded. Mirrors the Rust engine/skill.rs implementation.
+fn fnv1a_hex(data: &[u8]) -> String {
+    let mut hash: u32 = 2166136261;
+    for &b in data {
+        hash ^= b as u32;
+        hash = hash.wrapping_mul(16777619);
+    }
+    format!("{hash:08x}")
 }
 
 fn now_ms() -> i64 {

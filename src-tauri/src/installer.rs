@@ -52,6 +52,13 @@ fn find_npm() -> Option<PathBuf> {
     })
 }
 
+/// Locate the `npx` binary by deriving it from the npm binary path.
+pub fn find_npx() -> Option<PathBuf> {
+    let npm = find_npm()?;
+    let npx = npm.with_file_name("npx");
+    if npx.exists() { Some(npx) } else { None }
+}
+
 // ---------------------------------------------------------------------------
 // Package name extraction
 // ---------------------------------------------------------------------------
