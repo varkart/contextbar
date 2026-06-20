@@ -1,6 +1,6 @@
 use super::manifest::{SkillSource, SkillSourceSpec};
 use super::resolve::{expand_home, version_in_range};
-use crate::detectors::{parse_skill_description, skill_md_exists};
+use crate::detectors::{parse_skill_content_hash, parse_skill_description, parse_skill_source_url, skill_md_exists};
 use crate::models::Skill;
 
 pub fn collect(
@@ -68,6 +68,8 @@ fn read_directory(dir: &std::path::Path, disabled_subdir: Option<&str>) -> Vec<S
             };
             let description = parse_skill_description(&path);
             let has_full_description = skill_md_exists(&path);
+            let source_url = parse_skill_source_url(&path);
+            let content_hash = parse_skill_content_hash(&path);
             skills.push(Skill {
                 name,
                 path: path.to_string_lossy().to_string(),
@@ -75,6 +77,8 @@ fn read_directory(dir: &std::path::Path, disabled_subdir: Option<&str>) -> Vec<S
                 has_full_description,
                 active: true,
                 source_id: String::new(),
+                source_url,
+                content_hash,
             });
         }
     }
@@ -104,6 +108,8 @@ fn read_directory(dir: &std::path::Path, disabled_subdir: Option<&str>) -> Vec<S
                 };
                 let description = parse_skill_description(&path);
                 let has_full_description = skill_md_exists(&path);
+                let source_url = parse_skill_source_url(&path);
+                let content_hash = parse_skill_content_hash(&path);
                 skills.push(Skill {
                     name,
                     path: path.to_string_lossy().to_string(),
@@ -111,6 +117,8 @@ fn read_directory(dir: &std::path::Path, disabled_subdir: Option<&str>) -> Vec<S
                     has_full_description,
                     active: false,
                     source_id: String::new(),
+                    source_url,
+                    content_hash,
                 });
             }
         }

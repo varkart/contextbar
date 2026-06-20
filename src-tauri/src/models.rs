@@ -24,6 +24,10 @@ pub struct Skill {
     pub active: bool,
     /// Which [[skill_sources]] entry produced this skill. Matches McpSource.id or "source_{n}".
     pub source_id: String,
+    /// Optional URL from the `source:` frontmatter field (e.g. a GitHub link).
+    pub source_url: Option<String>,
+    /// FNV-1a hash of the SKILL.md content — used to detect variants across tools.
+    pub content_hash: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
