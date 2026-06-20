@@ -23,7 +23,6 @@ fn all_manifest_strs() -> &'static [(&'static str, &'static str)] {
         ("gemini", manifest_toml!("gemini")),
         ("copilot", manifest_toml!("copilot")),
         ("windsurf", manifest_toml!("windsurf")),
-        ("chatgpt", manifest_toml!("chatgpt")),
         ("kiro", manifest_toml!("kiro")),
         ("codex", manifest_toml!("codex")),
     ]
