@@ -263,7 +263,9 @@ fn warm_skill_cache(db: tauri::State<'_, db::DbState>) {
 /// Spawn a fire-and-forget task to resolve and store the npm source URL for an MCP.
 /// Uses Option B (registry fetch + HEAD validation) with Option A (npmjs.com) fallback.
 fn enrich_mcp_source_url(app: tauri::AppHandle, mcp_name: String, package_name: String) {
-    tokio::spawn(async move {
+    // Use tauri's runtime — safe to call from both sync and async Tauri commands.
+    // tokio::spawn panics from sync command contexts (no active Tokio context on caller thread).
+    tauri::async_runtime::spawn(async move {
         if let Some(source_url) = installer::fetch_npm_source_url(&package_name).await {
             let db = app.state::<db::DbState>();
             db::update_mcp_source_url(&db, &mcp_name, &source_url);
