@@ -1,8 +1,8 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { capture, captureException } from '../../analytics';
 import { TOOL_COLORS } from '../../constants/toolColors';
-import type { AiTool } from '../../types';
+import type { AiTool, CachedMcp } from '../../types';
 
 interface AddMcpViewProps {
   installedTools: AiTool[];
@@ -209,6 +209,23 @@ function buildMcpPayload(type: McpType, fields: Record<string, string>): {
   }
 }
 
+function prefillTypeAndFields(cached: CachedMcp): { type: McpType; fields: Record<string, string> } {
+  if (cached.url) {
+    return { type: 'http', fields: { url: cached.url } };
+  }
+  if (cached.command === 'npx' && cached.args.includes('-y')) {
+    const pkg = cached.args.find(a => !a.startsWith('-')) ?? '';
+    return { type: 'npx', fields: { package: pkg } };
+  }
+  if (cached.command === 'docker') {
+    const image = cached.args.find(a => !a.startsWith('-') && a !== 'run' && a !== '--rm' && a !== '-i') ?? '';
+    return { type: 'docker', fields: { image } };
+  }
+  // fallback: custom command
+  const args = cached.args.join(' ');
+  return { type: 'command', fields: { command: cached.command ?? '', args } };
+}
+
 export default function AddMcpView({ installedTools, onBack, onAdded }: AddMcpViewProps) {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(
     new Set(installedTools.slice(0, 1).map(t => t.id))
@@ -220,6 +237,15 @@ export default function AddMcpView({ installedTools, onBack, onAdded }: AddMcpVi
   const [error, setError] = useState<string | null>(null);
   const [validationErrors, setValidationErrors] = useState<ValidationErrors>({});
   const [addedCount, setAddedCount] = useState<number | null>(null);
+  const [cachedMcps, setCachedMcps] = useState<CachedMcp[]>([]);
+
+  // Load MCPs from cache that aren't currently installed in any tool
+  useEffect(() => {
+    const currentMcpNames = new Set(installedTools.flatMap(t => t.mcps.map(m => m.name)));
+    invoke<CachedMcp[]>('get_all_cached_mcps')
+      .then(all => setCachedMcps(all.filter(m => !currentMcpNames.has(m.name))))
+      .catch(() => {});
+  }, [installedTools]);
 
   const setField = (key: string, val: string) => setFields(f => ({ ...f, [key]: val }));
   const toolIds = Array.from(selectedIds);
@@ -340,6 +366,34 @@ export default function AddMcpView({ installedTools, onBack, onAdded }: AddMcpVi
       </div>
 
       <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-4 space-y-4">
+        {/* Previously used MCPs from cache */}
+        {cachedMcps.length > 0 && (
+          <div>
+            <label className="block text-[12px] font-semibold text-[var(--c-text-3)] uppercase tracking-wider mb-2">
+              Previously used
+            </label>
+            <div className="flex flex-wrap gap-1.5">
+              {cachedMcps.map(cached => (
+                <button
+                  key={cached.name}
+                  type="button"
+                  onClick={() => {
+                    const { type, fields: f } = prefillTypeAndFields(cached);
+                    setName(cached.name);
+                    setMcpType(type);
+                    setFields(f);
+                    setError(null);
+                    setValidationErrors({});
+                  }}
+                  className="flex items-center gap-1.5 px-2.5 py-1 rounded-md border border-[var(--c-border)] text-[12px] text-[var(--c-text-2)] hover:text-[var(--c-text)] hover:border-violet-400/40 hover:bg-violet-500/5 transition-colors font-mono"
+                >
+                  {cached.name}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Multi-select tools */}
         <ToolMultiSelect tools={installedTools} selected={selectedIds} onChange={setSelectedIds} />
 

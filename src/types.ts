@@ -44,6 +44,15 @@ export interface McpServer {
   sourceId: string;
 }
 
+export interface CachedMcp {
+  name: string;
+  command: string | null;
+  args: string[];
+  url: string | null;
+  cachedAt: number;
+  updatedAt: number;
+}
+
 export interface ToolPermissions {
   allow: string[];
   deny: string[];

@@ -28,8 +28,9 @@ export function useTools(): UseToolsResult {
       const result = await invoke<AiTool[]>('get_tools')
       const duration_ms = Date.now() - t0
       setTools(result)
-      // Warm the skill cache in the background for pre-cache skills
+      // Warm caches in background — skills and MCPs
       invoke('warm_skill_cache').catch(() => {})
+      invoke('warm_mcp_cache').catch(() => {})
       setLastUpdated(new Date())
       capture('tools_loaded', {
         tool_count: result.length,
