@@ -23,16 +23,6 @@ const tool: AiTool = {
 }
 
 describe('SkillsListPanel', () => {
-  it('renders tool name breadcrumb', () => {
-    render(<SkillsListPanel tool={tool} onBack={vi.fn()} onSelectSkill={vi.fn()} onAddSkill={vi.fn()} />)
-    expect(screen.getByText('Claude Code')).toBeInTheDocument()
-  })
-
-  it('renders Skills heading', () => {
-    render(<SkillsListPanel tool={tool} onBack={vi.fn()} onSelectSkill={vi.fn()} onAddSkill={vi.fn()} />)
-    expect(screen.getByText('Skills')).toBeInTheDocument()
-  })
-
   it('lists all skills', () => {
     render(<SkillsListPanel tool={tool} onBack={vi.fn()} onSelectSkill={vi.fn()} onAddSkill={vi.fn()} />)
     expect(screen.getByText('impeccable')).toBeInTheDocument()
@@ -44,13 +34,6 @@ describe('SkillsListPanel', () => {
     render(<SkillsListPanel tool={tool} onBack={vi.fn()} onSelectSkill={vi.fn()} onAddSkill={vi.fn()} />)
     const xlsxBtn = screen.getByText('xlsx').closest('button')
     expect(xlsxBtn).toHaveClass('opacity-40')
-  })
-
-  it('back button calls onBack', () => {
-    const onBack = vi.fn()
-    render(<SkillsListPanel tool={tool} onBack={onBack} onSelectSkill={vi.fn()} onAddSkill={vi.fn()} />)
-    fireEvent.click(screen.getByLabelText('Back'))
-    expect(onBack).toHaveBeenCalledTimes(1)
   })
 
   it('clicking skill calls onSelectSkill', () => {

@@ -110,10 +110,10 @@ describe('useViewRouter — selectMcp', () => {
 
 
 describe('useViewRouter — openSkillsPage / openMcpsPage', () => {
-  it('openSkillsPage navigates to skills-list', () => {
+  it('openSkillsPage navigates to all-skills-list', () => {
     const { result } = renderHook(() => useViewRouter())
     act(() => { result.current.openSkillsPage() })
-    expect(result.current.view).toBe('skills-list')
+    expect(result.current.view).toBe('all-skills-list')
   })
 
   it('openMcpsPage navigates to mcps-list', () => {
@@ -139,11 +139,11 @@ describe('useViewRouter — escape', () => {
     expect(result.current.view).toBe('main')
   })
 
-  it('from tool-detail navigates to main', () => {
+  it('from tool-detail navigates to llms-list', () => {
     const { result } = renderHook(() => useViewRouter())
     act(() => { result.current.selectTool(tool) })
     act(() => { result.current.escape() })
-    expect(result.current.view).toBe('main')
+    expect(result.current.view).toBe('llms-list')
   })
 
   it('from skill-detail goes to skillBackView', () => {

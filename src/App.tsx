@@ -10,12 +10,14 @@ import { useViewRouter } from './useViewRouter'
 import { capture } from './analytics'
 import ViewManager from './components/views/ViewManager'
 import SplashScreen from './components/SplashScreen'
+import Header from './components/Header'
+import Footer from './components/Footer'
 
 const isE2E = !!(globalThis as Record<string, unknown>).__skipSplash
 
 export default function App() {
   const routerProps = useViewRouter()
-  const { view, refreshSelected, escape } = routerProps
+  const { view, llmsListMode, selectedTool, selectedSkill, selectedMcp, skillBackView, mcpBackView, refreshSelected, escape, goTo, openLlmsList } = routerProps
 
   const [version, setVersion] = useState('')
   const { theme, setTheme } = useTheme()
@@ -90,22 +92,45 @@ export default function App() {
       {!splashDismissed && (
         <SplashScreen backendReady={backendReady} onDismiss={() => setSplashDismissed(true)} />
       )}
-      <ViewManager
-        {...routerProps}
-        query={query}
-        setQuery={setQuery}
-        loading={loading}
-        tools={tools}
-        installedTools={installedTools}
-        searchResults={searchResults}
-        notifications={notifications}
-        updateInfo={updateInfo}
+      <Header
+        view={view}
+        llmsListMode={llmsListMode}
+        selectedTool={selectedTool}
+        selectedSkill={selectedSkill}
+        selectedMcp={selectedMcp}
+        skillBackView={skillBackView}
+        mcpBackView={mcpBackView}
+        goTo={goTo}
+        openLlmsList={openLlmsList}
+        updateAvailable={!!updateInfo}
+        notificationCount={notifications.length}
+        onSettingsClick={() => goTo('settings')}
+        onNotificationsClick={() => goTo('notifications')}
+      />
+      <div className="flex-1 overflow-hidden flex flex-col min-h-0">
+        <ViewManager
+          {...routerProps}
+          query={query}
+          setQuery={setQuery}
+          loading={loading}
+          tools={tools}
+          installedTools={installedTools}
+          searchResults={searchResults}
+          notifications={notifications}
+          updateInfo={updateInfo}
+          lastUpdated={lastUpdated}
+          cloudSyncing={cloudSyncing}
+          handleFetchTools={handleFetchTools}
+          theme={theme}
+          setTheme={setTheme}
+          fetchNotifications={fetchNotifications}
+        />
+      </div>
+      <Footer
         lastUpdated={lastUpdated}
+        onRefresh={handleFetchTools}
+        loading={loading}
         cloudSyncing={cloudSyncing}
-        handleFetchTools={handleFetchTools}
-        theme={theme}
-        setTheme={setTheme}
-        fetchNotifications={fetchNotifications}
       />
     </div>
   )
