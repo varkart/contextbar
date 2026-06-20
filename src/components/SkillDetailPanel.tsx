@@ -2,8 +2,10 @@ import { useState, useEffect, useRef } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import type { Skill, FileEntry } from '../types'
+import type { Skill, FileEntry, AiTool } from '../types'
 import { capture, captureException } from '../analytics'
+import { SkillInstalledOn } from './InstalledOnSection'
+import { TOOL_COLORS } from '../constants/toolColors'
 
 interface SkillDetailPanelProps {
   skill: Skill
@@ -11,6 +13,10 @@ interface SkillDetailPanelProps {
   toolName?: string
   toolId?: string
   onToggled?: () => void
+  allTools?: AiTool[]
+  /** All variants of this skill across tools (same name, possibly different content). */
+  variants?: Skill[]
+  onSelectTool?: (tool: AiTool) => void
 }
 
 function FileIcon({ extension, isDir }: { extension?: string; isDir: boolean }) {
@@ -50,7 +56,7 @@ function FileTree({ entries, depth = 0 }: { entries: FileEntry[]; depth?: number
 }
 
 function FileTreeNode({ entry, depth }: { entry: FileEntry; depth: number }) {
-  const [open, setOpen] = useState(depth === 0)
+  const [open, setOpen] = useState(false)
 
   const handleClick = async () => {
     if (entry.isDir) {
@@ -115,16 +121,61 @@ function stripFrontmatter(content: string): string {
   return content.slice(end + 4).trimStart()
 }
 
-function ExpandableDescription({ skill }: { skill: Skill }) {
-  const [expanded, setExpanded] = useState(false)
+const ChevronLeft = () => (
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+    stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
+    className="w-3.5 h-3.5">
+    <polyline points="15 18 9 12 15 6"/>
+  </svg>
+)
+
+export default function SkillDetailPanel({ skill: initialSkill, onBack, toolName, toolId, onToggled, allTools, variants, onSelectTool }: SkillDetailPanelProps) {
+  // Variant switcher — active skill may change if user picks a different variant
+  const hasVariants = variants && variants.length > 1 &&
+    new Set(variants.map(v => v.contentHash).filter(Boolean)).size > 1
+  const [activeVariant, setActiveVariant] = useState<Skill>(initialSkill)
+  const skill = hasVariants ? activeVariant : initialSkill
+
+  const [fileTree, setFileTree] = useState<FileEntry | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  // Full description overlay
+  const [descOpen, setDescOpen] = useState(false)
   const [fullContent, setFullContent] = useState<string | null>(null)
   const [loadingContent, setLoadingContent] = useState(false)
   const loadedForPath = useRef<string | null>(null)
 
-  if (!skill.description) return null
+  useEffect(() => {
+    setLoading(true)
+    setError(null)
+    invoke<FileEntry>('read_skill_dir', { path: skill.path })
+      .then(setFileTree)
+      .catch(e => setError(String(e)))
+      .finally(() => setLoading(false))
+  }, [skill.path])
 
-  const handleExpand = async () => {
-    setExpanded(true)
+  // Close overlay and reset content when skill changes
+  useEffect(() => {
+    setDescOpen(false)
+  }, [skill.path])
+
+  // Capture-phase Escape closes the overlay before App.tsx's global handler fires
+  useEffect(() => {
+    if (!descOpen) return
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.stopImmediatePropagation()
+        setDescOpen(false)
+        capture('skill_description_collapsed', { skill_name: skill.name })
+      }
+    }
+    window.addEventListener('keydown', handler, { capture: true })
+    return () => window.removeEventListener('keydown', handler, { capture: true })
+  }, [descOpen, skill.name])
+
+  const handleShowFull = async () => {
+    setDescOpen(true)
     capture('skill_description_expanded', { skill_name: skill.name })
     if (loadedForPath.current === skill.path) return
     setLoadingContent(true)
@@ -139,137 +190,13 @@ function ExpandableDescription({ skill }: { skill: Skill }) {
     }
   }
 
-  return (
-    <div className="px-4 py-3 border-b border-[var(--c-border)]">
-      {expanded ? (
-        <>
-          {loadingContent && (
-            <div className="flex gap-1.5 py-2">
-              {[0,1,2].map(i => <span key={i} className="w-1 h-1 rounded-full bg-[var(--c-text-3)] animate-pulse" style={{ animationDelay: `${i * 150}ms` }} />)}
-            </div>
-          )}
-          {fullContent && !loadingContent && (
-            <div className="text-[13px] text-[var(--c-text-2)] leading-relaxed overflow-x-hidden skill-md">
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>{stripFrontmatter(fullContent)}</ReactMarkdown>
-            </div>
-          )}
-          <button
-            onClick={() => { setExpanded(false); capture('skill_description_collapsed', { skill_name: skill.name }) }}
-            className="text-[13px] text-indigo-500 hover:text-indigo-400 mt-2 transition-colors"
-          >
-            Show less
-          </button>
-        </>
-      ) : (
-        <>
-          <p className="text-[14px] text-[var(--c-text-2)] leading-relaxed line-clamp-3">
-            {skill.description}
-          </p>
-          {skill.hasFullDescription && (
-            <button
-              onClick={handleExpand}
-              className="text-[13px] text-indigo-500 hover:text-indigo-400 mt-1.5 transition-colors"
-            >
-              Show full description →
-            </button>
-          )}
-        </>
-      )}
-    </div>
-  )
-}
-
-function SkillToggle({
-  active,
-  toggling,
-  justToggled,
-  onToggle,
-}: {
-  active: boolean
-  toggling: boolean
-  justToggled: boolean
-  onToggle: () => void
-}) {
-  return (
-    <button
-      onClick={onToggle}
-      disabled={toggling}
-      aria-label={active ? 'Disable skill' : 'Enable skill'}
-      style={{ transition: 'background-color 0.25s ease' }}
-      className={`relative w-11 h-6 rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/50 flex-shrink-0 ${
-        active ? 'bg-emerald-500' : 'bg-[var(--c-track)]'
-      } ${justToggled && active ? 'ring-2 ring-emerald-400/30' : ''}`}
-    >
-      {/* knob */}
-      <span
-        style={{ transition: 'left 0.28s cubic-bezier(0.34, 1.56, 0.64, 1)' }}
-        className={`absolute top-1 w-4 h-4 rounded-full bg-white shadow-md flex items-center justify-center ${
-          active ? 'left-6' : 'left-1'
-        }`}
-      >
-        {/* spinner while IPC in flight */}
-        {toggling && (
-          <svg className="w-2.5 h-2.5 text-zinc-400 animate-spin" viewBox="0 0 24 24" fill="none">
-            <circle cx="12" cy="12" r="8" stroke="currentColor" strokeWidth="3.5"
-              strokeDasharray="38" strokeDashoffset="9" strokeLinecap="round"/>
-          </svg>
-        )}
-        {/* checkmark on success */}
-        {justToggled && !toggling && (
-          <svg className="w-2.5 h-2.5 text-emerald-500" viewBox="0 0 24 24" fill="none"
-            stroke="currentColor" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round">
-            <polyline points="20 6 9 17 4 12"/>
-          </svg>
-        )}
-      </span>
-    </button>
-  )
-}
-
-export default function SkillDetailPanel({ skill, onBack, toolName, toolId, onToggled }: SkillDetailPanelProps) {
-  const [active, setActive] = useState(skill.active)
-  const [toggling, setToggling] = useState(false)
-  const [justToggled, setJustToggled] = useState(false)
-  const [toggleError, setToggleError] = useState<string | null>(null)
-  const [fileTree, setFileTree] = useState<FileEntry | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-
-  const handleToggle = async () => {
-    if (!toolId) return
-    setToggling(true)
-    setToggleError(null)
-    // yield one frame so React paints the spinner before the IPC call blocks
-    await new Promise<void>(r => requestAnimationFrame(() => r()))
-    try {
-      await invoke('set_skill_active', {
-        toolId,
-        skillName: skill.name,
-        skillPath: skill.path,
-        active: !active,
-      })
-      capture('skill_toggled', { tool_id: toolId, skill_name: skill.name, active: !active })
-      setActive(v => !v)
-      setJustToggled(true)
-      await onToggled?.()
-    } catch (e) {
-      setToggleError(String(e))
-      captureException(e)
-    } finally {
-      setToggling(false)
-      setTimeout(() => setJustToggled(false), 1200)
-    }
+  const handleCloseDesc = () => {
+    setDescOpen(false)
+    capture('skill_description_collapsed', { skill_name: skill.name })
   }
 
-  useEffect(() => {
-    invoke<FileEntry>('read_skill_dir', { path: skill.path })
-      .then(setFileTree)
-      .catch(e => setError(String(e)))
-      .finally(() => setLoading(false))
-  }, [skill.path])
-
   return (
-    <div className="flex flex-col h-full bg-[var(--c-bg)] animate-slide-in-right">
+    <div className="relative flex flex-col h-full bg-[var(--c-bg)] animate-slide-in-right">
       {/* Header */}
       <div className="flex items-center gap-2 px-4 py-2.5 border-b border-[var(--c-border)] flex-shrink-0">
         <button
@@ -277,11 +204,7 @@ export default function SkillDetailPanel({ skill, onBack, toolName, toolId, onTo
           className="text-[var(--c-text-2)] hover:text-[var(--c-text)] transition-colors p-0.5 -ml-0.5 rounded"
           aria-label="Back"
         >
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
-            stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
-            className="w-3.5 h-3.5">
-            <polyline points="15 18 9 12 15 6"/>
-          </svg>
+          <ChevronLeft />
         </button>
         {toolName && (
           <>
@@ -292,44 +215,65 @@ export default function SkillDetailPanel({ skill, onBack, toolName, toolId, onTo
           </>
         )}
         <span className="text-[15px] font-semibold text-[var(--c-text)] tracking-[-0.01em] truncate">
-          {skill.name}
+          Skills
         </span>
       </div>
 
-      {/* Status + toggle strip */}
-      {toolId && (
-        <div className="flex items-center justify-between px-4 py-2.5 border-b border-[var(--c-border)] bg-[var(--c-surface)]/40 flex-shrink-0">
-          <div className="flex items-center gap-2 min-w-0">
-            {/* status dot */}
-            <span
-              style={{ transition: 'background-color 0.25s ease' }}
-              className={`w-2 h-2 rounded-full flex-shrink-0 ${active ? 'bg-emerald-400' : 'bg-[var(--c-text-3)]'}`}
-            />
-            <span
-              style={{ transition: 'color 0.25s ease' }}
-              className={`text-[13px] font-medium ${active ? 'text-emerald-400' : 'text-[var(--c-text-3)]'}`}
-            >
-              {active ? 'Active' : 'Inactive'}
-            </span>
-            {toggleError && (
-              <span className="text-[12px] text-red-400 truncate ml-1">— {toggleError}</span>
-            )}
-            {toggleError && (
-              <button onClick={() => setToggleError(null)} className="text-[11px] text-red-400/60 hover:text-red-400 flex-shrink-0 ml-1">✕</button>
-            )}
-          </div>
-          <SkillToggle
-            active={active}
-            toggling={toggling}
-            justToggled={justToggled}
-            onToggle={handleToggle}
-          />
+      {/* Variant switcher — only when multiple tools have different content */}
+      {hasVariants && variants && (
+        <div className="flex items-center gap-1.5 px-4 py-2 border-b border-[var(--c-border)] bg-[var(--c-surface)]/40 flex-shrink-0 flex-wrap">
+          <span className="text-[11px] text-[var(--c-text-3)] flex-shrink-0">Variant:</span>
+          {variants.map(v => {
+            const colors = TOOL_COLORS[v.toolId ?? ''] ?? { bg: 'bg-zinc-500/15', text: 'text-zinc-400' }
+            const selected = v.path === activeVariant.path
+            return (
+              <button
+                key={v.path}
+                onClick={() => setActiveVariant(v)}
+                className={`text-[12px] font-medium px-2 py-0.5 rounded-full border transition-colors flex-shrink-0 ${
+                  selected
+                    ? `${colors.bg} ${colors.text} border-current/30`
+                    : 'bg-transparent text-[var(--c-text-3)] border-[var(--c-border)] hover:text-[var(--c-text-2)]'
+                }`}
+              >
+                {v.toolName ?? v.toolId}
+              </button>
+            )
+          })}
         </div>
       )}
 
       <div className="flex-1 overflow-y-auto">
-        {/* Expandable description */}
-        <ExpandableDescription skill={skill} />
+        {/* Skill name + short description */}
+        {skill.description && (
+          <div className="px-4 pt-3 pb-2.5 border-b border-[var(--c-border)]">
+            <p className="text-[15px] font-semibold text-indigo-400 leading-tight tracking-[-0.01em] font-mono">
+              {skill.name}
+            </p>
+            <p className="text-[13px] text-[var(--c-text-2)] leading-relaxed mt-1">
+              {skill.description}
+            </p>
+            {skill.hasFullDescription && (
+              <button
+                onClick={handleShowFull}
+                className="text-[13px] text-indigo-500 hover:text-indigo-400 mt-1.5 transition-colors"
+              >
+                Show full description →
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* Installed on */}
+        {allTools && (
+          <SkillInstalledOn
+            skill={skill}
+            currentToolId={toolId ?? skill.toolId ?? ''}
+            allTools={allTools}
+            onInstalled={async () => { await onToggled?.() }}
+            onSelectTool={onSelectTool}
+          />
+        )}
 
         {/* File tree */}
         <div className="px-2 py-2">
@@ -349,13 +293,69 @@ export default function SkillDetailPanel({ skill, onBack, toolName, toolId, onTo
           )}
         </div>
 
-        {/* Path */}
-        <div className="px-4 py-3 border-t border-[var(--c-border)] mt-auto">
+        {/* Path + source link */}
+        <div className="px-4 py-3 border-t border-[var(--c-border)] mt-auto space-y-1.5">
+          {skill.sourceUrl && (
+            <button
+              onClick={async () => {
+                try { await invoke('open_url', { url: skill.sourceUrl }) } catch {}
+              }}
+              className="flex items-center gap-1.5 text-[12px] text-indigo-400 hover:text-indigo-300 transition-colors"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+                stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+                className="w-3 h-3 flex-shrink-0">
+                <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+                <polyline points="15 3 21 3 21 9"/>
+                <line x1="10" y1="14" x2="21" y2="3"/>
+              </svg>
+              <span className="truncate">{skill.sourceUrl}</span>
+            </button>
+          )}
           <p className="text-[12px] text-[var(--c-text-3)] font-mono break-all leading-relaxed">
             {skill.path}
           </p>
         </div>
       </div>
+
+      {/* Full description overlay — slides in from right over the detail page */}
+      {descOpen && (
+        <div className="absolute inset-0 z-10 flex flex-col bg-[var(--c-bg)] animate-slide-in-right">
+          <div className="flex items-center gap-2 px-4 py-2.5 border-b border-[var(--c-border)] flex-shrink-0">
+            <button
+              onClick={handleCloseDesc}
+              className="text-[var(--c-text-2)] hover:text-[var(--c-text)] transition-colors p-0.5 -ml-0.5 rounded"
+              aria-label="Back"
+            >
+              <ChevronLeft />
+            </button>
+            <span className="text-[15px] font-semibold text-indigo-400 tracking-[-0.01em] font-mono flex-1 truncate">
+              {skill.name}
+            </span>
+            <button
+              onClick={handleCloseDesc}
+              className="text-[12px] text-[var(--c-text-3)] hover:text-indigo-400 transition-colors flex-shrink-0"
+            >
+              Show less
+            </button>
+          </div>
+          <div className="flex-1 overflow-y-auto px-4 py-3">
+            {loadingContent && (
+              <div className="flex gap-1.5 py-4">
+                {[0,1,2].map(i => (
+                  <span key={i} className="w-1.5 h-1.5 rounded-full bg-[var(--c-text-3)] animate-pulse"
+                    style={{ animationDelay: `${i * 150}ms` }} />
+                ))}
+              </div>
+            )}
+            {fullContent && !loadingContent && (
+              <div className="text-[13px] text-[var(--c-text-2)] leading-relaxed overflow-x-hidden skill-md">
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>{stripFrontmatter(fullContent)}</ReactMarkdown>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
