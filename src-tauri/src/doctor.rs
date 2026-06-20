@@ -1,4 +1,5 @@
 use crate::db::{self, DbState};
+use crate::installer;
 use crate::models::AiTool;
 use std::collections::HashSet;
 use tauri::{AppHandle, Emitter};
@@ -25,6 +26,8 @@ pub(crate) fn check(tools: &[AiTool], db: &DbState) -> bool {
             if !mcp.active || mcp.command.is_empty() {
                 continue;
             }
+
+            // Check the launcher binary (npx, node, python3, etc.) is on PATH.
             if !command_on_path(&mcp.command) {
                 let key = format!("{KEY_PREFIX}{}:{}:missing", tool.id, mcp.name);
                 current_keys.insert(key.clone());
@@ -36,6 +39,30 @@ pub(crate) fn check(tools: &[AiTool], db: &DbState) -> bool {
                 if let Ok(inserted) = db::add_notification(db, "warn", &title, &body, Some(&key)) {
                     if inserted {
                         any_change = true;
+                    }
+                }
+            }
+
+            // For npx-based MCPs: also verify the npm package is installed globally.
+            // Skip MCPs that use -y / --yes (auto-download on demand — "not installed" is expected).
+            let auto_download = mcp.args.iter().any(|a| a == "-y" || a == "--yes");
+            if !auto_download {
+                if let Some(pkg) = installer::npm_package_from_mcp(&mcp.command, &mcp.args) {
+                    if installer::get_npm_installed_version(&pkg).is_none() {
+                        let key = format!("{KEY_PREFIX}{}:{}:pkg-missing", tool.id, mcp.name);
+                        current_keys.insert(key.clone());
+                        let title = format!("'{}' not installed", pkg);
+                        let body = format!(
+                            "MCP '{}' ({}) needs npm package '{}'. Open it to install.",
+                            mcp.name, tool.name, pkg,
+                        );
+                        if let Ok(inserted) =
+                            db::add_notification(db, "warn", &title, &body, Some(&key))
+                        {
+                            if inserted {
+                                any_change = true;
+                            }
+                        }
                     }
                 }
             }
@@ -97,6 +124,21 @@ mod tests {
             name: name.to_string(),
             command: command.to_string(),
             args: vec![],
+            url: None,
+            description: None,
+            active,
+            has_secrets: false,
+            secret_key_names: vec![],
+            extension_name: None,
+            source_id: "test".to_string(),
+        }
+    }
+
+    fn make_npx_mcp(name: &str, args: &[&str], active: bool) -> McpServer {
+        McpServer {
+            name: name.to_string(),
+            command: "npx".to_string(),
+            args: args.iter().map(|s| s.to_string()).collect(),
             url: None,
             description: None,
             active,
@@ -230,5 +272,70 @@ mod tests {
         let notifs = db::get_active_notifications(&db).unwrap();
         assert_eq!(notifs.len(), 1);
         assert!(notifs[0].body.contains("bad"));
+    }
+
+    // ── npm pkg-missing detection ─────────────────────────────────────────────
+
+    #[test]
+    fn npx_mcp_with_dash_y_skips_pkg_check() {
+        let db = test_db();
+        // -y means "auto-download on demand" — no pkg-missing notification expected.
+        let tool = make_tool(
+            "t",
+            vec![make_npx_mcp("my-mcp", &["-y", "__fake_npm_pkg__"], true)],
+        );
+        check(&[tool], &db);
+        let notifs = db::get_active_notifications(&db).unwrap();
+        assert!(
+            notifs.iter().all(|n| !n.title.contains("__fake_npm_pkg__")),
+            "no pkg-missing notification expected for -y MCP"
+        );
+    }
+
+    #[test]
+    fn npx_mcp_with_yes_flag_skips_pkg_check() {
+        let db = test_db();
+        let tool = make_tool(
+            "t",
+            vec![make_npx_mcp("my-mcp", &["--yes", "__fake_npm_pkg__"], true)],
+        );
+        check(&[tool], &db);
+        let notifs = db::get_active_notifications(&db).unwrap();
+        assert!(
+            notifs.iter().all(|n| !n.title.contains("__fake_npm_pkg__")),
+            "no pkg-missing notification expected for --yes MCP"
+        );
+    }
+
+    #[test]
+    fn npx_mcp_missing_pkg_fires_pkg_missing_notification() {
+        let db = test_db();
+        let pkg = "__llmmanager_definitely_not_a_real_npm_pkg__";
+        let tool = make_tool("claude", vec![make_npx_mcp("my-mcp", &[pkg], true)]);
+        check(&[tool], &db);
+        let notifs = db::get_active_notifications(&db).unwrap();
+        assert!(
+            notifs.iter().any(|n| n.title.contains(pkg)),
+            "expected pkg-missing notification for uninstalled npx package"
+        );
+    }
+
+    #[test]
+    fn npx_mcp_pkg_missing_dedup_key_format() {
+        let db = test_db();
+        let pkg = "__llmmanager_definitely_not_a_real_npm_pkg__";
+        let tool = make_tool("claude", vec![make_npx_mcp("my-mcp", &[pkg], true)]);
+        // Two runs should not duplicate the notification.
+        check(&[tool.clone()], &db);
+        let changed = check(&[tool], &db);
+        assert!(!changed, "second run with same issue: no change");
+        assert_eq!(
+            db::get_active_notifications(&db)
+                .unwrap()
+                .iter()
+                .filter(|n| n.title.contains(pkg))
+                .count(),
+            1
+        );
     }
 }
