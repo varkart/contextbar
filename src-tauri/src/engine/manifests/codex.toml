@@ -17,10 +17,13 @@ timeout_ms = 800
 parse = "first_token"
 
 [[skill_sources]]
-id = "skills_dir"
-type = "directory"
-path = "~/.codex/skills"
-disabled_subdir = ".disabled"
+id = "agents_skills_dir"
+type = "toml_config_directory"
+path = "~/.agents/skills"
+config_file = "~/.codex/config.toml"
+config_key_path = ["skills", "config"]
+path_field = "path"
+enabled_field = "enabled"
 
 # MCP servers defined in [mcp_servers] TOML table
 [[mcp_sources]]

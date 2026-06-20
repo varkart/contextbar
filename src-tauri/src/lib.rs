@@ -354,11 +354,20 @@ fn skill_dir_for(tool_id: &str) -> Result<SkillWriteTarget, String> {
     let manifest = crate::engine::load_manifest(tool_id)
         .ok_or_else(|| format!("no manifest for '{tool_id}'"))?;
     for source in &manifest.skill_sources {
-        let SkillSourceSpec::Directory { path, flat_files, .. } = &source.spec;
-        return Ok(SkillWriteTarget {
-            dir: expand_home(path, &home),
-            flat_files: *flat_files,
-        });
+        match &source.spec {
+            SkillSourceSpec::Directory { path, flat_files, .. } => {
+                return Ok(SkillWriteTarget {
+                    dir: expand_home(path, &home),
+                    flat_files: *flat_files,
+                });
+            }
+            SkillSourceSpec::TomlConfigDirectory { path, .. } => {
+                return Ok(SkillWriteTarget {
+                    dir: expand_home(path, &home),
+                    flat_files: false,
+                });
+            }
+        }
     }
     Err(format!("'{tool_id}' has no writable skill source"))
 }
@@ -923,9 +932,49 @@ fn set_skill_active(
     tool_id: String,
     skill_name: String,
     skill_path: String,
+    source_id: Option<String>,
     active: bool,
 ) -> Result<(), String> {
-    let result = app_state::move_skill_folder(&skill_path, &skill_name, active);
+    use crate::engine::manifest::SkillSourceSpec;
+    use crate::engine::resolve::expand_home;
+
+    let result = if let Some(sid) = &source_id {
+        if let Some(manifest) = crate::engine::load_manifest(&tool_id) {
+            let home = dirs::home_dir().ok_or("cannot find home dir")?;
+            let matched = manifest.skill_sources.iter().enumerate().find(|(idx, s)| {
+                s.id.as_deref().unwrap_or(&format!("source_{idx}")) == sid
+            });
+            if let Some((_, source)) = matched {
+                if let SkillSourceSpec::TomlConfigDirectory {
+                    config_file,
+                    config_key_path,
+                    path_field,
+                    enabled_field,
+                    ..
+                } = &source.spec
+                {
+                    let config_path = expand_home(config_file, &home);
+                    app_state::toggle_toml_config_skill(
+                        &config_path.to_string_lossy(),
+                        config_key_path,
+                        path_field,
+                        enabled_field,
+                        &skill_path,
+                        active,
+                    )
+                } else {
+                    app_state::move_skill_folder(&skill_path, &skill_name, active)
+                }
+            } else {
+                app_state::move_skill_folder(&skill_path, &skill_name, active)
+            }
+        } else {
+            app_state::move_skill_folder(&skill_path, &skill_name, active)
+        }
+    } else {
+        app_state::move_skill_folder(&skill_path, &skill_name, active)
+    };
+
     if result.is_ok() {
         let detail = format!(r#"{{"active":{active}}}"#);
         db::log_event(&db, "skill_toggled", &tool_id, &skill_name, Some(&detail));

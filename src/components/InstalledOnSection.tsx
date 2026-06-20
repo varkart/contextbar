@@ -72,6 +72,7 @@ export function SkillInstalledOn({ skill, currentToolId, allTools, onInstalled, 
         toolId: targetTool.id,
         skillName: matchedSkill.name,
         skillPath: matchedSkill.path,
+        sourceId: matchedSkill.sourceId,
         active: newActive,
       })
       capture('skill_toggled', { tool_id: targetTool.id, skill_name: matchedSkill.name, active: newActive })

@@ -227,4 +227,27 @@ pub enum SkillSourceSpec {
         #[serde(default)]
         flat_files: bool,
     },
+    /// Skills live in a directory but active/inactive state is controlled by a
+    /// TOML config file that contains an array of `{path_field, enabled_field}` entries.
+    /// Used by Codex: `[[skills.config]]` in `~/.codex/config.toml`.
+    TomlConfigDirectory {
+        path: String,
+        config_file: String,
+        /// Key path to the array within the TOML file (e.g. ["skills", "config"]).
+        #[serde(default)]
+        config_key_path: Vec<String>,
+        /// Field on each array entry that holds the skill's SKILL.md path.
+        #[serde(default = "default_path_field")]
+        path_field: String,
+        /// Boolean field that controls enabled state (default true when absent).
+        #[serde(default = "default_enabled_field")]
+        enabled_field: String,
+    },
+}
+
+fn default_path_field() -> String {
+    "path".to_string()
+}
+fn default_enabled_field() -> String {
+    "enabled".to_string()
 }
