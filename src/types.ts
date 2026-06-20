@@ -49,6 +49,8 @@ export interface CachedMcp {
   command: string | null;
   args: string[];
   url: string | null;
+  /** Validated GitHub/homepage URL, or npmjs.com fallback. Null until background enrichment completes. */
+  sourceUrl: string | null;
   cachedAt: number;
   updatedAt: number;
 }
