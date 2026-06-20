@@ -446,7 +446,22 @@ fn read_toml_key_pair(
         Ok(v) => v,
         Err(e) => return (vec![], Some(format!("toml→json parse failed: {e}"))),
     };
-    (parse_mcp_servers(&json, true), None)
+    // Split on per-entry `enabled` field (defaults to true when absent)
+    let mut active_map = serde_json::Map::new();
+    let mut inactive_map = serde_json::Map::new();
+    if let Some(obj) = json.as_object() {
+        for (name, cfg) in obj {
+            let is_enabled = cfg.get("enabled").and_then(|v| v.as_bool()).unwrap_or(true);
+            if is_enabled {
+                active_map.insert(name.clone(), cfg.clone());
+            } else {
+                inactive_map.insert(name.clone(), cfg.clone());
+            }
+        }
+    }
+    let mut mcps = parse_mcp_servers(&serde_json::Value::Object(active_map), true);
+    mcps.extend(parse_mcp_servers(&serde_json::Value::Object(inactive_map), false));
+    (mcps, None)
 }
 
 type ClaudeCacheType = Option<(Vec<McpServer>, std::time::Instant)>;

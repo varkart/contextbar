@@ -981,18 +981,29 @@ fn set_mcp_active(
                 file,
                 active_key,
                 disabled_key,
+                inline_toggle_field,
             } => {
-                let dk = disabled_key
-                    .as_deref()
-                    .ok_or("source has no disabled_key; toggling not supported for this source")?;
                 let path = expand_home(file, &home);
-                app_state::move_mcp_in_toml_config(
-                    &path.to_string_lossy(),
-                    &mcp_name,
-                    active,
-                    active_key,
-                    dk,
-                )
+                if let Some(field) = inline_toggle_field.as_deref() {
+                    app_state::toggle_toml_mcp_enabled(
+                        &path.to_string_lossy(),
+                        active_key,
+                        &mcp_name,
+                        active,
+                        field,
+                    )
+                } else {
+                    let dk = disabled_key.as_deref().ok_or(
+                        "source has no disabled_key; toggling not supported for this source",
+                    )?;
+                    app_state::move_mcp_in_toml_config(
+                        &path.to_string_lossy(),
+                        &mcp_name,
+                        active,
+                        active_key,
+                        dk,
+                    )
+                }
             }
             McpSourceSpec::ExtensionDir {
                 enablement_file: Some(ef),
