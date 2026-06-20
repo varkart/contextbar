@@ -238,6 +238,104 @@ fn reveal_in_finder(path: String) -> Result<(), String> {
     Ok(())
 }
 
+// ---------------------------------------------------------------------------
+// Skill cache commands
+// ---------------------------------------------------------------------------
+
+/// Background-populate the cache for skills that were installed before the cache
+/// existed. Reads SKILL.md from every detected skill and upserts into skill_cache
+/// with method="detected" if the skill has no existing cache entry with a richer method.
+#[tauri::command]
+fn warm_skill_cache(db: tauri::State<'_, db::DbState>) {
+    let tools = detectors::detect_all();
+    for tool in tools {
+        for skill in tool.skills {
+            if db::is_skill_cached(&db, &skill.name) {
+                continue;
+            }
+            if let Some(content) = detectors::read_skill_file_content(std::path::Path::new(&skill.path)) {
+                db::cache_skill(&db, &skill.name, &content, "detected", skill.source_url.as_deref());
+            }
+        }
+    }
+}
+
+/// Return cache metadata for a skill so the frontend knows whether a re-install
+/// can be attempted without user input.
+#[tauri::command]
+fn get_skill_cache_status(
+    db: tauri::State<'_, db::DbState>,
+    skill_name: String,
+) -> Option<db::CachedSkill> {
+    db::get_cached_skill(&db, &skill_name)
+}
+
+/// Add a skill to a target tool using the best available content source:
+///  1. skill_cache (always preferred — path-independent)
+///  2. Re-fetch from install_source URL if method == "url"
+///  3. Live copy from any tool that currently has the skill (enabled or disabled)
+///
+/// This replaces the old `install_skill_from_path` path for cross-tool adds.
+#[tauri::command]
+async fn add_skill_to_tool(
+    db: tauri::State<'_, db::DbState>,
+    app: tauri::AppHandle,
+    skill_name: String,
+    tool_id: String,
+) -> Result<String, String> {
+    // 1. Try cache
+    if let Some(cached) = db::get_cached_skill(&db, &skill_name) {
+        let content = if cached.install_method == "url" {
+            // Try re-fetching to get the freshest content; fall back to cached if fetch fails
+            if let Some(ref source) = cached.install_source {
+                if let Ok(resp) = reqwest::get(source.as_str()).await {
+                    if resp.status().is_success() {
+                        if let Ok(fresh) = resp.text().await {
+                            if validate_skill_content(&fresh).is_ok() {
+                                db::cache_skill(&db, &skill_name, &fresh, "url", Some(source));
+                                fresh
+                            } else {
+                                cached.content
+                            }
+                        } else { cached.content }
+                    } else { cached.content }
+                } else { cached.content }
+            } else { cached.content }
+        } else {
+            cached.content
+        };
+
+        let dir = skill_dir_for(&tool_id)?;
+        let path = write_skill_file(&dir, &skill_name, &content)?;
+        db::log_event(&db, "skill_added_to_tool", &tool_id, &skill_name, Some("from_cache"));
+        let _ = app.emit("tools-changed", ());
+        return Ok(path);
+    }
+
+    // 2. Live copy: find skill in any detected tool (enabled or disabled)
+    let tools = tokio::task::spawn_blocking(detectors::detect_all)
+        .await
+        .unwrap_or_default();
+
+    for tool in &tools {
+        if tool.id == tool_id { continue; }
+        if let Some(skill) = tool.skills.iter().find(|s| s.name == skill_name) {
+            if let Some(content) = detectors::read_skill_file_content(std::path::Path::new(&skill.path)) {
+                db::cache_skill(&db, &skill_name, &content, "copy", skill.source_url.as_deref());
+                let dir = skill_dir_for(&tool_id)?;
+                let path = write_skill_file(&dir, &skill_name, &content)?;
+                db::log_event(&db, "skill_added_to_tool", &tool_id, &skill_name, Some("from_live_copy"));
+                let _ = app.emit("tools-changed", ());
+                return Ok(path);
+            }
+        }
+    }
+
+    Err(format!(
+        "skill '{skill_name}' not found in cache or any provider — re-add from URL or local path"
+    ))
+}
+
 #[tauri::command]
 fn open_url(url: String) -> Result<(), String> {
     tauri_plugin_opener::open_url(url, None::<&str>).map_err(|e| e.to_string())
@@ -303,6 +401,7 @@ fn create_skill(
         "---\nname: {name}\n{desc_line}---\n\n# {name}\n\n<!-- Describe what this skill does -->\n"
     );
 
+    db::cache_skill(&db, &slug, &content, "template", None);
     let mut paths = Vec::new();
     for tool_id in &tool_ids {
         let dir = skill_dir_for(tool_id)?;
@@ -518,6 +617,7 @@ async fn install_skill_from_url(
             if slug.is_empty() {
                 continue;
             }
+            db::cache_skill(&db, &slug, &content, "url", Some(&url));
             for tool_id in &tool_ids {
                 let dir = skill_dir_for(tool_id)?;
                 let path = write_skill_file(&dir, &slug, &content)?;
@@ -549,6 +649,7 @@ async fn install_skill_from_url(
         return Err("could not derive a valid skill name from URL".into());
     }
 
+    db::cache_skill(&db, &slug, &content, "url", Some(&url));
     let mut paths = Vec::new();
     for tool_id in &tool_ids {
         let dir = skill_dir_for(tool_id)?;
@@ -603,6 +704,7 @@ fn install_skill_from_path(
         return Err("could not derive a valid skill name from path".into());
     }
 
+    db::cache_skill(&db, &slug, &content, "local", Some(&src_path));
     let mut paths = Vec::new();
     for tool_id in &tool_ids {
         let dir = skill_dir_for(tool_id)?;
@@ -754,6 +856,45 @@ async fn query_mcp_tools(
 // ---------------------------------------------------------------------------
 // IPC commands – skill / MCP toggles
 // ---------------------------------------------------------------------------
+
+/// Permanently delete a skill from a tool (both active and .disabled locations).
+#[tauri::command]
+fn remove_skill(
+    db: tauri::State<'_, db::DbState>,
+    tool_id: String,
+    skill_name: String,
+    skill_path: String,
+) -> Result<(), String> {
+    let path = std::path::Path::new(&skill_path);
+    // Also check the .disabled location
+    let disabled_path = path
+        .parent()
+        .map(|p| p.join(".disabled").join(&skill_name))
+        .filter(|p| p.exists());
+
+    let mut deleted = false;
+    if path.exists() {
+        if path.is_dir() {
+            std::fs::remove_dir_all(path).map_err(|e| e.to_string())?;
+        } else {
+            std::fs::remove_file(path).map_err(|e| e.to_string())?;
+        }
+        deleted = true;
+    }
+    if let Some(dp) = disabled_path {
+        if dp.is_dir() {
+            let _ = std::fs::remove_dir_all(&dp);
+        } else {
+            let _ = std::fs::remove_file(&dp);
+        }
+        deleted = true;
+    }
+    if !deleted {
+        return Err(format!("skill not found at {skill_path}"));
+    }
+    db::log_event(&db, "skill_removed", &tool_id, &skill_name, None);
+    Ok(())
+}
 
 #[tauri::command]
 fn set_skill_active(
@@ -1391,6 +1532,9 @@ pub fn run() {
             open_path,
             reveal_in_finder,
             open_url,
+            warm_skill_cache,
+            get_skill_cache_status,
+            add_skill_to_tool,
             create_skill,
             install_skill_from_url,
             install_skill_from_path,
@@ -1398,6 +1542,7 @@ pub fn run() {
             read_text_file,
             check_for_update,
             query_mcp_tools,
+            remove_skill,
             set_skill_active,
             set_mcp_active,
             validate_mcp,

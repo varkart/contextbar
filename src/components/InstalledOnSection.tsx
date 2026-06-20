@@ -1,0 +1,465 @@
+import { useState } from 'react'
+import { flushSync } from 'react-dom'
+import { invoke } from '@tauri-apps/api/core'
+import type { AiTool, Skill, McpServer } from '../types'
+import { TOOL_COLORS } from '../constants/toolColors'
+import { capture, captureException } from '../analytics'
+
+const NO_SKILL_SUPPORT = new Set(['copilot', 'chatgpt'])
+const NO_MCP_SUPPORT = new Set(['chatgpt'])
+
+const MIN_SPINNER_MS = 1000
+const sleep = (ms: number) => new Promise<void>(r => setTimeout(r, ms))
+
+function ToolAvatar({ tool }: { tool: AiTool }) {
+  const colors = TOOL_COLORS[tool.id] ?? { bg: 'bg-zinc-500/15', text: 'text-zinc-400' }
+  return (
+    <span className={`inline-flex items-center justify-center w-[22px] h-[22px] rounded text-[12px] font-bold flex-shrink-0 select-none ${colors.bg} ${colors.text}`}>
+      {tool.name[0].toUpperCase()}
+    </span>
+  )
+}
+
+function SpinnerKnob() {
+  return (
+    <svg className="w-2.5 h-2.5 text-zinc-400 animate-spin" viewBox="0 0 24 24" fill="none">
+      <circle cx="12" cy="12" r="8" stroke="currentColor" strokeWidth="3.5" strokeDasharray="38" strokeDashoffset="9" strokeLinecap="round"/>
+    </svg>
+  )
+}
+
+function MiniSpinner() {
+  return (
+    <svg className="w-3 h-3 animate-spin" viewBox="0 0 24 24" fill="none">
+      <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2.5" strokeOpacity="0.25"/>
+      <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"/>
+    </svg>
+  )
+}
+
+// ── Skill variant ────────────────────────────────────────────────────────────
+
+interface SkillInstalledOnProps {
+  skill: Skill
+  currentToolId: string
+  allTools: AiTool[]
+  onInstalled: () => void
+  onSelectTool?: (tool: AiTool) => void
+}
+
+interface PendingDisable {
+  tool: AiTool
+  matchedSkill: Skill
+}
+
+export function SkillInstalledOn({ skill, currentToolId, allTools, onInstalled, onSelectTool }: SkillInstalledOnProps) {
+  const [installing, setInstalling] = useState<string | null>(null)
+  const [toggling, setToggling] = useState<string | null>(null)
+  const [deleting, setDeleting] = useState<string | null>(null)
+  const [errors, setErrors] = useState<Record<string, string>>({})
+  // Pending disable when skill has no cache and this is the last provider
+  const [pendingDisable, setPendingDisable] = useState<PendingDisable | null>(null)
+
+  const installedTools = allTools.filter(t => t.installed)
+
+  const doToggle = async (targetTool: AiTool, matchedSkill: Skill, newActive: boolean) => {
+    flushSync(() => setToggling(targetTool.id))
+    const started = Date.now()
+    try {
+      await invoke('set_skill_active', {
+        toolId: targetTool.id,
+        skillName: matchedSkill.name,
+        skillPath: matchedSkill.path,
+        active: newActive,
+      })
+      capture('skill_toggled', { tool_id: targetTool.id, skill_name: matchedSkill.name, active: newActive })
+    } catch (e) {
+      setErrors(prev => ({ ...prev, [targetTool.id]: String(e) }))
+      captureException(e)
+    } finally {
+      const elapsed = Date.now() - started
+      if (elapsed < MIN_SPINNER_MS) await sleep(MIN_SPINNER_MS - elapsed)
+      await onInstalled()
+      setToggling(null)
+    }
+  }
+
+  const handleToggle = async (targetTool: AiTool, matchedSkill: Skill, newActive: boolean) => {
+    // Disabling from the last provider that has this skill → check cache first
+    if (!newActive) {
+      const otherHaveIt = installedTools.some(
+        t => t.id !== targetTool.id && t.skills.some(s => s.name === skill.name)
+      )
+      if (!otherHaveIt) {
+        const cached = await invoke('get_skill_cache_status', { skillName: skill.name }).catch(() => null)
+        if (!cached) {
+          setPendingDisable({ tool: targetTool, matchedSkill })
+          return
+        }
+      }
+    }
+    await doToggle(targetTool, matchedSkill, newActive)
+  }
+
+  const handleDelete = async (targetTool: AiTool, matchedSkill: Skill) => {
+    flushSync(() => setDeleting(targetTool.id))
+    const started = Date.now()
+    try {
+      await invoke('remove_skill', {
+        toolId: targetTool.id,
+        skillName: matchedSkill.name,
+        skillPath: matchedSkill.path,
+      })
+      capture('skill_deleted', { tool_id: targetTool.id, skill_name: matchedSkill.name })
+    } catch (e) {
+      setErrors(prev => ({ ...prev, [targetTool.id]: String(e) }))
+      captureException(e)
+    } finally {
+      const elapsed = Date.now() - started
+      if (elapsed < MIN_SPINNER_MS) await sleep(MIN_SPINNER_MS - elapsed)
+      await onInstalled()
+      setDeleting(null)
+    }
+  }
+
+  // Cache-aware add: uses add_skill_to_tool which tries cache → live copy
+  const handleAdd = async (targetTool: AiTool) => {
+    flushSync(() => {
+      setInstalling(targetTool.id)
+      setErrors(e => ({ ...e, [targetTool.id]: '' }))
+    })
+    const started = Date.now()
+    try {
+      await invoke('add_skill_to_tool', { skillName: skill.name, toolId: targetTool.id })
+      capture('skill_cross_installed', { from: currentToolId, to: targetTool.id, skill_name: skill.name })
+    } catch (e) {
+      setErrors(prev => ({ ...prev, [targetTool.id]: String(e) }))
+      captureException(e)
+    } finally {
+      const elapsed = Date.now() - started
+      if (elapsed < MIN_SPINNER_MS) await sleep(MIN_SPINNER_MS - elapsed)
+      await onInstalled()
+      setInstalling(null)
+    }
+  }
+
+  return (
+    <div className="px-4 py-3 border-b border-[var(--c-border)]">
+      <p className="text-[13px] font-semibold text-indigo-500 mb-2">Installed on</p>
+
+      {/* Modal: no-cache last-provider disable warning */}
+      {pendingDisable && (
+        <div className="mb-3 p-3 rounded-lg bg-amber-500/8 border border-amber-500/20 space-y-2">
+          <p className="text-[12px] text-amber-400 leading-relaxed">
+            <span className="font-semibold">No cached copy.</span> This is the last provider with <span className="font-mono">{skill.name}</span>. What would you like to do?
+          </p>
+          <div className="flex gap-2">
+            <button
+              onClick={async () => {
+                setPendingDisable(null)
+                await doToggle(pendingDisable.tool, pendingDisable.matchedSkill, false)
+              }}
+              className="flex-1 py-1.5 rounded text-[12px] font-medium bg-[var(--c-surface)] border border-[var(--c-border)] text-[var(--c-text-2)] hover:bg-[var(--c-hover)] transition-colors"
+            >
+              Disable temporarily
+            </button>
+            <button
+              onClick={async () => {
+                setPendingDisable(null)
+                await handleDelete(pendingDisable.tool, pendingDisable.matchedSkill)
+              }}
+              className="flex-1 py-1.5 rounded text-[12px] font-medium bg-red-500/10 border border-red-500/20 text-red-400 hover:bg-red-500/20 transition-colors"
+            >
+              Remove completely
+            </button>
+          </div>
+          <button
+            onClick={() => setPendingDisable(null)}
+            className="text-[11px] text-[var(--c-text-3)] hover:text-[var(--c-text-2)] transition-colors"
+          >
+            Cancel
+          </button>
+        </div>
+      )}
+
+      <div className="flex flex-col gap-1.5">
+        {installedTools.map(tool => {
+          const noSupport = NO_SKILL_SUPPORT.has(tool.id)
+          const match = tool.skills.find(s => s.name.toLowerCase().trim() === skill.name.toLowerCase().trim())
+          const isInstalled = !!match
+          const isActive = match?.active ?? false
+          const isDisabled = isInstalled && !isActive
+
+          return (
+            <div key={tool.id}>
+              <div
+                className={`flex items-center gap-2.5 px-2.5 py-1.5 rounded-md border transition-colors ${
+                  noSupport ? 'border-[var(--c-border)] opacity-30 cursor-not-allowed' : 'border-[var(--c-border)]'
+                }`}
+              >
+                <button
+                  onClick={() => !noSupport && onSelectTool?.(tool)}
+                  className={`flex items-center gap-2 flex-1 min-w-0 text-left ${onSelectTool && !noSupport ? 'hover:opacity-80 transition-opacity' : ''}`}
+                  disabled={!onSelectTool || noSupport}
+                >
+                  <ToolAvatar tool={tool} />
+                  <span className={`text-[13px] truncate ${noSupport ? 'text-[var(--c-text-3)]' : 'text-[var(--c-text-2)]'}`}>
+                    {tool.name}
+                  </span>
+                </button>
+
+                {noSupport && (
+                  <span className="text-[11px] text-[var(--c-text-3)]">No skills support</span>
+                )}
+
+                {/* Active: toggle switch */}
+                {!noSupport && isInstalled && isActive && (
+                  <button
+                    onClick={() => handleToggle(tool, match, false)}
+                    disabled={toggling === tool.id}
+                    aria-label="Disable skill"
+                    style={{ transition: 'background-color 0.25s ease' }}
+                    className="relative w-9 h-5 rounded-full flex-shrink-0 focus:outline-none disabled:opacity-40 bg-emerald-500"
+                  >
+                    <span
+                      style={{ transition: 'left 0.25s cubic-bezier(0.34,1.56,0.64,1)' }}
+                      className="absolute top-0.5 left-4 w-4 h-4 rounded-full bg-white shadow-md flex items-center justify-center"
+                    >
+                      {toggling === tool.id && <SpinnerKnob />}
+                    </span>
+                  </button>
+                )}
+
+                {/* Disabled: Enable + Delete buttons */}
+                {!noSupport && isDisabled && (
+                  <div className="flex items-center gap-1 flex-shrink-0">
+                    <button
+                      onClick={() => doToggle(tool, match, true)}
+                      disabled={toggling === tool.id || deleting === tool.id}
+                      className="text-[11px] font-medium px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/20 transition-colors disabled:opacity-40"
+                    >
+                      {toggling === tool.id ? <MiniSpinner /> : 'Enable'}
+                    </button>
+                    <button
+                      onClick={() => handleDelete(tool, match)}
+                      disabled={deleting === tool.id || toggling === tool.id}
+                      aria-label="Delete skill"
+                      className="p-0.5 text-[var(--c-text-3)] hover:text-red-400 transition-colors disabled:opacity-40"
+                    >
+                      {deleting === tool.id ? <MiniSpinner /> : (
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+                          stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+                          className="w-3.5 h-3.5">
+                          <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/>
+                          <path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/>
+                        </svg>
+                      )}
+                    </button>
+                  </div>
+                )}
+
+                {/* Not installed: Add button (cache-aware) */}
+                {!noSupport && !isInstalled && (
+                  <button
+                    onClick={() => handleAdd(tool)}
+                    disabled={installing === tool.id}
+                    className="flex items-center gap-1.5 text-[12px] font-medium px-2 py-0.5 rounded bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 hover:bg-indigo-500/20 transition-colors disabled:opacity-60 flex-shrink-0"
+                  >
+                    {installing === tool.id ? <><MiniSpinner />Adding…</> : 'Add'}
+                  </button>
+                )}
+              </div>
+              {errors[tool.id] && (
+                <p className="text-[11px] text-red-400 px-2.5 mt-1">{errors[tool.id]}</p>
+              )}
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+// ── MCP variant ──────────────────────────────────────────────────────────────
+
+interface McpInstalledOnProps {
+  mcp: McpServer
+  currentToolId: string
+  allTools: AiTool[]
+  onInstalled: () => void
+  onBack?: () => void
+}
+
+export function McpInstalledOn({ mcp, currentToolId, allTools, onInstalled, onBack }: McpInstalledOnProps) {
+  const [installing, setInstalling] = useState<string | null>(null)
+  const [toggling, setToggling] = useState<string | null>(null)
+  const [removing, setRemoving] = useState<string | null>(null)
+  const [errors, setErrors] = useState<Record<string, string>>({})
+
+  const installedTools = allTools.filter(t => t.installed)
+
+  const handleToggle = async (targetTool: AiTool, matchedMcp: McpServer) => {
+    flushSync(() => setToggling(targetTool.id))
+    const started = Date.now()
+    try {
+      await invoke('set_mcp_active', {
+        toolId: targetTool.id,
+        mcpName: matchedMcp.name,
+        sourceId: matchedMcp.sourceId,
+        active: !matchedMcp.active,
+        extensionName: matchedMcp.extensionName ?? null,
+      })
+      capture('mcp_toggled', { tool_id: targetTool.id, mcp_name: matchedMcp.name, active: !matchedMcp.active })
+    } catch (e) {
+      setErrors(prev => ({ ...prev, [targetTool.id]: String(e) }))
+      captureException(e)
+    } finally {
+      const elapsed = Date.now() - started
+      if (elapsed < MIN_SPINNER_MS) await sleep(MIN_SPINNER_MS - elapsed)
+      await onInstalled()
+      setToggling(null)
+    }
+  }
+
+  const handleRemove = async (targetTool: AiTool, matchedMcp: McpServer) => {
+    flushSync(() => setRemoving(targetTool.id))
+    const started = Date.now()
+    try {
+      await invoke('remove_mcp', {
+        toolId: targetTool.id,
+        mcpName: matchedMcp.name,
+        sourceId: matchedMcp.sourceId,
+      })
+      capture('mcp_removed', { tool_id: targetTool.id, mcp_name: matchedMcp.name })
+    } catch (e) {
+      setErrors(prev => ({ ...prev, [targetTool.id]: String(e) }))
+      captureException(e)
+    } finally {
+      const elapsed = Date.now() - started
+      if (elapsed < MIN_SPINNER_MS) await sleep(MIN_SPINNER_MS - elapsed)
+      await onInstalled()
+      setRemoving(null)
+      if (targetTool.id === currentToolId) onBack?.()
+    }
+  }
+
+  const handleAdd = async (targetTool: AiTool) => {
+    flushSync(() => {
+      setInstalling(targetTool.id)
+      setErrors(e => ({ ...e, [targetTool.id]: '' }))
+    })
+    const started = Date.now()
+    try {
+      await invoke('add_mcp', {
+        toolId: targetTool.id,
+        name: mcp.name,
+        command: mcp.command || null,
+        args: mcp.args,
+        url: mcp.url ?? null,
+      })
+      capture('mcp_cross_installed', { from: currentToolId, to: targetTool.id, mcp_name: mcp.name })
+    } catch (e) {
+      setErrors(prev => ({ ...prev, [targetTool.id]: String(e) }))
+      captureException(e)
+    } finally {
+      const elapsed = Date.now() - started
+      if (elapsed < MIN_SPINNER_MS) await sleep(MIN_SPINNER_MS - elapsed)
+      await onInstalled()
+      setInstalling(null)
+    }
+  }
+
+  const hasSecrets = mcp.hasSecrets && mcp.secretKeyNames.length > 0
+
+  return (
+    <div className="px-4 py-3 border-b border-[var(--c-border)]">
+      <p className="text-[13px] font-semibold text-violet-500 mb-2">Installed on</p>
+      <div className="flex flex-col gap-1.5">
+        {installedTools.map(tool => {
+          const noSupport = NO_MCP_SUPPORT.has(tool.id)
+          const match = tool.mcps.find(m => m.name.toLowerCase().trim() === mcp.name.toLowerCase().trim())
+          const isInstalled = !!match
+
+          return (
+            <div key={tool.id}>
+              <div className={`flex items-center gap-2.5 px-2.5 py-1.5 rounded-md border border-[var(--c-border)] transition-colors ${noSupport ? 'opacity-30 cursor-not-allowed' : ''}`}>
+                <ToolAvatar tool={tool} />
+                <span className={`text-[13px] flex-1 truncate ${noSupport ? 'text-[var(--c-text-3)]' : 'text-[var(--c-text-2)]'}`}>{tool.name}</span>
+
+                {noSupport && (
+                  <span className="text-[11px] text-[var(--c-text-3)]">No MCP support</span>
+                )}
+
+                {!noSupport && isInstalled && (
+                  <>
+                    <button
+                      onClick={() => handleToggle(tool, match)}
+                      disabled={toggling === tool.id || removing === tool.id}
+                      aria-label={match.active ? 'Disable MCP' : 'Enable MCP'}
+                      style={{ transition: 'background-color 0.25s ease' }}
+                      className={`relative w-9 h-5 rounded-full flex-shrink-0 focus:outline-none disabled:opacity-40 ${match.active ? 'bg-emerald-500' : 'bg-[var(--c-track)]'}`}
+                    >
+                      <span
+                        style={{ transition: 'left 0.25s cubic-bezier(0.34,1.56,0.64,1)' }}
+                        className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow-md flex items-center justify-center ${match.active ? 'left-4' : 'left-0.5'}`}
+                      >
+                        {toggling === tool.id && <SpinnerKnob />}
+                      </span>
+                    </button>
+                    <button
+                      onClick={() => handleRemove(tool, match)}
+                      disabled={removing === tool.id || toggling === tool.id}
+                      aria-label="Remove MCP"
+                      className="p-0.5 text-[var(--c-text-3)] hover:text-red-400 transition-colors disabled:opacity-40 flex-shrink-0"
+                    >
+                      {removing === tool.id ? (
+                        <MiniSpinner />
+                      ) : (
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+                          stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+                          className="w-3.5 h-3.5">
+                          <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/>
+                          <path d="M10 11v6"/><path d="M14 11v6"/>
+                          <path d="M9 6V4h6v2"/>
+                        </svg>
+                      )}
+                    </button>
+                  </>
+                )}
+
+                {!noSupport && !isInstalled && (
+                  <button
+                    onClick={() => handleAdd(tool)}
+                    disabled={installing === tool.id}
+                    className="flex items-center gap-1.5 text-[12px] font-medium px-2 py-0.5 rounded bg-violet-500/10 text-violet-400 border border-violet-500/20 hover:bg-violet-500/20 transition-colors disabled:opacity-60 flex-shrink-0"
+                  >
+                    {installing === tool.id ? (
+                      <><MiniSpinner />Adding…</>
+                    ) : 'Add'}
+                  </button>
+                )}
+              </div>
+              {errors[tool.id] && (
+                <p className="text-[11px] text-red-400 px-2.5 mt-1">{errors[tool.id]}</p>
+              )}
+            </div>
+          )
+        })}
+      </div>
+
+      {hasSecrets && (
+        <div className="flex items-start gap-2 mt-3 px-2.5 py-2 rounded-md bg-amber-500/5 border border-amber-500/15">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+            stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+            className="w-3.5 h-3.5 text-amber-400 flex-shrink-0 mt-0.5">
+            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+            <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+          </svg>
+          <p className="text-[12px] text-amber-400/80 leading-relaxed">
+            Uses <span className="font-mono text-amber-400">{mcp.secretKeyNames.join(', ')}</span> — set these env vars in the target tool separately.
+          </p>
+        </div>
+      )}
+    </div>
+  )
+}
