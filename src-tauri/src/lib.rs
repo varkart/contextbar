@@ -1497,7 +1497,13 @@ async fn install_mcp_npm(
     );
     let db = app.state::<db::DbState>();
     db::log_event(&db, "mcp_npm_installed", &tool_id, &mcp_name, Some(&detail));
+
+    // Clear the doctor "pkg-missing" notification now that the package is installed.
+    let dedup_key = format!("doctor:mcp:{}:{}:pkg-missing", tool_id, mcp_name);
+    db::dismiss_by_dedup_key(&db, &dedup_key);
+
     let _ = app.emit("tools-changed", ());
+    let _ = app.emit("notifications-changed", ());
     Ok(version)
 }
 
