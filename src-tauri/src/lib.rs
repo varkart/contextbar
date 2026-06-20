@@ -282,6 +282,7 @@ fn write_skill_file(dir: &std::path::Path, slug: &str, content: &str) -> Result<
 
 #[tauri::command]
 fn create_skill(
+    db: tauri::State<'_, db::DbState>,
     tool_ids: Vec<String>,
     name: String,
     description: Option<String>,
@@ -306,6 +307,7 @@ fn create_skill(
     for tool_id in &tool_ids {
         let dir = skill_dir_for(tool_id)?;
         let path = write_skill_file(&dir, &slug, &content)?;
+        db::log_event(&db, "skill_created", tool_id, &slug, None);
         paths.push(path);
     }
     Ok(paths)
@@ -491,6 +493,7 @@ async fn github_find_skill_mds(
 
 #[tauri::command]
 async fn install_skill_from_url(
+    db: tauri::State<'_, db::DbState>,
     tool_ids: Vec<String>,
     url: String,
     name: Option<String>,
@@ -518,6 +521,7 @@ async fn install_skill_from_url(
             for tool_id in &tool_ids {
                 let dir = skill_dir_for(tool_id)?;
                 let path = write_skill_file(&dir, &slug, &content)?;
+                db::log_event(&db, "skill_installed_url", tool_id, &slug, Some(&url));
                 all_paths.push(path);
             }
         }
@@ -549,6 +553,7 @@ async fn install_skill_from_url(
     for tool_id in &tool_ids {
         let dir = skill_dir_for(tool_id)?;
         let path = write_skill_file(&dir, &slug, &content)?;
+        db::log_event(&db, "skill_installed_url", tool_id, &slug, Some(&url));
         paths.push(path);
     }
     Ok(paths)
@@ -556,6 +561,7 @@ async fn install_skill_from_url(
 
 #[tauri::command]
 fn install_skill_from_path(
+    db: tauri::State<'_, db::DbState>,
     tool_ids: Vec<String>,
     src_path: String,
     name: Option<String>,
@@ -601,6 +607,7 @@ fn install_skill_from_path(
     for tool_id in &tool_ids {
         let dir = skill_dir_for(tool_id)?;
         let path = write_skill_file(&dir, &slug, &content)?;
+        db::log_event(&db, "skill_installed_path", tool_id, &slug, Some(&src_path));
         paths.push(path);
     }
     Ok(paths)

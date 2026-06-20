@@ -10,12 +10,8 @@ interface AddSkillViewProps {
   onCreated: () => void;
 }
 
-type SourceType = 'template' | 'url' | 'local' | 'github';
+type SourceType = 'template' | 'url' | 'local';
 
-// Tools whose skill path matches what `npx skills add` writes.
-// cursor → ~/.cursor/skills/ (CLI) vs ~/.cursor/skills-cursor/ (our manifest).
-// windsurf → ~/.codeium/windsurf/skills/ (CLI) but no skill source in our manifest.
-const SKILLS_CLI_SUPPORTED = new Set(['claude', 'gemini']);
 
 function ToolMultiSelect({
   tools,
@@ -108,10 +104,7 @@ export default function AddSkillView({ installedTools, onBack, onCreated }: AddS
   const [description, setDescription] = useState('');
   const [url, setUrl] = useState('');
   const [localPath, setLocalPath] = useState('');
-  const [githubSource, setGithubSource] = useState('');
-  const [skillFilter, setSkillFilter] = useState('');
   const [searchDepth, setSearchDepth] = useState(2);
-  const [githubOutput, setGithubOutput] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [createdPaths, setCreatedPaths] = useState<string[] | null>(null);
@@ -145,24 +138,6 @@ export default function AddSkillView({ installedTools, onBack, onCreated }: AddS
           maxDepth: searchDepth,
         });
         capture('skill_installed_url', { tool_ids: toolIds });
-      } else if (sourceType === 'github') {
-        const trimmedSource = githubSource.trim();
-        if (!trimmedSource) { setError('Source is required'); setSaving(false); return; }
-        const unsupported = toolIds.filter(id => !SKILLS_CLI_SUPPORTED.has(id));
-        if (unsupported.length > 0) {
-          setError(`skills CLI path mismatch for: ${unsupported.join(', ')} — only Claude Code and Gemini are supported`);
-          setSaving(false);
-          return;
-        }
-        const output = await invoke<string>('install_skill_from_github', {
-          toolIds,
-          source: trimmedSource,
-          skillFilter: skillFilter.trim() || null,
-        });
-        capture('skill_installed_github', { tool_ids: toolIds });
-        setGithubOutput(output || 'Installed successfully');
-        await onCreated();
-        return;
       } else {
         const trimmedPath = localPath.trim();
         if (!trimmedPath) { setError('Path is required'); setSaving(false); return; }
@@ -188,7 +163,7 @@ export default function AddSkillView({ installedTools, onBack, onCreated }: AddS
     await invoke('reveal_in_finder', { path: createdPaths[0] }).catch(() => {});
   };
 
-  const sourceLabel = sourceType === 'template' ? 'Template' : sourceType === 'url' ? 'URL' : sourceType === 'github' ? 'GitHub' : 'Local';
+  const sourceLabel = sourceType === 'template' ? 'Template' : sourceType === 'url' ? 'URL' : 'Local';
 
   return (
     <div className="flex flex-col h-full bg-[var(--c-bg)] animate-slide-in-right">
@@ -203,27 +178,7 @@ export default function AddSkillView({ installedTools, onBack, onCreated }: AddS
         <span className="text-[15px] font-semibold text-[var(--c-text)] tracking-[-0.01em]">Add Skill</span>
       </div>
 
-      {githubOutput ? (
-        <div className="flex-1 flex flex-col items-center justify-center p-6 text-center gap-4">
-          <div className="w-12 h-12 rounded-xl bg-green-500/10 flex items-center justify-center">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-6 h-6 text-green-400">
-              <polyline points="20 6 9 17 4 12" />
-            </svg>
-          </div>
-          <div>
-            <p className="text-[15px] font-semibold text-[var(--c-text)] mb-1">Skills installed</p>
-            <p className="text-[12px] text-[var(--c-text-3)]">via npx skills add</p>
-          </div>
-          {githubOutput && (
-            <pre className="w-full text-left text-[11px] text-[var(--c-text-3)] font-mono bg-[var(--c-surface)] rounded-lg p-3 overflow-x-auto whitespace-pre-wrap max-h-32">
-              {githubOutput}
-            </pre>
-          )}
-          <button onClick={onBack} className="w-full max-w-[240px] py-2 rounded-lg bg-indigo-500/20 text-indigo-400 text-[14px] font-medium hover:bg-indigo-500/30 transition-colors">
-            Done
-          </button>
-        </div>
-      ) : createdPaths ? (
+      {createdPaths ? (
         <SuccessState
           paths={createdPaths}
           name={name || url || localPath}
@@ -241,7 +196,7 @@ export default function AddSkillView({ installedTools, onBack, onCreated }: AddS
               Source
             </label>
             <div className="flex gap-1 bg-[var(--c-surface)] rounded-lg p-1">
-              {(['template', 'url', 'local', 'github'] as SourceType[]).map(s => (
+              {(['template', 'url', 'local'] as SourceType[]).map(s => (
                 <button
                   key={s}
                   type="button"
@@ -252,7 +207,7 @@ export default function AddSkillView({ installedTools, onBack, onCreated }: AddS
                       : 'text-[var(--c-text-3)] hover:text-[var(--c-text-2)]'
                   }`}
                 >
-                  {s === 'local' ? 'Local' : s === 'url' ? 'URL' : s === 'github' ? 'GitHub' : 'Template'}
+                  {s === 'local' ? 'Local' : s === 'url' ? 'URL' : 'Template'}
                 </button>
               ))}
             </div>
@@ -362,35 +317,6 @@ export default function AddSkillView({ installedTools, onBack, onCreated }: AddS
               </div>
               <p className="text-[12px] text-[var(--c-text-3)]">
                 Accepts a <span className="font-mono">.md</span> file or a directory containing <span className="font-mono">SKILL.md</span>.
-              </p>
-            </div>
-          )}
-
-          {sourceType === 'github' && (
-            <div className="space-y-3">
-              <div>
-                <label className="block text-[12px] font-semibold text-[var(--c-text-3)] uppercase tracking-wider mb-1.5">Source *</label>
-                <input
-                  type="text"
-                  value={githubSource}
-                  onChange={e => setGithubSource(e.target.value)}
-                  placeholder="owner/repo or https://github.com/owner/repo"
-                  required
-                  className="w-full bg-[var(--c-surface)] border border-[var(--c-border)] rounded-lg px-3 py-2 text-[14px] text-[var(--c-text)] placeholder-[var(--c-text-3)] outline-none focus:border-indigo-400/60 transition-colors font-mono text-[13px]"
-                />
-              </div>
-              <div>
-                <label className="block text-[12px] font-semibold text-[var(--c-text-3)] uppercase tracking-wider mb-1.5">Skill filter <span className="normal-case font-normal">(optional)</span></label>
-                <input
-                  type="text"
-                  value={skillFilter}
-                  onChange={e => setSkillFilter(e.target.value)}
-                  placeholder="exact-skill-name — leave empty to install all"
-                  className="w-full bg-[var(--c-surface)] border border-[var(--c-border)] rounded-lg px-3 py-2 text-[14px] text-[var(--c-text)] placeholder-[var(--c-text-3)] outline-none focus:border-indigo-400/60 transition-colors"
-                />
-              </div>
-              <p className="text-[12px] text-[var(--c-text-3)] leading-relaxed">
-                Runs <span className="font-mono">npx skills add</span> — requires Node.js. Supported: Claude Code, Gemini CLI. Leave filter empty to install all skills from the repo.
               </p>
             </div>
           )}
