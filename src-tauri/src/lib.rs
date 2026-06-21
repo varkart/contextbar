@@ -1785,8 +1785,8 @@ fn toggle_main_window(app: &tauri::AppHandle) {
         if window.is_visible().unwrap_or(false) {
             let _ = window.hide();
         } else {
-            let _ = window.move_window(Position::TrayCenter);
             let _ = window.show();
+            let _ = window.move_window(Position::TrayCenter);
             let _ = window.set_focus();
         }
     } else {
@@ -1804,8 +1804,8 @@ fn open_main_window(app: &tauri::AppHandle, hash: Option<&str>) {
         // Use JSON-encode to prevent JS injection via hash value
         let hash_json = serde_json::to_string(hash.unwrap_or("")).unwrap_or_default();
         let _ = window.eval(format!("window.location.hash = {hash_json}"));
-        let _ = window.move_window(Position::TrayCenter);
         let _ = window.show();
+        let _ = window.move_window(Position::TrayCenter);
         let _ = window.set_focus();
         return;
     }
@@ -1831,8 +1831,8 @@ fn open_main_window(app: &tauri::AppHandle, hash: Option<&str>) {
             let _ = win_blur.hide();
         }
     });
-    let _ = window.move_window(Position::TrayCenter);
     let _ = window.show();
+    let _ = window.move_window(Position::TrayCenter);
     let _ = window.set_focus();
 }
 
