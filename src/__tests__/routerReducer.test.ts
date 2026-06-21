@@ -32,6 +32,40 @@ describe('initialRouterState', () => {
   })
 })
 
+describe('routerReducer — OPEN_LLMS_LIST', () => {
+  it('navigates to llms-list with given mode', () => {
+    const next = routerReducer(base, { type: 'OPEN_LLMS_LIST', mode: 'skills' })
+    expect(next.view).toBe('llms-list')
+    expect(next.llmsListMode).toBe('skills')
+  })
+
+  it('default mode', () => {
+    const next = routerReducer(base, { type: 'OPEN_LLMS_LIST', mode: 'default' })
+    expect(next.llmsListMode).toBe('default')
+  })
+
+  it('mcps mode', () => {
+    const next = routerReducer(base, { type: 'OPEN_LLMS_LIST', mode: 'mcps' })
+    expect(next.llmsListMode).toBe('mcps')
+  })
+})
+
+describe('routerReducer — OPEN_SKILLS_LIST_FOR_TOOL', () => {
+  it('sets selectedTool and navigates to skills-list', () => {
+    const next = routerReducer(base, { type: 'OPEN_SKILLS_LIST_FOR_TOOL', tool })
+    expect(next.view).toBe('skills-list')
+    expect(next.selectedTool).toBe(tool)
+  })
+})
+
+describe('routerReducer — OPEN_MCPS_LIST_FOR_TOOL', () => {
+  it('sets selectedTool and navigates to mcps-list', () => {
+    const next = routerReducer(base, { type: 'OPEN_MCPS_LIST_FOR_TOOL', tool })
+    expect(next.view).toBe('mcps-list')
+    expect(next.selectedTool).toBe(tool)
+  })
+})
+
 describe('routerReducer — SELECT_TOOL', () => {
   it('sets selectedTool and navigates to tool-detail', () => {
     const next = routerReducer(base, { type: 'SELECT_TOOL', tool })
