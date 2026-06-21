@@ -187,6 +187,10 @@ pub enum McpSourceSpec {
         file: String,
         #[serde(default = "default_mcp_key")]
         active_key: String,
+        /// Move entries between sections to disable (e.g. "disabled_mcp_servers").
+        disabled_key: Option<String>,
+        /// Set a boolean field on the entry to disable (e.g. "enabled" → false).
+        inline_toggle_field: Option<String>,
     },
     /// Claude Code's ~/.claude.json: collects mcpServers from all projects entries,
     /// deduplicated by name (first occurrence wins).
@@ -218,5 +222,32 @@ pub enum SkillSourceSpec {
     Directory {
         path: String,
         disabled_subdir: Option<String>,
+        /// When true, skills are stored as flat `{name}.md` files rather than
+        /// `{name}/SKILL.md` subdirectories (e.g. Windsurf workflows).
+        #[serde(default)]
+        flat_files: bool,
     },
+    /// Skills live in a directory but active/inactive state is controlled by a
+    /// TOML config file that contains an array of `{path_field, enabled_field}` entries.
+    /// Used by Codex: `[[skills.config]]` in `~/.codex/config.toml`.
+    TomlConfigDirectory {
+        path: String,
+        config_file: String,
+        /// Key path to the array within the TOML file (e.g. ["skills", "config"]).
+        #[serde(default)]
+        config_key_path: Vec<String>,
+        /// Field on each array entry that holds the skill's SKILL.md path.
+        #[serde(default = "default_path_field")]
+        path_field: String,
+        /// Boolean field that controls enabled state (default true when absent).
+        #[serde(default = "default_enabled_field")]
+        enabled_field: String,
+    },
+}
+
+fn default_path_field() -> String {
+    "path".to_string()
+}
+fn default_enabled_field() -> String {
+    "enabled".to_string()
 }

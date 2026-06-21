@@ -77,7 +77,225 @@ fn migrate(conn: &mut Connection) -> Result<(), AppError> {
         conn.pragma_update(None, "user_version", 2)?;
     }
 
+    if version < 3 {
+        conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS skill_cache (
+                name            TEXT    PRIMARY KEY,
+                content         TEXT    NOT NULL,
+                content_hash    TEXT    NOT NULL,
+                install_method  TEXT    NOT NULL,
+                install_source  TEXT,
+                cached_at       INTEGER NOT NULL,
+                updated_at      INTEGER NOT NULL
+            );",
+        )?;
+        conn.pragma_update(None, "user_version", 3)?;
+    }
+
+    if version < 4 {
+        conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS mcp_cache (
+                name        TEXT    PRIMARY KEY,
+                command     TEXT,
+                args        TEXT    NOT NULL DEFAULT '[]',
+                url         TEXT,
+                cached_at   INTEGER NOT NULL,
+                updated_at  INTEGER NOT NULL
+            );",
+        )?;
+        conn.pragma_update(None, "user_version", 4)?;
+    }
+
+    if version < 5 {
+        conn.execute_batch("ALTER TABLE mcp_cache ADD COLUMN source_url TEXT;")?;
+        conn.pragma_update(None, "user_version", 5)?;
+    }
+
     Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Skill cache
+// ---------------------------------------------------------------------------
+
+#[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct CachedSkill {
+    pub name: String,
+    pub content: String,
+    pub content_hash: String,
+    pub install_method: String,
+    pub install_source: Option<String>,
+    pub cached_at: i64,
+    pub updated_at: i64,
+}
+
+/// Upsert a skill into the cache. `method` is one of: "url", "local", "template", "copy".
+pub fn cache_skill(
+    state: &DbState,
+    name: &str,
+    content: &str,
+    method: &str,
+    source: Option<&str>,
+) {
+    let hash = fnv1a_hex(content.as_bytes());
+    let now = now_ms();
+    let Ok(conn) = state.0.lock() else { return };
+    let _ = conn.execute(
+        "INSERT INTO skill_cache (name, content, content_hash, install_method, install_source, cached_at, updated_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?6)
+         ON CONFLICT(name) DO UPDATE SET
+           content        = excluded.content,
+           content_hash   = excluded.content_hash,
+           install_method = excluded.install_method,
+           install_source = COALESCE(excluded.install_source, skill_cache.install_source),
+           updated_at     = excluded.updated_at",
+        rusqlite::params![name, content, hash, method, source, now],
+    );
+}
+
+pub fn get_cached_skill(state: &DbState, name: &str) -> Option<CachedSkill> {
+    let conn = state.0.lock().ok()?;
+    conn.query_row(
+        "SELECT name, content, content_hash, install_method, install_source, cached_at, updated_at
+         FROM skill_cache WHERE name = ?1",
+        rusqlite::params![name],
+        |r| {
+            Ok(CachedSkill {
+                name: r.get(0)?,
+                content: r.get(1)?,
+                content_hash: r.get(2)?,
+                install_method: r.get(3)?,
+                install_source: r.get(4)?,
+                cached_at: r.get(5)?,
+                updated_at: r.get(6)?,
+            })
+        },
+    )
+    .ok()
+}
+
+pub fn is_skill_cached(state: &DbState, name: &str) -> bool {
+    let Ok(conn) = state.0.lock() else { return false };
+    conn.query_row(
+        "SELECT EXISTS(SELECT 1 FROM skill_cache WHERE name = ?1)",
+        rusqlite::params![name],
+        |r| r.get::<_, bool>(0),
+    )
+    .unwrap_or(false)
+}
+
+// ---------------------------------------------------------------------------
+// MCP cache
+// ---------------------------------------------------------------------------
+
+#[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct CachedMcp {
+    pub name: String,
+    pub command: Option<String>,
+    pub args: Vec<String>,
+    pub url: Option<String>,
+    /// Validated source URL: GitHub repo, homepage, or npmjs.com fallback.
+    pub source_url: Option<String>,
+    pub cached_at: i64,
+    pub updated_at: i64,
+}
+
+/// Upsert an MCP into the cache. Preserves existing entry if new values are empty.
+pub fn cache_mcp(
+    state: &DbState,
+    name: &str,
+    command: Option<&str>,
+    args: &[String],
+    url: Option<&str>,
+) {
+    let args_json = serde_json::to_string(args).unwrap_or_else(|_| "[]".to_string());
+    let now = now_ms();
+    let Ok(conn) = state.0.lock() else { return };
+    let _ = conn.execute(
+        "INSERT INTO mcp_cache (name, command, args, url, cached_at, updated_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?5)
+         ON CONFLICT(name) DO UPDATE SET
+           command    = COALESCE(excluded.command,    mcp_cache.command),
+           args       = CASE WHEN excluded.args != '[]' THEN excluded.args ELSE mcp_cache.args END,
+           url        = COALESCE(excluded.url,        mcp_cache.url),
+           updated_at = excluded.updated_at",
+        rusqlite::params![name, command, args_json, url, now],
+    );
+}
+
+/// Update only the source_url for an existing cache entry (called after async URL resolution).
+pub fn update_mcp_source_url(state: &DbState, name: &str, source_url: &str) {
+    let Ok(conn) = state.0.lock() else { return };
+    let _ = conn.execute(
+        "UPDATE mcp_cache SET source_url = ?1 WHERE name = ?2",
+        rusqlite::params![source_url, name],
+    );
+}
+
+pub fn get_cached_mcp(state: &DbState, name: &str) -> Option<CachedMcp> {
+    let conn = state.0.lock().ok()?;
+    conn.query_row(
+        "SELECT name, command, args, url, source_url, cached_at, updated_at FROM mcp_cache WHERE name = ?1",
+        rusqlite::params![name],
+        |r| {
+            let args_json: String = r.get(2)?;
+            let args: Vec<String> = serde_json::from_str(&args_json).unwrap_or_default();
+            Ok(CachedMcp {
+                name: r.get(0)?,
+                command: r.get(1)?,
+                args,
+                url: r.get(3)?,
+                source_url: r.get(4)?,
+                cached_at: r.get(5)?,
+                updated_at: r.get(6)?,
+            })
+        },
+    )
+    .ok()
+}
+
+pub fn get_all_cached_mcps(state: &DbState) -> Vec<CachedMcp> {
+    let Ok(conn) = state.0.lock() else { return vec![] };
+    let Ok(mut stmt) = conn.prepare(
+        "SELECT name, command, args, url, source_url, cached_at, updated_at FROM mcp_cache ORDER BY updated_at DESC",
+    ) else { return vec![] };
+    stmt.query_map([], |r| {
+        let args_json: String = r.get(2)?;
+        let args: Vec<String> = serde_json::from_str(&args_json).unwrap_or_default();
+        Ok(CachedMcp {
+            name: r.get(0)?,
+            command: r.get(1)?,
+            args,
+            url: r.get(3)?,
+            source_url: r.get(4)?,
+            cached_at: r.get(5)?,
+            updated_at: r.get(6)?,
+        })
+    })
+    .map(|rows| rows.flatten().collect())
+    .unwrap_or_default()
+}
+
+pub fn is_mcp_cached(state: &DbState, name: &str) -> bool {
+    let Ok(conn) = state.0.lock() else { return false };
+    conn.query_row(
+        "SELECT EXISTS(SELECT 1 FROM mcp_cache WHERE name = ?1)",
+        rusqlite::params![name],
+        |r| r.get::<_, bool>(0),
+    )
+    .unwrap_or(false)
+}
+
+/// FNV-1a 32-bit hash, hex-encoded. Mirrors the Rust engine/skill.rs implementation.
+fn fnv1a_hex(data: &[u8]) -> String {
+    let mut hash: u32 = 2166136261;
+    for &b in data {
+        hash ^= b as u32;
+        hash = hash.wrapping_mul(16777619);
+    }
+    format!("{hash:08x}")
 }
 
 fn now_ms() -> i64 {

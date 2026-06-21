@@ -36,10 +36,39 @@ pub fn detect_all() -> Vec<AiTool> {
 /// Falls back to the first non-empty, non-heading, non-separator line.
 /// Truncates to 120 characters.
 fn skill_md_candidates(skill_path: &std::path::Path) -> Option<[std::path::PathBuf; 2]> {
+    if skill_path.is_file() {
+        // Flat .md skill file — the file itself is the content
+        let stem = skill_path.file_stem()?.to_string_lossy().into_owned();
+        let sibling = skill_path.with_file_name(format!("{}.md", stem));
+        return Some([skill_path.to_path_buf(), sibling]);
+    }
+    // Directory-based skill: look for SKILL.md inside, then sibling .md file
     let mut p = skill_path.to_path_buf();
     let stem = p.file_name()?.to_string_lossy().into_owned();
     p.set_file_name(format!("{}.md", stem));
     Some([skill_path.join("SKILL.md"), p])
+}
+
+/// FNV-1a 64-bit hash — no crate needed, fast, sufficient for content comparison.
+fn fnv1a(data: &[u8]) -> u64 {
+    let mut hash: u64 = 0xcbf29ce484222325;
+    for byte in data {
+        hash ^= *byte as u64;
+        hash = hash.wrapping_mul(0x100000001b3);
+    }
+    hash
+}
+
+pub fn parse_skill_content_hash(skill_path: &std::path::Path) -> Option<String> {
+    for candidate in skill_md_candidates(skill_path)?.iter() {
+        if !candidate.exists() {
+            continue;
+        }
+        if let Ok(bytes) = std::fs::read(candidate) {
+            return Some(format!("{:016x}", fnv1a(&bytes)));
+        }
+    }
+    None
 }
 
 pub fn parse_skill_description(skill_path: &std::path::Path) -> Option<String> {
@@ -56,6 +85,27 @@ pub fn parse_skill_description(skill_path: &std::path::Path) -> Option<String> {
     None
 }
 
+pub fn parse_skill_source_url(skill_path: &std::path::Path) -> Option<String> {
+    for candidate in skill_md_candidates(skill_path)?.iter() {
+        if !candidate.exists() {
+            continue;
+        }
+        if let Ok(content) = std::fs::read_to_string(candidate) {
+            if let Some(url) = extract_frontmatter_field(&content, "source") {
+                return Some(url);
+            }
+        }
+    }
+    None
+}
+
+/// Returns true if a SKILL.md (or sibling .md) exists — cheap stat, no read.
+pub fn skill_md_exists(skill_path: &std::path::Path) -> bool {
+    skill_md_candidates(skill_path)
+        .map(|cs| cs.iter().any(|c| c.is_file()))
+        .unwrap_or(false)
+}
+
 pub fn read_skill_file_content(skill_path: &std::path::Path) -> Option<String> {
     for candidate in skill_md_candidates(skill_path)?.iter() {
         if !candidate.exists() {
@@ -64,6 +114,25 @@ pub fn read_skill_file_content(skill_path: &std::path::Path) -> Option<String> {
         if let Ok(content) = std::fs::read_to_string(candidate) {
             if !content.is_empty() {
                 return Some(content);
+            }
+        }
+    }
+    None
+}
+
+fn extract_frontmatter_field(content: &str, key: &str) -> Option<String> {
+    let lines: Vec<&str> = content.lines().collect();
+    if lines.first().map(|l| l.trim()) != Some("---") {
+        return None;
+    }
+    let end = lines[1..].iter().position(|l| l.trim() == "---")?;
+    let prefix = format!("{}:", key);
+    for line in &lines[1..=end] {
+        let trimmed = line.trim();
+        if let Some(rest) = trimmed.strip_prefix(&prefix) {
+            let val = rest.trim().trim_matches('"').trim_matches('\'').to_string();
+            if !val.is_empty() {
+                return Some(val);
             }
         }
     }
@@ -91,10 +160,10 @@ fn extract_description(content: &str) -> Option<String> {
                             .collect::<Vec<_>>()
                             .join(" ");
                         if !block.is_empty() {
-                            return Some(truncate(block, 120));
+                            return Some(block);
                         }
                     } else if !val.is_empty() {
-                        return Some(truncate(val, 120));
+                        return Some(val);
                     }
                 }
             }
@@ -107,18 +176,10 @@ fn extract_description(content: &str) -> Option<String> {
         if trimmed.is_empty() || trimmed.starts_with('#') || trimmed.starts_with("---") {
             continue;
         }
-        return Some(truncate(trimmed.to_string(), 120));
+        return Some(trimmed.to_string());
     }
 
     None
-}
-
-fn truncate(s: String, max_chars: usize) -> String {
-    if s.chars().count() <= max_chars {
-        s
-    } else {
-        s.chars().take(max_chars).collect()
-    }
 }
 
 pub fn parse_mcp_servers(
@@ -243,6 +304,7 @@ mod tests {
     #[test]
     fn test_truncate() {
         let s = "a".repeat(200);
-        assert_eq!(truncate(s, 120).len(), 120);
+        let truncated: String = s.chars().take(120).collect();
+        assert_eq!(truncated.len(), 120);
     }
 }

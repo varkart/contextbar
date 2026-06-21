@@ -4,8 +4,7 @@ const TIPS = [
   'take a small break',
   'rest ur eyes',
   'stretch ur back',
-  'have a sip of water',
-  'breathe slowly',
+  'have a sip of water'
 ]
 
 interface SplashScreenProps {
@@ -15,58 +14,92 @@ interface SplashScreenProps {
 
 export default function SplashScreen({ backendReady, onDismiss }: SplashScreenProps) {
   const [exiting, setExiting] = useState(false)
-  const [tipIndex, setTipIndex] = useState(0)
+  const [cycleDone, setCycleDone] = useState(false)
+  const [text, setText] = useState('')
 
   useEffect(() => {
-    const t = setInterval(() => setTipIndex(i => (i + 1) % TIPS.length), 2200)
-    return () => clearInterval(t)
+    let timeout: ReturnType<typeof setTimeout>
+    let charIdx = 0
+    let msgIdx = 0
+    let isDel = false
+
+    const type = () => {
+      const msg = TIPS[msgIdx]
+      
+      if (isDel) {
+        charIdx--
+      } else {
+        charIdx++
+      }
+      
+      setText(msg.substring(0, charIdx))
+      
+      let spd = isDel ? 30 : 70
+      
+      if (!isDel && charIdx === msg.length) {
+        spd = 1500
+        isDel = true
+        if (msgIdx === TIPS.length - 1) {
+          setCycleDone(true)
+        }
+      } else if (isDel && charIdx === 0) {
+        isDel = false
+        msgIdx = (msgIdx + 1) % TIPS.length
+        spd = 500
+      }
+      
+      timeout = setTimeout(type, spd)
+    }
+    
+    type()
+    
+    return () => clearTimeout(timeout)
   }, [])
 
-  const handleContinue = () => {
-    if (!backendReady) return
-    setExiting(true)
-    setTimeout(onDismiss, 280)
-  }
+  useEffect(() => {
+    if (backendReady && cycleDone) {
+      setExiting(true)
+      const t = setTimeout(onDismiss, 280)
+      return () => clearTimeout(t)
+    }
+  }, [backendReady, cycleDone, onDismiss])
 
   return (
     <div
-      className={`fixed inset-0 z-50 flex flex-col items-center justify-center gap-6 bg-[var(--c-bg)] ${exiting ? 'splash-out' : 'splash-fade-in'}`}
+      className={`fixed inset-0 z-50 flex flex-col items-center justify-center gap-6 bg-[var(--c-bg)] ${exiting ? 'splash-out' : ''}`}
       style={{ animationFillMode: 'forwards' }}
     >
-      {/* glow ring + logo */}
-      <div className="relative flex items-center justify-center">
-        <div
-          className="splash-glow absolute w-48 h-48 rounded-full"
-          style={{
-            background: 'radial-gradient(circle, rgba(139,92,246,0.45) 0%, rgba(99,102,241,0.15) 50%, rgba(139,92,246,0) 75%)',
-          }}
-        />
-        <img
-          src="/sloth.png"
-          alt="LLM Manager"
-          className="splash-float relative w-32 h-32 object-contain"
-          style={{ filter: 'drop-shadow(0 8px 24px rgba(139,92,246,0.5)) drop-shadow(0 4px 8px rgba(0,0,0,0.4))' }}
-          draggable={false}
-        />
-      </div>
+      <img
+        src="/sloth.png"
+        alt="LLM Manager"
+        className="splash-float w-32 h-32 object-contain"
+        draggable={false}
+      />
 
-      {/* title + cycling tip */}
-      <div className="flex flex-col items-center gap-2 text-center px-6 w-full">
+      {/* title + typewriter tip */}
+      <div className="flex flex-col items-center gap-2 text-center w-full">
         <p className="text-[22px] font-bold text-[var(--c-text)] tracking-[-0.02em]">
           LLM Manager
         </p>
-        <p
-          key={tipIndex}
-          className="text-[14px] text-[var(--c-text-3)] splash-fade-in whitespace-nowrap"
-          style={{ animationDuration: '0.35s' }}
-        >
-          {TIPS[tipIndex]}
-        </p>
+        <div className="flex flex-col items-center justify-center h-[44px] gap-1">
+          <span className="text-[14px] text-[var(--c-text-3)]">
+            we are loading, until then
+          </span>
+          <div className="flex items-center">
+            <span className="font-mono text-[14px] text-violet-400 dark:text-violet-400">
+              {text}
+            </span>
+            <span 
+              className="inline-block w-2 h-4 bg-violet-400 ml-1"
+              style={{ animation: 'sp-blink 0.8s step-end infinite' }} 
+            />
+          </div>
+        </div>
       </div>
 
-      {/* fixed-height action zone — always same height so title/tip never shift */}
+      {/* fixed-height action zone — shows dots if backend not ready or animation still going */}
       <div className="flex items-center justify-center" style={{ minHeight: '44px' }}>
-        {!backendReady ? (
+        {(!backendReady || !cycleDone) && (
           <div className="flex gap-2">
             {[0, 1, 2].map(i => (
               <span
@@ -76,21 +109,6 @@ export default function SplashScreen({ backendReady, onDismiss }: SplashScreenPr
               />
             ))}
           </div>
-        ) : (
-          <button
-            onClick={handleContinue}
-            disabled={exiting}
-            className="px-7 py-2.5 text-[15px] font-semibold rounded-2xl text-white
-              hover:scale-105 active:scale-95 transition-transform duration-150
-              select-none splash-fade-in"
-            style={{
-              animationDuration: '0.3s',
-              background: 'linear-gradient(135deg, #7c3aed 0%, #6366f1 100%)',
-              boxShadow: '0 4px 24px rgba(124,58,237,0.45), 0 1px 4px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.15)',
-            }}
-          >
-            Continue <span className="opacity-70">→</span>
-          </button>
         )}
       </div>
     </div>

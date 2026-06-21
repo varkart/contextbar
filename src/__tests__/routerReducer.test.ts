@@ -4,11 +4,11 @@ import type { RouterState } from '../viewRouter'
 import type { AiTool, Skill, McpServer } from '../types'
 
 const tool = {
-  id: 'claude', name: 'Claude Code', installed: true, skills: [], mcps: [],
+  id: 'claude', name: 'Claude Code', installed: true, supportsSkills: true, supportsMcps: true, skills: [], mcps: [],
 } as AiTool
 
 const skill: Skill = {
-  name: 'graphify', path: '/skills/graphify', description: 'g', active: true, sourceId: 's',
+  name: 'graphify', path: '/skills/graphify', description: 'g', hasFullDescription: false, active: true, sourceId: 's',
 }
 
 const mcp: McpServer = {
@@ -29,6 +29,40 @@ describe('initialRouterState', () => {
 
   it('unknown hash defaults to main', () => {
     expect(initialRouterState('#other').view).toBe('main')
+  })
+})
+
+describe('routerReducer — OPEN_LLMS_LIST', () => {
+  it('navigates to llms-list with given mode', () => {
+    const next = routerReducer(base, { type: 'OPEN_LLMS_LIST', mode: 'skills' })
+    expect(next.view).toBe('llms-list')
+    expect(next.llmsListMode).toBe('skills')
+  })
+
+  it('default mode', () => {
+    const next = routerReducer(base, { type: 'OPEN_LLMS_LIST', mode: 'default' })
+    expect(next.llmsListMode).toBe('default')
+  })
+
+  it('mcps mode', () => {
+    const next = routerReducer(base, { type: 'OPEN_LLMS_LIST', mode: 'mcps' })
+    expect(next.llmsListMode).toBe('mcps')
+  })
+})
+
+describe('routerReducer — OPEN_SKILLS_LIST_FOR_TOOL', () => {
+  it('sets selectedTool and navigates to skills-list', () => {
+    const next = routerReducer(base, { type: 'OPEN_SKILLS_LIST_FOR_TOOL', tool })
+    expect(next.view).toBe('skills-list')
+    expect(next.selectedTool).toBe(tool)
+  })
+})
+
+describe('routerReducer — OPEN_MCPS_LIST_FOR_TOOL', () => {
+  it('sets selectedTool and navigates to mcps-list', () => {
+    const next = routerReducer(base, { type: 'OPEN_MCPS_LIST_FOR_TOOL', tool })
+    expect(next.view).toBe('mcps-list')
+    expect(next.selectedTool).toBe(tool)
   })
 })
 
@@ -77,9 +111,9 @@ describe('routerReducer — SELECT_PERMISSIONS', () => {
 })
 
 describe('routerReducer — OPEN_SKILLS_PAGE', () => {
-  it('navigates to skills-list', () => {
+  it('navigates to all-skills-list', () => {
     const next = routerReducer(base, { type: 'OPEN_SKILLS_PAGE' })
-    expect(next.view).toBe('skills-list')
+    expect(next.view).toBe('all-skills-list')
   })
 })
 

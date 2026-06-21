@@ -10,14 +10,14 @@ import { useViewRouter } from './useViewRouter'
 import { capture } from './analytics'
 import ViewManager from './components/views/ViewManager'
 import SplashScreen from './components/SplashScreen'
+import Header from './components/Header'
+import Footer from './components/Footer'
 
-const SPLASH_BORN = Date.now()
-const SPLASH_MIN_MS = 8000
 const isE2E = !!(globalThis as Record<string, unknown>).__skipSplash
 
 export default function App() {
   const routerProps = useViewRouter()
-  const { view, refreshSelected, escape } = routerProps
+  const { view, llmsListMode, selectedTool, selectedSkill, selectedMcp, skillBackView, mcpBackView, refreshSelected, escape, goTo, openLlmsList } = routerProps
 
   const [version, setVersion] = useState('')
   const { theme, setTheme } = useTheme()
@@ -48,8 +48,12 @@ export default function App() {
   useEffect(() => {
     const splash = document.getElementById('splash')
     if (splash) {
-      splash.classList.add('fade-out')
-      splash.addEventListener('transitionend', () => splash.remove(), { once: true })
+      if (isE2E) {
+        splash.remove()
+      } else {
+        splash.classList.add('fade-out')
+        splash.addEventListener('transitionend', () => splash.remove(), { once: true })
+      }
     }
   }, [])
 
@@ -58,13 +62,6 @@ export default function App() {
       setBackendReady(true)
     }
   }, [loading, backendReady])
-
-  useEffect(() => {
-    if (!backendReady || isE2E) return
-    const remaining = Math.max(0, SPLASH_MIN_MS - (Date.now() - SPLASH_BORN))
-    const t = setTimeout(() => setSplashDismissed(true), remaining)
-    return () => clearTimeout(t)
-  }, [backendReady])
 
   const updateInfo = useUpdateCheck(version)
   useToolsDiff()
@@ -91,26 +88,49 @@ export default function App() {
   const searchResults = useMemo(() => searchTools(installedTools, query), [installedTools, query])
 
   return (
-    <div className="w-[380px] h-[520px] bg-[var(--c-bg)] text-[var(--c-text)] flex flex-col overflow-hidden select-none">
+    <div className="w-[380px] h-[520px] bg-[var(--c-bg)] text-[var(--c-text)] flex flex-col overflow-hidden">
       {!splashDismissed && (
         <SplashScreen backendReady={backendReady} onDismiss={() => setSplashDismissed(true)} />
       )}
-      <ViewManager
-        {...routerProps}
-        query={query}
-        setQuery={setQuery}
-        loading={loading}
-        tools={tools}
-        installedTools={installedTools}
-        searchResults={searchResults}
-        notifications={notifications}
-        updateInfo={updateInfo}
+      <Header
+        view={view}
+        llmsListMode={llmsListMode}
+        selectedTool={selectedTool}
+        selectedSkill={selectedSkill}
+        selectedMcp={selectedMcp}
+        skillBackView={skillBackView}
+        mcpBackView={mcpBackView}
+        goTo={goTo}
+        openLlmsList={openLlmsList}
+        updateAvailable={!!updateInfo}
+        notificationCount={notifications.length}
+        onSettingsClick={() => goTo('settings')}
+        onNotificationsClick={() => goTo('notifications')}
+      />
+      <div className="flex-1 overflow-hidden flex flex-col min-h-0">
+        <ViewManager
+          {...routerProps}
+          query={query}
+          setQuery={setQuery}
+          loading={loading}
+          tools={tools}
+          installedTools={installedTools}
+          searchResults={searchResults}
+          notifications={notifications}
+          updateInfo={updateInfo}
+          lastUpdated={lastUpdated}
+          cloudSyncing={cloudSyncing}
+          handleFetchTools={handleFetchTools}
+          theme={theme}
+          setTheme={setTheme}
+          fetchNotifications={fetchNotifications}
+        />
+      </div>
+      <Footer
         lastUpdated={lastUpdated}
+        onRefresh={handleFetchTools}
+        loading={loading}
         cloudSyncing={cloudSyncing}
-        handleFetchTools={handleFetchTools}
-        theme={theme}
-        setTheme={setTheme}
-        fetchNotifications={fetchNotifications}
       />
     </div>
   )
