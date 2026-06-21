@@ -7,6 +7,7 @@ const activeSkill: Skill = {
   name: 'impeccable',
   path: '~/.claude/skills/impeccable',
   description: 'Polish frontend UI',
+  hasFullDescription: false,
   active: true,
   sourceId: 'skills_dir',
 }

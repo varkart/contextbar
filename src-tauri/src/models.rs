@@ -11,6 +11,10 @@ pub struct AiTool {
     pub skills: Vec<Skill>,
     pub mcps: Vec<McpServer>,
     pub error: Option<String>,
+    /// True when the tool's manifest defines at least one [[skill_sources]] entry.
+    pub supports_skills: bool,
+    /// True when the tool's manifest defines at least one [[mcp_sources]] entry.
+    pub supports_mcps: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -19,11 +23,15 @@ pub struct Skill {
     pub name: String,
     pub path: String,
     pub description: Option<String>,
-    /// Full raw text of the skill's SKILL.md (or sibling .md). None if no file found.
-    pub full_description: Option<String>,
+    /// True when a SKILL.md (or sibling .md) exists — content is fetched on demand via get_skill_full_description.
+    pub has_full_description: bool,
     pub active: bool,
     /// Which [[skill_sources]] entry produced this skill. Matches McpSource.id or "source_{n}".
     pub source_id: String,
+    /// Optional URL from the `source:` frontmatter field (e.g. a GitHub link).
+    pub source_url: Option<String>,
+    /// FNV-1a hash of the SKILL.md content — used to detect variants across tools.
+    pub content_hash: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

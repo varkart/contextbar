@@ -13,11 +13,11 @@ const mockInvoke = vi.mocked(invoke)
 const mockCapture = vi.mocked(capture)
 
 const tool: AiTool = {
-  id: 'claude', name: 'Claude Code', installed: true, skills: [], mcps: [],
+  id: 'claude', name: 'Claude Code', installed: true, supportsSkills: true, supportsMcps: true, skills: [], mcps: [],
 }
 
 const skill: Skill = {
-  name: 'graphify', path: '/skills/graphify', description: 'g', active: true, sourceId: 's',
+  name: 'graphify', path: '/skills/graphify', description: 'g', hasFullDescription: false, active: true, sourceId: 's',
 }
 
 const mcp: McpServer = {
@@ -108,27 +108,12 @@ describe('useViewRouter — selectMcp', () => {
   })
 })
 
-describe('useViewRouter — selectPermissions', () => {
-  it('navigates to permissions-detail', () => {
-    const { result } = renderHook(() => useViewRouter())
-    act(() => { result.current.selectTool(tool) })
-    act(() => { result.current.selectPermissions() })
-    expect(result.current.view).toBe('permissions-detail')
-  })
-
-  it('fires capture with tool_id', () => {
-    const { result } = renderHook(() => useViewRouter())
-    act(() => { result.current.selectTool(tool) })
-    act(() => { result.current.selectPermissions() })
-    expect(mockCapture).toHaveBeenCalledWith('permissions_detail_viewed', { tool_id: 'claude' })
-  })
-})
 
 describe('useViewRouter — openSkillsPage / openMcpsPage', () => {
-  it('openSkillsPage navigates to skills-list', () => {
+  it('openSkillsPage navigates to all-skills-list', () => {
     const { result } = renderHook(() => useViewRouter())
     act(() => { result.current.openSkillsPage() })
-    expect(result.current.view).toBe('skills-list')
+    expect(result.current.view).toBe('all-skills-list')
   })
 
   it('openMcpsPage navigates to mcps-list', () => {
@@ -154,11 +139,11 @@ describe('useViewRouter — escape', () => {
     expect(result.current.view).toBe('main')
   })
 
-  it('from tool-detail navigates to main', () => {
+  it('from tool-detail navigates to llms-list', () => {
     const { result } = renderHook(() => useViewRouter())
     act(() => { result.current.selectTool(tool) })
     act(() => { result.current.escape() })
-    expect(result.current.view).toBe('main')
+    expect(result.current.view).toBe('llms-list')
   })
 
   it('from skill-detail goes to skillBackView', () => {

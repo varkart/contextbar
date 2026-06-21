@@ -4,28 +4,34 @@ import SkillsListPanel from '../SkillsListPanel'
 import McpsListPanel from '../McpsListPanel'
 import SkillDetailPanel from '../SkillDetailPanel'
 import McpDetailPanel from '../McpDetailPanel'
-import PermissionsDetailPanel from '../PermissionsDetailPanel'
 import ToolDetailPage from '../ToolDetailPage'
 import Settings from '../Settings'
 import MainView from './MainView'
+import LlmsListView from './LlmsListView'
+import AllSkillsView from './AllSkillsView'
+import AddSkillView from './AddSkillView'
+import AddMcpView from './AddMcpView'
 
 import type { ThemePreference } from '../../useTheme'
+import type { AiTool, Skill } from '../../types'
 
 export default function ViewManager({
   view,
+  llmsListMode,
   selectedTool,
   selectedSkill,
   selectedMcp,
   selectTool,
+  openLlmsList,
+  openSkillsListForTool,
+  openMcpsListForTool,
   selectSkill,
   selectMcp,
-  selectPermissions,
   openSkillsPage,
   openMcpsPage,
   goTo,
   escape,
   query,
-  setQuery,
   loading,
   tools,
   installedTools,
@@ -51,12 +57,46 @@ export default function ViewManager({
       />
     )
   }
+  if (view === 'add-skill') {
+    return (
+      <AddSkillView
+        installedTools={installedTools}
+        onBack={() => goTo('llms-list')}
+        onCreated={handleFetchTools}
+      />
+    )
+  }
+  if (view === 'add-mcp') {
+    return (
+      <AddMcpView
+        installedTools={installedTools}
+        onBack={() => goTo('llms-list')}
+        onAdded={handleFetchTools}
+      />
+    )
+  }
+  if (view === 'llms-list') {
+    return (
+      <LlmsListView
+        tools={tools}
+        loading={loading}
+        mode={llmsListMode}
+        onBack={() => goTo('main')}
+        onSelectTool={selectTool}
+        onOpenSkillsForTool={openSkillsListForTool}
+        onOpenMcpsForTool={openMcpsListForTool}
+        onAddSkill={() => goTo('add-skill')}
+        onAddMcp={() => goTo('add-mcp')}
+      />
+    )
+  }
   if (view === 'skills-list' && selectedTool) {
     return (
       <SkillsListPanel
         tool={selectedTool}
-        onBack={() => goTo('tool-detail')}
+        onBack={() => escape()}
         onSelectSkill={skill => selectSkill(skill, 'skills-list')}
+        onAddSkill={() => goTo('add-skill')}
       />
     )
   }
@@ -64,20 +104,38 @@ export default function ViewManager({
     return (
       <McpsListPanel
         tool={selectedTool}
-        onBack={() => goTo('tool-detail')}
+        onBack={() => escape()}
         onSelectMcp={mcp => selectMcp(mcp, 'mcps-list')}
-        onAdded={handleFetchTools}
+        onAddMcp={() => goTo('add-mcp')}
+      />
+    )
+  }
+  if (view === 'all-skills-list') {
+    return (
+      <AllSkillsView
+        tools={tools}
+        onBack={() => escape()}
+        onSelectSkill={skill => selectSkill(skill, 'all-skills-list')}
       />
     )
   }
   if (view === 'skill-detail' && selectedSkill) {
+    // Compute all variants (same name, any tool) with toolId/toolName populated
+    const skillVariants = (tools as AiTool[])
+      .filter((t: AiTool) => t.installed)
+      .flatMap((t: AiTool) => t.skills
+        .filter((s: Skill) => s.name.toLowerCase() === selectedSkill.name.toLowerCase())
+        .map((s: Skill) => ({ ...s, toolId: t.id, toolName: t.name }))
+      )
     return (
       <SkillDetailPanel
         skill={selectedSkill}
-        toolName={selectedTool?.name}
-        toolId={selectedTool?.id}
+        toolName={selectedTool?.name ?? selectedSkill.toolName}
+        toolId={selectedTool?.id ?? selectedSkill.toolId}
         onToggled={handleFetchTools}
         onBack={() => escape()}
+        allTools={tools}
+        variants={skillVariants}
       />
     )
   }
@@ -90,15 +148,7 @@ export default function ViewManager({
         onToggled={handleFetchTools}
         onRemoved={handleFetchTools}
         onBack={() => escape()}
-      />
-    )
-  }
-  if (view === 'permissions-detail' && selectedTool) {
-    return (
-      <PermissionsDetailPanel
-        toolId={selectedTool.id}
-        toolName={selectedTool.name}
-        onBack={() => goTo('tool-detail')}
+        allTools={tools}
       />
     )
   }
@@ -106,10 +156,9 @@ export default function ViewManager({
     return (
       <ToolDetailPage
         tool={selectedTool}
-        onBack={() => goTo('main')}
+        onBack={() => goTo('llms-list')}
         onSelectSkill={skill => selectSkill(skill, 'tool-detail')}
         onSelectMcp={mcp => selectMcp(mcp, 'tool-detail')}
-        onSelectPermissions={selectPermissions}
         onOpenSkillsPage={openSkillsPage}
         onOpenMcpsPage={openMcpsPage}
         onToolUpdated={handleFetchTools}
@@ -133,8 +182,6 @@ export default function ViewManager({
 
   return (
     <MainView
-      query={query}
-      setQuery={setQuery}
       loading={loading}
       tools={tools}
       installedTools={installedTools}
@@ -143,9 +190,9 @@ export default function ViewManager({
       updateInfo={updateInfo}
       lastUpdated={lastUpdated}
       cloudSyncing={cloudSyncing}
-      onSelectTool={selectTool}
       onFetchTools={handleFetchTools}
       onGoTo={goTo}
+      onOpenLlmsList={openLlmsList}
     />
   )
 }

@@ -150,7 +150,6 @@ pub fn start(app: AppHandle) {
             ("gemini", "Gemini CLI"),
             ("copilot", "GitHub Copilot"),
             ("windsurf", "Windsurf"),
-            ("chatgpt", "ChatGPT"),
         ]
         .iter()
         .map(|(k, v)| (k.to_string(), v.to_string()))

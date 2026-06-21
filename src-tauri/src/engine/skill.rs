@@ -1,7 +1,8 @@
 use super::manifest::{SkillSource, SkillSourceSpec};
 use super::resolve::{expand_home, version_in_range};
-use crate::detectors::{parse_skill_description, read_skill_file_content};
+use crate::detectors::{parse_skill_content_hash, parse_skill_description, parse_skill_source_url, skill_md_exists};
 use crate::models::Skill;
+use std::collections::HashMap;
 
 pub fn collect(
     sources: &[SkillSource],
@@ -36,8 +37,128 @@ fn read_source(source: &SkillSourceSpec, home: &std::path::Path) -> Vec<Skill> {
         SkillSourceSpec::Directory {
             path,
             disabled_subdir,
+            ..
         } => read_directory(&expand_home(path, home), disabled_subdir.as_deref()),
+        SkillSourceSpec::TomlConfigDirectory {
+            path,
+            config_file,
+            config_key_path,
+            path_field,
+            enabled_field,
+        } => read_toml_config_directory(
+            &expand_home(path, home),
+            &expand_home(config_file, home),
+            config_key_path,
+            path_field,
+            enabled_field,
+        ),
     }
+}
+
+fn read_toml_config_directory(
+    dir: &std::path::Path,
+    config_file: &std::path::Path,
+    config_key_path: &[String],
+    path_field: &str,
+    enabled_field: &str,
+) -> Vec<Skill> {
+    // Build a map of SKILL.md absolute path → enabled bool from config file
+    let enabled_map: HashMap<String, bool> = load_toml_enabled_map(
+        config_file,
+        config_key_path,
+        path_field,
+        enabled_field,
+    );
+
+    let mut skills = Vec::new();
+    let Ok(entries) = std::fs::read_dir(dir) else { return skills };
+
+    for entry in entries.flatten() {
+        let raw_name = entry.file_name().to_string_lossy().to_string();
+        if raw_name.starts_with('.') {
+            continue;
+        }
+        let path = entry.path();
+        if path.is_symlink() && !path.exists() {
+            continue;
+        }
+        if path.is_file() && path.extension().and_then(|e| e.to_str()) != Some("md") {
+            continue;
+        }
+        let name = if path.is_file() {
+            path.file_stem()
+                .map(|s| s.to_string_lossy().into_owned())
+                .unwrap_or(raw_name)
+        } else {
+            raw_name
+        };
+
+        // Determine active state: check config entry for {path}/SKILL.md
+        let skill_md = if path.is_dir() {
+            path.join("SKILL.md").to_string_lossy().into_owned()
+        } else {
+            path.to_string_lossy().into_owned()
+        };
+        // Absent from config → defaults to active (enabled)
+        let active = enabled_map.get(&skill_md).copied().unwrap_or(true);
+
+        let description = parse_skill_description(&path);
+        let has_full_description = skill_md_exists(&path);
+        let source_url = parse_skill_source_url(&path);
+        let content_hash = parse_skill_content_hash(&path);
+        skills.push(Skill {
+            name,
+            path: path.to_string_lossy().to_string(),
+            description,
+            has_full_description,
+            active,
+            source_id: String::new(),
+            source_url,
+            content_hash,
+        });
+    }
+    skills
+}
+
+fn load_toml_enabled_map(
+    config_file: &std::path::Path,
+    key_path: &[String],
+    path_field: &str,
+    enabled_field: &str,
+) -> HashMap<String, bool> {
+    let raw = match std::fs::read_to_string(config_file) {
+        Ok(s) => s,
+        Err(_) => return HashMap::new(),
+    };
+    let doc: toml::Value = match toml::from_str(&raw) {
+        Ok(v) => v,
+        Err(_) => return HashMap::new(),
+    };
+
+    // Navigate to the array at key_path
+    let mut current = &doc;
+    for key in key_path {
+        match current.get(key) {
+            Some(v) => current = v,
+            None => return HashMap::new(),
+        }
+    }
+
+    let array = match current.as_array() {
+        Some(a) => a,
+        None => return HashMap::new(),
+    };
+
+    let mut map = HashMap::new();
+    for entry in array {
+        if let (Some(path_val), enabled_val) = (
+            entry.get(path_field).and_then(|v| v.as_str()),
+            entry.get(enabled_field).and_then(|v| v.as_bool()),
+        ) {
+            map.insert(path_val.to_string(), enabled_val.unwrap_or(true));
+        }
+    }
+    map
 }
 
 fn read_directory(dir: &std::path::Path, disabled_subdir: Option<&str>) -> Vec<Skill> {
@@ -45,8 +166,8 @@ fn read_directory(dir: &std::path::Path, disabled_subdir: Option<&str>) -> Vec<S
 
     if let Ok(entries) = std::fs::read_dir(dir) {
         for entry in entries.flatten() {
-            let name = entry.file_name().to_string_lossy().to_string();
-            if name.starts_with('.') {
+            let raw_name = entry.file_name().to_string_lossy().to_string();
+            if raw_name.starts_with('.') {
                 continue;
             }
             let path = entry.path();
@@ -54,15 +175,31 @@ fn read_directory(dir: &std::path::Path, disabled_subdir: Option<&str>) -> Vec<S
             if path.is_symlink() && !path.exists() {
                 continue;
             }
+            // plain files must be .md; skip everything else (e.g. .json, .sh)
+            if path.is_file() && path.extension().and_then(|e| e.to_str()) != Some("md") {
+                continue;
+            }
+            // strip .md extension for flat skill files so name = "ios-testing" not "ios-testing.md"
+            let name = if path.is_file() {
+                path.file_stem()
+                    .map(|s| s.to_string_lossy().into_owned())
+                    .unwrap_or(raw_name)
+            } else {
+                raw_name
+            };
             let description = parse_skill_description(&path);
-            let full_description = read_skill_file_content(&path);
+            let has_full_description = skill_md_exists(&path);
+            let source_url = parse_skill_source_url(&path);
+            let content_hash = parse_skill_content_hash(&path);
             skills.push(Skill {
                 name,
                 path: path.to_string_lossy().to_string(),
                 description,
-                full_description,
+                has_full_description,
                 active: true,
                 source_id: String::new(),
+                source_url,
+                content_hash,
             });
         }
     }
@@ -71,8 +208,8 @@ fn read_directory(dir: &std::path::Path, disabled_subdir: Option<&str>) -> Vec<S
         let disabled_dir = dir.join(sub);
         if let Ok(entries) = std::fs::read_dir(&disabled_dir) {
             for entry in entries.flatten() {
-                let name = entry.file_name().to_string_lossy().to_string();
-                if name.starts_with('.') {
+                let raw_name = entry.file_name().to_string_lossy().to_string();
+                if raw_name.starts_with('.') {
                     continue;
                 }
                 let path = entry.path();
@@ -80,15 +217,29 @@ fn read_directory(dir: &std::path::Path, disabled_subdir: Option<&str>) -> Vec<S
                 if path.is_symlink() && !path.exists() {
                     continue;
                 }
+                if path.is_file() && path.extension().and_then(|e| e.to_str()) != Some("md") {
+                    continue;
+                }
+                let name = if path.is_file() {
+                    path.file_stem()
+                        .map(|s| s.to_string_lossy().into_owned())
+                        .unwrap_or(raw_name)
+                } else {
+                    raw_name
+                };
                 let description = parse_skill_description(&path);
-                let full_description = read_skill_file_content(&path);
+                let has_full_description = skill_md_exists(&path);
+                let source_url = parse_skill_source_url(&path);
+                let content_hash = parse_skill_content_hash(&path);
                 skills.push(Skill {
                     name,
                     path: path.to_string_lossy().to_string(),
                     description,
-                    full_description,
+                    has_full_description,
                     active: false,
                     source_id: String::new(),
+                    source_url,
+                    content_hash,
                 });
             }
         }
@@ -126,6 +277,7 @@ mod tests {
         let source = SkillSourceSpec::Directory {
             path: tmp.path().to_string_lossy().to_string(),
             disabled_subdir: None,
+            flat_files: false,
         };
         let skills = collect(&[wrap(source)], None, tmp.path());
         assert_eq!(skills.len(), 2);
@@ -141,6 +293,7 @@ mod tests {
         let source = SkillSourceSpec::Directory {
             path: tmp.path().to_string_lossy().to_string(),
             disabled_subdir: Some(".disabled".to_string()),
+            flat_files: false,
         };
         let skills = collect(&[wrap(source)], None, tmp.path());
         assert_eq!(skills.len(), 2);
@@ -156,6 +309,7 @@ mod tests {
         let source = SkillSourceSpec::Directory {
             path: tmp.path().join("nonexistent").to_string_lossy().to_string(),
             disabled_subdir: None,
+            flat_files: false,
         };
         let skills = collect(&[wrap(source)], None, tmp.path());
         assert!(skills.is_empty());
@@ -170,6 +324,7 @@ mod tests {
         let source = SkillSourceSpec::Directory {
             path: tmp.path().to_string_lossy().to_string(),
             disabled_subdir: None,
+            flat_files: false,
         };
         let skills = collect(&[wrap(source)], None, tmp.path());
         assert_eq!(skills.len(), 1);
@@ -186,6 +341,7 @@ mod tests {
         let source = SkillSourceSpec::Directory {
             path: tmp.path().to_string_lossy().to_string(),
             disabled_subdir: None,
+            flat_files: false,
         };
         let skills = collect(&[wrap(source)], None, tmp.path());
         let names: Vec<&str> = skills.iter().map(|s| s.name.as_str()).collect();
@@ -204,6 +360,7 @@ mod tests {
             spec: SkillSourceSpec::Directory {
                 path: tmp.path().to_string_lossy().to_string(),
                 disabled_subdir: None,
+                flat_files: false,
             },
         };
         let skills = collect(&[source], Some("2.9"), tmp.path());

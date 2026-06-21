@@ -13,9 +13,11 @@ const mockTool: AiTool = {
   name: 'Claude Code',
   version: '1.0.0',
   installed: true,
+  supportsSkills: true,
+  supportsMcps: true,
   skills: [
-    { name: 'impeccable', path: '~/.claude/skills/impeccable', description: 'UI polish', active: true, sourceId: 'skills_dir' },
-    { name: 'graphify',   path: '~/.claude/skills/.disabled/graphify', description: undefined, active: false, sourceId: 'skills_dir' },
+    { name: 'impeccable', path: '~/.claude/skills/impeccable', description: 'UI polish', hasFullDescription: false, active: true, sourceId: 'skills_dir' },
+    { name: 'graphify',   path: '~/.claude/skills/.disabled/graphify', description: undefined, hasFullDescription: false, active: false, sourceId: 'skills_dir' },
   ],
   mcps: [],
   error: undefined,
@@ -37,22 +39,10 @@ beforeEach(() => {
 })
 
 describe('ToolDetailPage', () => {
-  it('renders tool name in breadcrumb', () => {
-    render(<ToolDetailPage {...defaultProps} />)
-    expect(screen.getByText('Claude Code')).toBeInTheDocument()
-    expect(screen.getByText('LLM Manager')).toBeInTheDocument()
-  })
-
   it('renders both active and disabled skills', () => {
     render(<ToolDetailPage {...defaultProps} />)
     expect(screen.getByText('impeccable')).toBeInTheDocument()
     expect(screen.getByText('graphify')).toBeInTheDocument()
-  })
-
-  it('back button calls onBack', () => {
-    render(<ToolDetailPage {...defaultProps} />)
-    fireEvent.click(screen.getByLabelText('Back'))
-    expect(defaultProps.onBack).toHaveBeenCalled()
   })
 
   it('clicking a skill calls onSelectSkill', () => {

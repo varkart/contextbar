@@ -7,17 +7,27 @@ export interface AiTool {
   skills: Skill[];
   mcps: McpServer[];
   error?: string;
+  supportsSkills: boolean;
+  supportsMcps: boolean;
 }
 
 export interface Skill {
   name: string;
   path: string;
   description?: string;
-  /** Full raw text of the skill's SKILL.md file. */
-  fullDescription?: string;
+  /** True when a SKILL.md exists; full content fetched on demand via get_skill_full_description. */
+  hasFullDescription: boolean;
   active: boolean;
   /** Which [[skill_sources]] entry produced this skill. */
   sourceId: string;
+  /** URL from the `source:` frontmatter field, if present. */
+  sourceUrl?: string;
+  /** FNV-1a hex hash of SKILL.md content — used to detect variants across tools. */
+  contentHash?: string;
+  /** Which tool this skill belongs to — populated by the aggregated skills view. */
+  toolId?: string;
+  /** Which tool name this skill belongs to — populated by the aggregated skills view. */
+  toolName?: string;
 }
 
 export interface McpServer {
@@ -32,6 +42,17 @@ export interface McpServer {
   extensionName?: string; // set for extension-dir MCPs (e.g. Gemini extensions)
   /** Which [[mcp_sources]] entry produced this server. Used to route toggle commands. */
   sourceId: string;
+}
+
+export interface CachedMcp {
+  name: string;
+  command: string | null;
+  args: string[];
+  url: string | null;
+  /** Validated GitHub/homepage URL, or npmjs.com fallback. Null until background enrichment completes. */
+  sourceUrl: string | null;
+  cachedAt: number;
+  updatedAt: number;
 }
 
 export interface ToolPermissions {
