@@ -1,6 +1,49 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, OnceLock};
 
+fn strip_jsonc(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    let chars: Vec<char> = s.chars().collect();
+    let len = chars.len();
+    let mut i = 0;
+    let mut in_string = false;
+
+    while i < len {
+        let c = chars[i];
+        if in_string {
+            if c == '\\' && i + 1 < len {
+                out.push(c);
+                out.push(chars[i + 1]);
+                i += 2;
+                continue;
+            }
+            if c == '"' {
+                in_string = false;
+            }
+            out.push(c);
+            i += 1;
+        } else if c == '"' {
+            in_string = true;
+            out.push(c);
+            i += 1;
+        } else if c == '/' && i + 1 < len && chars[i + 1] == '/' {
+            while i < len && chars[i] != '\n' {
+                i += 1;
+            }
+        } else if c == '/' && i + 1 < len && chars[i + 1] == '*' {
+            i += 2;
+            while i + 1 < len && !(chars[i] == '*' && chars[i + 1] == '/') {
+                i += 1;
+            }
+            i += 2;
+        } else {
+            out.push(c);
+            i += 1;
+        }
+    }
+    out
+}
+
 /// Returns a per-path mutex so concurrent MCP toggles on the same config file
 /// are serialized. Different config files get independent locks.
 fn config_lock(path: &str) -> Arc<Mutex<()>> {
@@ -32,8 +75,9 @@ pub fn move_mcp_in_config(
 
     let content = std::fs::read_to_string(config_path)
         .map_err(|e| format!("cannot read {config_path}: {e}"))?;
+    let stripped = strip_jsonc(&content);
     let mut json: serde_json::Value =
-        serde_json::from_str(&content).map_err(|e| format!("cannot parse {config_path}: {e}"))?;
+        serde_json::from_str(&stripped).map_err(|e| format!("cannot parse {config_path}: {e}"))?;
 
     let obj = json.as_object_mut().ok_or("config is not a JSON object")?;
 
@@ -216,8 +260,9 @@ pub fn add_mcp_to_config(
     }
 
     let content = std::fs::read_to_string(config_path).unwrap_or_else(|_| "{}".to_string());
+    let stripped = strip_jsonc(&content);
     let mut json: serde_json::Value =
-        serde_json::from_str(&content).map_err(|e| format!("cannot parse {config_path}: {e}"))?;
+        serde_json::from_str(&stripped).map_err(|e| format!("cannot parse {config_path}: {e}"))?;
 
     let obj = json.as_object_mut().ok_or("config is not a JSON object")?;
     let section = obj
@@ -263,8 +308,9 @@ pub fn remove_mcp_from_config(
 
     let content = std::fs::read_to_string(config_path)
         .map_err(|e| format!("cannot read {config_path}: {e}"))?;
+    let stripped = strip_jsonc(&content);
     let mut json: serde_json::Value =
-        serde_json::from_str(&content).map_err(|e| format!("cannot parse {config_path}: {e}"))?;
+        serde_json::from_str(&stripped).map_err(|e| format!("cannot parse {config_path}: {e}"))?;
 
     let obj = json.as_object_mut().ok_or("config is not a JSON object")?;
 
@@ -299,14 +345,295 @@ pub fn remove_mcp_from_config(
     Ok(())
 }
 
+/// Add a new MCP entry under `active_key.name` in a TOML config file.
+pub fn add_mcp_to_toml_config(
+    config_path: &str,
+    active_key: &str,
+    name: &str,
+    command: Option<&str>,
+    args: &[String],
+    url: Option<&str>,
+) -> Result<(), String> {
+    let lock = config_lock(config_path);
+    let _guard = lock.lock().unwrap();
+
+    if let Err(e) = crate::backup::snapshot(config_path) {
+        eprintln!("[backup] snapshot failed for {config_path}: {e}");
+    }
+
+    let raw = std::fs::read_to_string(config_path).unwrap_or_default();
+    let mut doc: toml::Value = if raw.trim().is_empty() {
+        toml::Value::Table(toml::map::Map::new())
+    } else {
+        toml::from_str(&raw).map_err(|e| format!("cannot parse {config_path}: {e}"))?
+    };
+
+    let root = doc.as_table_mut().ok_or("TOML root is not a table")?;
+    let section = root
+        .entry(active_key)
+        .or_insert_with(|| toml::Value::Table(toml::map::Map::new()));
+    let map = section.as_table_mut().ok_or("MCP section is not a TOML table")?;
+
+    if map.contains_key(name) {
+        return Err(format!("MCP '{name}' already exists"));
+    }
+
+    let mut entry = toml::map::Map::new();
+    if let Some(u) = url {
+        entry.insert("url".into(), toml::Value::String(u.to_string()));
+    } else {
+        if let Some(cmd) = command {
+            entry.insert("command".into(), toml::Value::String(cmd.to_string()));
+        }
+        entry.insert(
+            "args".into(),
+            toml::Value::Array(args.iter().map(|a| toml::Value::String(a.clone())).collect()),
+        );
+    }
+    map.insert(name.to_string(), toml::Value::Table(entry));
+
+    let updated = toml::to_string_pretty(&doc).map_err(|e| format!("TOML serialization error: {e}"))?;
+
+    if let Some(parent) = std::path::Path::new(config_path).parent() {
+        std::fs::create_dir_all(parent).map_err(|e| format!("cannot create dir: {e}"))?;
+    }
+
+    let tmp_path = format!("{config_path}.tmp");
+    std::fs::write(&tmp_path, &updated).map_err(|e| format!("cannot write temp file: {e}"))?;
+    std::fs::rename(&tmp_path, config_path).map_err(|e| {
+        let _ = std::fs::remove_file(&tmp_path);
+        format!("cannot atomically replace {config_path}: {e}")
+    })?;
+
+    Ok(())
+}
+
+/// Set a boolean field (e.g. `enabled`) on a TOML MCP entry to toggle it without moving sections.
+pub fn toggle_toml_mcp_enabled(
+    config_path: &str,
+    active_key: &str,
+    mcp_name: &str,
+    active: bool,
+    toggle_field: &str,
+) -> Result<(), String> {
+    let lock = config_lock(config_path);
+    let _guard = lock.lock().unwrap();
+
+    if let Err(e) = crate::backup::snapshot(config_path) {
+        eprintln!("[backup] snapshot failed for {config_path}: {e}");
+    }
+
+    let raw = std::fs::read_to_string(config_path)
+        .map_err(|e| format!("cannot read {config_path}: {e}"))?;
+    let mut doc: toml::Value =
+        toml::from_str(&raw).map_err(|e| format!("cannot parse {config_path}: {e}"))?;
+
+    let entry = doc
+        .as_table_mut()
+        .and_then(|root| root.get_mut(active_key))
+        .and_then(|section| section.as_table_mut())
+        .and_then(|map| map.get_mut(mcp_name))
+        .and_then(|entry| entry.as_table_mut())
+        .ok_or_else(|| format!("MCP '{mcp_name}' not found in [{active_key}]"))?;
+
+    entry.insert(toggle_field.to_string(), toml::Value::Boolean(active));
+
+    let updated = toml::to_string_pretty(&doc).map_err(|e| format!("TOML serialization error: {e}"))?;
+
+    let tmp_path = format!("{config_path}.tmp");
+    std::fs::write(&tmp_path, &updated).map_err(|e| format!("cannot write temp file: {e}"))?;
+    std::fs::rename(&tmp_path, config_path).map_err(|e| {
+        let _ = std::fs::remove_file(&tmp_path);
+        format!("cannot atomically replace {config_path}: {e}")
+    })?;
+
+    Ok(())
+}
+
+/// Move an MCP entry between `active_key` and `disabled_key` sections in a TOML config file.
+pub fn move_mcp_in_toml_config(
+    config_path: &str,
+    mcp_name: &str,
+    active: bool,
+    active_key: &str,
+    disabled_key: &str,
+) -> Result<(), String> {
+    let lock = config_lock(config_path);
+    let _guard = lock.lock().unwrap();
+
+    if let Err(e) = crate::backup::snapshot(config_path) {
+        eprintln!("[backup] snapshot failed for {config_path}: {e}");
+    }
+
+    let raw = std::fs::read_to_string(config_path)
+        .map_err(|e| format!("cannot read {config_path}: {e}"))?;
+    let mut doc: toml::Value =
+        toml::from_str(&raw).map_err(|e| format!("cannot parse {config_path}: {e}"))?;
+
+    let root = doc.as_table_mut().ok_or("TOML root is not a table")?;
+
+    let src_key = if active { disabled_key } else { active_key };
+    let dst_key = if active { active_key } else { disabled_key };
+
+    let entry = root
+        .get_mut(src_key)
+        .and_then(|v| v.as_table_mut())
+        .and_then(|m| m.remove(mcp_name))
+        .ok_or_else(|| format!("MCP '{mcp_name}' not found in [{src_key}]"))?;
+
+    root.entry(dst_key.to_string())
+        .or_insert_with(|| toml::Value::Table(toml::map::Map::new()))
+        .as_table_mut()
+        .ok_or("destination section is not a TOML table")?
+        .insert(mcp_name.to_string(), entry);
+
+    let updated = toml::to_string_pretty(&doc).map_err(|e| format!("TOML serialization error: {e}"))?;
+
+    let tmp_path = format!("{config_path}.tmp");
+    std::fs::write(&tmp_path, &updated).map_err(|e| format!("cannot write temp file: {e}"))?;
+    std::fs::rename(&tmp_path, config_path).map_err(|e| {
+        let _ = std::fs::remove_file(&tmp_path);
+        format!("cannot atomically replace {config_path}: {e}")
+    })?;
+
+    Ok(())
+}
+
+/// Remove an MCP entry from `active_key.name` in a TOML config file.
+pub fn remove_mcp_from_toml_config(
+    config_path: &str,
+    active_key: &str,
+    name: &str,
+) -> Result<(), String> {
+    let lock = config_lock(config_path);
+    let _guard = lock.lock().unwrap();
+
+    if let Err(e) = crate::backup::snapshot(config_path) {
+        eprintln!("[backup] snapshot failed for {config_path}: {e}");
+    }
+
+    let raw = std::fs::read_to_string(config_path)
+        .map_err(|e| format!("cannot read {config_path}: {e}"))?;
+    let mut doc: toml::Value =
+        toml::from_str(&raw).map_err(|e| format!("cannot parse {config_path}: {e}"))?;
+
+    let found = doc
+        .as_table_mut()
+        .and_then(|root| root.get_mut(active_key))
+        .and_then(|s| s.as_table_mut())
+        .map(|map| map.remove(name).is_some())
+        .unwrap_or(false);
+
+    if !found {
+        return Err(format!("MCP '{name}' not found in config"));
+    }
+
+    let updated = toml::to_string_pretty(&doc).map_err(|e| format!("TOML serialization error: {e}"))?;
+
+    let tmp_path = format!("{config_path}.tmp");
+    std::fs::write(&tmp_path, &updated).map_err(|e| format!("cannot write temp file: {e}"))?;
+    std::fs::rename(&tmp_path, config_path).map_err(|e| {
+        let _ = std::fs::remove_file(&tmp_path);
+        format!("cannot atomically replace {config_path}: {e}")
+    })?;
+
+    Ok(())
+}
+
+/// Upsert a `[[key_path]]` entry in a TOML config file to set skill enabled state.
+/// Used by Codex: each skill has an entry in `[[skills.config]]` with `path` and `enabled`.
+pub fn toggle_toml_config_skill(
+    config_path: &str,
+    key_path: &[String],
+    path_field: &str,
+    enabled_field: &str,
+    skill_dir: &str,
+    active: bool,
+) -> Result<(), String> {
+    let lock = config_lock(config_path);
+    let _guard = lock.lock().unwrap();
+
+    if let Err(e) = crate::backup::snapshot(config_path) {
+        eprintln!("[backup] snapshot failed for {config_path}: {e}");
+    }
+
+    let raw = std::fs::read_to_string(config_path).unwrap_or_default();
+    let mut doc: toml::Value = if raw.trim().is_empty() {
+        toml::Value::Table(toml::map::Map::new())
+    } else {
+        toml::from_str(&raw).map_err(|e| format!("cannot parse {config_path}: {e}"))?
+    };
+
+    // The path referenced in config is the SKILL.md file path
+    let skill_md = format!("{skill_dir}/SKILL.md");
+
+    // Navigate to the array, creating intermediate tables as needed
+    let array = navigate_or_create_toml_array(doc.as_table_mut().ok_or("TOML root is not a table")?, key_path)?;
+
+    // Find existing entry for this skill path
+    if let Some(entry) = array.iter_mut().find(|e| {
+        e.get(path_field).and_then(|v| v.as_str()) == Some(&skill_md)
+    }) {
+        // Update in place
+        if let Some(t) = entry.as_table_mut() {
+            t.insert(enabled_field.to_string(), toml::Value::Boolean(active));
+        }
+    } else if !active {
+        // Only add an entry when disabling (enabled is the default, no entry needed)
+        let mut entry = toml::map::Map::new();
+        entry.insert(path_field.to_string(), toml::Value::String(skill_md));
+        entry.insert(enabled_field.to_string(), toml::Value::Boolean(false));
+        array.push(toml::Value::Table(entry));
+    }
+    // If active=true and no existing entry, nothing to write (default is enabled)
+
+    let updated = toml::to_string_pretty(&doc).map_err(|e| format!("TOML serialization error: {e}"))?;
+
+    if let Some(parent) = std::path::Path::new(config_path).parent() {
+        std::fs::create_dir_all(parent).map_err(|e| format!("cannot create dir: {e}"))?;
+    }
+    let tmp_path = format!("{config_path}.tmp");
+    std::fs::write(&tmp_path, &updated).map_err(|e| format!("cannot write temp file: {e}"))?;
+    std::fs::rename(&tmp_path, config_path).map_err(|e| {
+        let _ = std::fs::remove_file(&tmp_path);
+        format!("cannot atomically replace {config_path}: {e}")
+    })?;
+
+    Ok(())
+}
+
+fn navigate_or_create_toml_array<'a>(
+    mut table: &'a mut toml::map::Map<String, toml::Value>,
+    key_path: &[String],
+) -> Result<&'a mut Vec<toml::Value>, String> {
+    if key_path.is_empty() {
+        return Err("key_path is empty".to_string());
+    }
+    for key in &key_path[..key_path.len() - 1] {
+        let entry = table
+            .entry(key.clone())
+            .or_insert_with(|| toml::Value::Table(toml::map::Map::new()));
+        table = entry.as_table_mut().ok_or_else(|| format!("'{key}' is not a TOML table"))?;
+    }
+    let last = key_path.last().unwrap();
+    let entry = table
+        .entry(last.clone())
+        .or_insert_with(|| toml::Value::Array(vec![]));
+    entry.as_array_mut().ok_or_else(|| format!("'{last}' is not a TOML array"))
+}
+
 pub fn move_skill_folder(skill_path: &str, skill_name: &str, active: bool) -> Result<(), String> {
     let current = std::path::Path::new(skill_path);
+    // Use the actual filename from the path — preserves `.md` extension for flat files.
+    let fname = current
+        .file_name()
+        .ok_or_else(|| format!("cannot get file name from: {skill_path}"))?;
     if active {
         let skills_dir = current
             .parent()
             .and_then(|p| p.parent())
             .ok_or_else(|| format!("cannot resolve skills dir from: {skill_path}"))?;
-        let target = skills_dir.join(skill_name);
+        let target = skills_dir.join(fname);
         std::fs::rename(current, &target)
             .map_err(|e| format!("failed to enable '{skill_name}': {e}"))
     } else {
@@ -316,7 +643,7 @@ pub fn move_skill_folder(skill_path: &str, skill_name: &str, active: bool) -> Re
         let disabled_dir = skills_dir.join(".disabled");
         std::fs::create_dir_all(&disabled_dir)
             .map_err(|e| format!("failed to create .disabled dir: {e}"))?;
-        let target = disabled_dir.join(skill_name);
+        let target = disabled_dir.join(fname);
         std::fs::rename(current, &target)
             .map_err(|e| format!("failed to disable '{skill_name}': {e}"))
     }
@@ -767,5 +1094,195 @@ mod tests {
         let content: serde_json::Value =
             serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
         assert!(content["new-ext"].is_object());
+    }
+
+    // ── add_mcp_to_toml_config ────────────────────────────────────────────────
+
+    fn make_toml(dir: &std::path::Path, filename: &str, content: &str) -> String {
+        let path = dir.join(filename);
+        fs::write(&path, content).unwrap();
+        path.to_string_lossy().to_string()
+    }
+
+    #[test]
+    fn toml_add_mcp_inserts_entry() {
+        let tmp = TempDir::new().unwrap();
+        let path = make_toml(tmp.path(), "config.toml", "[mcpServers]\n");
+
+        add_mcp_to_toml_config(&path, "mcpServers", "my-server", Some("npx"), &["mcp-pkg".to_string()], None).unwrap();
+
+        let raw = fs::read_to_string(&path).unwrap();
+        let doc: toml::Value = toml::from_str(&raw).unwrap();
+        assert_eq!(doc["mcpServers"]["my-server"]["command"].as_str(), Some("npx"));
+        assert_eq!(doc["mcpServers"]["my-server"]["args"][0].as_str(), Some("mcp-pkg"));
+    }
+
+    #[test]
+    fn toml_add_mcp_with_url() {
+        let tmp = TempDir::new().unwrap();
+        let path = make_toml(tmp.path(), "config.toml", "");
+
+        add_mcp_to_toml_config(&path, "mcpServers", "http-server", None, &[], Some("https://mcp.example.com/sse")).unwrap();
+
+        let raw = fs::read_to_string(&path).unwrap();
+        let doc: toml::Value = toml::from_str(&raw).unwrap();
+        assert_eq!(doc["mcpServers"]["http-server"]["url"].as_str(), Some("https://mcp.example.com/sse"));
+        assert!(doc["mcpServers"]["http-server"].get("command").is_none());
+    }
+
+    #[test]
+    fn toml_add_mcp_fails_when_already_exists() {
+        let tmp = TempDir::new().unwrap();
+        let path = make_toml(tmp.path(), "config.toml", "[mcpServers]\n[mcpServers.existing]\ncommand = \"npx\"\n");
+
+        let result = add_mcp_to_toml_config(&path, "mcpServers", "existing", Some("node"), &[], None);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("already exists"));
+    }
+
+    #[test]
+    fn toml_add_mcp_creates_section_when_missing() {
+        let tmp = TempDir::new().unwrap();
+        let path = make_toml(tmp.path(), "config.toml", "");
+
+        add_mcp_to_toml_config(&path, "mcpServers", "new-server", Some("uvx"), &["tool".to_string()], None).unwrap();
+
+        let raw = fs::read_to_string(&path).unwrap();
+        let doc: toml::Value = toml::from_str(&raw).unwrap();
+        assert!(doc["mcpServers"]["new-server"].is_table());
+    }
+
+    // ── toggle_toml_mcp_enabled ───────────────────────────────────────────────
+
+    #[test]
+    fn toml_toggle_mcp_sets_enabled_false() {
+        let tmp = TempDir::new().unwrap();
+        let path = make_toml(
+            tmp.path(),
+            "config.toml",
+            "[mcpServers.my-server]\ncommand = \"npx\"\nenabled = true\n",
+        );
+
+        toggle_toml_mcp_enabled(&path, "mcpServers", "my-server", false, "enabled").unwrap();
+
+        let raw = fs::read_to_string(&path).unwrap();
+        let doc: toml::Value = toml::from_str(&raw).unwrap();
+        assert_eq!(doc["mcpServers"]["my-server"]["enabled"].as_bool(), Some(false));
+    }
+
+    #[test]
+    fn toml_toggle_mcp_sets_enabled_true() {
+        let tmp = TempDir::new().unwrap();
+        let path = make_toml(
+            tmp.path(),
+            "config.toml",
+            "[mcpServers.my-server]\ncommand = \"npx\"\nenabled = false\n",
+        );
+
+        toggle_toml_mcp_enabled(&path, "mcpServers", "my-server", true, "enabled").unwrap();
+
+        let raw = fs::read_to_string(&path).unwrap();
+        let doc: toml::Value = toml::from_str(&raw).unwrap();
+        assert_eq!(doc["mcpServers"]["my-server"]["enabled"].as_bool(), Some(true));
+    }
+
+    #[test]
+    fn toml_toggle_mcp_missing_server_returns_err() {
+        let tmp = TempDir::new().unwrap();
+        let path = make_toml(tmp.path(), "config.toml", "[mcpServers]\n");
+
+        let result = toggle_toml_mcp_enabled(&path, "mcpServers", "ghost", false, "enabled");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("not found"));
+    }
+
+    // ── move_mcp_in_toml_config ───────────────────────────────────────────────
+
+    #[test]
+    fn toml_disable_mcp_moves_to_disabled_section() {
+        let tmp = TempDir::new().unwrap();
+        let path = make_toml(
+            tmp.path(),
+            "config.toml",
+            "[mcpServers.target]\ncommand = \"npx\"\n",
+        );
+
+        move_mcp_in_toml_config(&path, "target", false, "mcpServers", "disabledMcpServers").unwrap();
+
+        let raw = fs::read_to_string(&path).unwrap();
+        let doc: toml::Value = toml::from_str(&raw).unwrap();
+        assert!(doc["mcpServers"].get("target").is_none());
+        assert!(doc["disabledMcpServers"]["target"].is_table());
+    }
+
+    #[test]
+    fn toml_enable_mcp_moves_back_to_active_section() {
+        let tmp = TempDir::new().unwrap();
+        let path = make_toml(
+            tmp.path(),
+            "config.toml",
+            "[disabledMcpServers.target]\ncommand = \"npx\"\n",
+        );
+
+        move_mcp_in_toml_config(&path, "target", true, "mcpServers", "disabledMcpServers").unwrap();
+
+        let raw = fs::read_to_string(&path).unwrap();
+        let doc: toml::Value = toml::from_str(&raw).unwrap();
+        assert!(doc["disabledMcpServers"].get("target").is_none());
+        assert!(doc["mcpServers"]["target"].is_table());
+    }
+
+    #[test]
+    fn toml_move_mcp_missing_returns_err() {
+        let tmp = TempDir::new().unwrap();
+        let path = make_toml(tmp.path(), "config.toml", "[mcpServers]\n");
+
+        let result = move_mcp_in_toml_config(&path, "ghost", false, "mcpServers", "disabledMcpServers");
+        assert!(result.is_err());
+    }
+
+    // ── remove_mcp_from_toml_config ───────────────────────────────────────────
+
+    #[test]
+    fn toml_remove_mcp_deletes_entry() {
+        let tmp = TempDir::new().unwrap();
+        let path = make_toml(
+            tmp.path(),
+            "config.toml",
+            "[mcpServers.target]\ncommand = \"npx\"\n",
+        );
+
+        remove_mcp_from_toml_config(&path, "mcpServers", "target").unwrap();
+
+        let raw = fs::read_to_string(&path).unwrap();
+        let doc: toml::Value = toml::from_str(&raw).unwrap();
+        assert!(doc["mcpServers"].get("target").is_none());
+    }
+
+    #[test]
+    fn toml_remove_mcp_missing_returns_err() {
+        let tmp = TempDir::new().unwrap();
+        let path = make_toml(tmp.path(), "config.toml", "[mcpServers]\n");
+
+        let result = remove_mcp_from_toml_config(&path, "mcpServers", "ghost");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("not found"));
+    }
+
+    #[test]
+    fn toml_remove_preserves_other_entries() {
+        let tmp = TempDir::new().unwrap();
+        let path = make_toml(
+            tmp.path(),
+            "config.toml",
+            "[mcpServers.keep]\ncommand = \"node\"\n[mcpServers.remove-me]\ncommand = \"npx\"\n",
+        );
+
+        remove_mcp_from_toml_config(&path, "mcpServers", "remove-me").unwrap();
+
+        let raw = fs::read_to_string(&path).unwrap();
+        let doc: toml::Value = toml::from_str(&raw).unwrap();
+        assert!(doc["mcpServers"]["keep"].is_table());
+        assert!(doc["mcpServers"].get("remove-me").is_none());
     }
 }

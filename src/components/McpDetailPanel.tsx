@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react'
 import { invoke } from '@tauri-apps/api/core'
-import type { McpServer, McpTool, NpmInstallState } from '../types'
+import type { McpServer, McpTool, NpmInstallState, AiTool } from '../types'
 import { capture, captureException } from '../analytics'
+import { McpInstalledOn } from './InstalledOnSection'
 
 interface McpDetailPanelProps {
   mcp: McpServer
@@ -10,6 +11,7 @@ interface McpDetailPanelProps {
   toolId?: string
   onToggled?: () => void
   onRemoved?: () => void
+  allTools?: AiTool[]
 }
 
 function ToolItem({ tool }: { tool: McpTool }) {
@@ -56,6 +58,8 @@ function NpmInstallSection({ mcp, toolId }: { mcp: McpServer; toolId?: string })
 
   const pkg = state.package!
   const installed = state.installedVersion
+  // npx -y / --yes auto-downloads the package on demand — "not installed" is misleading
+  const isAutoDownload = mcp.args.includes('-y') || mcp.args.includes('--yes')
   const hasUpdate = latestVersion !== null && installed !== null && latestVersion !== installed
 
   const handleInstall = async () => {
@@ -131,6 +135,18 @@ function NpmInstallSection({ mcp, toolId }: { mcp: McpServer; toolId?: string })
               )}
             </div>
           </>
+        ) : isAutoDownload ? (
+          <>
+            <span className="text-[12px] text-[var(--c-text-3)]">downloads via npx automatically</span>
+            <button
+              onClick={handleInstall}
+              disabled={installing}
+              aria-label="Install package globally"
+              className="ml-auto text-[12px] text-[var(--c-text-3)] hover:text-violet-400 px-2 py-0.5 rounded transition-colors disabled:opacity-50"
+            >
+              {installing ? 'installing…' : 'Install globally'}
+            </button>
+          </>
         ) : (
           <>
             <span className="text-[12px] text-amber-400/70">not installed</span>
@@ -152,71 +168,53 @@ function NpmInstallSection({ mcp, toolId }: { mcp: McpServer; toolId?: string })
   )
 }
 
-export default function McpDetailPanel({ mcp, onBack, toolName, toolId, onToggled, onRemoved }: McpDetailPanelProps) {
-  const [active, setActive] = useState(mcp.active)
-  const [toggling, setToggling] = useState(false)
-  const [justToggled, setJustToggled] = useState(false)
-  const [toggleError, setToggleError] = useState<string | null>(null)
-  const [removing, setRemoving] = useState(false)
-  const [removeError, setRemoveError] = useState<string | null>(null)
-  const [toggleAnim, setToggleAnim] = useState<'enable' | 'disable' | null>(null)
+export default function McpDetailPanel({ mcp, onBack, toolId, onToggled, allTools }: McpDetailPanelProps) {
   const [tools, setTools] = useState<McpTool[]>([])
   const [loading, setLoading] = useState(true)
+  const [elapsed, setElapsed] = useState(0)
   const [error, setError] = useState<string | null>(null)
-
-  const handleToggle = async () => {
-    if (!toolId) return
-    setToggling(true)
-    setToggleError(null)
-    setToggleAnim(active ? 'disable' : 'enable')
-    try {
-      await invoke('set_mcp_active', {
-        toolId,
-        mcpName: mcp.name,
-        sourceId: mcp.sourceId,
-        active: !active,
-        extensionName: mcp.extensionName ?? null,
-      })
-      capture('mcp_toggled', { tool_id: toolId, mcp_name: mcp.name, active: !active })
-      setActive(v => !v)
-      setJustToggled(true)
-      await onToggled?.()
-    } catch (e) {
-      setToggleError(String(e))
-      captureException(e)
-    } finally {
-      setToggling(false)
-      setTimeout(() => { setJustToggled(false); setToggleAnim(null) }, 800)
-    }
-  }
-
-  const handleRemove = async () => {
-    if (!toolId) return
-    setRemoving(true)
-    setRemoveError(null)
-    try {
-      await invoke('remove_mcp', { toolId, mcpName: mcp.name, sourceId: mcp.sourceId })
-      capture('mcp_removed', { tool_id: toolId, mcp_name: mcp.name })
-      await onRemoved?.()
-      onBack()
-    } catch (e) {
-      setRemoveError(String(e))
-      captureException(e)
-    } finally {
-      setRemoving(false)
-    }
-  }
 
   const commandStr = [mcp.command, ...mcp.args].join(' ')
   const isHttp = !!mcp.url && !mcp.command
 
+  // Derive npm package name from npx command, fetch GitHub/homepage URL lazily
+  const [repoUrl, setRepoUrl] = useState<string | null>(null)
   useEffect(() => {
-    if (isHttp) {
-      setLoading(false)
-      return
-    }
+    if (mcp.command !== 'npx') return
+    const pkg = (() => {
+      let skipNext = false
+      for (const arg of mcp.args) {
+        if (skipNext) { skipNext = false; continue }
+        if (arg === '-p' || arg === '--package' || arg === '--node-arg') { skipNext = true; continue }
+        if (arg.startsWith('-')) continue
+        const at = arg.lastIndexOf('@')
+        return at > 0 ? arg.slice(0, at) : arg
+      }
+      return null
+    })()
+    if (!pkg) return
+    fetch(`https://registry.npmjs.org/${pkg}`)
+      .then(r => r.ok ? r.json() : null)
+      .then((data: Record<string, unknown> | null) => {
+        if (!data) return
+        const repo = (data.repository as Record<string, string> | undefined)?.url ?? ''
+        const cleaned = repo.replace(/^git\+/, '').replace(/\.git$/, '').replace(/^git:\/\//, 'https://')
+        const url = cleaned.startsWith('http') ? cleaned : (data.homepage as string | undefined) ?? null
+        if (url) setRepoUrl(url)
+      })
+      .catch(() => {})
+  }, [mcp.command, mcp.args])
+
+  useEffect(() => {
+    if (!loading) return
+    setElapsed(0)
+    const interval = setInterval(() => setElapsed(s => s + 1), 1000)
+    return () => clearInterval(interval)
+  }, [loading])
+
+  useEffect(() => {
     const t0 = Date.now()
-    invoke<McpTool[]>('query_mcp_tools', { command: mcp.command, args: mcp.args })
+    invoke<McpTool[]>('query_mcp_tools', { command: mcp.command, args: mcp.args, url: mcp.url ?? null })
       .then(result => {
         setTools(result)
         capture('mcp_query_duration', {
@@ -231,93 +229,17 @@ export default function McpDetailPanel({ mcp, onBack, toolName, toolId, onToggle
         capture('mcp_query_failed', { mcp_name: mcp.name, error: String(e) })
       })
       .finally(() => setLoading(false))
-  }, [mcp.command, mcp.args, mcp.name, isHttp])
+  }, [mcp.command, mcp.args, mcp.name, mcp.url])
 
   return (
     <div className="flex flex-col h-full bg-[var(--c-bg)] animate-slide-in-right">
-      {/* Header */}
-      <div className="flex items-center gap-2 px-4 py-2.5 border-b border-[var(--c-border)] flex-shrink-0">
-        <button
-          onClick={onBack}
-          className="text-[var(--c-text-2)] hover:text-[var(--c-text)] transition-colors p-0.5 -ml-0.5 rounded"
-          aria-label="Back"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
-            stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
-            className="w-3.5 h-3.5">
-            <polyline points="15 18 9 12 15 6"/>
-          </svg>
-        </button>
-        {toolName && (
-          <>
-            <button onClick={onBack} className="text-[13px] text-[var(--c-text-3)] truncate max-w-[80px] hover:text-[var(--c-text-2)] transition-colors">
-              {toolName}
-            </button>
-            <span className="text-[12px] text-[var(--c-text-3)]">›</span>
-          </>
-        )}
-        <span className="text-[15px] font-semibold text-[var(--c-text)] tracking-[-0.01em] truncate">
-          {mcp.name}
-        </span>
-        <div className="ml-auto flex items-center gap-1.5 flex-shrink-0">
-          {toolId && (
-            <button
-              onClick={handleToggle}
-              disabled={toggling || justToggled}
-              aria-label={active ? 'Disable MCP' : 'Enable MCP'}
-              className={`text-[12px] px-2 py-0.5 rounded transition-colors ${
-                toggling ? 'animate-toggle-busy' :
-                toggleAnim === 'enable' ? 'animate-toggle-enable' :
-                toggleAnim === 'disable' ? 'animate-toggle-disable' :
-                justToggled ? 'animate-toggle-confirm' : ''
-              } ${
-                justToggled
-                  ? 'bg-emerald-500/10 text-emerald-400'
-                  : active
-                    ? 'bg-red-500/10 text-red-400 hover:bg-red-500/20'
-                    : 'bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20'
-              }`}
-            >
-              {justToggled ? '✓' : active ? 'Disable' : 'Enable'}
-            </button>
-          )}
-          {toolId && (
-            <button
-              onClick={handleRemove}
-              disabled={removing}
-              aria-label="Remove MCP"
-              className="p-0.5 text-[var(--c-text-3)] hover:text-red-400 transition-colors disabled:opacity-50"
-              title="Remove MCP"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
-                stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
-                className="w-3.5 h-3.5">
-                <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/>
-                <path d="M10 11v6"/><path d="M14 11v6"/>
-                <path d="M9 6V4h6v2"/>
-              </svg>
-            </button>
-          )}
-          <span className="text-[12px] bg-violet-500/10 text-violet-400 px-1.5 py-0.5 rounded font-mono">MCP</span>
-        </div>
-      </div>
-
-      {toggleError && (
-        <div className="mx-3 mt-1 px-3 py-1.5 rounded text-[12px] text-red-400 bg-red-500/10 flex items-center justify-between gap-2 flex-shrink-0">
-          <span className="truncate">{toggleError}</span>
-          <button onClick={() => setToggleError(null)} className="flex-shrink-0 hover:text-red-300">✕</button>
-        </div>
-      )}
-      {removeError && (
-        <div className="mx-3 mt-1 px-3 py-1.5 rounded text-[12px] text-red-400 bg-red-500/10 flex items-center justify-between gap-2 flex-shrink-0">
-          <span className="truncate">{removeError}</span>
-          <button onClick={() => setRemoveError(null)} className="flex-shrink-0 hover:text-red-300">✕</button>
-        </div>
-      )}
 
       <div className="flex-1 overflow-y-auto">
         {/* Description / command / URL */}
         <div className="px-4 py-3 border-b border-[var(--c-border)]">
+          <p className="text-[15px] font-semibold text-violet-400 leading-tight tracking-[-0.01em] font-mono mb-1">
+            {mcp.name}
+          </p>
           {mcp.url && (
             <p className="text-[12px] text-[var(--c-text-3)] font-mono break-all leading-relaxed mb-1">{mcp.url}</p>
           )}
@@ -329,7 +251,33 @@ export default function McpDetailPanel({ mcp, onBack, toolName, toolId, onToggle
           {mcp.hasSecrets && mcp.secretKeyNames.length > 0 && (
             <p className="text-[12px] text-amber-400/70 mt-1">env: {mcp.secretKeyNames.join(', ')}</p>
           )}
+          {repoUrl && (
+            <button
+              onClick={() => invoke('open_url', { url: repoUrl }).catch(() => {})}
+              className="flex items-center gap-1.5 mt-2 text-[12px] text-violet-400 hover:text-violet-300 transition-colors"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+                stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+                className="w-3 h-3 flex-shrink-0">
+                <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+                <polyline points="15 3 21 3 21 9"/>
+                <line x1="10" y1="14" x2="21" y2="3"/>
+              </svg>
+              <span className="truncate">{repoUrl.replace(/^https?:\/\//, '')}</span>
+            </button>
+          )}
         </div>
+
+        {/* Installed on */}
+        {allTools && (
+          <McpInstalledOn
+            mcp={mcp}
+            currentToolId={toolId ?? ''}
+            allTools={allTools}
+            onInstalled={async () => { await onToggled?.() }}
+            onBack={onBack}
+          />
+        )}
 
         {/* npm install state */}
         <NpmInstallSection mcp={mcp} toolId={toolId} />
@@ -347,12 +295,54 @@ export default function McpDetailPanel({ mcp, onBack, toolName, toolId, onToggle
               Live tools {!loading && !error && `(${tools.length})`}
             </p>
             {loading && (
-              <div className="px-2 py-4 animate-pulse space-y-2">
-                {[1,2,3].map(i => <div key={i} className="h-3 bg-[var(--c-skeleton)] rounded w-3/4"/>)}
+              <div className="px-2 py-4 flex flex-col gap-2">
+                <div className="flex items-center gap-2 text-[13px] text-[var(--c-text-3)]">
+                  <svg className="w-3.5 h-3.5 text-violet-400 animate-spin flex-shrink-0" viewBox="0 0 24 24" fill="none">
+                    <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2.5" strokeOpacity="0.25"/>
+                    <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"/>
+                  </svg>
+                  <span>
+                    {elapsed < 4
+                      ? 'Starting server…'
+                      : elapsed < 12
+                      ? 'Waiting for server to respond…'
+                      : 'Downloading dependencies — this only happens once…'}
+                  </span>
+                </div>
+                {elapsed >= 4 && (
+                  <p className="text-[11px] text-[var(--c-text-3)] font-mono pl-5 truncate opacity-60">
+                    {commandStr}
+                  </p>
+                )}
               </div>
             )}
             {error && (
-              <p className="text-[13px] text-red-400 px-2 py-2 leading-relaxed">{error}</p>
+              <div className="px-2 py-2 space-y-1">
+                <p className="text-[13px] text-red-400 leading-relaxed">
+                  {error.includes('timeout')
+                    ? 'Server took too long to respond. On first run, package managers like uvx or npx may need to download dependencies — try again in a moment.'
+                    : error.includes('closed stdout') || error.includes('server closed')
+                    ? 'Server exited before responding. It may need configuration, a required env variable, or may not support this transport.'
+                    : error.includes('failed to start')
+                    ? `Could not launch server: ${error.replace('failed to start MCP server: ', '')}`
+                    : error}
+                </p>
+                {(error.includes('timeout') || error.includes('closed stdout') || error.includes('server closed')) && (
+                  <button
+                    onClick={() => {
+                      setError(null);
+                      setLoading(true);
+                      invoke<McpTool[]>('query_mcp_tools', { command: mcp.command, args: mcp.args, url: mcp.url ?? null })
+                        .then(setTools)
+                        .catch(e => setError(String(e)))
+                        .finally(() => setLoading(false));
+                    }}
+                    className="text-[12px] text-violet-400 hover:text-violet-300 transition-colors"
+                  >
+                    Retry
+                  </button>
+                )}
+              </div>
             )}
             {!loading && !error && tools.length === 0 && (
               <p className="text-[13px] text-[var(--c-text-3)] px-2 py-2">No tools returned</p>

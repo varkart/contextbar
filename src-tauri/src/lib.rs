@@ -51,8 +51,10 @@ fn write_settings(val: serde_json::Value) -> Result<(), String> {
 // ---------------------------------------------------------------------------
 
 #[tauri::command]
-fn get_tools(app: tauri::AppHandle) -> Vec<AiTool> {
-    let tools = detectors::detect_all();
+async fn get_tools(app: tauri::AppHandle) -> Vec<AiTool> {
+    let tools = tokio::task::spawn_blocking(detectors::detect_all)
+        .await
+        .unwrap_or_default();
     // If the claude mcp list cache is cold, warm it in the background and
     // notify the frontend when done so it can re-fetch.
     if engine::mcp::is_claude_mcp_cache_cold() {
@@ -72,6 +74,11 @@ fn get_tools(app: tauri::AppHandle) -> Vec<AiTool> {
 #[tauri::command]
 fn hide_window(window: tauri::WebviewWindow) {
     let _ = window.hide();
+}
+
+#[tauri::command]
+fn get_skill_full_description(path: String) -> Option<String> {
+    detectors::read_skill_file_content(std::path::Path::new(&path))
 }
 
 #[tauri::command]
@@ -222,6 +229,672 @@ fn open_path(path: String) -> Result<(), String> {
 }
 
 #[tauri::command]
+fn reveal_in_finder(path: String) -> Result<(), String> {
+    std::process::Command::new("open")
+        .arg("-R")
+        .arg(&path)
+        .spawn()
+        .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Skill cache commands
+// ---------------------------------------------------------------------------
+
+/// Background-populate the cache for skills that were installed before the cache
+/// existed. Reads SKILL.md from every detected skill and upserts into skill_cache
+/// with method="detected" if the skill has no existing cache entry with a richer method.
+#[tauri::command]
+fn warm_skill_cache(db: tauri::State<'_, db::DbState>) {
+    let tools = detectors::detect_all();
+    for tool in tools {
+        for skill in tool.skills {
+            if db::is_skill_cached(&db, &skill.name) {
+                continue;
+            }
+            if let Some(content) = detectors::read_skill_file_content(std::path::Path::new(&skill.path)) {
+                db::cache_skill(&db, &skill.name, &content, "detected", skill.source_url.as_deref());
+            }
+        }
+    }
+}
+
+/// Spawn a fire-and-forget task to resolve and store the npm source URL for an MCP.
+/// Uses Option B (registry fetch + HEAD validation) with Option A (npmjs.com) fallback.
+fn enrich_mcp_source_url(app: tauri::AppHandle, mcp_name: String, package_name: String) {
+    // Use tauri's runtime — safe to call from both sync and async Tauri commands.
+    // tokio::spawn panics from sync command contexts (no active Tokio context on caller thread).
+    tauri::async_runtime::spawn(async move {
+        if let Some(source_url) = installer::fetch_npm_source_url(&package_name).await {
+            let db = app.state::<db::DbState>();
+            db::update_mcp_source_url(&db, &mcp_name, &source_url);
+        }
+    });
+}
+
+/// Populate mcp_cache with install info for all currently detected MCPs.
+/// Runs on startup — skips MCPs already in cache so existing entries aren't overwritten.
+/// Also enriches source_url for cached MCPs that don't have one yet.
+#[tauri::command]
+async fn warm_mcp_cache(app: tauri::AppHandle, db: tauri::State<'_, db::DbState>) -> Result<(), ()> {
+    let tools = tokio::task::spawn_blocking(detectors::detect_all)
+        .await
+        .unwrap_or_default();
+    for tool in tools {
+        for mcp in tool.mcps {
+            let already_cached = db::is_mcp_cached(&db, &mcp.name);
+            if !already_cached {
+                db::cache_mcp(
+                    &db,
+                    &mcp.name,
+                    if mcp.command.is_empty() { None } else { Some(mcp.command.as_str()) },
+                    &mcp.args,
+                    mcp.url.as_deref(),
+                );
+            }
+            // Enrich source_url if missing (covers both new and existing cache entries)
+            let needs_url = db::get_cached_mcp(&db, &mcp.name)
+                .map(|c| c.source_url.is_none())
+                .unwrap_or(false);
+            if needs_url {
+                if let Some(pkg) = installer::npm_package_from_mcp(&mcp.command, &mcp.args) {
+                    enrich_mcp_source_url(app.clone(), mcp.name, pkg);
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+#[tauri::command]
+fn get_all_cached_mcps(db: tauri::State<'_, db::DbState>) -> Vec<db::CachedMcp> {
+    db::get_all_cached_mcps(&db)
+}
+
+/// Return cache metadata for a skill so the frontend knows whether a re-install
+/// can be attempted without user input.
+#[tauri::command]
+fn get_skill_cache_status(
+    db: tauri::State<'_, db::DbState>,
+    skill_name: String,
+) -> Option<db::CachedSkill> {
+    db::get_cached_skill(&db, &skill_name)
+}
+
+/// Add a skill to a target tool using the best available content source:
+///  1. skill_cache (always preferred — path-independent)
+///  2. Re-fetch from install_source URL if method == "url"
+///  3. Live copy from any tool that currently has the skill (enabled or disabled)
+///
+/// This replaces the old `install_skill_from_path` path for cross-tool adds.
+#[tauri::command]
+async fn add_skill_to_tool(
+    db: tauri::State<'_, db::DbState>,
+    app: tauri::AppHandle,
+    skill_name: String,
+    tool_id: String,
+) -> Result<String, String> {
+    // 1. Try cache
+    if let Some(cached) = db::get_cached_skill(&db, &skill_name) {
+        let content = if cached.install_method == "url" {
+            // Try re-fetching to get the freshest content; fall back to cached if fetch fails
+            if let Some(ref source) = cached.install_source {
+                if let Ok(resp) = reqwest::get(source.as_str()).await {
+                    if resp.status().is_success() {
+                        if let Ok(fresh) = resp.text().await {
+                            if validate_skill_content(&fresh).is_ok() {
+                                db::cache_skill(&db, &skill_name, &fresh, "url", Some(source));
+                                fresh
+                            } else {
+                                cached.content
+                            }
+                        } else { cached.content }
+                    } else { cached.content }
+                } else { cached.content }
+            } else { cached.content }
+        } else {
+            cached.content
+        };
+
+        let dir = skill_dir_for(&tool_id)?;
+        let path = write_skill_file(&dir, &skill_name, &content)?;
+        db::log_event(&db, "skill_added_to_tool", &tool_id, &skill_name, Some("from_cache"));
+        let _ = app.emit("tools-changed", ());
+        return Ok(path);
+    }
+
+    // 2. Live copy: find skill in any detected tool (enabled or disabled)
+    let tools = tokio::task::spawn_blocking(detectors::detect_all)
+        .await
+        .unwrap_or_default();
+
+    for tool in &tools {
+        if tool.id == tool_id { continue; }
+        if let Some(skill) = tool.skills.iter().find(|s| s.name == skill_name) {
+            if let Some(content) = detectors::read_skill_file_content(std::path::Path::new(&skill.path)) {
+                db::cache_skill(&db, &skill_name, &content, "copy", skill.source_url.as_deref());
+                let dir = skill_dir_for(&tool_id)?;
+                let path = write_skill_file(&dir, &skill_name, &content)?;
+                db::log_event(&db, "skill_added_to_tool", &tool_id, &skill_name, Some("from_live_copy"));
+                let _ = app.emit("tools-changed", ());
+                return Ok(path);
+            }
+        }
+    }
+
+    Err(format!(
+        "skill '{skill_name}' not found in cache or any provider — re-add from URL or local path"
+    ))
+}
+
+#[tauri::command]
+fn open_url(url: String) -> Result<(), String> {
+    tauri_plugin_opener::open_url(url, None::<&str>).map_err(|e| e.to_string())
+}
+
+/// Returns the first writable skills directory for `tool_id`, or an error.
+struct SkillWriteTarget {
+    dir: std::path::PathBuf,
+    flat_files: bool,
+}
+
+fn skill_dir_for(tool_id: &str) -> Result<SkillWriteTarget, String> {
+    use crate::engine::manifest::SkillSourceSpec;
+    use crate::engine::resolve::expand_home;
+    let home = dirs::home_dir().ok_or("cannot find home dir")?;
+    let manifest = crate::engine::load_manifest(tool_id)
+        .ok_or_else(|| format!("no manifest for '{tool_id}'"))?;
+    for source in &manifest.skill_sources {
+        match &source.spec {
+            SkillSourceSpec::Directory { path, flat_files, .. } => {
+                return Ok(SkillWriteTarget {
+                    dir: expand_home(path, &home),
+                    flat_files: *flat_files,
+                });
+            }
+            SkillSourceSpec::TomlConfigDirectory { path, .. } => {
+                return Ok(SkillWriteTarget {
+                    dir: expand_home(path, &home),
+                    flat_files: false,
+                });
+            }
+        }
+    }
+    Err(format!("'{tool_id}' has no writable skill source"))
+}
+
+/// Slugify a name for use as a filename.
+fn slugify(name: &str) -> String {
+    name.to_lowercase()
+        .chars()
+        .map(|c| if c.is_alphanumeric() || c == '-' { c } else { '-' })
+        .collect::<String>()
+        .split('-')
+        .filter(|s| !s.is_empty())
+        .collect::<Vec<_>>()
+        .join("-")
+}
+
+/// Write skill content for `slug` using the target's format. Returns the created path.
+/// - flat_files=true  → `{dir}/{slug}.md` (e.g. Windsurf workflows)
+/// - flat_files=false → `{dir}/{slug}/SKILL.md` subdirectory (e.g. Codex, Claude)
+fn write_skill_file(target: &SkillWriteTarget, slug: &str, content: &str) -> Result<String, String> {
+    if target.flat_files {
+        std::fs::create_dir_all(&target.dir).map_err(|e| e.to_string())?;
+        let file_path = target.dir.join(format!("{slug}.md"));
+        if file_path.exists() {
+            return Err(format!("skill '{slug}.md' already exists in {}", target.dir.display()));
+        }
+        std::fs::write(&file_path, content).map_err(|e| e.to_string())?;
+        Ok(file_path.to_string_lossy().into_owned())
+    } else {
+        let skill_dir = target.dir.join(slug);
+        std::fs::create_dir_all(&skill_dir).map_err(|e| e.to_string())?;
+        let file_path = skill_dir.join("SKILL.md");
+        if file_path.exists() {
+            return Err(format!("skill '{slug}' already exists in {}", target.dir.display()));
+        }
+        std::fs::write(&file_path, content).map_err(|e| e.to_string())?;
+        Ok(skill_dir.to_string_lossy().into_owned())
+    }
+}
+
+#[tauri::command]
+fn create_skill(
+    db: tauri::State<'_, db::DbState>,
+    tool_ids: Vec<String>,
+    name: String,
+    description: Option<String>,
+) -> Result<Vec<String>, String> {
+    if name.trim().is_empty() {
+        return Err("skill name cannot be empty".into());
+    }
+    let slug = slugify(name.trim());
+    if slug.is_empty() {
+        return Err("invalid skill name".into());
+    }
+    let desc_line = description
+        .as_deref()
+        .filter(|d| !d.trim().is_empty())
+        .map(|d| format!("description: {d}\n"))
+        .unwrap_or_default();
+    let content = format!(
+        "---\nname: {name}\n{desc_line}---\n\n# {name}\n\n<!-- Describe what this skill does -->\n"
+    );
+
+    db::cache_skill(&db, &slug, &content, "template", None);
+    let mut paths = Vec::new();
+    for tool_id in &tool_ids {
+        let dir = skill_dir_for(tool_id)?;
+        let path = write_skill_file(&dir, &slug, &content)?;
+        db::log_event(&db, "skill_created", tool_id, &slug, None);
+        paths.push(path);
+    }
+    Ok(paths)
+}
+
+/// Reject content that is clearly not a SKILL.md file.
+fn validate_skill_content(content: &str) -> Result<(), String> {
+    let trimmed = content.trim_start();
+    if trimmed.is_empty() {
+        return Err("file is empty".into());
+    }
+    if trimmed.starts_with("<!DOCTYPE") || trimmed.starts_with("<html") || trimmed.starts_with("<HTML") {
+        return Err(
+            "fetched content is an HTML page, not a SKILL.md file.\n\
+             Paste the GitHub repo URL (e.g. https://github.com/owner/repo) \
+             or a direct link to a raw .md file.".into(),
+        );
+    }
+    if trimmed.starts_with('{') || trimmed.starts_with('[') {
+        return Err("fetched content looks like JSON, not a SKILL.md file.".into());
+    }
+    Ok(())
+}
+
+/// For a github.com blob URL, return the equivalent raw.githubusercontent.com URL.
+/// Returns None for repo/tree URLs (handled by the API search path).
+fn github_blob_to_raw(url: &str) -> Option<String> {
+    if url.contains("raw.githubusercontent.com") {
+        return Some(url.to_string());
+    }
+    if !url.contains("github.com/") {
+        return None; // not GitHub at all
+    }
+    let path = url.split("github.com/").nth(1)?.trim_end_matches('/');
+    let parts: Vec<&str> = path.split('/').collect();
+    if parts.len() >= 5 && parts[2] == "blob" {
+        let (owner, repo, branch) = (parts[0], parts[1], parts[3]);
+        let file_path = parts[4..].join("/");
+        return Some(format!("https://raw.githubusercontent.com/{owner}/{repo}/{branch}/{file_path}"));
+    }
+    None // repo or tree URL — caller should use the API
+}
+
+/// For a github.com repo or tree URL, return (owner, repo, branch).
+fn parse_github_repo_url(url: &str) -> Option<(String, String, String)> {
+    if url.contains("raw.githubusercontent.com") {
+        return None;
+    }
+    if !url.contains("github.com/") {
+        return None;
+    }
+    let path = url.split("github.com/").nth(1)?.trim_end_matches('/');
+    let parts: Vec<&str> = path.split('/').collect();
+    if parts.len() < 2 {
+        return None;
+    }
+    let (owner, repo) = (parts[0], parts[1]);
+    if parts.len() >= 3 && parts[2] == "blob" {
+        return None; // blob → direct file, not a repo search
+    }
+    let branch = if parts.len() >= 4 && parts[2] == "tree" { parts[3] } else { "HEAD" };
+    Some((owner.to_string(), repo.to_string(), branch.to_string()))
+}
+
+/// Search a GitHub repo for SKILL.md files up to 2 directory levels deep,
+/// fetch each one, and return (skill_name, content) pairs.
+async fn github_find_skill_mds(
+    owner: &str,
+    repo: &str,
+    branch_hint: &str, // "HEAD" means resolve from API
+    max_depth: usize,  // max path segments, e.g. 2 = "dir/SKILL.md"
+) -> Result<Vec<(String, String)>, String> {
+    let client = reqwest::Client::builder()
+        .user_agent("llmmanager")
+        .build()
+        .map_err(|e| e.to_string())?;
+
+    // Resolve "HEAD" → actual default branch name (the trees API rejects "HEAD")
+    let branch = if branch_hint == "HEAD" {
+        let repo_resp = client
+            .get(format!("https://api.github.com/repos/{owner}/{repo}"))
+            .header("Accept", "application/vnd.github+json")
+            .send()
+            .await
+            .map_err(|e| e.to_string())?;
+        if !repo_resp.status().is_success() {
+            return Err(format!(
+                "GitHub API error {} for {owner}/{repo} — repo may be private or not exist",
+                repo_resp.status()
+            ));
+        }
+        let meta: serde_json::Value = repo_resp.json().await.map_err(|e| e.to_string())?;
+        meta["default_branch"]
+            .as_str()
+            .unwrap_or("main")
+            .to_string()
+    } else {
+        branch_hint.to_string()
+    };
+
+    let raw_base = format!("https://raw.githubusercontent.com/{owner}/{repo}/{branch}");
+    let api_url = format!(
+        "https://api.github.com/repos/{owner}/{repo}/git/trees/{branch}?recursive=1"
+    );
+
+    let tree_resp = client
+        .get(&api_url)
+        .header("Accept", "application/vnd.github+json")
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    if !tree_resp.status().is_success() {
+        return Err(format!(
+            "GitHub API error {} fetching tree for {owner}/{repo}@{branch}",
+            tree_resp.status()
+        ));
+    }
+
+    let tree: serde_json::Value = tree_resp.json().await.map_err(|e| e.to_string())?;
+    let items = tree["tree"]
+        .as_array()
+        .ok_or_else(|| "unexpected GitHub API response".to_string())?;
+
+    // Collect SKILL.md paths at depth ≤ 2 (e.g. "SKILL.md" or "subdir/SKILL.md")
+    let skill_paths: Vec<String> = items
+        .iter()
+        .filter_map(|item| {
+            let path = item["path"].as_str()?;
+            let type_ = item["type"].as_str()?;
+            if type_ != "blob" {
+                return None;
+            }
+            let parts: Vec<&str> = path.split('/').collect();
+            if parts.len() <= max_depth && *parts.last().unwrap() == "SKILL.md" {
+                Some(path.to_string())
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    if skill_paths.is_empty() {
+        return Err(format!(
+            "no SKILL.md found in {owner}/{repo} (searched up to 2 directory levels)"
+        ));
+    }
+
+    // Fetch each SKILL.md and validate
+    let mut results = Vec::new();
+    for path in &skill_paths {
+        let raw_url = format!("{raw_base}/{path}");
+        let resp = client
+            .get(&raw_url)
+            .send()
+            .await
+            .map_err(|e| e.to_string())?;
+        if !resp.status().is_success() {
+            continue;
+        }
+        let content = resp.text().await.map_err(|e| e.to_string())?;
+        if validate_skill_content(&content).is_err() {
+            continue;
+        }
+        // Name: parent directory of SKILL.md, or repo name if at root
+        let parts: Vec<&str> = path.split('/').collect();
+        let name = if parts.len() >= 2 {
+            parts[parts.len() - 2].to_string()
+        } else {
+            repo.to_string()
+        };
+        results.push((name, content));
+    }
+
+    if results.is_empty() {
+        return Err(format!(
+            "SKILL.md files found in {owner}/{repo} but none had valid content"
+        ));
+    }
+
+    Ok(results)
+}
+
+#[tauri::command]
+async fn install_skill_from_url(
+    db: tauri::State<'_, db::DbState>,
+    tool_ids: Vec<String>,
+    url: String,
+    name: Option<String>,
+    max_depth: Option<u32>,
+) -> Result<Vec<String>, String> {
+    let depth = max_depth.unwrap_or(2).clamp(1, 10) as usize;
+
+    // GitHub repo/tree URL → search the repo with the API
+    if let Some((owner, repo, branch)) = parse_github_repo_url(&url) {
+        let skills = github_find_skill_mds(&owner, &repo, &branch, depth).await?;
+        let multi = skills.len() > 1;
+        let mut all_paths = Vec::new();
+        for (skill_name, content) in skills {
+            // Single skill: name param replaces the dir name entirely.
+            // Multiple skills: name param becomes a prefix → "{prefix}-{dir_name}".
+            let final_name = match &name {
+                Some(prefix) if multi => format!("{}-{}", prefix.trim(), skill_name),
+                Some(n) => n.trim().to_string(),
+                None => skill_name,
+            };
+            let slug = slugify(&final_name);
+            if slug.is_empty() {
+                continue;
+            }
+            db::cache_skill(&db, &slug, &content, "url", Some(&url));
+            for tool_id in &tool_ids {
+                let dir = skill_dir_for(tool_id)?;
+                let path = write_skill_file(&dir, &slug, &content)?;
+                db::log_event(&db, "skill_installed_url", tool_id, &slug, Some(&url));
+                all_paths.push(path);
+            }
+        }
+        return Ok(all_paths);
+    }
+
+    // Blob URL or raw URL or non-GitHub URL → fetch directly
+    let fetch_url = github_blob_to_raw(&url).unwrap_or_else(|| url.clone());
+    let response = reqwest::get(&fetch_url).await.map_err(|e| e.to_string())?;
+    if !response.status().is_success() {
+        return Err(format!("HTTP {}: {}", response.status(), fetch_url));
+    }
+    let content = response.text().await.map_err(|e| e.to_string())?;
+    validate_skill_content(&content)?;
+
+    let derived_name = name.unwrap_or_else(|| {
+        url.split('/')
+            .last()
+            .unwrap_or("skill")
+            .trim_end_matches(".md")
+            .to_string()
+    });
+    let slug = slugify(derived_name.trim());
+    if slug.is_empty() {
+        return Err("could not derive a valid skill name from URL".into());
+    }
+
+    db::cache_skill(&db, &slug, &content, "url", Some(&url));
+    let mut paths = Vec::new();
+    for tool_id in &tool_ids {
+        let dir = skill_dir_for(tool_id)?;
+        let path = write_skill_file(&dir, &slug, &content)?;
+        db::log_event(&db, "skill_installed_url", tool_id, &slug, Some(&url));
+        paths.push(path);
+    }
+    Ok(paths)
+}
+
+#[tauri::command]
+fn install_skill_from_path(
+    db: tauri::State<'_, db::DbState>,
+    tool_ids: Vec<String>,
+    src_path: String,
+    name: Option<String>,
+) -> Result<Vec<String>, String> {
+    let src = std::path::Path::new(&src_path);
+    if !src.exists() {
+        return Err(format!("path not found: {src_path}"));
+    }
+
+    let content = if src.is_file() {
+        let ext = src.extension().and_then(|e| e.to_str()).unwrap_or("");
+        if ext != "md" {
+            return Err(format!(
+                "expected a .md file, got .{ext} — point to a SKILL.md file or a directory containing one"
+            ));
+        }
+        std::fs::read_to_string(src).map_err(|e| e.to_string())?
+    } else if src.is_dir() {
+        // Look for SKILL.md inside directory
+        let skill_md = src.join("SKILL.md");
+        if skill_md.exists() {
+            std::fs::read_to_string(&skill_md).map_err(|e| e.to_string())?
+        } else {
+            return Err(format!("no SKILL.md found in {src_path}"));
+        }
+    } else {
+        return Err(format!("unsupported path type: {src_path}"));
+    };
+    validate_skill_content(&content)?;
+
+    let derived_name = name.unwrap_or_else(|| {
+        src.file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or("skill")
+            .to_string()
+    });
+    let slug = slugify(derived_name.trim());
+    if slug.is_empty() {
+        return Err("could not derive a valid skill name from path".into());
+    }
+
+    db::cache_skill(&db, &slug, &content, "local", Some(&src_path));
+    let mut paths = Vec::new();
+    for tool_id in &tool_ids {
+        let dir = skill_dir_for(tool_id)?;
+        let path = write_skill_file(&dir, &slug, &content)?;
+        db::log_event(&db, "skill_installed_path", tool_id, &slug, Some(&src_path));
+        paths.push(path);
+    }
+    Ok(paths)
+}
+
+/// Strip ANSI escape sequences and noisy CLI UI characters from `skills` CLI output.
+/// Keeps lines that contain meaningful text; drops ASCII art banners, spinner frames, and
+/// lines that are purely box-drawing / block chars.
+fn clean_skills_output(raw: &str) -> String {
+    // Remove ANSI CSI sequences: ESC [ ... m  (colours, bold, etc.)
+    let mut out = String::with_capacity(raw.len());
+    let bytes = raw.as_bytes();
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == 0x1b && i + 1 < bytes.len() && bytes[i + 1] == b'[' {
+            // skip until we hit a letter that ends the sequence
+            i += 2;
+            while i < bytes.len() && !bytes[i].is_ascii_alphabetic() {
+                i += 1;
+            }
+            i += 1; // skip the final letter
+        } else {
+            out.push(bytes[i] as char);
+            i += 1;
+        }
+    }
+
+    // Keep only lines that have at least one ASCII letter or digit,
+    // and don't look like a spinner frame (lines whose non-space content
+    // is entirely box/block/spinner Unicode).
+    out.lines()
+        .filter(|line| {
+            let trimmed = line.trim();
+            if trimmed.is_empty() { return false; }
+            // Must contain at least one ASCII alphanumeric character
+            trimmed.chars().any(|c| c.is_ascii_alphanumeric())
+        })
+        .map(|line| line.trim_end())
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+/// Map our tool ID to the agent name expected by the `skills` CLI (vercel-labs/skills).
+fn skills_agent_name(tool_id: &str) -> Option<&'static str> {
+    match tool_id {
+        "claude"  => Some("claude-code"),
+        "gemini"  => Some("gemini-cli"),
+        "cursor"  => Some("cursor"),
+        "windsurf"=> Some("windsurf"),
+        "copilot" => Some("github-copilot"),
+        _         => None,
+    }
+}
+
+
+#[tauri::command]
+async fn install_skill_from_github(
+    app: tauri::AppHandle,
+    db: tauri::State<'_, db::DbState>,
+    tool_ids: Vec<String>,
+    source: String,
+    skill_filter: Option<String>,
+) -> Result<String, String> {
+    let npx = installer::find_npx()
+        .ok_or("npx not found — install Node.js to use this feature")?;
+
+    let mut combined_output = String::new();
+
+    for tool_id in &tool_ids {
+        let agent = skills_agent_name(tool_id)
+            .ok_or_else(|| format!("'{tool_id}' is not supported by the skills CLI"))?;
+
+        let mut cmd = tokio::process::Command::new(&npx);
+        cmd.args(["skills", "add", source.trim(), "--agent", agent, "--global", "--copy", "-y"]);
+
+        if let Some(ref filter) = skill_filter {
+            let f = filter.trim();
+            if !f.is_empty() {
+                cmd.args(["--skill", f]);
+            }
+        }
+
+        let output = cmd.output().await
+            .map_err(|e| format!("failed to run npx: {e}"))?;
+
+        let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+        let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+
+        if !output.status.success() {
+            let cleaned = clean_skills_output(&format!("{stderr}{stdout}"));
+            return Err(format!("skills add failed:\n{cleaned}"));
+        }
+
+        db::log_event(&db, "skill_github_installed", tool_id, source.trim(), None);
+        if !combined_output.is_empty() { combined_output.push('\n'); }
+        combined_output.push_str(&clean_skills_output(stdout.trim()));
+    }
+
+    let _ = app.emit("tools-changed", ());
+    Ok(combined_output)
+}
+
+#[tauri::command]
 fn read_text_file(path: String) -> Result<String, String> {
     let p = std::path::Path::new(&path);
 
@@ -257,13 +930,53 @@ fn read_text_file(path: String) -> Result<String, String> {
 async fn query_mcp_tools(
     command: String,
     args: Vec<String>,
+    url: Option<String>,
 ) -> Result<Vec<mcp_client::McpTool>, String> {
-    mcp_client::query_tools(&command, &args).await
+    mcp_client::query_tools(&command, &args, url.as_deref()).await
 }
 
 // ---------------------------------------------------------------------------
 // IPC commands – skill / MCP toggles
 // ---------------------------------------------------------------------------
+
+/// Permanently delete a skill from a tool (both active and .disabled locations).
+#[tauri::command]
+fn remove_skill(
+    db: tauri::State<'_, db::DbState>,
+    tool_id: String,
+    skill_name: String,
+    skill_path: String,
+) -> Result<(), String> {
+    let path = std::path::Path::new(&skill_path);
+    // Also check the .disabled location
+    let disabled_path = path
+        .parent()
+        .map(|p| p.join(".disabled").join(&skill_name))
+        .filter(|p| p.exists());
+
+    let mut deleted = false;
+    if path.exists() {
+        if path.is_dir() {
+            std::fs::remove_dir_all(path).map_err(|e| e.to_string())?;
+        } else {
+            std::fs::remove_file(path).map_err(|e| e.to_string())?;
+        }
+        deleted = true;
+    }
+    if let Some(dp) = disabled_path {
+        if dp.is_dir() {
+            let _ = std::fs::remove_dir_all(&dp);
+        } else {
+            let _ = std::fs::remove_file(&dp);
+        }
+        deleted = true;
+    }
+    if !deleted {
+        return Err(format!("skill not found at {skill_path}"));
+    }
+    db::log_event(&db, "skill_removed", &tool_id, &skill_name, None);
+    Ok(())
+}
 
 #[tauri::command]
 fn set_skill_active(
@@ -271,9 +984,49 @@ fn set_skill_active(
     tool_id: String,
     skill_name: String,
     skill_path: String,
+    source_id: Option<String>,
     active: bool,
 ) -> Result<(), String> {
-    let result = app_state::move_skill_folder(&skill_path, &skill_name, active);
+    use crate::engine::manifest::SkillSourceSpec;
+    use crate::engine::resolve::expand_home;
+
+    let result = if let Some(sid) = &source_id {
+        if let Some(manifest) = crate::engine::load_manifest(&tool_id) {
+            let home = dirs::home_dir().ok_or("cannot find home dir")?;
+            let matched = manifest.skill_sources.iter().enumerate().find(|(idx, s)| {
+                s.id.as_deref().unwrap_or(&format!("source_{idx}")) == sid
+            });
+            if let Some((_, source)) = matched {
+                if let SkillSourceSpec::TomlConfigDirectory {
+                    config_file,
+                    config_key_path,
+                    path_field,
+                    enabled_field,
+                    ..
+                } = &source.spec
+                {
+                    let config_path = expand_home(config_file, &home);
+                    app_state::toggle_toml_config_skill(
+                        &config_path.to_string_lossy(),
+                        config_key_path,
+                        path_field,
+                        enabled_field,
+                        &skill_path,
+                        active,
+                    )
+                } else {
+                    app_state::move_skill_folder(&skill_path, &skill_name, active)
+                }
+            } else {
+                app_state::move_skill_folder(&skill_path, &skill_name, active)
+            }
+        } else {
+            app_state::move_skill_folder(&skill_path, &skill_name, active)
+        }
+    } else {
+        app_state::move_skill_folder(&skill_path, &skill_name, active)
+    };
+
     if result.is_ok() {
         let detail = format!(r#"{{"active":{active}}}"#);
         db::log_event(&db, "skill_toggled", &tool_id, &skill_name, Some(&detail));
@@ -325,6 +1078,34 @@ fn set_mcp_active(
                     dk,
                 )
             }
+            McpSourceSpec::TomlKeyPair {
+                file,
+                active_key,
+                disabled_key,
+                inline_toggle_field,
+            } => {
+                let path = expand_home(file, &home);
+                if let Some(field) = inline_toggle_field.as_deref() {
+                    app_state::toggle_toml_mcp_enabled(
+                        &path.to_string_lossy(),
+                        active_key,
+                        &mcp_name,
+                        active,
+                        field,
+                    )
+                } else {
+                    let dk = disabled_key.as_deref().ok_or(
+                        "source has no disabled_key; toggling not supported for this source",
+                    )?;
+                    app_state::move_mcp_in_toml_config(
+                        &path.to_string_lossy(),
+                        &mcp_name,
+                        active,
+                        active_key,
+                        dk,
+                    )
+                }
+            }
             McpSourceSpec::ExtensionDir {
                 enablement_file: Some(ef),
                 ..
@@ -350,11 +1131,110 @@ fn set_mcp_active(
 }
 
 // ---------------------------------------------------------------------------
-// IPC commands – MCP add / remove (v1.1)
+// IPC commands – MCP validation + add / remove (v1.1)
 // ---------------------------------------------------------------------------
+
+#[derive(serde::Serialize)]
+pub struct McpValidation {
+    pub ok: bool,
+    pub name_error: Option<String>,
+    pub command_error: Option<String>,
+    pub url_error: Option<String>,
+}
+
+impl McpValidation {
+    fn pass() -> Self { Self { ok: true, name_error: None, command_error: None, url_error: None } }
+    fn fail(self) -> Self { Self { ok: false, ..self } }
+}
+
+/// Resolve a binary against PATH.
+fn which_in_path(bin: &str) -> bool {
+    let path_val = std::env::var("PATH").unwrap_or_default();
+    std::env::split_paths(&path_val)
+        .any(|dir| {
+            let p = dir.join(bin);
+            p.exists() && p.metadata().map(|m| !m.is_dir()).unwrap_or(false)
+        })
+}
+
+#[tauri::command]
+fn validate_mcp(
+    tool_id: String,
+    name: String,
+    command: Option<String>,
+    url: Option<String>,
+) -> McpValidation {
+    use crate::engine::manifest::McpSourceSpec;
+    use crate::engine::resolve::expand_home;
+
+    let mut v = McpValidation::pass();
+
+    // --- name ---
+    let trimmed_name = name.trim();
+    if trimmed_name.is_empty() {
+        v.name_error = Some("Name is required".into());
+    } else if !trimmed_name.chars().all(|c| c.is_alphanumeric() || matches!(c, '-' | '_' | '.')) {
+        v.name_error = Some("Name may only contain letters, numbers, hyphens, underscores, dots".into());
+    } else if let Ok(home) = dirs::home_dir().ok_or("") {
+        // Check for existing name in tool's config
+        if let Some(manifest) = crate::engine::load_manifest(&tool_id) {
+            for source in &manifest.mcp_sources {
+                if let McpSourceSpec::JsonKeyPair { file, active_key, disabled_key, .. } = &source.spec {
+                    let path = expand_home(file, &home);
+                    if let Ok(raw) = std::fs::read_to_string(&path) {
+                        if let Ok(val) = serde_json::from_str::<serde_json::Value>(&raw) {
+                            let check_key = |key: &str| {
+                                val.get(key)
+                                    .and_then(|v| v.as_object())
+                                    .map(|obj| obj.contains_key(trimmed_name))
+                                    .unwrap_or(false)
+                            };
+                            if check_key(active_key) || disabled_key.as_deref().map(check_key).unwrap_or(false) {
+                                v.name_error = Some(format!("MCP '{trimmed_name}' already exists in this tool"));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // --- command (stdio) ---
+    if url.is_none() {
+        if let Some(cmd) = command.as_deref() {
+            let cmd = cmd.trim();
+            if cmd.is_empty() {
+                v.command_error = Some("Command is required for stdio MCPs".into());
+            } else if !which_in_path(cmd) {
+                v.command_error = Some(format!(
+                    "'{cmd}' not found on PATH — make sure it is installed and in your shell PATH"
+                ));
+            }
+        }
+    }
+
+    // --- url (HTTP) ---
+    if let Some(u) = url.as_deref() {
+        let u = u.trim();
+        if u.is_empty() {
+            v.url_error = Some("URL is required".into());
+        } else if !u.starts_with("http://") && !u.starts_with("https://") {
+            v.url_error = Some("URL must start with http:// or https://".into());
+        } else if !u.contains('.') && !u.contains("localhost") {
+            v.url_error = Some("URL does not look valid — missing hostname".into());
+        }
+    }
+
+    if v.name_error.is_some() || v.command_error.is_some() || v.url_error.is_some() {
+        v.fail()
+    } else {
+        v
+    }
+}
 
 #[tauri::command]
 fn add_mcp(
+    app: tauri::AppHandle,
     db: tauri::State<'_, db::DbState>,
     tool_id: String,
     name: String,
@@ -370,20 +1250,46 @@ fn add_mcp(
         .ok_or_else(|| format!("no manifest for '{tool_id}'"))?;
 
     for source in &manifest.mcp_sources {
-        if let McpSourceSpec::JsonKeyPair { file, active_key, .. } = &source.spec {
-            let path = expand_home(file, &home);
-            let entry = if let Some(u) = &url {
-                serde_json::json!({ "url": u })
-            } else {
-                serde_json::json!({
-                    "command": command.as_deref().unwrap_or(""),
-                    "args": args.as_deref().unwrap_or(&[]),
-                })
-            };
-            let result =
-                app_state::add_mcp_to_config(&path.to_string_lossy(), active_key, &name, entry);
+        let result = match &source.spec {
+            McpSourceSpec::JsonKeyPair { file, active_key, .. } => {
+                let path = expand_home(file, &home);
+                let entry = if let Some(u) = &url {
+                    serde_json::json!({ "url": u })
+                } else {
+                    serde_json::json!({
+                        "command": command.as_deref().unwrap_or(""),
+                        "args": args.as_deref().unwrap_or(&[]),
+                    })
+                };
+                Some(app_state::add_mcp_to_config(
+                    &path.to_string_lossy(), active_key, &name, entry,
+                ))
+            }
+            McpSourceSpec::TomlKeyPair { file, active_key, .. } => {
+                let path = expand_home(file, &home);
+                Some(app_state::add_mcp_to_toml_config(
+                    &path.to_string_lossy(),
+                    active_key,
+                    &name,
+                    command.as_deref(),
+                    args.as_deref().unwrap_or(&[]),
+                    url.as_deref(),
+                ))
+            }
+            _ => None,
+        };
+        if let Some(result) = result {
             if result.is_ok() {
                 db::log_event(&db, "mcp_added", &tool_id, &name, None);
+                let args_slice = args.as_deref().unwrap_or(&[]);
+                db::cache_mcp(&db, &name, command.as_deref(), args_slice, url.as_deref());
+                // Enrich with validated source URL in background
+                if let Some(pkg) = installer::npm_package_from_mcp(
+                    command.as_deref().unwrap_or(""),
+                    args_slice,
+                ) {
+                    enrich_mcp_source_url(app.clone(), name.clone(), pkg);
+                }
             }
             return result;
         }
@@ -393,10 +1299,15 @@ fn add_mcp(
 
 #[tauri::command]
 fn remove_mcp(
+    app: tauri::AppHandle,
     db: tauri::State<'_, db::DbState>,
     tool_id: String,
     mcp_name: String,
     source_id: String,
+    // Install data passed from frontend so we can cache without re-detecting
+    command: Option<String>,
+    args: Option<Vec<String>>,
+    url: Option<String>,
 ) -> Result<(), String> {
     use crate::engine::manifest::McpSourceSpec;
     use crate::engine::resolve::expand_home;
@@ -413,26 +1324,44 @@ fn remove_mcp(
         if eff_id != source_id {
             continue;
         }
-        if let McpSourceSpec::JsonKeyPair {
-            file,
-            active_key,
-            disabled_key,
-            ..
-        } = &source.spec
-        {
-            let path = expand_home(file, &home);
-            let result = app_state::remove_mcp_from_config(
-                &path.to_string_lossy(),
-                active_key,
-                disabled_key.as_deref(),
-                &mcp_name,
-            );
-            if result.is_ok() {
-                db::log_event(&db, "mcp_removed", &tool_id, &mcp_name, None);
+        let result = match &source.spec {
+            McpSourceSpec::JsonKeyPair { file, active_key, disabled_key, .. } => {
+                let path = expand_home(file, &home);
+                app_state::remove_mcp_from_config(
+                    &path.to_string_lossy(),
+                    active_key,
+                    disabled_key.as_deref(),
+                    &mcp_name,
+                )
             }
-            return result;
+            McpSourceSpec::TomlKeyPair { file, active_key, .. } => {
+                let path = expand_home(file, &home);
+                app_state::remove_mcp_from_toml_config(
+                    &path.to_string_lossy(),
+                    active_key,
+                    &mcp_name,
+                )
+            }
+            _ => Err(format!("source '{source_id}' does not support MCP removal")),
+        };
+        if result.is_ok() {
+            db::log_event(&db, "mcp_removed", &tool_id, &mcp_name, None);
+            let args_slice = args.as_deref().unwrap_or(&[]);
+            db::cache_mcp(&db, &mcp_name, command.as_deref(), args_slice, url.as_deref());
+            // Enrich with validated source URL if not already cached
+            let needs_url = db::get_cached_mcp(&db, &mcp_name)
+                .map(|c| c.source_url.is_none())
+                .unwrap_or(false);
+            if needs_url {
+                if let Some(pkg) = installer::npm_package_from_mcp(
+                    command.as_deref().unwrap_or(""),
+                    args_slice,
+                ) {
+                    enrich_mcp_source_url(app.clone(), mcp_name.clone(), pkg);
+                }
+            }
         }
-        return Err(format!("source '{source_id}' does not support MCP removal"));
+        return result;
     }
     Err(format!(
         "source '{source_id}' not found in '{tool_id}' manifest"
@@ -570,7 +1499,13 @@ async fn install_mcp_npm(
     );
     let db = app.state::<db::DbState>();
     db::log_event(&db, "mcp_npm_installed", &tool_id, &mcp_name, Some(&detail));
+
+    // Clear the doctor "pkg-missing" notification now that the package is installed.
+    let dedup_key = format!("doctor:mcp:{}:{}:pkg-missing", tool_id, mcp_name);
+    db::dismiss_by_dedup_key(&db, &dedup_key);
+
     let _ = app.emit("tools-changed", ());
+    let _ = app.emit("notifications-changed", ());
     Ok(version)
 }
 
@@ -790,6 +1725,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             get_tools,
+            get_skill_full_description,
             hide_window,
             get_version,
             get_autostart,
@@ -800,11 +1736,24 @@ pub fn run() {
             set_vibrancy,
             read_skill_dir,
             open_path,
+            reveal_in_finder,
+            open_url,
+            warm_skill_cache,
+            get_skill_cache_status,
+            add_skill_to_tool,
+            warm_mcp_cache,
+            get_all_cached_mcps,
+            create_skill,
+            install_skill_from_url,
+            install_skill_from_path,
+            install_skill_from_github,
             read_text_file,
             check_for_update,
             query_mcp_tools,
+            remove_skill,
             set_skill_active,
             set_mcp_active,
+            validate_mcp,
             add_mcp,
             remove_mcp,
             list_config_backups,
@@ -836,8 +1785,8 @@ fn toggle_main_window(app: &tauri::AppHandle) {
         if window.is_visible().unwrap_or(false) {
             let _ = window.hide();
         } else {
-            let _ = window.move_window(Position::TrayCenter);
             let _ = window.show();
+            let _ = window.move_window(Position::TrayCenter);
             let _ = window.set_focus();
         }
     } else {
@@ -855,8 +1804,8 @@ fn open_main_window(app: &tauri::AppHandle, hash: Option<&str>) {
         // Use JSON-encode to prevent JS injection via hash value
         let hash_json = serde_json::to_string(hash.unwrap_or("")).unwrap_or_default();
         let _ = window.eval(format!("window.location.hash = {hash_json}"));
-        let _ = window.move_window(Position::TrayCenter);
         let _ = window.show();
+        let _ = window.move_window(Position::TrayCenter);
         let _ = window.set_focus();
         return;
     }
@@ -882,7 +1831,88 @@ fn open_main_window(app: &tauri::AppHandle, hash: Option<&str>) {
             let _ = win_blur.hide();
         }
     });
-    let _ = window.move_window(Position::TrayCenter);
     let _ = window.show();
+    let _ = window.move_window(Position::TrayCenter);
     let _ = window.set_focus();
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{github_blob_to_raw, parse_github_repo_url, validate_skill_content};
+
+    #[test]
+    fn valid_markdown_passes() {
+        assert!(validate_skill_content("# My Skill\n\nDoes things.").is_ok());
+        assert!(validate_skill_content("---\nname: my-skill\n---\n# Heading").is_ok());
+    }
+
+    #[test]
+    fn html_page_rejected() {
+        assert!(validate_skill_content("<!DOCTYPE html><html>...</html>").is_err());
+        assert!(validate_skill_content("<html lang=\"en\">...</html>").is_err());
+    }
+
+    #[test]
+    fn json_rejected() {
+        assert!(validate_skill_content("{ \"key\": 1 }").is_err());
+        assert!(validate_skill_content("[1, 2, 3]").is_err());
+    }
+
+    #[test]
+    fn empty_content_rejected() {
+        assert!(validate_skill_content("").is_err());
+        assert!(validate_skill_content("   \n  ").is_err());
+    }
+
+    // parse_github_repo_url tests
+    #[test]
+    fn repo_url_parsed() {
+        let r = parse_github_repo_url("https://github.com/obra/superpowers").unwrap();
+        assert_eq!(r, ("obra".into(), "superpowers".into(), "HEAD".into()));
+    }
+
+    #[test]
+    fn tree_url_uses_branch() {
+        let r = parse_github_repo_url("https://github.com/obra/superpowers/tree/main").unwrap();
+        assert_eq!(r, ("obra".into(), "superpowers".into(), "main".into()));
+    }
+
+    #[test]
+    fn blob_url_returns_none_from_repo_parser() {
+        assert!(parse_github_repo_url(
+            "https://github.com/obra/superpowers/blob/main/SKILL.md"
+        ).is_none());
+    }
+
+    #[test]
+    fn raw_url_returns_none_from_repo_parser() {
+        assert!(parse_github_repo_url(
+            "https://raw.githubusercontent.com/obra/superpowers/main/SKILL.md"
+        ).is_none());
+    }
+
+    // github_blob_to_raw tests
+    #[test]
+    fn blob_url_converts_to_raw() {
+        assert_eq!(
+            github_blob_to_raw("https://github.com/obra/superpowers/blob/main/MY-SKILL.md"),
+            Some("https://raw.githubusercontent.com/obra/superpowers/main/MY-SKILL.md".into())
+        );
+    }
+
+    #[test]
+    fn raw_url_passthrough() {
+        let raw = "https://raw.githubusercontent.com/obra/superpowers/main/SKILL.md";
+        assert_eq!(github_blob_to_raw(raw), Some(raw.into()));
+    }
+
+    #[test]
+    fn non_github_url_returns_none() {
+        assert!(github_blob_to_raw("https://example.com/my-skill.md").is_none());
+    }
+
+    #[test]
+    fn repo_url_returns_none_from_blob_parser() {
+        assert!(github_blob_to_raw("https://github.com/obra/superpowers").is_none());
+    }
 }

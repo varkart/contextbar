@@ -27,12 +27,19 @@ path = "~/.aws/amazonq"
 type = "dir"
 path = "~/.q"
 
+[[skill_sources]]
+id = "skills_dir"
+type = "directory"
+path = "~/.kiro/skills"
+disabled_subdir = ".disabled"
+
 # Global MCP config
 [[mcp_sources]]
 id = "mcp_json"
 type = "json_key_pair"
 file = "~/.kiro/settings/mcp.json"
 active_key = "mcpServers"
+disabled_key = "disabledMcpServers"
 
 # Legacy Amazon Q MCP config
 [[mcp_sources]]
@@ -40,3 +47,4 @@ id = "amazonq_mcp_json"
 type = "json_key_pair"
 file = "~/.aws/amazonq/mcp.json"
 active_key = "mcpServers"
+disabled_key = "disabledMcpServers"

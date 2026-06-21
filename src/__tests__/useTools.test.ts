@@ -10,8 +10,8 @@ import { invoke } from '@tauri-apps/api/core'
 const mockInvoke = vi.mocked(invoke)
 
 const mockTools = [
-  { id: 'claude', name: 'Claude Code', version: '1.0', installed: true, skills: [], mcps: [], error: undefined },
-  { id: 'cursor', name: 'Cursor', version: undefined, installed: false, skills: [], mcps: [], error: undefined },
+  { id: 'claude', name: 'Claude Code', version: '1.0', installed: true, supportsSkills: true, supportsMcps: true, skills: [], mcps: [], error: undefined },
+  { id: 'cursor', name: 'Cursor', version: undefined, installed: false, supportsSkills: true, supportsMcps: true, skills: [], mcps: [], error: undefined },
 ]
 
 beforeEach(() => {

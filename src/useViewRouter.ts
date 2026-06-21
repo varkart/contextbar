@@ -7,16 +7,19 @@ import {
   initialRouterState,
   escapeTransition,
   type View,
+  type LlmsListMode,
   type RouterState,
 } from './viewRouter'
 
-export type { View }
+export type { View, LlmsListMode }
 
 export interface UseViewRouterResult extends RouterState {
   selectTool: (tool: AiTool) => void
+  openLlmsList: (mode: LlmsListMode) => void
+  openSkillsListForTool: (tool: AiTool) => void
+  openMcpsListForTool: (tool: AiTool) => void
   selectSkill: (skill: Skill, fromView?: View) => void
   selectMcp: (mcp: McpServer, fromView?: View) => void
-  selectPermissions: () => void
   openSkillsPage: () => void
   openMcpsPage: () => void
   goTo: (view: View) => void
@@ -40,6 +43,20 @@ export function useViewRouter(): UseViewRouterResult {
     capture('tool_detail_viewed', { tool_id: tool.id })
   }, [])
 
+  const openLlmsList = useCallback((mode: LlmsListMode) => {
+    dispatch({ type: 'OPEN_LLMS_LIST', mode })
+  }, [])
+
+  const openSkillsListForTool = useCallback((tool: AiTool) => {
+    dispatch({ type: 'OPEN_SKILLS_LIST_FOR_TOOL', tool })
+    capture('skills_list_viewed', { tool_id: tool.id })
+  }, [])
+
+  const openMcpsListForTool = useCallback((tool: AiTool) => {
+    dispatch({ type: 'OPEN_MCPS_LIST_FOR_TOOL', tool })
+    capture('mcps_list_viewed', { tool_id: tool.id })
+  }, [])
+
   const selectSkill = useCallback((skill: Skill, fromView: View = 'tool-detail') => {
     dispatch({ type: 'SELECT_SKILL', skill, fromView })
     capture('skill_detail_viewed', { skill_name: skill.name })
@@ -50,11 +67,6 @@ export function useViewRouter(): UseViewRouterResult {
     capture('mcp_detail_viewed', { mcp_name: mcp.name })
   }, [])
 
-  const selectPermissions = useCallback(() => {
-    dispatch({ type: 'SELECT_PERMISSIONS' })
-    capture('permissions_detail_viewed', { tool_id: state.selectedTool?.id })
-  }, [state.selectedTool?.id])
-
   const openSkillsPage = useCallback(() => dispatch({ type: 'OPEN_SKILLS_PAGE' }), [])
 
   const openMcpsPage = useCallback(() => dispatch({ type: 'OPEN_MCPS_PAGE' }), [])
@@ -63,11 +75,11 @@ export function useViewRouter(): UseViewRouterResult {
 
   const escape = useCallback(() => {
     const result = escapeTransition(
-      state.view, state.skillBackView, state.mcpBackView, state.selectedTool,
+      state.view, state.llmsListMode, state.skillBackView, state.mcpBackView, state.selectedTool,
     )
     if (result.type === 'navigate') dispatch({ type: 'GO_TO', view: result.to })
     else invoke('hide_window').catch(() => {})
-  }, [state.view, state.skillBackView, state.mcpBackView, state.selectedTool])
+  }, [state.view, state.llmsListMode, state.skillBackView, state.mcpBackView, state.selectedTool])
 
   const refreshSelected = useCallback((tools: AiTool[]) => {
     dispatch({ type: 'REFRESH_SELECTED', tools })
@@ -76,9 +88,11 @@ export function useViewRouter(): UseViewRouterResult {
   return {
     ...state,
     selectTool,
+    openLlmsList,
+    openSkillsListForTool,
+    openMcpsListForTool,
     selectSkill,
     selectMcp,
-    selectPermissions,
     openSkillsPage,
     openMcpsPage,
     goTo,

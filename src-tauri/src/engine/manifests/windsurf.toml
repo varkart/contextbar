@@ -11,8 +11,16 @@ type = "json_key"
 file = "~/.windsurf/argv.json"
 key_path = ["version"]
 
+[[skill_sources]]
+id = "workflows"
+type = "directory"
+path = "~/.codeium/windsurf/windsurf/workflows"
+disabled_subdir = ".disabled"
+flat_files = true
+
 [[mcp_sources]]
 id = "mcp_config"
 type = "json_key_pair"
 file = "~/.codeium/windsurf/mcp_config.json"
 active_key = "mcpServers"
+disabled_key = "disabledMcpServers"

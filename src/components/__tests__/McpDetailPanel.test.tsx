@@ -44,17 +44,10 @@ beforeEach(() => {
 })
 
 describe('McpDetailPanel', () => {
-  it('shows skeleton while loading', () => {
+  it('shows spinner while loading', () => {
     mockInvoke.mockReturnValue(new Promise(() => {}))
     const { container } = render(<McpDetailPanel mcp={baseMcp} onBack={vi.fn()} />)
-    expect(container.querySelector('.animate-pulse')).toBeInTheDocument()
-  })
-
-  it('renders mcp name in header', async () => {
-    mockInvoke.mockResolvedValue([])
-    render(<McpDetailPanel mcp={baseMcp} onBack={vi.fn()} />)
-    await waitFor(() => expect(screen.queryByText(/live tools \(/i)).toBeInTheDocument())
-    expect(screen.getByText('github')).toBeInTheDocument()
+    expect(container.querySelector('.animate-spin')).toBeInTheDocument()
   })
 
   it('renders tool list after invoke resolves', async () => {
@@ -76,21 +69,6 @@ describe('McpDetailPanel', () => {
     await waitFor(() => expect(screen.getByText(/connection refused/i)).toBeInTheDocument())
   })
 
-  it('back button calls onBack', () => {
-    mockInvoke.mockReturnValue(new Promise(() => {}))
-    const onBack = vi.fn()
-    render(<McpDetailPanel mcp={baseMcp} onBack={onBack} />)
-    fireEvent.click(screen.getByRole('button', { name: /back/i }))
-    expect(onBack).toHaveBeenCalledTimes(1)
-  })
-
-  it('shows toolName breadcrumb when provided', async () => {
-    defaultMocks()
-    render(<McpDetailPanel mcp={baseMcp} onBack={vi.fn()} toolName="Claude Code" />)
-    await waitFor(() => expect(screen.queryByText(/live tools \(/i)).toBeInTheDocument())
-    expect(screen.getByText('Claude Code')).toBeInTheDocument()
-  })
-
   it('expanding a tool item reveals its description', async () => {
     defaultMocks(notInstalledState, [
       { name: 'search_repos', description: 'Searches GitHub repositories' },
@@ -108,6 +86,7 @@ describe('McpDetailPanel', () => {
     await waitFor(() => expect(mockInvoke).toHaveBeenCalledWith('query_mcp_tools', {
       command: 'npx',
       args: ['-y', '@modelcontextprotocol/server-github'],
+      url: null,
     }))
   })
 })
@@ -121,9 +100,13 @@ describe('NpmInstallSection', () => {
     )
   })
 
-  it('shows "not installed" when installedVersion is null', async () => {
-    defaultMocks()
-    render(<McpDetailPanel mcp={baseMcp} onBack={vi.fn()} />)
+  it('shows "not installed" when installedVersion is null and no auto-download flag', async () => {
+    const noFlagMcp: McpServer = { ...baseMcp, args: ['@modelcontextprotocol/server-github'] }
+    mockInvoke.mockImplementation((cmd: string) => {
+      if (cmd === 'get_mcp_install_state') return Promise.resolve(notInstalledState)
+      return Promise.resolve([])
+    })
+    render(<McpDetailPanel mcp={noFlagMcp} onBack={vi.fn()} />)
     await waitFor(() => expect(screen.getByText('not installed')).toBeInTheDocument())
   })
 

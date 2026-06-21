@@ -18,18 +18,6 @@ beforeEach(() => {
 })
 
 describe('LogsPanel', () => {
-  it('renders Activity Log heading', () => {
-    render(<LogsPanel onBack={vi.fn()} />)
-    expect(screen.getByText('Activity Log')).toBeInTheDocument()
-  })
-
-  it('back button calls onBack', async () => {
-    const onBack = vi.fn()
-    render(<LogsPanel onBack={onBack} />)
-    screen.getByLabelText('Back').click()
-    expect(onBack).toHaveBeenCalledTimes(1)
-  })
-
   it('calls get_audit_log on mount', async () => {
     render(<LogsPanel onBack={vi.fn()} />)
     await waitFor(() => expect(mockInvoke).toHaveBeenCalledWith('get_audit_log', { limit: 200 }))

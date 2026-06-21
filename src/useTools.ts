@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
 import type { AiTool } from './types'
@@ -17,14 +17,20 @@ export function useTools(): UseToolsResult {
   const [loading, setLoading] = useState(true)
   const [cloudSyncing, setCloudSyncing] = useState(false)
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
+  const fetchingRef = useRef(false)
 
   const fetchTools = useCallback(async (): Promise<AiTool[]> => {
+    if (fetchingRef.current) return []
+    fetchingRef.current = true
     setLoading(true)
     const t0 = Date.now()
     try {
       const result = await invoke<AiTool[]>('get_tools')
       const duration_ms = Date.now() - t0
       setTools(result)
+      // Warm caches in background — skills and MCPs
+      invoke('warm_skill_cache').catch(() => {})
+      invoke('warm_mcp_cache').catch(() => {})
       setLastUpdated(new Date())
       capture('tools_loaded', {
         tool_count: result.length,
@@ -41,6 +47,7 @@ export function useTools(): UseToolsResult {
       return []
     } finally {
       setLoading(false)
+      fetchingRef.current = false
     }
   }, [])
 
