@@ -1095,4 +1095,194 @@ mod tests {
             serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
         assert!(content["new-ext"].is_object());
     }
+
+    // ── add_mcp_to_toml_config ────────────────────────────────────────────────
+
+    fn make_toml(dir: &std::path::Path, filename: &str, content: &str) -> String {
+        let path = dir.join(filename);
+        fs::write(&path, content).unwrap();
+        path.to_string_lossy().to_string()
+    }
+
+    #[test]
+    fn toml_add_mcp_inserts_entry() {
+        let tmp = TempDir::new().unwrap();
+        let path = make_toml(tmp.path(), "config.toml", "[mcpServers]\n");
+
+        add_mcp_to_toml_config(&path, "mcpServers", "my-server", Some("npx"), &["mcp-pkg".to_string()], None).unwrap();
+
+        let raw = fs::read_to_string(&path).unwrap();
+        let doc: toml::Value = toml::from_str(&raw).unwrap();
+        assert_eq!(doc["mcpServers"]["my-server"]["command"].as_str(), Some("npx"));
+        assert_eq!(doc["mcpServers"]["my-server"]["args"][0].as_str(), Some("mcp-pkg"));
+    }
+
+    #[test]
+    fn toml_add_mcp_with_url() {
+        let tmp = TempDir::new().unwrap();
+        let path = make_toml(tmp.path(), "config.toml", "");
+
+        add_mcp_to_toml_config(&path, "mcpServers", "http-server", None, &[], Some("https://mcp.example.com/sse")).unwrap();
+
+        let raw = fs::read_to_string(&path).unwrap();
+        let doc: toml::Value = toml::from_str(&raw).unwrap();
+        assert_eq!(doc["mcpServers"]["http-server"]["url"].as_str(), Some("https://mcp.example.com/sse"));
+        assert!(doc["mcpServers"]["http-server"].get("command").is_none());
+    }
+
+    #[test]
+    fn toml_add_mcp_fails_when_already_exists() {
+        let tmp = TempDir::new().unwrap();
+        let path = make_toml(tmp.path(), "config.toml", "[mcpServers]\n[mcpServers.existing]\ncommand = \"npx\"\n");
+
+        let result = add_mcp_to_toml_config(&path, "mcpServers", "existing", Some("node"), &[], None);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("already exists"));
+    }
+
+    #[test]
+    fn toml_add_mcp_creates_section_when_missing() {
+        let tmp = TempDir::new().unwrap();
+        let path = make_toml(tmp.path(), "config.toml", "");
+
+        add_mcp_to_toml_config(&path, "mcpServers", "new-server", Some("uvx"), &["tool".to_string()], None).unwrap();
+
+        let raw = fs::read_to_string(&path).unwrap();
+        let doc: toml::Value = toml::from_str(&raw).unwrap();
+        assert!(doc["mcpServers"]["new-server"].is_table());
+    }
+
+    // ── toggle_toml_mcp_enabled ───────────────────────────────────────────────
+
+    #[test]
+    fn toml_toggle_mcp_sets_enabled_false() {
+        let tmp = TempDir::new().unwrap();
+        let path = make_toml(
+            tmp.path(),
+            "config.toml",
+            "[mcpServers.my-server]\ncommand = \"npx\"\nenabled = true\n",
+        );
+
+        toggle_toml_mcp_enabled(&path, "mcpServers", "my-server", false, "enabled").unwrap();
+
+        let raw = fs::read_to_string(&path).unwrap();
+        let doc: toml::Value = toml::from_str(&raw).unwrap();
+        assert_eq!(doc["mcpServers"]["my-server"]["enabled"].as_bool(), Some(false));
+    }
+
+    #[test]
+    fn toml_toggle_mcp_sets_enabled_true() {
+        let tmp = TempDir::new().unwrap();
+        let path = make_toml(
+            tmp.path(),
+            "config.toml",
+            "[mcpServers.my-server]\ncommand = \"npx\"\nenabled = false\n",
+        );
+
+        toggle_toml_mcp_enabled(&path, "mcpServers", "my-server", true, "enabled").unwrap();
+
+        let raw = fs::read_to_string(&path).unwrap();
+        let doc: toml::Value = toml::from_str(&raw).unwrap();
+        assert_eq!(doc["mcpServers"]["my-server"]["enabled"].as_bool(), Some(true));
+    }
+
+    #[test]
+    fn toml_toggle_mcp_missing_server_returns_err() {
+        let tmp = TempDir::new().unwrap();
+        let path = make_toml(tmp.path(), "config.toml", "[mcpServers]\n");
+
+        let result = toggle_toml_mcp_enabled(&path, "mcpServers", "ghost", false, "enabled");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("not found"));
+    }
+
+    // ── move_mcp_in_toml_config ───────────────────────────────────────────────
+
+    #[test]
+    fn toml_disable_mcp_moves_to_disabled_section() {
+        let tmp = TempDir::new().unwrap();
+        let path = make_toml(
+            tmp.path(),
+            "config.toml",
+            "[mcpServers.target]\ncommand = \"npx\"\n",
+        );
+
+        move_mcp_in_toml_config(&path, "target", false, "mcpServers", "disabledMcpServers").unwrap();
+
+        let raw = fs::read_to_string(&path).unwrap();
+        let doc: toml::Value = toml::from_str(&raw).unwrap();
+        assert!(doc["mcpServers"].get("target").is_none());
+        assert!(doc["disabledMcpServers"]["target"].is_table());
+    }
+
+    #[test]
+    fn toml_enable_mcp_moves_back_to_active_section() {
+        let tmp = TempDir::new().unwrap();
+        let path = make_toml(
+            tmp.path(),
+            "config.toml",
+            "[disabledMcpServers.target]\ncommand = \"npx\"\n",
+        );
+
+        move_mcp_in_toml_config(&path, "target", true, "mcpServers", "disabledMcpServers").unwrap();
+
+        let raw = fs::read_to_string(&path).unwrap();
+        let doc: toml::Value = toml::from_str(&raw).unwrap();
+        assert!(doc["disabledMcpServers"].get("target").is_none());
+        assert!(doc["mcpServers"]["target"].is_table());
+    }
+
+    #[test]
+    fn toml_move_mcp_missing_returns_err() {
+        let tmp = TempDir::new().unwrap();
+        let path = make_toml(tmp.path(), "config.toml", "[mcpServers]\n");
+
+        let result = move_mcp_in_toml_config(&path, "ghost", false, "mcpServers", "disabledMcpServers");
+        assert!(result.is_err());
+    }
+
+    // ── remove_mcp_from_toml_config ───────────────────────────────────────────
+
+    #[test]
+    fn toml_remove_mcp_deletes_entry() {
+        let tmp = TempDir::new().unwrap();
+        let path = make_toml(
+            tmp.path(),
+            "config.toml",
+            "[mcpServers.target]\ncommand = \"npx\"\n",
+        );
+
+        remove_mcp_from_toml_config(&path, "mcpServers", "target").unwrap();
+
+        let raw = fs::read_to_string(&path).unwrap();
+        let doc: toml::Value = toml::from_str(&raw).unwrap();
+        assert!(doc["mcpServers"].get("target").is_none());
+    }
+
+    #[test]
+    fn toml_remove_mcp_missing_returns_err() {
+        let tmp = TempDir::new().unwrap();
+        let path = make_toml(tmp.path(), "config.toml", "[mcpServers]\n");
+
+        let result = remove_mcp_from_toml_config(&path, "mcpServers", "ghost");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("not found"));
+    }
+
+    #[test]
+    fn toml_remove_preserves_other_entries() {
+        let tmp = TempDir::new().unwrap();
+        let path = make_toml(
+            tmp.path(),
+            "config.toml",
+            "[mcpServers.keep]\ncommand = \"node\"\n[mcpServers.remove-me]\ncommand = \"npx\"\n",
+        );
+
+        remove_mcp_from_toml_config(&path, "mcpServers", "remove-me").unwrap();
+
+        let raw = fs::read_to_string(&path).unwrap();
+        let doc: toml::Value = toml::from_str(&raw).unwrap();
+        assert!(doc["mcpServers"]["keep"].is_table());
+        assert!(doc["mcpServers"].get("remove-me").is_none());
+    }
 }
