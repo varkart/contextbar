@@ -9,6 +9,7 @@ export type View =
   | 'tool-detail'
   | 'skills-list'
   | 'all-skills-list'
+  | 'all-mcps-list'
   | 'mcps-list'
   | 'skill-detail'
   | 'mcp-detail'
@@ -30,6 +31,7 @@ const _VIEW_REGISTRY: Record<View, true> = {
   'tool-detail': true,
   'skills-list': true,
   'all-skills-list': true,
+  'all-mcps-list': true,
   'mcps-list': true,
   'skill-detail': true,
   'mcp-detail': true,
@@ -49,6 +51,8 @@ export interface RouterState {
   selectedMcp: McpServer | null
   skillBackView: View
   mcpBackView: View
+  allSkillsBackView: View
+  allMcpsBackView: View
 }
 
 export type RouterAction =
@@ -59,8 +63,8 @@ export type RouterAction =
   | { type: 'SELECT_SKILL'; skill: Skill; fromView: View }
   | { type: 'SELECT_MCP'; mcp: McpServer; fromView: View }
   | { type: 'SELECT_PERMISSIONS' }
-  | { type: 'OPEN_SKILLS_PAGE' }
-  | { type: 'OPEN_MCPS_PAGE' }
+  | { type: 'OPEN_SKILLS_PAGE'; fromView: View }
+  | { type: 'OPEN_MCPS_PAGE'; fromView: View }
   | { type: 'GO_TO'; view: View }
   | { type: 'REFRESH_SELECTED'; tools: AiTool[] }
 
@@ -74,11 +78,14 @@ export function escapeTransition(
   skillBackView: View,
   mcpBackView: View,
   selectedTool: AiTool | null,
+  allSkillsBackView: View,
+  allMcpsBackView: View,
 ): EscapeResult {
   if (view === 'skill-detail') return { type: 'navigate', to: skillBackView }
   if (view === 'mcp-detail') return { type: 'navigate', to: mcpBackView }
   if (view === 'permissions-detail') return { type: 'navigate', to: selectedTool ? 'tool-detail' : 'main' }
-  if (view === 'all-skills-list') return { type: 'navigate', to: 'main' }
+  if (view === 'all-skills-list') return { type: 'navigate', to: allSkillsBackView }
+  if (view === 'all-mcps-list') return { type: 'navigate', to: allMcpsBackView }
   if (view === 'skills-list') return { type: 'navigate', to: llmsListMode === 'skills' ? 'llms-list' : 'tool-detail' }
   if (view === 'mcps-list') return { type: 'navigate', to: llmsListMode === 'mcps' ? 'llms-list' : 'tool-detail' }
   if (view === 'tool-detail') return { type: 'navigate', to: 'llms-list' }
@@ -99,6 +106,8 @@ export function initialRouterState(hash = ''): RouterState {
     selectedMcp: null,
     skillBackView: 'tool-detail',
     mcpBackView: 'tool-detail',
+    allSkillsBackView: 'tool-detail',
+    allMcpsBackView: 'tool-detail',
   }
 }
 
@@ -126,10 +135,10 @@ export function routerReducer(state: RouterState, action: RouterAction): RouterS
       return { ...state, view: 'permissions-detail' }
 
     case 'OPEN_SKILLS_PAGE':
-      return { ...state, view: 'all-skills-list', selectedTool: null }
+      return { ...state, view: 'all-skills-list', allSkillsBackView: action.fromView }
 
     case 'OPEN_MCPS_PAGE':
-      return { ...state, view: 'mcps-list' }
+      return { ...state, view: 'all-mcps-list', allMcpsBackView: action.fromView }
 
     case 'GO_TO':
       return { ...state, view: action.view }

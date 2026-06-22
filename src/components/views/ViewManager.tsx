@@ -9,6 +9,7 @@ import Settings from '../Settings'
 import MainView from './MainView'
 import LlmsListView from './LlmsListView'
 import AllSkillsView from './AllSkillsView'
+import AllMcpsView from './AllMcpsView'
 import AddSkillView from './AddSkillView'
 import AddMcpView from './AddMcpView'
 
@@ -116,6 +117,15 @@ export default function ViewManager({
         tools={tools}
         onBack={() => escape()}
         onSelectSkill={skill => selectSkill(skill, 'all-skills-list')}
+      />
+    )
+  }
+  if (view === 'all-mcps-list') {
+    return (
+      <AllMcpsView
+        tools={tools}
+        onBack={() => escape()}
+        onSelectMcp={mcp => selectMcp(mcp, 'all-mcps-list')}
       />
     )
   }
