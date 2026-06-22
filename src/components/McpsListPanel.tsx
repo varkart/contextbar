@@ -64,8 +64,7 @@ export default function McpsListPanel({ tool, onSelectMcp, onAddMcp }: McpsListP
         </button>
       </div>
 
-      {tool.mcps.length > 5 && (
-        <div className="px-3 py-1.5 border-b border-[var(--c-border)] flex-shrink-0">
+      <div className="px-3 py-1.5 border-b border-[var(--c-border)] flex-shrink-0">
           <input
             ref={filterInputRef}
             type="text"
@@ -76,7 +75,6 @@ export default function McpsListPanel({ tool, onSelectMcp, onAddMcp }: McpsListP
             className="w-full bg-[var(--c-hover)] text-[13px] text-[var(--c-text)] placeholder-[var(--c-text-3)] rounded px-2.5 py-1 outline-none focus:ring-1 focus:ring-violet-400/40"
           />
         </div>
-      )}
 
       <div className="flex-1 overflow-y-auto py-1">
         {filtered.length === 0 ? (
