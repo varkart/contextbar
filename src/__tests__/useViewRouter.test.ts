@@ -116,10 +116,10 @@ describe('useViewRouter — openSkillsPage / openMcpsPage', () => {
     expect(result.current.view).toBe('all-skills-list')
   })
 
-  it('openMcpsPage navigates to mcps-list', () => {
+  it('openMcpsPage navigates to all-mcps-list', () => {
     const { result } = renderHook(() => useViewRouter())
     act(() => { result.current.openMcpsPage() })
-    expect(result.current.view).toBe('mcps-list')
+    expect(result.current.view).toBe('all-mcps-list')
   })
 })
 
