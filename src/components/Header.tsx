@@ -14,6 +14,8 @@ function buildBreadcrumbs(
   selectedMcp: McpServer | null,
   skillBackView: View,
   mcpBackView: View,
+  allSkillsBackView: View,
+  allMcpsBackView: View,
   goTo: (v: View) => void,
   openLlmsList: (mode: LlmsListMode) => void,
 ): BreadcrumbSegment[] {
@@ -43,7 +45,16 @@ function buildBreadcrumbs(
       return [home, toolCrumb(), { label: 'MCPs' }]
 
     case 'all-skills-list':
+      if (allSkillsBackView === 'tool-detail' && selectedTool) {
+        return [home, providers, toolCrumb(), { label: 'All Skills' }]
+      }
       return [home, { label: 'All Skills' }]
+
+    case 'all-mcps-list':
+      if (allMcpsBackView === 'tool-detail' && selectedTool) {
+        return [home, providers, toolCrumb(), { label: 'All MCPs' }]
+      }
+      return [home, { label: 'All MCPs' }]
 
     case 'skill-detail':
       if (skillBackView === 'all-skills-list') {
@@ -55,6 +66,9 @@ function buildBreadcrumbs(
       return [home, toolCrumb(), { label: selectedSkill?.name ?? '…' }]
 
     case 'mcp-detail':
+      if (mcpBackView === 'all-mcps-list') {
+        return [home, { label: 'All MCPs', onClick: () => goTo('all-mcps-list') }, { label: selectedMcp?.name ?? '…' }]
+      }
       if (mcpBackView === 'mcps-list') {
         return [home, toolCrumb(), { label: 'MCPs', onClick: () => goTo('mcps-list') }, { label: selectedMcp?.name ?? '…' }]
       }
@@ -113,6 +127,8 @@ export interface HeaderProps {
   selectedMcp: McpServer | null
   skillBackView: View
   mcpBackView: View
+  allSkillsBackView: View
+  allMcpsBackView: View
   goTo: (view: View) => void
   openLlmsList: (mode: LlmsListMode) => void
   updateAvailable?: boolean
@@ -129,6 +145,8 @@ export default function Header({
   selectedMcp,
   skillBackView,
   mcpBackView,
+  allSkillsBackView,
+  allMcpsBackView,
   goTo,
   openLlmsList,
   updateAvailable,
@@ -138,7 +156,7 @@ export default function Header({
 }: HeaderProps) {
   const crumbs = buildBreadcrumbs(
     view, llmsListMode, selectedTool, selectedSkill, selectedMcp,
-    skillBackView, mcpBackView, goTo, openLlmsList,
+    skillBackView, mcpBackView, allSkillsBackView, allMcpsBackView, goTo, openLlmsList,
   )
   const hasNotifications = (notificationCount ?? 0) > 0
 

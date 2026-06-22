@@ -10,6 +10,8 @@ const defaultProps = {
   selectedMcp: null,
   skillBackView: 'tool-detail' as const,
   mcpBackView: 'tool-detail' as const,
+  allSkillsBackView: 'tool-detail' as const,
+  allMcpsBackView: 'tool-detail' as const,
   goTo: vi.fn(),
   openLlmsList: vi.fn(),
   onSettingsClick: vi.fn(),

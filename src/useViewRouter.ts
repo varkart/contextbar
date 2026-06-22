@@ -67,19 +67,20 @@ export function useViewRouter(): UseViewRouterResult {
     capture('mcp_detail_viewed', { mcp_name: mcp.name })
   }, [])
 
-  const openSkillsPage = useCallback(() => dispatch({ type: 'OPEN_SKILLS_PAGE' }), [])
+  const openSkillsPage = useCallback(() => dispatch({ type: 'OPEN_SKILLS_PAGE', fromView: state.view }), [state.view])
 
-  const openMcpsPage = useCallback(() => dispatch({ type: 'OPEN_MCPS_PAGE' }), [])
+  const openMcpsPage = useCallback(() => dispatch({ type: 'OPEN_MCPS_PAGE', fromView: state.view }), [state.view])
 
   const goTo = useCallback((view: View) => dispatch({ type: 'GO_TO', view }), [])
 
   const escape = useCallback(() => {
     const result = escapeTransition(
       state.view, state.llmsListMode, state.skillBackView, state.mcpBackView, state.selectedTool,
+      state.allSkillsBackView, state.allMcpsBackView,
     )
     if (result.type === 'navigate') dispatch({ type: 'GO_TO', view: result.to })
     else invoke('hide_window').catch(() => {})
-  }, [state.view, state.llmsListMode, state.skillBackView, state.mcpBackView, state.selectedTool])
+  }, [state.view, state.llmsListMode, state.skillBackView, state.mcpBackView, state.selectedTool, state.allSkillsBackView, state.allMcpsBackView])
 
   const refreshSelected = useCallback((tools: AiTool[]) => {
     dispatch({ type: 'REFRESH_SELECTED', tools })
