@@ -67,6 +67,12 @@ Or: System Settings → Privacy & Security → scroll down → **Open Anyway**
 - macOS 13 (Ventura) or later
 - Apple Silicon or Intel (universal binary)
 
+> **Windows / Linux not supported.** llmmanager uses macOS-specific APIs (tray, FSEvents, Tauri positioner). If you add Windows support, regenerate the full icon set from the source PNG:
+> ```bash
+> npm run tauri icon assets/sloth_transparent_nobg.png
+> ```
+> This regenerates all sizes including `icon.ico` and `icon.png` in `src-tauri/icons/`.
+
 ---
 
 ## Build from source
