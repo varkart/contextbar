@@ -18,7 +18,7 @@
   "plugins": {
     "updater": {
       "pubkey": "",
-      "endpoints": ["https://github.com/varkart/agentbar/releases/latest/download/latest.json"]
+      "endpoints": ["https://github.com/varkart/llmmanager/releases/latest/download/latest.json"]
     }
   },
   "bundle": {
