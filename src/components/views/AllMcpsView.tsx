@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react'
 import type { AiTool, McpServer } from '../../types'
 import ToolDot from '../ToolDot'
 import ProviderChips from '../ProviderChips'
+import SearchInput from '../SearchInput'
 import { useProviderFilter } from '../../hooks/useProviderFilter'
 
 interface Props {
@@ -69,20 +70,7 @@ export default function AllMcpsView({ tools, onSelectMcp }: Props) {
       </div>
 
       <div className="px-3 py-2 border-b border-[var(--c-border)] flex-shrink-0">
-        <div className="relative">
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
-            stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
-            className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[var(--c-text-3)]">
-            <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
-          </svg>
-          <input
-            type="text"
-            value={query}
-            onChange={e => setQuery(e.target.value)}
-            placeholder="Search MCPs…"
-            className="w-full bg-[var(--c-surface)] border border-[var(--c-border)] rounded-md pl-8 pr-3 py-1.5 text-[13px] text-[var(--c-text)] placeholder:text-[var(--c-text-3)] focus:outline-none focus:border-violet-500/50"
-          />
-        </div>
+        <SearchInput value={query} onChange={setQuery} placeholder="Search MCPs…" accentColor="violet" />
       </div>
 
       <ProviderChips installedTools={installedTools} selectedTools={selectedTools} onToggle={toggleTool} />
