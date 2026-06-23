@@ -48,10 +48,10 @@ describe('SkillsListPanel', () => {
     expect(screen.getByPlaceholderText('Filter skills…')).toBeInTheDocument()
   })
 
-  it('hides search input when 5 or fewer skills', () => {
+  it('shows search input even with 3 skills', () => {
     const smallTool = { ...tool, skills: tool.skills.slice(0, 3) }
     render(<SkillsListPanel tool={smallTool} onBack={vi.fn()} onSelectSkill={vi.fn()} onAddSkill={vi.fn()} />)
-    expect(screen.queryByPlaceholderText('Filter skills…')).not.toBeInTheDocument()
+    expect(screen.getByPlaceholderText('Filter skills…')).toBeInTheDocument()
   })
 
   it('search filters skill list', () => {

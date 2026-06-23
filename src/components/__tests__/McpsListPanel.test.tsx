@@ -59,10 +59,10 @@ describe('McpsListPanel', () => {
     expect(screen.getByPlaceholderText('Filter MCPs…')).toBeInTheDocument()
   })
 
-  it('hides search input when 5 or fewer MCPs', () => {
+  it('shows search input even with 3 MCPs', () => {
     const smallTool = { ...tool, mcps: tool.mcps.slice(0, 3) }
     render(<McpsListPanel tool={smallTool} onBack={vi.fn()} onSelectMcp={vi.fn()} onAddMcp={vi.fn()} />)
-    expect(screen.queryByPlaceholderText('Filter MCPs…')).not.toBeInTheDocument()
+    expect(screen.getByPlaceholderText('Filter MCPs…')).toBeInTheDocument()
   })
 
   it('search filters MCP list', () => {

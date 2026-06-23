@@ -1,6 +1,6 @@
 [package]
 name = "llmmanager"
-version = "0.7.0"
+version = "0.8.0"
 description = "macOS menu bar app — unified view of LLM skills and MCP servers"
 authors = ["varkart"]
 edition = "2021"

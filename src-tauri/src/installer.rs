@@ -52,6 +52,29 @@ fn find_npm() -> Option<PathBuf> {
     })
 }
 
+/// Build a PATH string that guarantees `node` is resolvable when npm runs.
+/// macOS app bundles inherit a stripped PATH; npm's shebang (`#!/usr/bin/env node`)
+/// needs node visible to `env`, so we prepend the npm binary's own directory plus
+/// well-known Homebrew/system locations.
+fn augmented_path(npm: &std::path::Path) -> String {
+    let npm_bin_dir = npm.parent().map(|p| p.to_string_lossy().into_owned()).unwrap_or_default();
+    let extra = [
+        npm_bin_dir.as_str(),
+        "/opt/homebrew/bin",
+        "/usr/local/bin",
+        "/usr/bin",
+        "/bin",
+    ];
+    let existing = std::env::var("PATH").unwrap_or_default();
+    let mut parts: Vec<&str> = extra.iter().copied().collect();
+    for p in existing.split(':') {
+        if !parts.contains(&p) {
+            parts.push(p);
+        }
+    }
+    parts.join(":")
+}
+
 /// Locate the `npx` binary by deriving it from the npm binary path.
 pub fn find_npx() -> Option<PathBuf> {
     let npm = find_npm()?;
@@ -104,6 +127,7 @@ pub fn get_npm_installed_version(package_name: &str) -> Option<String> {
     let npm = find_npm()?;
     let output = std::process::Command::new(&npm)
         .args(["ls", "-g", "--json", "--depth=0", package_name])
+        .env("PATH", augmented_path(&npm))
         .output()
         .ok()?;
 
@@ -125,6 +149,7 @@ pub async fn install_npm_global(package_name: &str) -> Result<String, String> {
 
     let output = tokio::process::Command::new(&npm)
         .args(["install", "-g", package_name])
+        .env("PATH", augmented_path(&npm))
         .output()
         .await
         .map_err(|e| format!("failed to spawn npm: {e}"))?;
@@ -236,6 +261,7 @@ pub async fn get_npm_latest_version(package_name: &str) -> Option<String> {
     let npm = find_npm()?;
     let output = tokio::process::Command::new(&npm)
         .args(["view", package_name, "version"])
+        .env("PATH", augmented_path(&npm))
         .output()
         .await
         .ok()?;

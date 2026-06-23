@@ -4,12 +4,13 @@ import Header from '../Header'
 
 const defaultProps = {
   view: 'main' as const,
-  llmsListMode: 'default' as const,
   selectedTool: null,
   selectedSkill: null,
   selectedMcp: null,
   skillBackView: 'tool-detail' as const,
   mcpBackView: 'tool-detail' as const,
+  allSkillsBackView: 'tool-detail' as const,
+  allMcpsBackView: 'tool-detail' as const,
   goTo: vi.fn(),
   openLlmsList: vi.fn(),
   onSettingsClick: vi.fn(),
