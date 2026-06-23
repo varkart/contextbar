@@ -43,3 +43,9 @@ docs/
 coverage/
 playwright-report/
 test-results/
+
+# Prototype files (local dev artifacts, never commit)
+*-prototypes.html
+prototype*.html
+prototype/
+*.skill
