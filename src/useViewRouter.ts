@@ -15,7 +15,7 @@ export type { View, LlmsListMode }
 
 export interface UseViewRouterResult extends RouterState {
   selectTool: (tool: AiTool) => void
-  openLlmsList: (mode: LlmsListMode) => void
+  openLlmsList: () => void
   openSkillsListForTool: (tool: AiTool) => void
   openMcpsListForTool: (tool: AiTool) => void
   selectSkill: (skill: Skill, fromView?: View) => void
@@ -43,8 +43,8 @@ export function useViewRouter(): UseViewRouterResult {
     capture('tool_detail_viewed', { tool_id: tool.id })
   }, [])
 
-  const openLlmsList = useCallback((mode: LlmsListMode) => {
-    dispatch({ type: 'OPEN_LLMS_LIST', mode })
+  const openLlmsList = useCallback(() => {
+    dispatch({ type: 'OPEN_LLMS_LIST', mode: 'default' })
   }, [])
 
   const openSkillsListForTool = useCallback((tool: AiTool) => {
@@ -67,19 +67,20 @@ export function useViewRouter(): UseViewRouterResult {
     capture('mcp_detail_viewed', { mcp_name: mcp.name })
   }, [])
 
-  const openSkillsPage = useCallback(() => dispatch({ type: 'OPEN_SKILLS_PAGE' }), [])
+  const openSkillsPage = useCallback(() => dispatch({ type: 'OPEN_SKILLS_PAGE', fromView: state.view }), [state.view])
 
-  const openMcpsPage = useCallback(() => dispatch({ type: 'OPEN_MCPS_PAGE' }), [])
+  const openMcpsPage = useCallback(() => dispatch({ type: 'OPEN_MCPS_PAGE', fromView: state.view }), [state.view])
 
   const goTo = useCallback((view: View) => dispatch({ type: 'GO_TO', view }), [])
 
   const escape = useCallback(() => {
     const result = escapeTransition(
-      state.view, state.llmsListMode, state.skillBackView, state.mcpBackView, state.selectedTool,
+      state.view, state.skillBackView, state.mcpBackView, state.selectedTool,
+      state.allSkillsBackView, state.allMcpsBackView,
     )
     if (result.type === 'navigate') dispatch({ type: 'GO_TO', view: result.to })
     else invoke('hide_window').catch(() => {})
-  }, [state.view, state.llmsListMode, state.skillBackView, state.mcpBackView, state.selectedTool])
+  }, [state.view, state.skillBackView, state.mcpBackView, state.selectedTool, state.allSkillsBackView, state.allMcpsBackView])
 
   const refreshSelected = useCallback((tools: AiTool[]) => {
     dispatch({ type: 'REFRESH_SELECTED', tools })

@@ -9,6 +9,7 @@ import Settings from '../Settings'
 import MainView from './MainView'
 import LlmsListView from './LlmsListView'
 import AllSkillsView from './AllSkillsView'
+import AllMcpsView from './AllMcpsView'
 import AddSkillView from './AddSkillView'
 import AddMcpView from './AddMcpView'
 
@@ -17,14 +18,11 @@ import type { AiTool, Skill } from '../../types'
 
 export default function ViewManager({
   view,
-  llmsListMode,
   selectedTool,
   selectedSkill,
   selectedMcp,
   selectTool,
   openLlmsList,
-  openSkillsListForTool,
-  openMcpsListForTool,
   selectSkill,
   selectMcp,
   openSkillsPage,
@@ -80,13 +78,7 @@ export default function ViewManager({
       <LlmsListView
         tools={tools}
         loading={loading}
-        mode={llmsListMode}
-        onBack={() => goTo('main')}
         onSelectTool={selectTool}
-        onOpenSkillsForTool={openSkillsListForTool}
-        onOpenMcpsForTool={openMcpsListForTool}
-        onAddSkill={() => goTo('add-skill')}
-        onAddMcp={() => goTo('add-mcp')}
       />
     )
   }
@@ -116,6 +108,15 @@ export default function ViewManager({
         tools={tools}
         onBack={() => escape()}
         onSelectSkill={skill => selectSkill(skill, 'all-skills-list')}
+      />
+    )
+  }
+  if (view === 'all-mcps-list') {
+    return (
+      <AllMcpsView
+        tools={tools}
+        onBack={() => escape()}
+        onSelectMcp={mcp => selectMcp(mcp, 'all-mcps-list')}
       />
     )
   }
@@ -193,6 +194,8 @@ export default function ViewManager({
       onFetchTools={handleFetchTools}
       onGoTo={goTo}
       onOpenLlmsList={openLlmsList}
+      onOpenSkillsPage={openSkillsPage}
+      onOpenMcpsPage={openMcpsPage}
     />
   )
 }

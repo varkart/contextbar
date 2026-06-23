@@ -33,20 +33,10 @@ describe('initialRouterState', () => {
 })
 
 describe('routerReducer — OPEN_LLMS_LIST', () => {
-  it('navigates to llms-list with given mode', () => {
-    const next = routerReducer(base, { type: 'OPEN_LLMS_LIST', mode: 'skills' })
-    expect(next.view).toBe('llms-list')
-    expect(next.llmsListMode).toBe('skills')
-  })
-
-  it('default mode', () => {
+  it('navigates to llms-list', () => {
     const next = routerReducer(base, { type: 'OPEN_LLMS_LIST', mode: 'default' })
+    expect(next.view).toBe('llms-list')
     expect(next.llmsListMode).toBe('default')
-  })
-
-  it('mcps mode', () => {
-    const next = routerReducer(base, { type: 'OPEN_LLMS_LIST', mode: 'mcps' })
-    expect(next.llmsListMode).toBe('mcps')
   })
 })
 
@@ -112,15 +102,25 @@ describe('routerReducer — SELECT_PERMISSIONS', () => {
 
 describe('routerReducer — OPEN_SKILLS_PAGE', () => {
   it('navigates to all-skills-list', () => {
-    const next = routerReducer(base, { type: 'OPEN_SKILLS_PAGE' })
+    const next = routerReducer(base, { type: 'OPEN_SKILLS_PAGE', fromView: 'tool-detail' })
     expect(next.view).toBe('all-skills-list')
+  })
+
+  it('stores allSkillsBackView from fromView', () => {
+    const next = routerReducer(base, { type: 'OPEN_SKILLS_PAGE', fromView: 'tool-detail' })
+    expect(next.allSkillsBackView).toBe('tool-detail')
   })
 })
 
 describe('routerReducer — OPEN_MCPS_PAGE', () => {
-  it('navigates to mcps-list', () => {
-    const next = routerReducer(base, { type: 'OPEN_MCPS_PAGE' })
-    expect(next.view).toBe('mcps-list')
+  it('navigates to all-mcps-list', () => {
+    const next = routerReducer(base, { type: 'OPEN_MCPS_PAGE', fromView: 'tool-detail' })
+    expect(next.view).toBe('all-mcps-list')
+  })
+
+  it('stores allMcpsBackView from fromView', () => {
+    const next = routerReducer(base, { type: 'OPEN_MCPS_PAGE', fromView: 'tool-detail' })
+    expect(next.allMcpsBackView).toBe('tool-detail')
   })
 })
 

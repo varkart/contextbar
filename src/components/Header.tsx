@@ -1,5 +1,5 @@
 import type { AiTool, Skill, McpServer } from '../types'
-import type { View, LlmsListMode } from '../viewRouter'
+import type { View } from '../viewRouter'
 
 interface BreadcrumbSegment {
   label: string
@@ -8,17 +8,18 @@ interface BreadcrumbSegment {
 
 function buildBreadcrumbs(
   view: View,
-  llmsListMode: LlmsListMode,
   selectedTool: AiTool | null,
   selectedSkill: Skill | null,
   selectedMcp: McpServer | null,
   skillBackView: View,
   mcpBackView: View,
+  allSkillsBackView: View,
+  allMcpsBackView: View,
   goTo: (v: View) => void,
-  openLlmsList: (mode: LlmsListMode) => void,
+  openLlmsList: () => void,
 ): BreadcrumbSegment[] {
   const home: BreadcrumbSegment = { label: 'Home', onClick: () => goTo('main') }
-  const providers: BreadcrumbSegment = { label: 'Providers', onClick: () => openLlmsList('default') }
+  const providers: BreadcrumbSegment = { label: 'Providers', onClick: () => openLlmsList() }
   const toolCrumb = (clickable = true): BreadcrumbSegment => ({
     label: selectedTool?.name ?? '…',
     onClick: clickable ? () => goTo('tool-detail') : undefined,
@@ -28,10 +29,8 @@ function buildBreadcrumbs(
     case 'main':
       return [{ label: 'Home' }]
 
-    case 'llms-list': {
-      const label = llmsListMode === 'skills' ? 'Skills' : llmsListMode === 'mcps' ? 'MCPs' : 'Providers'
-      return [home, { label }]
-    }
+    case 'llms-list':
+      return [home, { label: 'Providers' }]
 
     case 'tool-detail':
       return [home, providers, { label: selectedTool?.name ?? '…' }]
@@ -43,7 +42,16 @@ function buildBreadcrumbs(
       return [home, toolCrumb(), { label: 'MCPs' }]
 
     case 'all-skills-list':
+      if (allSkillsBackView === 'tool-detail' && selectedTool) {
+        return [home, providers, toolCrumb(), { label: 'All Skills' }]
+      }
       return [home, { label: 'All Skills' }]
+
+    case 'all-mcps-list':
+      if (allMcpsBackView === 'tool-detail' && selectedTool) {
+        return [home, providers, toolCrumb(), { label: 'All MCPs' }]
+      }
+      return [home, { label: 'All MCPs' }]
 
     case 'skill-detail':
       if (skillBackView === 'all-skills-list') {
@@ -55,6 +63,9 @@ function buildBreadcrumbs(
       return [home, toolCrumb(), { label: selectedSkill?.name ?? '…' }]
 
     case 'mcp-detail':
+      if (mcpBackView === 'all-mcps-list') {
+        return [home, { label: 'All MCPs', onClick: () => goTo('all-mcps-list') }, { label: selectedMcp?.name ?? '…' }]
+      }
       if (mcpBackView === 'mcps-list') {
         return [home, toolCrumb(), { label: 'MCPs', onClick: () => goTo('mcps-list') }, { label: selectedMcp?.name ?? '…' }]
       }
@@ -107,14 +118,15 @@ function GearIcon() {
 
 export interface HeaderProps {
   view: View
-  llmsListMode: LlmsListMode
   selectedTool: AiTool | null
   selectedSkill: Skill | null
   selectedMcp: McpServer | null
   skillBackView: View
   mcpBackView: View
+  allSkillsBackView: View
+  allMcpsBackView: View
   goTo: (view: View) => void
-  openLlmsList: (mode: LlmsListMode) => void
+  openLlmsList: () => void
   updateAvailable?: boolean
   notificationCount?: number
   onSettingsClick: () => void
@@ -123,12 +135,13 @@ export interface HeaderProps {
 
 export default function Header({
   view,
-  llmsListMode,
   selectedTool,
   selectedSkill,
   selectedMcp,
   skillBackView,
   mcpBackView,
+  allSkillsBackView,
+  allMcpsBackView,
   goTo,
   openLlmsList,
   updateAvailable,
@@ -137,8 +150,8 @@ export default function Header({
   onNotificationsClick,
 }: HeaderProps) {
   const crumbs = buildBreadcrumbs(
-    view, llmsListMode, selectedTool, selectedSkill, selectedMcp,
-    skillBackView, mcpBackView, goTo, openLlmsList,
+    view, selectedTool, selectedSkill, selectedMcp,
+    skillBackView, mcpBackView, allSkillsBackView, allMcpsBackView, goTo, openLlmsList,
   )
   const hasNotifications = (notificationCount ?? 0) > 0
 
