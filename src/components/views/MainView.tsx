@@ -16,6 +16,8 @@ interface MainViewProps {
   onFetchTools: () => Promise<void>;
   onGoTo: (view: any) => void;
   onOpenLlmsList: (mode: LlmsListMode) => void;
+  onOpenSkillsPage: () => void;
+  onOpenMcpsPage: () => void;
 }
 
 // ── Animated icons ────────────────────────────────────────────
@@ -305,6 +307,8 @@ export default function MainView({
   loading,
   installedTools,
   onOpenLlmsList,
+  onOpenSkillsPage,
+  onOpenMcpsPage,
 }: MainViewProps) {
   return (
     <div className="flex flex-col h-full">
@@ -333,7 +337,11 @@ export default function MainView({
               row={row}
               tools={installedTools}
               loading={loading}
-              onClick={() => onOpenLlmsList(row.key)}
+              onClick={() =>
+                row.key === 'skills' ? onOpenSkillsPage()
+                : row.key === 'mcps' ? onOpenMcpsPage()
+                : onOpenLlmsList(row.key)
+              }
             />
           ))}
         </div>
