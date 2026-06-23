@@ -47,6 +47,9 @@ function NpmInstallSection({ mcp, toolId }: { mcp: McpServer; toolId?: string })
   const [installError, setInstallError] = useState<string | null>(null)
   const [latestVersion, setLatestVersion] = useState<string | null>(null)
   const [checkingLatest, setCheckingLatest] = useState(false)
+  const [pkgDesc, setPkgDesc] = useState<string | null>(null)
+  const [repoUrl, setRepoUrl] = useState<string | null>(null)
+  const [descExpanded, setDescExpanded] = useState(false)
 
   useEffect(() => {
     invoke<NpmInstallState>('get_mcp_install_state', { command: mcp.command, args: mcp.args })
@@ -54,11 +57,38 @@ function NpmInstallSection({ mcp, toolId }: { mcp: McpServer; toolId?: string })
       .catch(() => {})
   }, [mcp.command, mcp.args])
 
+  // Fetch registry metadata for description + repo URL
+  useEffect(() => {
+    if (mcp.command !== 'npx') return
+    const pkg = (() => {
+      let skipNext = false
+      for (const arg of mcp.args) {
+        if (skipNext) { skipNext = false; continue }
+        if (arg === '-p' || arg === '--package' || arg === '--node-arg') { skipNext = true; continue }
+        if (arg.startsWith('-')) continue
+        const at = arg.lastIndexOf('@')
+        return at > 0 ? arg.slice(0, at) : arg
+      }
+      return null
+    })()
+    if (!pkg) return
+    fetch(`https://registry.npmjs.org/${pkg}`)
+      .then(r => r.ok ? r.json() : null)
+      .then((data: Record<string, unknown> | null) => {
+        if (!data) return
+        if (typeof data.description === 'string' && data.description) setPkgDesc(data.description)
+        const repo = (data.repository as Record<string, string> | undefined)?.url ?? ''
+        const cleaned = repo.replace(/^git\+/, '').replace(/\.git$/, '').replace(/^git:\/\//, 'https://')
+        const url = cleaned.startsWith('http') ? cleaned : (data.homepage as string | undefined) ?? null
+        if (url) setRepoUrl(url)
+      })
+      .catch(() => {})
+  }, [mcp.command, mcp.args])
+
   if (!state?.isNpx) return null
 
   const pkg = state.package!
   const installed = state.installedVersion
-  // npx -y / --yes auto-downloads the package on demand — "not installed" is misleading
   const isAutoDownload = mcp.args.includes('-y') || mcp.args.includes('--yes')
   const hasUpdate = latestVersion !== null && installed !== null && latestVersion !== installed
 
@@ -94,14 +124,51 @@ function NpmInstallSection({ mcp, toolId }: { mcp: McpServer; toolId?: string })
 
   return (
     <div className="px-4 py-3 border-b border-[var(--c-border)]">
-      <div className="flex items-center gap-2 mb-1.5">
-        <span className="text-[11px] font-semibold text-[var(--c-text-3)] uppercase tracking-wider">npm package</span>
-        <span className="text-[13px] font-mono text-[var(--c-text-2)] truncate flex-1">{pkg}</span>
+      {/* Header row */}
+      <div className="flex items-baseline gap-2 mb-1">
+        <span className="text-[10px] font-semibold text-[var(--c-text-3)] uppercase tracking-wider flex-shrink-0">npm package</span>
+        <span className="text-[13px] font-mono text-violet-400 truncate flex-1">{pkg}</span>
+        {repoUrl && (
+          <button
+            onClick={() => invoke('open_url', { url: repoUrl }).catch(() => {})}
+            aria-label="Open package source"
+            className="flex-shrink-0 text-[var(--c-text-3)] hover:text-violet-400 transition-colors"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+              className="w-3 h-3">
+              <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+              <polyline points="15 3 21 3 21 9"/>
+              <line x1="10" y1="14" x2="21" y2="3"/>
+            </svg>
+          </button>
+        )}
       </div>
-      <p className="text-[11px] text-[var(--c-text-3)]/60 mb-1.5">
+
+      {/* Description with expand/collapse */}
+      {pkgDesc && (
+        <div className="mb-2">
+          <p className={`text-[12px] text-[var(--c-text-2)] leading-relaxed ${descExpanded ? '' : 'line-clamp-2'}`}>
+            {pkgDesc}
+          </p>
+          {pkgDesc.length > 80 && (
+            <button
+              onClick={() => setDescExpanded(v => !v)}
+              className="text-[11px] text-violet-500 hover:text-violet-400 mt-0.5 transition-colors"
+            >
+              {descExpanded ? 'Show less' : 'Show more'}
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Install note */}
+      <p className="text-[11px] text-[var(--c-text-3)]/60 mb-2">
         Installs the global npm package so this MCP server command is available on PATH.
-        Does not modify your Claude config.
+        Does not modify your config.
       </p>
+
+      {/* Version / install row */}
       <div className="flex items-center gap-2 flex-wrap">
         {installed ? (
           <>
@@ -177,34 +244,6 @@ export default function McpDetailPanel({ mcp, onBack, toolId, onToggled, allTool
   const commandStr = [mcp.command, ...mcp.args].join(' ')
   const isHttp = !!mcp.url && !mcp.command
 
-  // Derive npm package name from npx command, fetch GitHub/homepage URL lazily
-  const [repoUrl, setRepoUrl] = useState<string | null>(null)
-  useEffect(() => {
-    if (mcp.command !== 'npx') return
-    const pkg = (() => {
-      let skipNext = false
-      for (const arg of mcp.args) {
-        if (skipNext) { skipNext = false; continue }
-        if (arg === '-p' || arg === '--package' || arg === '--node-arg') { skipNext = true; continue }
-        if (arg.startsWith('-')) continue
-        const at = arg.lastIndexOf('@')
-        return at > 0 ? arg.slice(0, at) : arg
-      }
-      return null
-    })()
-    if (!pkg) return
-    fetch(`https://registry.npmjs.org/${pkg}`)
-      .then(r => r.ok ? r.json() : null)
-      .then((data: Record<string, unknown> | null) => {
-        if (!data) return
-        const repo = (data.repository as Record<string, string> | undefined)?.url ?? ''
-        const cleaned = repo.replace(/^git\+/, '').replace(/\.git$/, '').replace(/^git:\/\//, 'https://')
-        const url = cleaned.startsWith('http') ? cleaned : (data.homepage as string | undefined) ?? null
-        if (url) setRepoUrl(url)
-      })
-      .catch(() => {})
-  }, [mcp.command, mcp.args])
-
   useEffect(() => {
     if (!loading) return
     setElapsed(0)
@@ -235,7 +274,10 @@ export default function McpDetailPanel({ mcp, onBack, toolId, onToggled, allTool
     <div className="flex flex-col h-full bg-[var(--c-bg)] animate-slide-in-right">
 
       <div className="flex-1 overflow-y-auto">
-        {/* Description / command / URL */}
+        {/* npm package card — top, only for npx MCPs */}
+        <NpmInstallSection mcp={mcp} toolId={toolId} />
+
+        {/* Name / command / URL */}
         <div className="px-4 py-3 border-b border-[var(--c-border)]">
           <p className="text-[15px] font-semibold text-violet-400 leading-tight tracking-[-0.01em] font-mono mb-1">
             {mcp.name}
@@ -251,21 +293,6 @@ export default function McpDetailPanel({ mcp, onBack, toolId, onToggled, allTool
           {mcp.hasSecrets && mcp.secretKeyNames.length > 0 && (
             <p className="text-[12px] text-amber-400/70 mt-1">env: {mcp.secretKeyNames.join(', ')}</p>
           )}
-          {repoUrl && (
-            <button
-              onClick={() => invoke('open_url', { url: repoUrl }).catch(() => {})}
-              className="flex items-center gap-1.5 mt-2 text-[12px] text-violet-400 hover:text-violet-300 transition-colors"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
-                stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
-                className="w-3 h-3 flex-shrink-0">
-                <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
-                <polyline points="15 3 21 3 21 9"/>
-                <line x1="10" y1="14" x2="21" y2="3"/>
-              </svg>
-              <span className="truncate">{repoUrl.replace(/^https?:\/\//, '')}</span>
-            </button>
-          )}
         </div>
 
         {/* Installed on */}
@@ -278,9 +305,6 @@ export default function McpDetailPanel({ mcp, onBack, toolId, onToggled, allTool
             onBack={onBack}
           />
         )}
-
-        {/* npm install state */}
-        <NpmInstallSection mcp={mcp} toolId={toolId} />
 
         {/* Live tools */}
         {isHttp ? (

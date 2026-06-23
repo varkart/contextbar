@@ -1,8 +1,7 @@
 import { useState } from 'react';
 import React from 'react';
 import type { AiTool, Notification } from '../../types';
-import type { LlmsListMode } from '../../useViewRouter';
-import { TOOL_COLORS } from '../../constants/toolColors';
+import ToolDot from '../ToolDot';
 
 interface MainViewProps {
   loading: boolean;
@@ -15,7 +14,9 @@ interface MainViewProps {
   cloudSyncing: boolean;
   onFetchTools: () => Promise<void>;
   onGoTo: (view: any) => void;
-  onOpenLlmsList: (mode: LlmsListMode) => void;
+  onOpenLlmsList: () => void;
+  onOpenSkillsPage: () => void;
+  onOpenMcpsPage: () => void;
 }
 
 // ── Animated icons ────────────────────────────────────────────
@@ -116,7 +117,7 @@ function NetworkIcon() {
 
 interface Bullet { text: string }
 interface RowConfig {
-  key: LlmsListMode;
+  key: 'default' | 'skills' | 'mcps';
   label: string;
   subdesc: string | null;
   expandHdr: string;
@@ -136,11 +137,10 @@ const ROWS: RowConfig[] = [
     key: 'default',
     label: 'Coding Agents',
     subdesc: null,
-    expandHdr: 'Your AI coding tools, unified',
+    expandHdr: 'Detected AI coding tools',
     bullets: [
-      { text: 'Claude Code, Cursor, Windsurf, Copilot, Gemini CLI and more — each wraps a frontier model and adds coding-specific features like file editing, terminal access, and inline suggestions' },
-      { text: 'Auto-detected from their config dirs (e.g. ~/.claude, ~/.cursor, ~/.gemini) — no manual registration, no config to write' },
-      { text: 'Drill into any tool to see its skills, MCP servers, and config state; toggle them without touching JSON files' },
+      { text: 'Claude Code, Cursor, Windsurf, Copilot, Gemini CLI and more' },
+      { text: 'Auto-detected from config dirs — no setup required' },
     ],
     accent: 'text-emerald-400',
     accentBorder: 'hover:border-emerald-500/30',
@@ -154,12 +154,11 @@ const ROWS: RowConfig[] = [
   {
     key: 'skills',
     label: 'Skills',
-    subdesc: 'Guide an agent on a task by giving it the right context to read',
-    expandHdr: 'When agents use skills',
+    subdesc: 'Context files that guide how agents respond',
+    expandHdr: 'How skills work',
     bullets: [
-      { text: 'Skills provide agents with additional information on how to do something — instructions, patterns, and context the agent reads before responding' },
-      { text: 'Agents invoke skills automatically when they feel it\'s appropriate based on the task context and the skill\'s description' },
-      { text: 'Skills can also be invoked manually using the slash commands of the skill' },
+      { text: 'Used to extend AI agent capabilities with specialized knowledge and workflows' },
+      { text: 'Provide domain expertise, repeatable workflows' },
     ],
     accent: 'text-indigo-400',
     accentBorder: 'hover:border-indigo-500/30',
@@ -173,12 +172,11 @@ const ROWS: RowConfig[] = [
   {
     key: 'mcps',
     label: 'MCPs',
-    subdesc: 'Connect agents to external tools, like APIs & DBs',
-    expandHdr: 'Give agents real tools, not just language',
+    subdesc: 'Connect agents to external tools',
+    expandHdr: 'Tools agents can call mid-task',
     bullets: [
-      { text: 'MCP (Model Context Protocol) servers expose callable functions the agent can invoke mid-task — read/write files, query a database, call a REST API, interact with GitHub, run shell commands' },
-      { text: 'Two transports: stdio (server spawns as a child process, talks over stdin/stdout) and HTTP/SSE (connects to a local or remote service endpoint)' },
-      { text: 'Each agent tool stores its MCP servers in a `mcpServers` section in its settings file — LLM Manager reads and writes that section so you never have to edit JSON manually' },
+      { text: 'File access, APIs, databases, GitHub, shell commands' },
+      { text: 'Edit servers here — no JSON files to touch' },
     ],
     accent: 'text-violet-400',
     accentBorder: 'hover:border-violet-500/30',
@@ -196,18 +194,9 @@ const ROWS: RowConfig[] = [
 function ToolDots({ tools }: { tools: AiTool[] }) {
   return (
     <div className="flex items-center gap-1.5 flex-wrap">
-      {tools.map(t => {
-        const colors = TOOL_COLORS[t.id] ?? { bg: 'bg-zinc-500/10', text: 'text-zinc-500' };
-        return (
-          <span
-            key={t.id}
-            className={`inline-flex items-center justify-center w-[22px] h-[22px] rounded text-[11px] font-bold flex-shrink-0 ${colors.bg} ${colors.text}`}
-            title={t.name}
-          >
-            {t.name[0].toUpperCase()}
-          </span>
-        );
-      })}
+      {tools.map(t => (
+        <ToolDot key={t.id} toolId={t.id} toolName={t.name} size="md" />
+      ))}
     </div>
   );
 }
@@ -305,6 +294,8 @@ export default function MainView({
   loading,
   installedTools,
   onOpenLlmsList,
+  onOpenSkillsPage,
+  onOpenMcpsPage,
 }: MainViewProps) {
   return (
     <div className="flex flex-col h-full">
@@ -333,7 +324,11 @@ export default function MainView({
               row={row}
               tools={installedTools}
               loading={loading}
-              onClick={() => onOpenLlmsList(row.key)}
+              onClick={() =>
+                row.key === 'skills' ? onOpenSkillsPage()
+                : row.key === 'mcps' ? onOpenMcpsPage()
+                : onOpenLlmsList()
+              }
             />
           ))}
         </div>

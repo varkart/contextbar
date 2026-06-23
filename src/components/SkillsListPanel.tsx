@@ -51,8 +51,7 @@ export default function SkillsListPanel({ tool, onSelectSkill, onAddSkill }: Ski
         </button>
       </div>
 
-      {tool.skills.length > 5 && (
-        <div className="px-3 py-1.5 border-b border-[var(--c-border)] flex-shrink-0">
+      <div className="px-3 py-1.5 border-b border-[var(--c-border)] flex-shrink-0">
           <input
             ref={filterInputRef}
             type="text"
@@ -63,7 +62,6 @@ export default function SkillsListPanel({ tool, onSelectSkill, onAddSkill }: Ski
             className="w-full bg-[var(--c-hover)] text-[13px] text-[var(--c-text)] placeholder-[var(--c-text-3)] rounded px-2.5 py-1 outline-none focus:ring-1 focus:ring-indigo-400/40"
           />
         </div>
-      )}
 
       <div className="flex-1 overflow-y-auto py-1">
         {filtered.length === 0 ? (
