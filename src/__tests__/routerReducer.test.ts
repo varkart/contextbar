@@ -33,20 +33,10 @@ describe('initialRouterState', () => {
 })
 
 describe('routerReducer — OPEN_LLMS_LIST', () => {
-  it('navigates to llms-list with given mode', () => {
-    const next = routerReducer(base, { type: 'OPEN_LLMS_LIST', mode: 'skills' })
-    expect(next.view).toBe('llms-list')
-    expect(next.llmsListMode).toBe('skills')
-  })
-
-  it('default mode', () => {
+  it('navigates to llms-list', () => {
     const next = routerReducer(base, { type: 'OPEN_LLMS_LIST', mode: 'default' })
+    expect(next.view).toBe('llms-list')
     expect(next.llmsListMode).toBe('default')
-  })
-
-  it('mcps mode', () => {
-    const next = routerReducer(base, { type: 'OPEN_LLMS_LIST', mode: 'mcps' })
-    expect(next.llmsListMode).toBe('mcps')
   })
 })
 

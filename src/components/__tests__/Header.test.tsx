@@ -4,7 +4,6 @@ import Header from '../Header'
 
 const defaultProps = {
   view: 'main' as const,
-  llmsListMode: 'default' as const,
   selectedTool: null,
   selectedSkill: null,
   selectedMcp: null,

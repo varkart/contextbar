@@ -17,7 +17,7 @@ export type View =
   | 'notifications'
   | 'logs'
 
-export type LlmsListMode = 'default' | 'skills' | 'mcps'
+export type LlmsListMode = 'default'
 
 // Exhaustive map — TypeScript errors if a View variant is added here but missing from the type,
 // or if the type gains a new variant without updating this map.
@@ -74,7 +74,6 @@ export type EscapeResult =
 
 export function escapeTransition(
   view: View,
-  llmsListMode: LlmsListMode,
   skillBackView: View,
   mcpBackView: View,
   selectedTool: AiTool | null,
@@ -86,8 +85,8 @@ export function escapeTransition(
   if (view === 'permissions-detail') return { type: 'navigate', to: selectedTool ? 'tool-detail' : 'main' }
   if (view === 'all-skills-list') return { type: 'navigate', to: allSkillsBackView }
   if (view === 'all-mcps-list') return { type: 'navigate', to: allMcpsBackView }
-  if (view === 'skills-list') return { type: 'navigate', to: llmsListMode === 'skills' ? 'llms-list' : 'tool-detail' }
-  if (view === 'mcps-list') return { type: 'navigate', to: llmsListMode === 'mcps' ? 'llms-list' : 'tool-detail' }
+  if (view === 'skills-list') return { type: 'navigate', to: 'tool-detail' }
+  if (view === 'mcps-list') return { type: 'navigate', to: 'tool-detail' }
   if (view === 'tool-detail') return { type: 'navigate', to: 'llms-list' }
   if (view === 'add-skill') return { type: 'navigate', to: 'llms-list' }
   if (view === 'add-mcp') return { type: 'navigate', to: 'llms-list' }
