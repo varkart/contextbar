@@ -28,7 +28,7 @@ describe('MainView tile navigation', () => {
     const onOpenLlmsList = vi.fn()
     render(<MainView {...defaultProps} onOpenLlmsList={onOpenLlmsList} />)
     fireEvent.click(getTileButton('Coding Agents'))
-    expect(onOpenLlmsList).toHaveBeenCalledWith('default')
+    expect(onOpenLlmsList).toHaveBeenCalledTimes(1)
   })
 
   it('clicking Skills tile calls onOpenSkillsPage, not onOpenLlmsList', () => {

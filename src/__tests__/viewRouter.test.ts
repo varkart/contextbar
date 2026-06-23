@@ -5,15 +5,13 @@ import type { AiTool } from '../types'
 const tool = { id: 'claude', name: 'Claude Code', installed: true, supportsSkills: true, supportsMcps: true, skills: [], mcps: [] } as AiTool
 
 const esc = (view: Parameters<typeof escapeTransition>[0], opts?: {
-  mode?: Parameters<typeof escapeTransition>[1]
-  skillBack?: Parameters<typeof escapeTransition>[2]
-  mcpBack?: Parameters<typeof escapeTransition>[3]
-  selectedTool?: Parameters<typeof escapeTransition>[4]
-  allSkillsBack?: Parameters<typeof escapeTransition>[5]
-  allMcpsBack?: Parameters<typeof escapeTransition>[6]
+  skillBack?: Parameters<typeof escapeTransition>[1]
+  mcpBack?: Parameters<typeof escapeTransition>[2]
+  selectedTool?: Parameters<typeof escapeTransition>[3]
+  allSkillsBack?: Parameters<typeof escapeTransition>[4]
+  allMcpsBack?: Parameters<typeof escapeTransition>[5]
 }) => escapeTransition(
   view,
-  opts?.mode ?? 'default',
   opts?.skillBack ?? 'tool-detail',
   opts?.mcpBack ?? 'tool-detail',
   opts?.selectedTool ?? null,
@@ -57,24 +55,14 @@ describe('escapeTransition', () => {
       .toEqual({ type: 'navigate', to: 'tool-detail' })
   })
 
-  it('skills-list in default mode → tool-detail', () => {
+  it('skills-list → tool-detail', () => {
     expect(esc('skills-list', { selectedTool: tool }))
       .toEqual({ type: 'navigate', to: 'tool-detail' })
   })
 
-  it('skills-list in skills mode → llms-list', () => {
-    expect(esc('skills-list', { mode: 'skills', selectedTool: tool }))
-      .toEqual({ type: 'navigate', to: 'llms-list' })
-  })
-
-  it('mcps-list in default mode → tool-detail', () => {
+  it('mcps-list → tool-detail', () => {
     expect(esc('mcps-list', { selectedTool: tool }))
       .toEqual({ type: 'navigate', to: 'tool-detail' })
-  })
-
-  it('mcps-list in mcps mode → llms-list', () => {
-    expect(esc('mcps-list', { mode: 'mcps', selectedTool: tool }))
-      .toEqual({ type: 'navigate', to: 'llms-list' })
   })
 
   it('tool-detail → llms-list', () => {

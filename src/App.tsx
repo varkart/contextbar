@@ -17,7 +17,7 @@ const isE2E = !!(globalThis as Record<string, unknown>).__skipSplash
 
 export default function App() {
   const routerProps = useViewRouter()
-  const { view, llmsListMode, selectedTool, selectedSkill, selectedMcp, skillBackView, mcpBackView, allSkillsBackView, allMcpsBackView, refreshSelected, escape, goTo, openLlmsList } = routerProps
+  const { view, selectedTool, selectedSkill, selectedMcp, skillBackView, mcpBackView, allSkillsBackView, allMcpsBackView, refreshSelected, escape, goTo, openLlmsList } = routerProps
 
   const [version, setVersion] = useState('')
   const { theme, setTheme } = useTheme()
@@ -94,7 +94,6 @@ export default function App() {
       )}
       <Header
         view={view}
-        llmsListMode={llmsListMode}
         selectedTool={selectedTool}
         selectedSkill={selectedSkill}
         selectedMcp={selectedMcp}

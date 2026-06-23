@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import React from 'react';
 import type { AiTool, Notification } from '../../types';
-import type { LlmsListMode } from '../../useViewRouter';
+;
 import { TOOL_COLORS } from '../../constants/toolColors';
 
 interface MainViewProps {
@@ -15,7 +15,7 @@ interface MainViewProps {
   cloudSyncing: boolean;
   onFetchTools: () => Promise<void>;
   onGoTo: (view: any) => void;
-  onOpenLlmsList: (mode: LlmsListMode) => void;
+  onOpenLlmsList: () => void;
   onOpenSkillsPage: () => void;
   onOpenMcpsPage: () => void;
 }
@@ -118,7 +118,7 @@ function NetworkIcon() {
 
 interface Bullet { text: string }
 interface RowConfig {
-  key: LlmsListMode;
+  key: 'default' | 'skills' | 'mcps';
   label: string;
   subdesc: string | null;
   expandHdr: string;
@@ -340,7 +340,7 @@ export default function MainView({
               onClick={() =>
                 row.key === 'skills' ? onOpenSkillsPage()
                 : row.key === 'mcps' ? onOpenMcpsPage()
-                : onOpenLlmsList(row.key)
+                : onOpenLlmsList()
               }
             />
           ))}

@@ -18,14 +18,11 @@ import type { AiTool, Skill } from '../../types'
 
 export default function ViewManager({
   view,
-  llmsListMode,
   selectedTool,
   selectedSkill,
   selectedMcp,
   selectTool,
   openLlmsList,
-  openSkillsListForTool,
-  openMcpsListForTool,
   selectSkill,
   selectMcp,
   openSkillsPage,
@@ -81,13 +78,7 @@ export default function ViewManager({
       <LlmsListView
         tools={tools}
         loading={loading}
-        mode={llmsListMode}
-        onBack={() => goTo('main')}
         onSelectTool={selectTool}
-        onOpenSkillsForTool={openSkillsListForTool}
-        onOpenMcpsForTool={openMcpsListForTool}
-        onAddSkill={() => goTo('add-skill')}
-        onAddMcp={() => goTo('add-mcp')}
       />
     )
   }
