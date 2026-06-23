@@ -1,8 +1,7 @@
 import { useState } from 'react';
 import React from 'react';
 import type { AiTool, Notification } from '../../types';
-;
-import { TOOL_COLORS } from '../../constants/toolColors';
+import ToolDot from '../ToolDot';
 
 interface MainViewProps {
   loading: boolean;
@@ -198,18 +197,9 @@ const ROWS: RowConfig[] = [
 function ToolDots({ tools }: { tools: AiTool[] }) {
   return (
     <div className="flex items-center gap-1.5 flex-wrap">
-      {tools.map(t => {
-        const colors = TOOL_COLORS[t.id] ?? { bg: 'bg-zinc-500/10', text: 'text-zinc-500' };
-        return (
-          <span
-            key={t.id}
-            className={`inline-flex items-center justify-center w-[22px] h-[22px] rounded text-[11px] font-bold flex-shrink-0 ${colors.bg} ${colors.text}`}
-            title={t.name}
-          >
-            {t.name[0].toUpperCase()}
-          </span>
-        );
-      })}
+      {tools.map(t => (
+        <ToolDot key={t.id} toolId={t.id} toolName={t.name} size="md" />
+      ))}
     </div>
   );
 }

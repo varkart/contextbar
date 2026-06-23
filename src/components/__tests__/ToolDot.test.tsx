@@ -46,4 +46,18 @@ describe('ToolDot', () => {
     const dot = screen.getByText('U')
     expect(dot.className).toContain('zinc')
   })
+
+  it('size=md applies larger size classes', () => {
+    render(<ToolDot toolId="claude" toolName="Claude Code" size="md" />)
+    const dot = screen.getByText('C')
+    expect(dot.className).toContain('w-[22px]')
+    expect(dot.className).toContain('h-[22px]')
+  })
+
+  it('size=sm (default) applies small size classes', () => {
+    render(<ToolDot toolId="claude" toolName="Claude Code" />)
+    const dot = screen.getByText('C')
+    expect(dot.className).toContain('w-3.5')
+    expect(dot.className).toContain('h-3.5')
+  })
 })
