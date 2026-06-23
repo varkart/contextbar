@@ -203,6 +203,8 @@ export default function ViewManager({
       onFetchTools={handleFetchTools}
       onGoTo={goTo}
       onOpenLlmsList={openLlmsList}
+      onOpenSkillsPage={openSkillsPage}
+      onOpenMcpsPage={openMcpsPage}
     />
   )
 }
