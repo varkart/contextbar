@@ -4,12 +4,18 @@ import { TOOL_COLORS } from '../constants/toolColors'
 interface Props {
   toolId: string
   toolName: string
+  size?: 'sm' | 'md'
 }
 
 const TOOLTIP_W = 140
 const WINDOW_PAD = 8
 
-export default function ToolDot({ toolId, toolName }: Props) {
+const SIZE_CLASSES = {
+  sm: 'w-3.5 h-3.5 rounded-sm text-[9px]',
+  md: 'w-[22px] h-[22px] rounded text-[11px]',
+}
+
+export default function ToolDot({ toolId, toolName, size = 'sm' }: Props) {
   const colors = TOOL_COLORS[toolId] ?? { bg: 'bg-zinc-500/15', text: 'text-zinc-400' }
   const [visible, setVisible] = useState(false)
   const [style, setStyle] = useState<CSSProperties>({})
@@ -27,7 +33,7 @@ export default function ToolDot({ toolId, toolName }: Props) {
 
   return (
     <span ref={ref} className="relative" onMouseEnter={handleEnter} onMouseLeave={() => setVisible(false)}>
-      <span className={`inline-flex w-3.5 h-3.5 rounded-sm text-[9px] font-bold items-center justify-center flex-shrink-0 cursor-default ${colors.bg} ${colors.text}`}>
+      <span className={`inline-flex font-bold items-center justify-center flex-shrink-0 cursor-default ${SIZE_CLASSES[size]} ${colors.bg} ${colors.text}`}>
         {toolId[0].toUpperCase()}
       </span>
       {visible && (
