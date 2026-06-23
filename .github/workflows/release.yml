@@ -4,6 +4,11 @@ on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to release (e.g. v0.8.0)'
+        required: true
 
 permissions:
   contents: write
@@ -17,11 +22,17 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Resolve tag name
+        id: ref
+        run: |
+          TAG="${{ github.event.inputs.tag || github.ref_name }}"
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+
       - name: Extract release notes from tag annotation
         id: tag
         run: |
           git fetch --tags --force
-          NOTES=$(git tag -l --format='%(contents)' "${{ github.ref_name }}")
+          NOTES=$(git tag -l --format='%(contents)' "${{ steps.ref.outputs.tag }}")
           if [ -z "$NOTES" ]; then
             echo "notes=No release notes provided." >> $GITHUB_OUTPUT
           else
@@ -66,7 +77,7 @@ jobs:
 
       - name: Package DMG
         run: |
-          VERSION="${{ github.ref_name }}"
+          VERSION="${{ steps.ref.outputs.tag }}"
           APP=$(find src-tauri/target/universal-apple-darwin/release/bundle/macos -name "*.app" -maxdepth 1 | head -1)
           APP_NAME=$(basename "$APP" .app)
           DMG="${APP_NAME}_${VERSION}_universal.dmg"
@@ -96,7 +107,7 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          name: "LLM Manager ${{ github.ref_name }}"
+          name: "LLM Manager ${{ steps.ref.outputs.tag }}"
           body: |
             ${{ steps.tag.outputs.notes }}
 
