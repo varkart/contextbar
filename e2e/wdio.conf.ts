@@ -4,7 +4,7 @@ import type { Options } from '@wdio/types'
 
 const APP_BINARY = path.resolve(
   __dirname,
-  '../src-tauri/target/debug/llmmanager'
+  '../src-tauri/target/debug/contextbar'
 )
 
 let tauriDriver: ChildProcess

@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 
 export type ThemePreference = 'light' | 'dark' | 'system'
 
-const STORAGE_KEY = 'llmmanager:theme'
+const STORAGE_KEY = 'contextbar:theme'
 
 function getSystemDark() {
   return window.matchMedia('(prefers-color-scheme: dark)').matches

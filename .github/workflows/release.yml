@@ -81,18 +81,18 @@ jobs:
           APP=$(find src-tauri/target/universal-apple-darwin/release/bundle/macos -name "*.app" -maxdepth 1 | head -1)
           APP_NAME=$(basename "$APP" .app)
           DMG="${APP_NAME}_${VERSION}_universal.dmg"
-          STAGING="/tmp/llmmanager_dmg"
+          STAGING="/tmp/contextbar_dmg"
           mkdir -p "$STAGING"
           cp -r "$APP" "$STAGING/"
           ln -s /Applications "$STAGING/Applications"
 
           # Install note shown alongside the app in the DMG
           cat > "$STAGING/INSTALL.txt" << 'INSTALLEOF'
-          Drag LLM Manager to Applications, then launch it.
+          Drag Context Bar to Applications, then launch it.
 
           If macOS blocks the app on first launch, run this once in Terminal:
 
-              xattr -d com.apple.quarantine /Applications/LLM Manager.app
+              xattr -d com.apple.quarantine /Applications/Context\ Bar.app
 
           Or: System Settings → Privacy & Security → Open Anyway
           INSTALLEOF
@@ -104,16 +104,43 @@ jobs:
             -o "$DMG"
           echo "DMG_NAME=$DMG" >> $GITHUB_ENV
 
+      - name: Compute DMG SHA256
+        run: |
+          SHA256=$(shasum -a 256 "${{ env.DMG_NAME }}" | awk '{print $1}')
+          echo "DMG_SHA256=$SHA256" >> $GITHUB_ENV
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          name: "LLM Manager ${{ steps.ref.outputs.tag }}"
+          name: "Context Bar ${{ steps.ref.outputs.tag }}"
           body: |
             ${{ steps.tag.outputs.notes }}
 
             ---
-            **Install:** Download the `.dmg` below.
-            **macOS security prompt:** run `xattr -d com.apple.quarantine /Applications/LLM Manager.app`
+            **Install (DMG):** Download the `.dmg` below.
+            **Install (Homebrew):** `brew tap varkart/tap && brew install --cask contextbar`
+            **macOS security prompt:** run `xattr -d com.apple.quarantine /Applications/Context\ Bar.app`
           files: ${{ env.DMG_NAME }}
           draft: false
           prerelease: false
+
+      - name: Update Homebrew tap
+        if: ${{ secrets.HOMEBREW_TAP_TOKEN != '' }}
+        env:
+          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        run: |
+          VERSION="${{ steps.ref.outputs.tag }}"
+          VERSION_NUM="${VERSION#v}"
+          SHA256="${{ env.DMG_SHA256 }}"
+
+          git clone "https://x-access-token:${HOMEBREW_TAP_TOKEN}@github.com/varkart/homebrew-tap.git" /tmp/homebrew-tap
+          cd /tmp/homebrew-tap
+
+          sed -i '' "s/version \".*\"/version \"${VERSION_NUM}\"/" Casks/contextbar.rb
+          sed -i '' "s/sha256 \".*\"/sha256 \"${SHA256}\"/" Casks/contextbar.rb
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Casks/contextbar.rb
+          git commit -m "chore: bump contextbar to ${VERSION}"
+          git push
