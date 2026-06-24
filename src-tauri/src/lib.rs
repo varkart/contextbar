@@ -432,7 +432,7 @@ fn skill_dir_for(tool_id: &str) -> Result<SkillWriteTarget, String> {
     let home = dirs::home_dir().ok_or("cannot find home dir")?;
     let manifest = crate::engine::load_manifest(tool_id)
         .ok_or_else(|| format!("no manifest for '{tool_id}'"))?;
-    for source in &manifest.skill_sources {
+    if let Some(source) = manifest.skill_sources.first() {
         match &source.spec {
             SkillSourceSpec::Directory { path, flat_files, .. } => {
                 return Ok(SkillWriteTarget {

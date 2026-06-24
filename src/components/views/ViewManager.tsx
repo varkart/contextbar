@@ -30,6 +30,7 @@ export default function ViewManager({
   goTo,
   escape,
   query,
+  setQuery,
   loading,
   tools,
   installedTools,
@@ -79,6 +80,8 @@ export default function ViewManager({
         tools={tools}
         loading={loading}
         onSelectTool={selectTool}
+        query={query}
+        setQuery={setQuery}
       />
     )
   }
@@ -108,6 +111,8 @@ export default function ViewManager({
         tools={tools}
         onBack={() => escape()}
         onSelectSkill={skill => selectSkill(skill, 'all-skills-list')}
+        query={query}
+        setQuery={setQuery}
       />
     )
   }
@@ -117,6 +122,8 @@ export default function ViewManager({
         tools={tools}
         onBack={() => escape()}
         onSelectMcp={mcp => selectMcp(mcp, 'all-mcps-list')}
+        query={query}
+        setQuery={setQuery}
       />
     )
   }

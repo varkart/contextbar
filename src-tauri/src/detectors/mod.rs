@@ -25,6 +25,43 @@ where
     rx.recv_timeout(dur).ok().flatten()
 }
 
+/// Spawn a Command and wait for its completion with a timeout.
+/// Kills the child process if it exceeds the timeout to prevent thread leakage.
+pub fn run_command_with_timeout(
+    mut cmd: std::process::Command,
+    timeout: std::time::Duration,
+) -> std::io::Result<std::process::Output> {
+    use std::process::Stdio;
+
+    cmd.stdout(Stdio::piped());
+    cmd.stderr(Stdio::piped());
+
+    let child = cmd.spawn()?;
+    let pid = child.id();
+    let (tx, rx) = std::sync::mpsc::channel();
+
+    std::thread::spawn(move || {
+        let res = child.wait_with_output();
+        let _ = tx.send(res);
+    });
+
+    match rx.recv_timeout(timeout) {
+        Ok(res) => res,
+        Err(_) => {
+            // Forcefully terminate the process using SIGKILL (macOS specific)
+            let _ = std::process::Command::new("kill")
+                .args(["-9", &pid.to_string()])
+                .output();
+            // Drain the channel to ensure the helper thread exits
+            let _ = rx.recv();
+            Err(std::io::Error::new(
+                std::io::ErrorKind::TimedOut,
+                "Command execution timed out",
+            ))
+        }
+    }
+}
+
 pub fn detect_all() -> Vec<AiTool> {
     crate::engine::detect_all()
 }

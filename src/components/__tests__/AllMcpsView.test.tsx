@@ -1,7 +1,13 @@
 import { render, screen, fireEvent } from '@testing-library/react'
 import { describe, it, expect, vi } from 'vitest'
-import AllMcpsView from '../views/AllMcpsView'
+import AllMcpsViewComponent from '../views/AllMcpsView'
+import { useState } from 'react'
 import type { AiTool, McpServer } from '../../types'
+
+function AllMcpsView(props: any) {
+  const [query, setQuery] = useState('')
+  return <AllMcpsViewComponent {...props} query={query} setQuery={setQuery} />
+}
 
 function makeMcp(overrides: Partial<McpServer> & Pick<McpServer, 'name'>): McpServer {
   return {

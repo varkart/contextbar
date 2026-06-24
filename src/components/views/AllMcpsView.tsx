@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useMemo } from 'react'
 import type { AiTool, McpServer } from '../../types'
 import ToolDot from '../ToolDot'
 import ProviderChips from '../ProviderChips'
@@ -9,6 +9,8 @@ interface Props {
   tools: AiTool[]
   onBack: () => void
   onSelectMcp: (mcp: McpServer) => void
+  query: string
+  setQuery: (q: string) => void
 }
 
 interface McpVariant extends McpServer {
@@ -41,8 +43,7 @@ function buildMcpGroups(tools: AiTool[]): McpGroup[] {
   return groups.sort((a, b) => a.name.localeCompare(b.name))
 }
 
-export default function AllMcpsView({ tools, onSelectMcp }: Props) {
-  const [query, setQuery] = useState('')
+export default function AllMcpsView({ tools, onSelectMcp, query = '', setQuery = () => {} }: Props) {
   const { installedTools, selectedTools, toggleTool, allSelected } = useProviderFilter(tools)
   const groups = useMemo(() => buildMcpGroups(tools), [tools])
 

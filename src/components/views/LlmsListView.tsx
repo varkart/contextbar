@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import ToolRow from '../ToolRow';
 import { searchTools } from '../../search';
 import type { AiTool } from '../../types';
@@ -7,6 +6,8 @@ interface LlmsListViewProps {
   tools: AiTool[];
   loading: boolean;
   onSelectTool: (tool: AiTool) => void;
+  query: string;
+  setQuery: (q: string) => void;
 }
 
 function SkeletonRows() {
@@ -25,8 +26,7 @@ function SkeletonRows() {
   );
 }
 
-export default function LlmsListView({ tools, loading, onSelectTool }: LlmsListViewProps) {
-  const [query, setQuery] = useState('');
+export default function LlmsListView({ tools, loading, onSelectTool, query = '', setQuery = () => {} }: LlmsListViewProps) {
   const installedTools = tools.filter(t => t.installed);
   const searchResults = searchTools(installedTools, query);
 

@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useMemo } from 'react'
 import type { AiTool, Skill } from '../../types'
 import ToolDot from '../ToolDot'
 import ProviderChips from '../ProviderChips'
@@ -9,6 +9,8 @@ interface Props {
   tools: AiTool[]
   onBack: () => void
   onSelectSkill: (skill: Skill) => void
+  query: string
+  setQuery: (q: string) => void
 }
 
 interface SkillVariant extends Skill {
@@ -41,8 +43,7 @@ function buildGroups(tools: AiTool[]): SkillGroup[] {
   return groups.sort((a, b) => a.name.localeCompare(b.name))
 }
 
-export default function AllSkillsView({ tools, onSelectSkill }: Props) {
-  const [query, setQuery] = useState('')
+export default function AllSkillsView({ tools, onSelectSkill, query = '', setQuery = () => {} }: Props) {
   const { installedTools, selectedTools, toggleTool, allSelected } = useProviderFilter(tools)
   const groups = useMemo(() => buildGroups(tools), [tools])
 

@@ -242,10 +242,7 @@ fn run_version(spec: &VersionSpec, home: &std::path::Path, dr: &DetectionResult)
             let args = args.clone();
             let parse = parse.clone();
             let timeout = std::time::Duration::from_millis(*timeout_ms);
-            crate::detectors::run_with_timeout(
-                move || run_command_version(&bin, &args, &parse),
-                timeout,
-            )
+            run_command_version(&bin, &args, &parse, timeout)
         }
         VersionSpec::JsonKey { file, key_path } => {
             let path = expand_home(file, home);
@@ -254,11 +251,10 @@ fn run_version(spec: &VersionSpec, home: &std::path::Path, dr: &DetectionResult)
     }
 }
 
-fn run_command_version(binary: &str, args: &[String], parse: &str) -> Option<String> {
-    let output = std::process::Command::new(binary)
-        .args(args)
-        .output()
-        .ok()?;
+fn run_command_version(binary: &str, args: &[String], parse: &str, timeout: std::time::Duration) -> Option<String> {
+    let mut cmd = std::process::Command::new(binary);
+    cmd.args(args);
+    let output = crate::detectors::run_command_with_timeout(cmd, timeout).ok()?;
     let stdout = String::from_utf8_lossy(&output.stdout);
     run_command_version_from_str(&stdout, parse)
 }

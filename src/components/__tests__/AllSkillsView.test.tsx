@@ -1,7 +1,13 @@
 import { render, screen, fireEvent } from '@testing-library/react'
 import { describe, it, expect, vi } from 'vitest'
-import AllSkillsView from '../views/AllSkillsView'
+import AllSkillsViewComponent from '../views/AllSkillsView'
+import { useState } from 'react'
 import type { AiTool, Skill } from '../../types'
+
+function AllSkillsView(props: any) {
+  const [query, setQuery] = useState('')
+  return <AllSkillsViewComponent {...props} query={query} setQuery={setQuery} />
+}
 
 function makeSkill(overrides: Partial<Skill> & Pick<Skill, 'name'>): Skill {
   return {

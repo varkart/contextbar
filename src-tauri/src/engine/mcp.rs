@@ -553,17 +553,11 @@ fn run_claude_mcp_list(binary: &str, timeout_ms: u64, home: &std::path::Path) {
     };
 
     let timeout = std::time::Duration::from_millis(timeout_ms);
-    let output = match crate::detectors::run_with_timeout(
-        move || {
-            std::process::Command::new(&bin)
-                .args(["mcp", "list"])
-                .output()
-                .ok()
-        },
-        timeout,
-    ) {
-        Some(o) => o,
-        None => return,
+    let mut cmd = std::process::Command::new(&bin);
+    cmd.args(["mcp", "list"]);
+    let output = match crate::detectors::run_command_with_timeout(cmd, timeout) {
+        Ok(o) => o,
+        Err(_) => return,
     };
 
     let stdout = String::from_utf8_lossy(&output.stdout);

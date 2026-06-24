@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LLM Manager - Homepage Redesigns</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+    :root {
+      --bg-body: #09090b;
+      --text-body: #fafafa;
+      --text-muted: #a1a1aa;
+    }
+
+    body {
+      background-color: var(--bg-body);
+      color: var(--text-body);
+      font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      margin: 0;
+      padding: 40px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    .header-info {
+      text-align: center;
+      margin-bottom: 40px;
+      max-width: 700px;
+    }
+
+    .header-info h1 {
+      font-size: 32px;
+      margin-bottom: 12px;
+      background: linear-gradient(90deg, #fff, #a78bfa);
+      -webkit-background-clip: text;
+      color: transparent;
+      letter-spacing: -0.02em;
+    }
+
+    .header-info p {
+      color: var(--text-muted);
+      line-height: 1.6;
+      font-size: 16px;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
+      gap: 40px;
+      width: 100%;
+      max-width: 1300px;
+      justify-items: center;
+    }
+
+    .mockup-wrapper {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .mockup-title {
+      font-size: 14px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-muted);
+    }
+
+    /* Base Window representing the macOS Menubar size (380x520) */
+    .window {
+      width: 380px;
+      height: 520px;
+      border-radius: 12px;
+      overflow: hidden;
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 20px 40px rgba(0,0,0,0.5), 0 1px 3px rgba(0,0,0,0.2);
+      user-select: none;
+    }
+
+    /* Common */
+    .flex { display: flex; }
+    .items-center { align-items: center; }
+    .justify-between { justify-content: space-between; }
+    .gap-2 { gap: 8px; }
+    .gap-3 { gap: 12px; }
+
+    /* =========================================
+       1. Refined Modern SaaS (Tailwind Style)
+       ========================================= */
+    .w-saas { background: #ffffff; color: #0f172a; border: 1px solid #e2e8f0; }
+    .w-saas .header { padding: 20px 24px; border-bottom: 1px solid #f1f5f9; }
+    .w-saas .h-title { font-size: 18px; font-weight: 700; letter-spacing: -0.02em; }
+    .w-saas .search { margin: 16px 24px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px 16px; font-size: 14px; color: #64748b; }
+    .w-saas .list { padding: 0 16px; display: flex; flex-direction: column; gap: 8px; }
+    .w-saas .tool-tile { background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px; display: flex; align-items: center; gap: 16px; transition: all 0.2s ease; cursor: pointer; box-shadow: 0 1px 2px rgba(0,0,0,0.02); }
+    .w-saas .tool-tile:hover { border-color: #cbd5e1; box-shadow: 0 4px 12px rgba(0,0,0,0.05); transform: translateY(-1px); }
+    .w-saas .t-icon { width: 40px; height: 40px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 18px; font-weight: 600; }
+    .w-saas .t-icon.claude { background: #fff7ed; color: #ea580c; }
+    .w-saas .t-icon.cursor { background: #f0f9ff; color: #0284c7; }
+    .w-saas .t-info { flex: 1; }
+    .w-saas .t-name { font-size: 15px; font-weight: 600; color: #0f172a; margin-bottom: 4px; }
+    .w-saas .t-badges { display: flex; gap: 6px; }
+    .w-saas .badge { display: flex; align-items: center; gap: 4px; background: #f1f5f9; color: #475569; padding: 4px 8px; border-radius: 6px; font-size: 11px; font-weight: 500; }
+    .w-saas .badge-dot { width: 6px; height: 6px; border-radius: 50%; }
+    .w-saas .badge-dot.skills { background: #8b5cf6; }
+    .w-saas .badge-dot.mcps { background: #10b981; }
+    .w-saas .chevron { color: #cbd5e1; }
+
+    /* =========================================
+       2. Elegant Dark (High Contrast)
+       ========================================= */
+    .w-dark { background: #0a0a0a; color: #ededed; border: 1px solid #222; }
+    .w-dark .header { padding: 24px; }
+    .w-dark .h-title { font-size: 20px; font-weight: 600; letter-spacing: -0.03em; }
+    .w-dark .search { margin: 0 24px 24px; border-bottom: 1px solid #333; padding: 8px 0; font-size: 14px; color: #888; }
+    .w-dark .list { display: flex; flex-direction: column; }
+    .w-dark .tool-tile { padding: 16px 24px; border-bottom: 1px solid #111; display: flex; justify-content: space-between; align-items: center; transition: background 0.2s; cursor: pointer; }
+    .w-dark .tool-tile:hover { background: #111; }
+    .w-dark .left-col { display: flex; align-items: center; gap: 16px; }
+    .w-dark .t-icon { width: 32px; height: 32px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-family: 'JetBrains Mono', monospace; font-size: 14px; border: 1px solid #333; background: #000; }
+    .w-dark .t-name { font-size: 15px; font-weight: 500; }
+    .w-dark .right-col { display: flex; gap: 8px; }
+    .w-dark .badge { background: #1a1a1a; border: 1px solid #333; color: #a1a1aa; padding: 4px 10px; border-radius: 12px; font-size: 11px; font-family: 'JetBrains Mono', monospace; }
+    .w-dark .badge span { color: #fff; font-weight: 600; margin-right: 4px; }
+
+    /* =========================================
+       3. The Floating Islands (Playful/Modern)
+       ========================================= */
+    .w-float { background: #f4f4f5; color: #18181b; border: 1px solid #e4e4e7; }
+    .w-float .header { padding: 24px; padding-bottom: 16px; }
+    .w-float .h-title { font-size: 24px; font-weight: 800; letter-spacing: -0.04em; }
+    .w-float .search { margin: 0 24px 20px; background: #fff; border-radius: 20px; padding: 12px 16px; font-size: 14px; color: #a1a1aa; box-shadow: 0 2px 8px rgba(0,0,0,0.04); }
+    .w-float .list { padding: 0 20px; display: flex; flex-direction: column; gap: 16px; }
+    .w-float .tool-tile { background: #fff; border-radius: 20px; padding: 20px; display: flex; flex-direction: column; gap: 16px; box-shadow: 0 4px 16px rgba(0,0,0,0.03); transition: transform 0.2s, box-shadow 0.2s; cursor: pointer; border: 1px solid transparent; }
+    .w-float .tool-tile:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0,0,0,0.06); border-color: #e4e4e7; }
+    .w-float .tile-header { display: flex; align-items: center; gap: 12px; }
+    .w-float .t-icon { width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; color: #fff; }
+    .w-float .t-name { font-size: 16px; font-weight: 700; letter-spacing: -0.01em; }
+    .w-float .tile-stats { display: flex; gap: 8px; }
+    .w-float .stat-tile { flex: 1; background: #fafafa; border: 1px solid #f0f0f0; border-radius: 12px; padding: 10px; display: flex; flex-direction: column; align-items: center; gap: 4px; }
+    .w-float .stat-num { font-size: 18px; font-weight: 700; color: #18181b; }
+    .w-float .stat-label { font-size: 11px; color: #71717a; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600; }
+
+    /* =========================================
+       4. Monospace Precision (Engineering Tool)
+       ========================================= */
+    .w-mono { background: #111111; color: #e5e5e5; border: 1px solid #333; font-family: 'JetBrains Mono', monospace; }
+    .w-mono .header { padding: 16px; border-bottom: 1px dashed #444; }
+    .w-mono .h-title { font-size: 14px; font-weight: 600; color: #8b5cf6; }
+    .w-mono .search { margin: 12px 16px; padding: 8px 0; border-bottom: 1px solid #333; color: #666; font-size: 12px; }
+    .w-mono .list { display: flex; flex-direction: column; }
+    .w-mono .tool-tile { padding: 16px; border-bottom: 1px solid #222; display: flex; align-items: flex-start; gap: 16px; transition: background 0.1s; cursor: pointer; }
+    .w-mono .tool-tile:hover { background: #1a1a1a; }
+    .w-mono .t-icon { font-size: 18px; line-height: 1; color: #8b5cf6; }
+    .w-mono .t-info { flex: 1; }
+    .w-mono .t-name { font-size: 14px; font-weight: 600; margin-bottom: 8px; color: #fff; }
+    .w-mono .t-details { display: flex; flex-direction: column; gap: 4px; font-size: 11px; color: #888; }
+    .w-mono .detail-row { display: flex; justify-content: space-between; }
+    .w-mono .val { color: #ddd; }
+
+    /* =========================================
+       5. Clean Lines (Subtle & Airy)
+       ========================================= */
+    .w-lines { background: #ffffff; color: #111; border: 1px solid #eaeaea; }
+    .w-lines .header { padding: 32px 32px 16px; }
+    .w-lines .h-title { font-size: 22px; font-weight: 400; letter-spacing: -0.02em; }
+    .w-lines .search { margin: 0 32px 24px; padding: 12px 16px; background: #f9f9f9; border-radius: 8px; font-size: 14px; color: #999; }
+    .w-lines .list { padding: 0 32px; display: flex; flex-direction: column; gap: 24px; }
+    .w-lines .tool-tile { display: flex; align-items: center; gap: 20px; cursor: pointer; group; }
+    .w-lines .t-icon { width: 48px; height: 48px; border-radius: 14px; background: #f4f4f5; display: flex; align-items: center; justify-content: center; font-size: 20px; color: #111; transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1); }
+    .w-lines .tool-tile:hover .t-icon { transform: scale(1.05); background: #111; color: #fff; }
+    .w-lines .t-info { flex: 1; border-bottom: 1px solid #f0f0f0; padding-bottom: 16px; display: flex; justify-content: space-between; align-items: center; }
+    .w-lines .t-name { font-size: 16px; font-weight: 500; margin-bottom: 4px; }
+    .w-lines .t-badges { display: flex; gap: 12px; font-size: 13px; color: #71717a; }
+    .w-lines .badge { display: flex; align-items: center; gap: 6px; }
+    .w-lines .arrow { color: #ccc; transition: transform 0.2s; }
+    .w-lines .tool-tile:hover .arrow { transform: translateX(4px); color: #111; }
+
+  </style>
+</head>
+<body>
+
+  <div class="header-info">
+    <h1>Homepage Redesigns</h1>
+    <p>5 new variations retaining the core structure (a vertical list of LLM tools showing their Skills and MCPs), but elevating the design to feel like a premium, dedicated homepage.</p>
+  </div>
+
+  <div class="grid">
+
+    <!-- 1. Refined Modern SaaS -->
+    <div class="mockup-wrapper">
+      <div class="mockup-title">1. Refined Modern SaaS</div>
+      <div class="window w-saas">
+        <div class="header flex items-center justify-between">
+          <div class="h-title">Agents</div>
+          <div>⚙️</div>
+        </div>
+        <div class="search">🔍 Search tools, skills...</div>
+        <div class="list">
+          <div class="tool-tile">
+            <div class="t-icon claude">C</div>
+            <div class="t-info">
+              <div class="t-name">Claude Code</div>
+              <div class="t-badges">
+                <div class="badge"><div class="badge-dot skills"></div> 3 Skills</div>
+                <div class="badge"><div class="badge-dot mcps"></div> 2 MCPs</div>
+              </div>
+            </div>
+            <div class="chevron">›</div>
+          </div>
+          <div class="tool-tile">
+            <div class="t-icon cursor">_</div>
+            <div class="t-info">
+              <div class="t-name">Cursor</div>
+              <div class="t-badges">
+                <div class="badge"><div class="badge-dot mcps"></div> 1 MCP</div>
+              </div>
+            </div>
+            <div class="chevron">›</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 2. Elegant Dark -->
+    <div class="mockup-wrapper">
+      <div class="mockup-title">2. Elegant Dark High-Contrast</div>
+      <div class="window w-dark">
+        <div class="header flex items-center justify-between">
+          <div class="h-title">Workspace</div>
+          <div style="color: #666;">+</div>
+        </div>
+        <div class="search">Type to filter...</div>
+        <div class="list">
+          <div class="tool-tile">
+            <div class="left-col">
+              <div class="t-icon">C</div>
+              <div class="t-name">Claude Code</div>
+            </div>
+            <div class="right-col">
+              <div class="badge"><span>3</span>SKL</div>
+              <div class="badge"><span>2</span>MCP</div>
+            </div>
+          </div>
+          <div class="tool-tile">
+            <div class="left-col">
+              <div class="t-icon">_</div>
+              <div class="t-name">Cursor</div>
+            </div>
+            <div class="right-col">
+              <div class="badge"><span>1</span>MCP</div>
+            </div>
+          </div>
+          <div class="tool-tile" style="opacity: 0.5;">
+            <div class="left-col">
+              <div class="t-icon">G</div>
+              <div class="t-name">Gemini CLI</div>
+            </div>
+            <div class="right-col">
+              <div style="font-size: 12px; color: #666;">Not installed</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 3. Floating Islands -->
+    <div class="mockup-wrapper">
+      <div class="mockup-title">3. The Floating Islands</div>
+      <div class="window w-float">
+        <div class="header">
+          <div class="h-title">Integrations</div>
+        </div>
+        <div class="search">Search your workspace...</div>
+        <div class="list">
+          <div class="tool-tile">
+            <div class="tile-header">
+              <div class="t-icon" style="background: #f97316;">C</div>
+              <div class="t-name">Claude Code</div>
+            </div>
+            <div class="tile-stats">
+              <div class="stat-tile">
+                <div class="stat-num">3</div>
+                <div class="stat-label">Skills</div>
+              </div>
+              <div class="stat-tile">
+                <div class="stat-num">2</div>
+                <div class="stat-label">MCPs</div>
+              </div>
+            </div>
+          </div>
+          <div class="tool-tile">
+            <div class="tile-header">
+              <div class="t-icon" style="background: #0ea5e9;">_</div>
+              <div class="t-name">Cursor</div>
+            </div>
+            <div class="tile-stats">
+              <div class="stat-tile">
+                <div class="stat-num">0</div>
+                <div class="stat-label">Skills</div>
+              </div>
+              <div class="stat-tile">
+                <div class="stat-num">1</div>
+                <div class="stat-label">MCPs</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 4. Monospace Precision -->
+    <div class="mockup-wrapper">
+      <div class="mockup-title">4. Monospace Precision</div>
+      <div class="window w-mono">
+        <div class="header flex items-center justify-between">
+          <div class="h-title">~ / agentbar / registry</div>
+          <div style="color: #444;">[OK]</div>
+        </div>
+        <div class="search">&gt; grep tool...<span style="animation: blink 1s infinite">_</span></div>
+        <div class="list">
+          <div class="tool-tile">
+            <div class="t-icon">■</div>
+            <div class="t-info">
+              <div class="t-name">claude_code</div>
+              <div class="t-details">
+                <div class="detail-row"><span>skills.count</span><span class="val">3</span></div>
+                <div class="detail-row"><span>mcps.count</span><span class="val">2</span></div>
+                <div class="detail-row"><span>status</span><span class="val" style="color: #10b981;">active</span></div>
+              </div>
+            </div>
+          </div>
+          <div class="tool-tile">
+            <div class="t-icon">■</div>
+            <div class="t-info">
+              <div class="t-name">cursor_ide</div>
+              <div class="t-details">
+                <div class="detail-row"><span>skills.count</span><span class="val">0</span></div>
+                <div class="detail-row"><span>mcps.count</span><span class="val">1</span></div>
+                <div class="detail-row"><span>status</span><span class="val" style="color: #10b981;">active</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 5. Clean Lines -->
+    <div class="mockup-wrapper">
+      <div class="mockup-title">5. Clean Lines & Typography</div>
+      <div class="window w-lines">
+        <div class="header">
+          <div class="h-title">Your Environment</div>
+        </div>
+        <div class="search">Filter integrations...</div>
+        <div class="list">
+          <div class="tool-tile">
+            <div class="t-icon">C</div>
+            <div class="t-info">
+              <div>
+                <div class="t-name">Claude Code</div>
+                <div class="t-badges">
+                  <div class="badge">3 Skills</div>
+                  <div class="badge">2 MCPs</div>
+                </div>
+              </div>
+              <div class="arrow">→</div>
+            </div>
+          </div>
+          <div class="tool-tile">
+            <div class="t-icon">_</div>
+            <div class="t-info">
+              <div>
+                <div class="t-name">Cursor</div>
+                <div class="t-badges">
+                  <div class="badge">1 MCP</div>
+                </div>
+              </div>
+              <div class="arrow">→</div>
+            </div>
+          </div>
+          <div class="tool-tile" style="opacity: 0.4;">
+            <div class="t-icon">G</div>
+            <div class="t-info">
+              <div>
+                <div class="t-name">Gemini CLI</div>
+                <div class="t-badges">
+                  <div class="badge">Not Installed</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+</body>
+</html>
