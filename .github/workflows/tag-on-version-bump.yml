@@ -10,6 +10,10 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: tag-on-version-bump
+  cancel-in-progress: true
+
 jobs:
   tag:
     runs-on: ubuntu-latest
