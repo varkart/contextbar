@@ -201,6 +201,7 @@ export default function Settings({ updateInfo, theme, onThemeChange, onOpenLogs 
   const [vibrancy, setVibrancy] = useState(true)
   const [vibrancyLoading, setVibrancyLoading] = useState(true)
   const [version, setVersion] = useState('')
+  const [accessibilityGranted, setAccessibilityGranted] = useState<boolean | null>(null)
 
   useEffect(() => {
     Promise.all([
@@ -208,6 +209,7 @@ export default function Settings({ updateInfo, theme, onThemeChange, onOpenLogs 
       invoke<string>('get_version').then(setVersion).catch(() => setVersion('0.5.0')),
       invoke<string>('get_shortcut').then(setShortcut).catch(() => {}),
       invoke<boolean>('get_vibrancy').then(setVibrancy).catch(() => {}),
+      invoke<boolean>('check_accessibility').then(setAccessibilityGranted).catch(() => setAccessibilityGranted(true)),
     ]).finally(() => {
       setAutostartLoading(false)
       setShortcutLoading(false)
@@ -255,6 +257,19 @@ export default function Settings({ updateInfo, theme, onThemeChange, onOpenLogs 
               <ShortcutRecorder value={shortcut} onChange={handleShortcutChange} />
             )}
           </SettingRow>
+          {accessibilityGranted === false && (
+            <SettingRow
+              label="Accessibility"
+              description="Required for global shortcut to work"
+            >
+              <button
+                onClick={() => invoke('open_accessibility_settings')}
+                className="text-[12px] text-amber-500 hover:text-amber-400 border border-amber-500/30 hover:border-amber-400/50 px-2 py-0.5 rounded transition-colors"
+              >
+                Open Settings
+              </button>
+            </SettingRow>
+          )}
         </div>
 
         <SectionLabel>Appearance</SectionLabel>
