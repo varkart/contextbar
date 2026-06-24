@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "LLM Manager",
+  "productName": "Context Bar",
   "version": "0.8.0",
-  "identifier": "com.varkart.llmmanager",
+  "identifier": "com.varkart.contextbar",
   "build": {
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:1420",
@@ -18,7 +18,7 @@
   "plugins": {
     "updater": {
       "pubkey": "",
-      "endpoints": ["https://github.com/varkart/llmmanager/releases/latest/download/latest.json"]
+      "endpoints": ["https://github.com/varkart/contextbar/releases/latest/download/latest.json"]
     }
   },
   "bundle": {

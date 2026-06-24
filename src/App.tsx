@@ -10,6 +10,7 @@ import { useViewRouter } from './useViewRouter'
 import { capture } from './analytics'
 import ViewManager from './components/views/ViewManager'
 import SplashScreen from './components/SplashScreen'
+import PermissionsSetupScreen from './components/PermissionsSetupScreen'
 import Header from './components/Header'
 import Footer from './components/Footer'
 
@@ -22,6 +23,9 @@ export default function App() {
   const [version, setVersion] = useState('')
   const { theme, setTheme } = useTheme()
   const [splashDismissed, setSplashDismissed] = useState(isE2E)
+  const [permissionsSetupDone, setPermissionsSetupDone] = useState(
+    isE2E || !!localStorage.getItem('permissions_setup_v1')
+  )
   const [backendReady, setBackendReady] = useState(false)
   const [query, setQuery] = useState('')
 
@@ -91,6 +95,12 @@ export default function App() {
     <div className="w-[380px] h-[520px] bg-[var(--c-bg)] text-[var(--c-text)] flex flex-col overflow-hidden">
       {!splashDismissed && (
         <SplashScreen backendReady={backendReady} onDismiss={() => setSplashDismissed(true)} />
+      )}
+      {splashDismissed && !permissionsSetupDone && (
+        <PermissionsSetupScreen onDone={() => {
+          localStorage.setItem('permissions_setup_v1', '1')
+          setPermissionsSetupDone(true)
+        }} />
       )}
       <Header
         view={view}
