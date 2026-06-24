@@ -166,26 +166,6 @@ pub async fn install_npm_global(package_name: &str) -> Result<String, String> {
 }
 
 // ---------------------------------------------------------------------------
-// Rollback (uninstall) — used if post-install validation fails
-// ---------------------------------------------------------------------------
-
-#[allow(dead_code)]
-pub async fn uninstall_npm_global(package_name: &str) -> Result<(), String> {
-    let npm = find_npm().ok_or_else(|| "npm not found".to_string())?;
-    let output = tokio::process::Command::new(&npm)
-        .args(["uninstall", "-g", package_name])
-        .output()
-        .await
-        .map_err(|e| format!("failed to spawn npm: {e}"))?;
-
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(format!("npm uninstall failed: {stderr}"));
-    }
-    Ok(())
-}
-
-// ---------------------------------------------------------------------------
 // npm source URL resolution (async — registry + HEAD validation)
 // ---------------------------------------------------------------------------
 

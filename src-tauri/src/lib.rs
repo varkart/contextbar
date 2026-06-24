@@ -21,6 +21,34 @@ use tauri_plugin_autostart::MacosLauncher;
 use tauri_plugin_positioner::{Position, WindowExt};
 
 // ---------------------------------------------------------------------------
+// Path validation — shared allowlist for all IPC commands that touch the FS
+// ---------------------------------------------------------------------------
+
+/// Canonicalize `path` and verify it sits inside one of the known tool-config
+/// roots. Returns the canonical `PathBuf` on success, an "access denied" error
+/// on failure. All IPC commands that read, write, or delete user files must
+/// call this before touching the filesystem.
+fn validate_tool_path(path: &str) -> Result<std::path::PathBuf, String> {
+    let p = std::path::Path::new(path);
+    let home = dirs::home_dir().ok_or("cannot resolve home dir")?;
+    let allowed_roots: &[std::path::PathBuf] = &[
+        home.join(".claude"),
+        home.join(".cursor"),
+        home.join(".config"),
+        home.join(".windsurf"),
+        home.join(".codeium"),
+        home.join(".kiro"),
+        home.join(".amazon-q"),
+        home.join("Library").join("Application Support"),
+    ];
+    let canonical = p.canonicalize().map_err(|e| format!("cannot access path: {e}"))?;
+    if !allowed_roots.iter().any(|root| canonical.starts_with(root)) {
+        return Err("access denied: path outside allowed tool directories".to_string());
+    }
+    Ok(canonical)
+}
+
+// ---------------------------------------------------------------------------
 // Settings helpers
 // ---------------------------------------------------------------------------
 
@@ -78,7 +106,8 @@ fn hide_window(window: tauri::WebviewWindow) {
 
 #[tauri::command]
 fn get_skill_full_description(path: String) -> Option<String> {
-    detectors::read_skill_file_content(std::path::Path::new(&path))
+    let canonical = validate_tool_path(&path).ok()?;
+    detectors::read_skill_file_content(&canonical)
 }
 
 #[tauri::command]
@@ -198,13 +227,8 @@ fn set_vibrancy(enabled: bool) -> Result<(), String> {
 
 #[tauri::command]
 fn read_skill_dir(path: String) -> Result<crate::models::FileEntry, String> {
-    use std::path::Path;
-
-    let root = Path::new(&path);
-    if !root.exists() {
-        return Err(format!("Path not found: {}", path));
-    }
-    read_entry(root, 0)
+    let canonical = validate_tool_path(&path)?;
+    read_entry(&canonical, 0)
 }
 
 fn read_entry(path: &std::path::Path, depth: usize) -> Result<crate::models::FileEntry, String> {
@@ -252,14 +276,16 @@ fn read_entry(path: &std::path::Path, depth: usize) -> Result<crate::models::Fil
 
 #[tauri::command]
 fn open_path(path: String) -> Result<(), String> {
-    tauri_plugin_opener::open_path(path, None::<&str>).map_err(|e| e.to_string())
+    let canonical = validate_tool_path(&path)?;
+    tauri_plugin_opener::open_path(canonical, None::<&str>).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 fn reveal_in_finder(path: String) -> Result<(), String> {
+    let canonical = validate_tool_path(&path)?;
     std::process::Command::new("open")
         .arg("-R")
-        .arg(&path)
+        .arg(&canonical)
         .spawn()
         .map_err(|e| e.to_string())?;
     Ok(())
@@ -974,7 +1000,7 @@ fn remove_skill(
     skill_name: String,
     skill_path: String,
 ) -> Result<(), String> {
-    let path = std::path::Path::new(&skill_path);
+    let path = validate_tool_path(&skill_path)?;
     // Also check the .disabled location
     let disabled_path = path
         .parent()
@@ -1014,6 +1040,7 @@ fn set_skill_active(
     source_id: Option<String>,
     active: bool,
 ) -> Result<(), String> {
+    validate_tool_path(&skill_path)?;
     use crate::engine::manifest::SkillSourceSpec;
     use crate::engine::resolve::expand_home;
 
@@ -1453,6 +1480,9 @@ struct BackupEntry {
 
 #[tauri::command]
 fn list_config_backups(config_path: String) -> Vec<BackupEntry> {
+    if validate_tool_path(&config_path).is_err() {
+        return vec![];
+    }
     backup::list_snapshots(&config_path)
         .into_iter()
         .map(|(ts, p)| BackupEntry {
@@ -1464,6 +1494,7 @@ fn list_config_backups(config_path: String) -> Vec<BackupEntry> {
 
 #[tauri::command]
 fn restore_config_backup(config_path: String, timestamp_ms: u128) -> Result<(), String> {
+    validate_tool_path(&config_path)?;
     // Snapshot the current file before overwriting so the restore itself is undoable.
     if let Err(e) = backup::snapshot(&config_path) {
         eprintln!("[backup] pre-restore snapshot failed: {e}");
@@ -1604,6 +1635,7 @@ fn get_audit_log(
 // IPC commands – debug helpers
 // ---------------------------------------------------------------------------
 
+#[cfg(debug_assertions)]
 #[tauri::command]
 fn debug_add_notification(
     db: tauri::State<'_, db::DbState>,
@@ -1626,6 +1658,15 @@ fn debug_add_notification(
     ).map_err(|e| e.to_string())?;
     let _ = app.emit("notifications-changed", ());
     Ok(())
+}
+
+#[cfg(not(debug_assertions))]
+#[tauri::command]
+fn debug_add_notification(
+    _db: tauri::State<'_, db::DbState>,
+    _app: tauri::AppHandle,
+) -> Result<(), String> {
+    Err("not available in release builds".to_string())
 }
 
 // ---------------------------------------------------------------------------
@@ -1744,6 +1785,7 @@ pub fn run() {
             }
 
             // In test mode, auto-open the window so WebDriver can connect
+            #[cfg(debug_assertions)]
             if std::env::var("AICONTEXTBAR_TEST").is_ok() {
                 open_main_window(app.handle(), None);
             }

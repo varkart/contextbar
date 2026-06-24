@@ -49,7 +49,7 @@ fn strip_jsonc(s: &str) -> String {
 fn config_lock(path: &str) -> Arc<Mutex<()>> {
     static LOCKS: OnceLock<Mutex<HashMap<String, Arc<Mutex<()>>>>> = OnceLock::new();
     let map = LOCKS.get_or_init(|| Mutex::new(HashMap::new()));
-    let mut guard = map.lock().unwrap();
+    let mut guard = map.lock().unwrap_or_else(|e| e.into_inner());
     guard
         .entry(path.to_string())
         .or_insert_with(|| Arc::new(Mutex::new(())))
@@ -67,7 +67,7 @@ pub fn move_mcp_in_config(
     disabled_key: &str,
 ) -> Result<(), String> {
     let lock = config_lock(config_path);
-    let _guard = lock.lock().unwrap();
+    let _guard = lock.lock().unwrap_or_else(|e| e.into_inner());
 
     if let Err(e) = crate::backup::snapshot(config_path) {
         eprintln!("[backup] snapshot failed for {config_path}: {e}");
@@ -120,7 +120,7 @@ pub fn toggle_extension_active(
     active: bool,
 ) -> Result<(), String> {
     let lock = config_lock(enablement_path);
-    let _guard = lock.lock().unwrap();
+    let _guard = lock.lock().unwrap_or_else(|e| e.into_inner());
 
     if let Err(e) = crate::backup::snapshot(enablement_path) {
         eprintln!("[backup] snapshot failed for {enablement_path}: {e}");
@@ -182,7 +182,7 @@ pub fn update_permissions_file(
     permissions_key: &str,
 ) -> Result<(), String> {
     let lock = config_lock(config_path);
-    let _guard = lock.lock().unwrap();
+    let _guard = lock.lock().unwrap_or_else(|e| e.into_inner());
 
     if let Err(e) = crate::backup::snapshot(config_path) {
         eprintln!("[backup] snapshot failed for {config_path}: {e}");
@@ -253,7 +253,7 @@ pub fn add_mcp_to_config(
     entry: serde_json::Value,
 ) -> Result<(), String> {
     let lock = config_lock(config_path);
-    let _guard = lock.lock().unwrap();
+    let _guard = lock.lock().unwrap_or_else(|e| e.into_inner());
 
     if let Err(e) = crate::backup::snapshot(config_path) {
         eprintln!("[backup] snapshot failed for {config_path}: {e}");
@@ -300,7 +300,7 @@ pub fn remove_mcp_from_config(
     name: &str,
 ) -> Result<(), String> {
     let lock = config_lock(config_path);
-    let _guard = lock.lock().unwrap();
+    let _guard = lock.lock().unwrap_or_else(|e| e.into_inner());
 
     if let Err(e) = crate::backup::snapshot(config_path) {
         eprintln!("[backup] snapshot failed for {config_path}: {e}");
@@ -355,7 +355,7 @@ pub fn add_mcp_to_toml_config(
     url: Option<&str>,
 ) -> Result<(), String> {
     let lock = config_lock(config_path);
-    let _guard = lock.lock().unwrap();
+    let _guard = lock.lock().unwrap_or_else(|e| e.into_inner());
 
     if let Err(e) = crate::backup::snapshot(config_path) {
         eprintln!("[backup] snapshot failed for {config_path}: {e}");
@@ -417,7 +417,7 @@ pub fn toggle_toml_mcp_enabled(
     toggle_field: &str,
 ) -> Result<(), String> {
     let lock = config_lock(config_path);
-    let _guard = lock.lock().unwrap();
+    let _guard = lock.lock().unwrap_or_else(|e| e.into_inner());
 
     if let Err(e) = crate::backup::snapshot(config_path) {
         eprintln!("[backup] snapshot failed for {config_path}: {e}");
@@ -459,7 +459,7 @@ pub fn move_mcp_in_toml_config(
     disabled_key: &str,
 ) -> Result<(), String> {
     let lock = config_lock(config_path);
-    let _guard = lock.lock().unwrap();
+    let _guard = lock.lock().unwrap_or_else(|e| e.into_inner());
 
     if let Err(e) = crate::backup::snapshot(config_path) {
         eprintln!("[backup] snapshot failed for {config_path}: {e}");
@@ -506,7 +506,7 @@ pub fn remove_mcp_from_toml_config(
     name: &str,
 ) -> Result<(), String> {
     let lock = config_lock(config_path);
-    let _guard = lock.lock().unwrap();
+    let _guard = lock.lock().unwrap_or_else(|e| e.into_inner());
 
     if let Err(e) = crate::backup::snapshot(config_path) {
         eprintln!("[backup] snapshot failed for {config_path}: {e}");
@@ -551,7 +551,7 @@ pub fn toggle_toml_config_skill(
     active: bool,
 ) -> Result<(), String> {
     let lock = config_lock(config_path);
-    let _guard = lock.lock().unwrap();
+    let _guard = lock.lock().unwrap_or_else(|e| e.into_inner());
 
     if let Err(e) = crate::backup::snapshot(config_path) {
         eprintln!("[backup] snapshot failed for {config_path}: {e}");
