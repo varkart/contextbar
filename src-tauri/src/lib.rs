@@ -109,6 +109,33 @@ fn set_autostart(app: tauri::AppHandle, enabled: bool) -> Result<(), String> {
 
 const DEFAULT_SHORTCUT: &str = "CommandOrControl+Shift+Space";
 
+// ---------------------------------------------------------------------------
+// IPC commands – Accessibility permission
+// ---------------------------------------------------------------------------
+
+#[cfg(target_os = "macos")]
+fn ax_is_process_trusted() -> bool {
+    extern "C" {
+        fn AXIsProcessTrusted() -> bool;
+    }
+    unsafe { AXIsProcessTrusted() }
+}
+
+#[cfg(not(target_os = "macos"))]
+fn ax_is_process_trusted() -> bool { true }
+
+#[tauri::command]
+fn check_accessibility() -> bool {
+    ax_is_process_trusted()
+}
+
+#[tauri::command]
+fn open_accessibility_settings() {
+    let _ = std::process::Command::new("open")
+        .arg("x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")
+        .spawn();
+}
+
 #[tauri::command]
 fn get_shortcut() -> String {
     read_settings()
@@ -1771,6 +1798,8 @@ pub fn run() {
             dismiss_all_notifications,
             get_audit_log,
             quit_app,
+            check_accessibility,
+            open_accessibility_settings,
         ])
         .run(tauri::generate_context!())
         .expect("error running LLM Manager");
