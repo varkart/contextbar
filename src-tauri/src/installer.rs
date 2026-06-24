@@ -197,7 +197,7 @@ pub async fn uninstall_npm_global(package_name: &str) -> Result<(), String> {
 pub async fn fetch_npm_source_url(package_name: &str) -> Option<String> {
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(8))
-        .user_agent("llmmanager")
+        .user_agent("contextbar")
         .build()
         .ok()?;
 

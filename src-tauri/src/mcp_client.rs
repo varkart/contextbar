@@ -84,7 +84,7 @@ async fn query_stdio_tools(command: &str, args: &[String]) -> Result<Vec<McpTool
         "params": {
             "protocolVersion": "2024-11-05",
             "capabilities": {},
-            "clientInfo": { "name": "LLM Manager", "version": env!("CARGO_PKG_VERSION") }
+            "clientInfo": { "name": "Context Bar", "version": env!("CARGO_PKG_VERSION") }
         }
     });
     stdin
@@ -152,7 +152,7 @@ async fn query_http_tools(url: &str) -> Result<Vec<McpTool>, String> {
             "params": {
                 "protocolVersion": "2024-11-05",
                 "capabilities": {},
-                "clientInfo": { "name": "LLM Manager", "version": env!("CARGO_PKG_VERSION") }
+                "clientInfo": { "name": "Context Bar", "version": env!("CARGO_PKG_VERSION") }
             }
         }))
         .send()

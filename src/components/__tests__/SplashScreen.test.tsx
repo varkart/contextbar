@@ -8,12 +8,12 @@ afterEach(() => { vi.useRealTimers() })
 describe('SplashScreen', () => {
   it('renders logo image', () => {
     render(<SplashScreen backendReady={false} onDismiss={vi.fn()} />)
-    expect(screen.getByAltText('LLM Manager')).toBeInTheDocument()
+    expect(screen.getByAltText('Context Bar')).toBeInTheDocument()
   })
 
   it('renders app name', () => {
     render(<SplashScreen backendReady={false} onDismiss={vi.fn()} />)
-    expect(screen.getByText('LLM Manager')).toBeInTheDocument()
+    expect(screen.getByText('Context Bar')).toBeInTheDocument()
   })
 
   it('shows loading dots when backend not ready', () => {

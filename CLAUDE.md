@@ -1,10 +1,10 @@
-# LLM Manager — Claude Code Project Guide
+# Context Bar — Claude Code Project Guide
 
 ## What This Is
 
 macOS menu bar app (Tauri 2.0) that detects installed AI tools (Claude, Cursor, Gemini, Copilot, Windsurf, ChatGPT) and shows their skills, MCP servers, and active/inactive status — all in one tray popover.
 
-**Repo:** https://github.com/varkart/llmmanager (private)
+**Repo:** https://github.com/varkart/contextbar (private)
 **Owner:** varkart
 
 ---
@@ -22,7 +22,7 @@ macOS menu bar app (Tauri 2.0) that detects installed AI tools (Claude, Cursor, 
 ## Directory Structure
 
 ```
-llmmanager/
+contextbar/
 ├── src/                        # React frontend
 │   ├── index.css               # Tailwind v4 entry (@import "tailwindcss")
 │   ├── main.tsx                # React entry

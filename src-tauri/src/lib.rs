@@ -27,7 +27,7 @@ use tauri_plugin_positioner::{Position, WindowExt};
 fn settings_path() -> std::path::PathBuf {
     dirs::config_dir()
         .unwrap_or_else(|| std::path::PathBuf::from("."))
-        .join("llmmanager")
+        .join("contextbar")
         .join("settings.json")
 }
 
@@ -589,7 +589,7 @@ async fn github_find_skill_mds(
     max_depth: usize,  // max path segments, e.g. 2 = "dir/SKILL.md"
 ) -> Result<Vec<(String, String)>, String> {
     let client = reqwest::Client::builder()
-        .user_agent("llmmanager")
+        .user_agent("contextbar")
         .build()
         .map_err(|e| e.to_string())?;
 
@@ -1474,10 +1474,10 @@ fn restore_config_backup(config_path: String, timestamp_ms: u128) -> Result<(), 
 #[tauri::command]
 fn read_backup_content(backup_path: String) -> Result<String, String> {
     let p = std::path::Path::new(&backup_path);
-    // Only allow reads from the llmmanager backup directory.
+    // Only allow reads from the contextbar backup directory.
     let data_dir = dirs::data_dir()
         .ok_or("cannot resolve data dir")?
-        .join("llmmanager")
+        .join("contextbar")
         .join("backups");
     let canonical = p.canonicalize().map_err(|e| e.to_string())?;
     if !canonical.starts_with(&data_dir) {
@@ -1684,7 +1684,7 @@ pub fn run() {
             #[cfg(target_os = "macos")]
             app.set_activation_policy(tauri::ActivationPolicy::Accessory);
 
-            let quit = MenuItem::with_id(app, "quit", "Quit LLM Manager", true, None::<&str>)?;
+            let quit = MenuItem::with_id(app, "quit", "Quit Context Bar", true, None::<&str>)?;
             let settings = MenuItem::with_id(app, "settings", "Settings…", true, None::<&str>)?;
             let menu = Menu::with_items(app, &[&settings, &quit])?;
 
@@ -1802,7 +1802,7 @@ pub fn run() {
             open_accessibility_settings,
         ])
         .run(tauri::generate_context!())
-        .expect("error running LLM Manager");
+        .expect("error running Context Bar");
 }
 
 // ---------------------------------------------------------------------------
@@ -1839,7 +1839,7 @@ fn open_main_window(app: &tauri::AppHandle, hash: Option<&str>) {
         return;
     }
     let window = WebviewWindowBuilder::new(app, "main", url)
-        .title("LLM Manager")
+        .title("Context Bar")
         .inner_size(380.0, 520.0)
         .resizable(false)
         .decorations(false)

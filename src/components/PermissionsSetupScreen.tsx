@@ -53,7 +53,7 @@ export default function PermissionsSetupScreen({ onDone }: Props) {
       {/* Header */}
       <div className="mb-5">
         <p className="text-[11px] font-medium text-[var(--c-text-3)] uppercase tracking-widest mb-1.5">
-          LLM Manager
+          Context Bar
         </p>
         <h1 className="text-[18px] font-semibold text-[var(--c-text)] tracking-[-0.02em] leading-snug">
           One permission needed
@@ -102,14 +102,14 @@ export default function PermissionsSetupScreen({ onDone }: Props) {
         {/* Body copy */}
         <p className="text-[12px] text-[var(--c-text-3)] leading-relaxed">
           Registers your shortcut key (⌘⇧Space by default) as a system-wide hotkey,
-          so you can open LLM Manager from any app without switching focus.
+          so you can open Context Bar from any app without switching focus.
         </p>
         <p className="text-[12px] text-[var(--c-text-3)] leading-relaxed">
           macOS requires Accessibility permission to intercept key combinations
           across applications.
         </p>
         <p className="text-[12px] text-[var(--c-text-3)] leading-relaxed">
-          LLM Manager only listens for your configured shortcut. It does not read
+          Context Bar only listens for your configured shortcut. It does not read
           your screen, control other apps, log keystrokes, or transmit any input data.
         </p>
 

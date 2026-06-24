@@ -247,7 +247,7 @@ export default function Settings({ updateInfo, theme, onThemeChange, onOpenLogs 
       <div className="flex-1 overflow-y-auto px-4 pb-4">
         <SectionLabel>General</SectionLabel>
         <div className="divide-y divide-[var(--c-border-sub)]">
-          <SettingRow label="Launch at login" description="Start LLM Manager when you log in">
+          <SettingRow label="Launch at login" description="Start Context Bar when you log in">
             <Toggle checked={autostart} onChange={handleAutostart} disabled={autostartLoading} label="Launch at login" />
           </SettingRow>
           <SettingRow label="Global shortcut" description="Click to record new shortcut">
@@ -316,9 +316,9 @@ export default function Settings({ updateInfo, theme, onThemeChange, onOpenLogs 
             </SettingRow>
           )}
           <SettingRow label="Source">
-            <a href="https://github.com/varkart/llmmanager" target="_blank" rel="noopener noreferrer"
+            <a href="https://github.com/varkart/contextbar" target="_blank" rel="noopener noreferrer"
               className="text-[13px] text-indigo-500 hover:text-indigo-400 transition-colors flex items-center gap-1">
-              github.com/varkart/llmmanager <ExternalLinkIcon />
+              github.com/varkart/contextbar <ExternalLinkIcon />
             </a>
           </SettingRow>
         </div>
