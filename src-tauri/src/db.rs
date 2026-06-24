@@ -31,10 +31,10 @@ pub fn open() -> DbState {
 fn try_open() -> Result<DbState, AppError> {
     let data_dir = dirs::data_dir()
         .ok_or_else(|| AppError::Other("cannot resolve data dir".into()))?
-        .join("llmmanager");
+        .join("contextbar");
     std::fs::create_dir_all(&data_dir)?;
 
-    let db_path = data_dir.join("llmmanager.db");
+    let db_path = data_dir.join("contextbar.db");
     let mut conn = Connection::open(&db_path)?;
     conn.pragma_update(None, "journal_mode", "WAL")?;
     migrate(&mut conn)?;
