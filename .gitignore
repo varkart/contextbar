@@ -39,6 +39,11 @@ src-tauri/gen/
 .local/
 docs/
 
+# AI assistant tooling (internal dev only)
+.claude/
+GEMINI.md
+repo-health-report.md
+
 # Test output
 coverage/
 playwright-report/
