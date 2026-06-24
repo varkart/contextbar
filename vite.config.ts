@@ -14,12 +14,9 @@ export default defineConfig(async () => ({
     react(),
     tailwindcss(),
     // Upload source maps to Sentry on production builds only
-    isBuild && sentryVitePlugin({
-      // @ts-expect-error process is a nodejs global
-      org: process.env.SENTRY_ORG ?? "personal-zt1",
-      // @ts-expect-error process is a nodejs global
-      project: process.env.SENTRY_PROJECT ?? "agentbar",
-      // @ts-expect-error process is a nodejs global
+    isBuild && process.env.SENTRY_AUTH_TOKEN && sentryVitePlugin({
+      org: process.env.SENTRY_ORG,
+      project: process.env.SENTRY_PROJECT,
       authToken: process.env.SENTRY_AUTH_TOKEN,
       silent: true,
     }),
