@@ -6,7 +6,7 @@ const MAX_SNAPSHOTS: usize = 20;
 fn backup_dir(config_path: &str) -> std::path::PathBuf {
     let base = dirs::data_dir()
         .unwrap_or_else(|| std::path::PathBuf::from("."))
-        .join("llmmanager")
+        .join("contextbar")
         .join("backups");
 
     // Sanitize the full path into a single dir name — replace path separators

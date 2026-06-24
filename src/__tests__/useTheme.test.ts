@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { renderHook, act } from '@testing-library/react'
 import { useTheme } from '../useTheme'
 
-const STORAGE_KEY = 'llmmanager:theme'
+const STORAGE_KEY = 'contextbar:theme'
 
 function mockMatchMedia(matches: boolean) {
   const listeners: Array<(e: { matches: boolean }) => void> = []

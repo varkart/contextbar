@@ -71,7 +71,7 @@ export default function SplashScreen({ backendReady, onDismiss }: SplashScreenPr
     >
       <img
         src="/sloth.png"
-        alt="LLM Manager"
+        alt="Context Bar"
         className="splash-float w-32 h-32 object-contain"
         draggable={false}
       />
@@ -79,7 +79,7 @@ export default function SplashScreen({ backendReady, onDismiss }: SplashScreenPr
       {/* title + typewriter tip */}
       <div className="flex flex-col items-center gap-2 text-center w-full">
         <p className="text-[22px] font-bold text-[var(--c-text)] tracking-[-0.02em]">
-          LLM Manager
+          Context Bar
         </p>
         <div className="flex flex-col items-center justify-center h-[44px] gap-1">
           <span className="text-[14px] text-[var(--c-text-3)]">

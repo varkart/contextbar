@@ -33,10 +33,10 @@ export function useToolsDiff() {
         try {
           const { sendNotification } = await import('@tauri-apps/plugin-notification')
           if (changes.length === 1) {
-            await sendNotification({ title: 'LLM Manager', body: changes[0] })
+            await sendNotification({ title: 'Context Bar', body: changes[0] })
           } else {
             await sendNotification({
-              title: 'LLM Manager',
+              title: 'Context Bar',
               body: `${changes.length} changes detected`,
             })
           }

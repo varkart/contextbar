@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest'
 import { renderHook, act } from '@testing-library/react'
 import { useExpandedState } from '../useExpandedState'
 
-const STORAGE_KEY = 'llmmanager:expandedTools'
+const STORAGE_KEY = 'contextbar:expandedTools'
 
 beforeEach(() => {
   localStorage.removeItem(STORAGE_KEY)
