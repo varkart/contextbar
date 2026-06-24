@@ -1,19 +1,11 @@
 import { useState } from 'react';
 import React from 'react';
-import type { AiTool, Notification } from '../../types';
+import type { AiTool } from '../../types';
 import ToolDot from '../ToolDot';
 
 interface MainViewProps {
   loading: boolean;
-  tools: AiTool[];
   installedTools: AiTool[];
-  searchResults: any[];
-  notifications: Notification[];
-  updateInfo: any;
-  lastUpdated: Date | null;
-  cloudSyncing: boolean;
-  onFetchTools: () => Promise<void>;
-  onGoTo: (view: any) => void;
   onOpenLlmsList: () => void;
   onOpenSkillsPage: () => void;
   onOpenMcpsPage: () => void;

@@ -4,7 +4,7 @@ import { invoke } from '@tauri-apps/api/core'
 const CACHE_KEY = 'contextbar:updateCheck'
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000 // 24 hours
 
-interface UpdateInfo {
+export interface UpdateInfo {
   latestVersion: string
   releaseUrl: string
   checkedAt: number

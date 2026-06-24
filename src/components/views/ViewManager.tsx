@@ -14,7 +14,39 @@ import AddSkillView from './AddSkillView'
 import AddMcpView from './AddMcpView'
 
 import type { ThemePreference } from '../../useTheme'
-import type { AiTool, Skill } from '../../types'
+import type { AiTool, Skill, McpServer, Notification } from '../../types'
+import type { ToolMatch } from '../../search'
+import type { UpdateInfo } from '../../useUpdateCheck'
+import type { View } from '../../viewRouter'
+
+interface ViewManagerProps {
+  view: string
+  selectedTool: AiTool | null
+  selectedSkill: Skill | null
+  selectedMcp: McpServer | null
+  selectTool: (tool: AiTool) => void
+  openLlmsList: () => void
+  selectSkill: (skill: Skill, fromView?: View) => void
+  selectMcp: (mcp: McpServer, fromView?: View) => void
+  openSkillsPage: () => void
+  openMcpsPage: () => void
+  goTo: (view: View) => void
+  escape: () => void
+  query?: string
+  setQuery?: (q: string) => void
+  loading: boolean
+  tools: AiTool[]
+  installedTools: AiTool[]
+  searchResults: ToolMatch[]
+  notifications: Notification[]
+  updateInfo: UpdateInfo | null
+  lastUpdated: Date | null
+  cloudSyncing: boolean
+  handleFetchTools: () => Promise<void>
+  theme: ThemePreference
+  setTheme: (t: ThemePreference) => void
+  fetchNotifications: () => void
+}
 
 export default function ViewManager({
   view,
@@ -37,13 +69,11 @@ export default function ViewManager({
   searchResults,
   notifications,
   updateInfo,
-  lastUpdated,
-  cloudSyncing,
   handleFetchTools,
   theme,
   setTheme,
   fetchNotifications,
-}: any) {
+}: ViewManagerProps) {
   if (view === 'logs') {
     return <LogsPanel onBack={() => goTo('main')} />
   }
@@ -80,8 +110,8 @@ export default function ViewManager({
         tools={tools}
         loading={loading}
         onSelectTool={selectTool}
-        query={query}
-        setQuery={setQuery}
+        query={query ?? ''}
+        setQuery={setQuery ?? (() => {})}
       />
     )
   }
@@ -111,8 +141,8 @@ export default function ViewManager({
         tools={tools}
         onBack={() => escape()}
         onSelectSkill={skill => selectSkill(skill, 'all-skills-list')}
-        query={query}
-        setQuery={setQuery}
+        query={query ?? ''}
+        setQuery={setQuery ?? (() => {})}
       />
     )
   }
@@ -122,8 +152,8 @@ export default function ViewManager({
         tools={tools}
         onBack={() => escape()}
         onSelectMcp={mcp => selectMcp(mcp, 'all-mcps-list')}
-        query={query}
-        setQuery={setQuery}
+        query={query ?? ''}
+        setQuery={setQuery ?? (() => {})}
       />
     )
   }
@@ -171,8 +201,8 @@ export default function ViewManager({
         onOpenMcpsPage={openMcpsPage}
         onToolUpdated={handleFetchTools}
         query={query || undefined}
-        matchedSkills={searchResults.find((r: any) => r.tool.id === selectedTool.id)?.matchedSkills}
-        matchedMcps={searchResults.find((r: any) => r.tool.id === selectedTool.id)?.matchedMcps}
+        matchedSkills={searchResults.find(r => r.tool.id === selectedTool.id)?.matchedSkills}
+        matchedMcps={searchResults.find(r => r.tool.id === selectedTool.id)?.matchedMcps}
       />
     )
   }
@@ -191,15 +221,7 @@ export default function ViewManager({
   return (
     <MainView
       loading={loading}
-      tools={tools}
       installedTools={installedTools}
-      searchResults={searchResults}
-      notifications={notifications}
-      updateInfo={updateInfo}
-      lastUpdated={lastUpdated}
-      cloudSyncing={cloudSyncing}
-      onFetchTools={handleFetchTools}
-      onGoTo={goTo}
       onOpenLlmsList={openLlmsList}
       onOpenSkillsPage={openSkillsPage}
       onOpenMcpsPage={openMcpsPage}
