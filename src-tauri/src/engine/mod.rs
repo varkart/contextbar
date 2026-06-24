@@ -8,6 +8,16 @@ use crate::models::AiTool;
 use manifest::{DetectionSpec, Manifest, VersionSpec};
 use resolve::expand_home;
 
+use std::sync::OnceLock;
+use std::collections::HashMap;
+use std::sync::Mutex;
+
+static VERSION_CACHE: OnceLock<Mutex<HashMap<String, String>>> = OnceLock::new();
+
+fn version_cache() -> &'static Mutex<HashMap<String, String>> {
+    VERSION_CACHE.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
 // ── Embed all manifests at compile time ──────────────────────────────────────
 
 macro_rules! manifest_toml {
@@ -228,7 +238,24 @@ fn semver_cmp(a: &str, b: &str) -> std::cmp::Ordering {
 // ── Version ───────────────────────────────────────────────────────────────────
 
 fn run_version(spec: &VersionSpec, home: &std::path::Path, dr: &DetectionResult) -> Option<String> {
-    match spec {
+    let cache_key = match spec {
+        VersionSpec::Command { binary, .. } => {
+            binary.clone()
+                .or_else(|| dr.detected_binary.clone())
+                .or_else(|| dr.install_path.clone())
+        }
+        VersionSpec::JsonKey { file, .. } => {
+            Some(expand_home(file, home).to_string_lossy().into_owned())
+        }
+    }?;
+
+    if let Ok(guard) = version_cache().lock() {
+        if let Some(version) = guard.get(&cache_key) {
+            return Some(version.clone());
+        }
+    }
+
+    let version = match spec {
         VersionSpec::Command {
             binary,
             args,
@@ -248,7 +275,15 @@ fn run_version(spec: &VersionSpec, home: &std::path::Path, dr: &DetectionResult)
             let path = expand_home(file, home);
             read_json_version(&path, key_path)
         }
+    };
+
+    if let Some(ref v) = version {
+        if let Ok(mut guard) = version_cache().lock() {
+            guard.insert(cache_key, v.clone());
+        }
     }
+
+    version
 }
 
 fn run_command_version(binary: &str, args: &[String], parse: &str, timeout: std::time::Duration) -> Option<String> {

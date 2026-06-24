@@ -3,9 +3,7 @@ import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import { sentryVitePlugin } from "@sentry/vite-plugin";
 
-// @ts-expect-error process is a nodejs global
 const host = process.env.TAURI_DEV_HOST;
-// @ts-expect-error process is a nodejs global
 const isBuild = process.env.npm_lifecycle_event === "build";
 
 // https://vite.dev/config/
@@ -15,11 +13,8 @@ export default defineConfig(async () => ({
     tailwindcss(),
     // Upload source maps to Sentry on production builds only
     isBuild && sentryVitePlugin({
-      // @ts-expect-error process is a nodejs global
       org: process.env.SENTRY_ORG ?? "personal-zt1",
-      // @ts-expect-error process is a nodejs global
       project: process.env.SENTRY_PROJECT ?? "agentbar",
-      // @ts-expect-error process is a nodejs global
       authToken: process.env.SENTRY_AUTH_TOKEN,
       silent: true,
     }),

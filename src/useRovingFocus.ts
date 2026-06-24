@@ -49,7 +49,7 @@ export function useRovingFocus({ count, onSelect, horizontal = false }: UseRovin
         onSelect?.(index)
         break
     }
-  }, [count, focusItem, onSelect])
+  }, [count, focusItem, onSelect, horizontal])
 
   const getItemProps = useCallback((index: number): ItemProps => ({
     tabIndex: focusedIndex === index ? 0 : -1,
