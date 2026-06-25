@@ -28,10 +28,11 @@ describe('SplashScreen', () => {
 
   it('cycles through wellness tips', () => {
     render(<SplashScreen backendReady={false} onDismiss={vi.fn()} />)
-    const firstTip = screen.getByText(/take a small break|rest ur eyes|stretch ur back|have a sip|breathe/)
-    expect(firstTip).toBeInTheDocument()
-    act(() => { vi.advanceTimersByTime(2200) })
-    const anyTip = screen.getByText(/take a small break|rest ur eyes|stretch ur back|have a sip|breathe/)
-    expect(anyTip).toBeInTheDocument()
+    // t=1500ms: first tip fully typed + 240ms into pause — text visible
+    act(() => { vi.advanceTimersByTime(1500) })
+    expect(screen.getByText(/take a small break|rest ur eyes|stretch ur back|have a sip/)).toBeInTheDocument()
+    // t=5000ms: past delete+pause cycle, second tip fully typed and visible
+    act(() => { vi.advanceTimersByTime(3500) })
+    expect(screen.getByText(/take a small break|rest ur eyes|stretch ur back|have a sip/)).toBeInTheDocument()
   })
 })
