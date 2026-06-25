@@ -326,8 +326,8 @@ mod tests {
         let pkg = "__llmmanager_definitely_not_a_real_npm_pkg__";
         let tool = make_tool("claude", vec![make_npx_mcp("my-mcp", &[pkg], true)]);
         // Two runs should not duplicate the notification.
-        check(&[tool.clone()], &db);
-        let changed = check(&[tool], &db);
+        check(std::slice::from_ref(&tool), &db);
+        let changed = check(std::slice::from_ref(&tool), &db);
         assert!(!changed, "second run with same issue: no change");
         assert_eq!(
             db::get_active_notifications(&db)
