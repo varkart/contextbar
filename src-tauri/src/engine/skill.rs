@@ -1,6 +1,8 @@
 use super::manifest::{SkillSource, SkillSourceSpec};
 use super::resolve::{expand_home, version_in_range};
-use crate::detectors::{parse_skill_content_hash, parse_skill_description, parse_skill_source_url, skill_md_exists};
+use crate::detectors::{
+    parse_skill_content_hash, parse_skill_description, parse_skill_source_url, skill_md_exists,
+};
 use crate::models::Skill;
 use std::collections::HashMap;
 
@@ -63,15 +65,13 @@ fn read_toml_config_directory(
     enabled_field: &str,
 ) -> Vec<Skill> {
     // Build a map of SKILL.md absolute path → enabled bool from config file
-    let enabled_map: HashMap<String, bool> = load_toml_enabled_map(
-        config_file,
-        config_key_path,
-        path_field,
-        enabled_field,
-    );
+    let enabled_map: HashMap<String, bool> =
+        load_toml_enabled_map(config_file, config_key_path, path_field, enabled_field);
 
     let mut skills = Vec::new();
-    let Ok(entries) = std::fs::read_dir(dir) else { return skills };
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return skills;
+    };
 
     for entry in entries.flatten() {
         let raw_name = entry.file_name().to_string_lossy().to_string();

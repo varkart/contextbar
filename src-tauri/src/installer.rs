@@ -57,7 +57,10 @@ fn find_npm() -> Option<PathBuf> {
 /// needs node visible to `env`, so we prepend the npm binary's own directory plus
 /// well-known Homebrew/system locations.
 fn augmented_path(npm: &std::path::Path) -> String {
-    let npm_bin_dir = npm.parent().map(|p| p.to_string_lossy().into_owned()).unwrap_or_default();
+    let npm_bin_dir = npm
+        .parent()
+        .map(|p| p.to_string_lossy().into_owned())
+        .unwrap_or_default();
     let extra = [
         npm_bin_dir.as_str(),
         "/opt/homebrew/bin",
@@ -79,7 +82,11 @@ fn augmented_path(npm: &std::path::Path) -> String {
 pub fn find_npx() -> Option<PathBuf> {
     let npm = find_npm()?;
     let npx = npm.with_file_name("npx");
-    if npx.exists() { Some(npx) } else { None }
+    if npx.exists() {
+        Some(npx)
+    } else {
+        None
+    }
 }
 
 // ---------------------------------------------------------------------------
