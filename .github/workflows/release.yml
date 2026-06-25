@@ -24,8 +24,10 @@ jobs:
 
       - name: Resolve tag name
         id: ref
+        env:
+          INPUT_TAG: ${{ github.event.inputs.tag }}
         run: |
-          TAG="${{ github.event.inputs.tag || github.ref_name }}"
+          TAG="${INPUT_TAG:-${{ github.ref_name }}}"
           echo "tag=$TAG" >> $GITHUB_OUTPUT
 
       - name: Extract release notes from tag annotation
@@ -33,13 +35,14 @@ jobs:
         run: |
           git fetch --tags --force
           NOTES=$(git tag -l --format='%(contents)' "${{ steps.ref.outputs.tag }}")
+          DELIM="NOTES_DELIM_${RANDOM}"
           if [ -z "$NOTES" ]; then
             echo "notes=No release notes provided." >> $GITHUB_OUTPUT
           else
             {
-              echo "notes<<EOF"
+              echo "notes<<${DELIM}"
               echo "$NOTES"
-              echo "EOF"
+              echo "${DELIM}"
             } >> $GITHUB_OUTPUT
           fi
 

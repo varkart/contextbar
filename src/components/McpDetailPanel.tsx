@@ -85,9 +85,9 @@ function NpmInstallSection({ mcp, toolId }: { mcp: McpServer; toolId?: string })
       .catch(() => {})
   }, [mcp.command, mcp.args])
 
-  if (!state?.isNpx) return null
+  if (!state?.isNpx || !state.package) return null
 
-  const pkg = state.package!
+  const pkg = state.package
   const installed = state.installedVersion
   const isAutoDownload = mcp.args.includes('-y') || mcp.args.includes('--yes')
   const hasUpdate = latestVersion !== null && installed !== null && latestVersion !== installed

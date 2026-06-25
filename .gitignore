@@ -35,6 +35,13 @@ src-tauri/gen/
 .env
 .env.local
 
+# Apple certificates and signing artifacts
+*.p12
+*.pem
+*.cer
+*.mobileprovision
+*.provisionprofile
+
 # Local-only knowledge (not for public repo)
 .local/
 docs/
