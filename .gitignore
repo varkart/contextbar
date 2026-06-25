@@ -48,6 +48,7 @@ docs/
 
 # AI assistant tooling (internal dev only)
 .claude/
+.gemini/
 GEMINI.md
 repo-health-report.md
 

@@ -21,9 +21,34 @@ Context Bar sits in your menu bar and gives you one place to see all of it — i
 
 ---
 
+## Use cases
+
+**See everything at a glance**
+Open the menu bar popover and immediately see which AI tools are installed, which have active skills and MCPs, and which are installed but unconfigured.
+
+**Toggle skills without touching config files**
+Enable or disable a skill for any tool with a single click. Context Bar moves the skill folder to/from the `.disabled` directory — no terminal, no manual file edits.
+
+**Toggle MCP servers on/off**
+Activate or deactivate an MCP server per tool without editing JSON. Changes write back to the tool's config atomically, with a backup kept automatically.
+
+**Browse skill content in-app**
+Open any skill's `SKILL.md` directly in the detail panel — read the full instructions without leaving your workflow.
+
+**See what tools an MCP server exposes**
+The MCP detail panel queries the server live over JSON-RPC stdio and lists every tool it exposes, with descriptions.
+
+**Install an MCP package**
+For `npx`-based MCPs, install the npm package globally from inside the app and see the installed version alongside the latest available.
+
+**Audit your AI setup**
+Check at a glance which tools have MCP servers registered, which skills are disabled, and whether any MCP binaries are missing from PATH (the doctor check notifies you automatically).
+
+---
+
 ## Features
 
-- **Detects 10 AI tools** automatically — no setup required
+- **Detects 8 AI tools** automatically — no setup required
 - **Skills** — lists every skill per tool with name and description
 - **MCP servers** — shows configured MCPs with live `tools/list` via JSON-RPC stdio
 - **Status indicators** — hover the dot to see installed / no config / error state
@@ -40,7 +65,7 @@ Context Bar sits in your menu bar and gives you one place to see all of it — i
 
 ## Supported tools
 
-Claude Code, Cursor, Gemini CLI, GitHub Copilot, Windsurf, ChatGPT, Aider, Continue.dev, Amazon Q, Zed
+Claude Code, Cursor, Gemini CLI, GitHub Copilot, Windsurf, ChatGPT, Codex CLI, Kiro
 
 ---
 
@@ -109,8 +134,9 @@ contextbar/
 ├── src-tauri/
 │   ├── src/
 │   │   ├── lib.rs          # Tray, window, IPC commands
-│   │   ├── detectors/      # Per-tool config readers (10 detectors, run in parallel)
-│   │   └── mcp_client.rs   # JSON-RPC stdio MCP client
+│   │   └── engine/
+│   │       ├── manifests/  # Per-tool TOML manifests (8 tools)
+│   │       └── mod.rs      # detect_all() — runs all detectors in parallel
 │   └── Cargo.toml
 └── .github/workflows/
     └── release.yml         # Build → ad-hoc sign → DMG → GitHub Release

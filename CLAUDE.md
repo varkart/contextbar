@@ -2,9 +2,9 @@
 
 ## What This Is
 
-macOS menu bar app (Tauri 2.0) that detects installed AI tools (Claude, Cursor, Gemini, Copilot, Windsurf, ChatGPT) and shows their skills, MCP servers, and active/inactive status — all in one tray popover.
+macOS menu bar app (Tauri 2.0) that detects installed AI tools and shows their skills, MCP servers, and active/inactive status — all in one tray popover.
 
-**Repo:** https://github.com/varkart/contextbar (private)
+**Repo:** https://github.com/varkart/contextbar
 **Owner:** varkart
 
 ---
@@ -16,7 +16,7 @@ macOS menu bar app (Tauri 2.0) that detects installed AI tools (Claude, Cursor, 
 | Frontend | React 19 + TypeScript + Tailwind v4 |
 | Backend | Rust (Tauri 2.0) |
 | Tray | `tauri-plugin-positioner` + `tray-icon` |
-| Build | Vite |
+| Build | Vite 7 |
 | Package manager | npm |
 
 ## Directory Structure
@@ -27,26 +27,19 @@ contextbar/
 │   ├── index.css               # Tailwind v4 entry (@import "tailwindcss")
 │   ├── main.tsx                # React entry
 │   ├── App.tsx                 # Root component
-│   └── components/             # UI components (to be created)
+│   └── components/             # UI components
 ├── src-tauri/
 │   ├── src/
 │   │   ├── main.rs             # Binary entry — calls lib::run()
-│   │   ├── lib.rs              # Tray setup, window toggle, app lifecycle
-│   │   └── detectors/          # Per-tool config readers (to be created)
-│   │       ├── mod.rs
-│   │       ├── claude.rs       # ~/.claude/settings.json + skills/
-│   │       ├── cursor.rs       # ~/.cursor/mcp.json + skills-cursor/
-│   │       ├── gemini.rs       # ~/.config/gemini/ + which gemini
-│   │       ├── copilot.rs      # ~/.vscode/extensions/github.copilot*
-│   │       ├── windsurf.rs     # ~/.windsurf/ + ~/.codeium/windsurf/
-│   │       └── chatgpt.rs      # ~/.vscode/extensions/openai.chatgpt*
+│   │   ├── lib.rs              # Tray setup, window toggle, IPC commands
+│   │   ├── detectors/          # Per-tool config readers (10 detectors, run in parallel)
+│   │   └── engine/
+│   │       ├── manifests/      # Per-tool TOML manifests (skills + MCP sources)
+│   │       └── mod.rs          # detect_all() entry point
 │   ├── Cargo.toml
 │   └── tauri.conf.json
 ├── CLAUDE.md                   # This file
 └── .local/                     # Local-only knowledge (gitignored)
-    ├── SPEC.md                 # Full product + technical spec
-    ├── STATUS.md               # Current project state
-    └── PRODUCT.md              # Product decisions
 ```
 
 ---
@@ -74,11 +67,11 @@ Note: `cargo` needs `source "$HOME/.cargo/env"` if not in PATH.
 ## Architecture: Data Flow
 
 ```
-Rust detectors (read fs)
+Rust engine (read fs via manifests)
   → serialize to JSON via serde
   → Tauri IPC command: get_tools()
   → React frontend renders
-  → User toggle → IPC command: set_tool_active(id, bool)
+  → User toggle → IPC command: set_skill_active / set_mcp_active
   → Rust writes back to tool's config
 ```
 
@@ -87,7 +80,6 @@ Rust detectors (read fs)
 ## Core Data Types (Rust → TypeScript)
 
 ```rust
-// src-tauri/src/models.rs (to create)
 pub struct AiTool {
     pub id: String,           // "claude", "cursor", etc.
     pub name: String,
@@ -112,26 +104,19 @@ pub struct McpServer {
 
 ---
 
-## Adding a New LLM Detector
+## Supported Tools
 
-1. Create `src-tauri/src/detectors/<name>.rs`
-2. Implement `pub fn detect() -> Option<AiTool>` — return `None` if not installed
-3. Register in `src-tauri/src/detectors/mod.rs`
-4. Call in `get_tools()` Tauri command in `lib.rs`
-5. No frontend changes needed — generic component renders all tools
+Defined by TOML manifests in `src-tauri/src/engine/manifests/`:
+
+`claude`, `cursor`, `gemini`, `copilot`, `windsurf`, `chatgpt`, `codex`, `kiro`
 
 ---
 
-## Installed Tools on Dev Machine
+## Adding a New Tool
 
-| Tool | Install Path | Skills | MCPs |
-|---|---|---|---|
-| Claude Code | `~/.claude/` | `~/.claude/skills/` (30+) | `~/.claude/settings.json` → `mcpServers` |
-| Cursor | `~/.cursor/` | `~/.cursor/skills-cursor/` (12) | `~/.cursor/mcp.json` |
-| Gemini CLI | `/opt/homebrew/bin/gemini` | none detected | none detected |
-| GitHub Copilot | `~/.vscode/extensions/github.copilot-chat-*` | none | none |
-| Windsurf | `~/.windsurf/` + `~/.codeium/windsurf/` | none detected | none detected |
-| ChatGPT (VS Code) | `~/.vscode/extensions/openai.chatgpt-*` | none | none |
+1. Create `src-tauri/src/engine/manifests/<name>.toml`
+2. Define `[meta]`, `[[skill_sources]]`, `[[mcp_sources]]` sections following the existing manifests
+3. No Rust code changes needed — the engine loads all manifests at startup
 
 ---
 
@@ -140,13 +125,12 @@ pub struct McpServer {
 - Never read or log API key values from tool configs (only key names)
 - Never commit `~/.claude/settings.json` contents or any tool secrets
 - MCP `env` fields: detect presence, never expose values in UI
+- All IPC commands that touch the filesystem call `validate_tool_path()` first
 
 ---
 
-## Spec-Driven Workflow
+## Development Workflow
 
-1. All features start in `.local/SPEC.md` before code
-2. UI changes: prototype with `impeccable` or `design-taste-frontend` skill first
-3. Rust changes: `cargo check` must pass before committing
-4. Commits: small + incremental, feature branch per feature
-5. No direct pushes to `main`
+1. Rust changes: `cargo check` must pass before committing
+2. Commits: small + incremental, feature branch per feature
+3. No direct pushes to `main`
