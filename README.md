@@ -23,7 +23,7 @@ Context Bar sits in your menu bar and gives you one place to see all of it — i
 
 ## Features
 
-- **Detects 10 AI tools** automatically — no setup required
+- **Detects 8 AI tools** automatically — no setup required
 - **Skills** — lists every skill per tool with name and description
 - **MCP servers** — shows configured MCPs with live `tools/list` via JSON-RPC stdio
 - **Status indicators** — hover the dot to see installed / no config / error state
@@ -40,7 +40,7 @@ Context Bar sits in your menu bar and gives you one place to see all of it — i
 
 ## Supported tools
 
-Claude Code, Cursor, Gemini CLI, GitHub Copilot, Windsurf, ChatGPT, Aider, Continue.dev, Amazon Q, Zed
+Claude Code, Cursor, Gemini CLI, GitHub Copilot, Windsurf, ChatGPT, Codex CLI, Kiro
 
 ---
 
