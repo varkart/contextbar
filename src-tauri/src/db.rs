@@ -359,17 +359,6 @@ pub fn dismiss_all_notifications(state: &DbState) -> Result<(), AppError> {
     Ok(())
 }
 
-#[allow(dead_code)]
-pub fn count_active_notifications(state: &DbState) -> i64 {
-    let Ok(conn) = state.0.lock() else { return 0 };
-    conn.query_row(
-        "SELECT COUNT(*) FROM notifications WHERE dismissed = 0",
-        [],
-        |r| r.get(0),
-    )
-    .unwrap_or(0)
-}
-
 /// Insert a notification. Returns true if a new row was inserted, false if a
 /// non-dismissed notification with the same dedup_key already exists.
 pub fn add_notification(

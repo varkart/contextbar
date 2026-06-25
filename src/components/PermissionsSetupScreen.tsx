@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 
 interface Props {
@@ -19,31 +19,42 @@ function KeyboardIcon() {
 export default function PermissionsSetupScreen({ onDone }: Props) {
   const [granted, setGranted] = useState<boolean | null>(null)
   const [polling, setPolling] = useState(false)
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
     invoke<boolean>('check_accessibility')
       .then(setGranted)
       .catch(() => setGranted(false))
+
+    return () => {
+      if (intervalRef.current !== null) clearInterval(intervalRef.current)
+      if (timeoutRef.current !== null) clearTimeout(timeoutRef.current)
+    }
   }, [])
 
   const handleOpenSettings = () => {
     invoke('open_accessibility_settings').catch(() => {})
 
+    if (intervalRef.current !== null) clearInterval(intervalRef.current)
+    if (timeoutRef.current !== null) clearTimeout(timeoutRef.current)
+
     setPolling(true)
-    const interval = setInterval(() => {
+    intervalRef.current = setInterval(() => {
       invoke<boolean>('check_accessibility')
         .then((result) => {
           setGranted(result)
           if (result) {
-            clearInterval(interval)
+            if (intervalRef.current !== null) clearInterval(intervalRef.current)
+            if (timeoutRef.current !== null) clearTimeout(timeoutRef.current)
             setPolling(false)
           }
         })
         .catch(() => {})
     }, 2000)
 
-    setTimeout(() => {
-      clearInterval(interval)
+    timeoutRef.current = setTimeout(() => {
+      if (intervalRef.current !== null) clearInterval(intervalRef.current)
       setPolling(false)
     }, 120_000)
   }
