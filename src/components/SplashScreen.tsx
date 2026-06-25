@@ -99,7 +99,7 @@ export default function SplashScreen({ backendReady, onDismiss }: SplashScreenPr
 
       {/* fixed-height action zone — shows dots if backend not ready or animation still going */}
       <div className="flex items-center justify-center" style={{ minHeight: '44px' }}>
-        {(!backendReady || !cycleDone) && (
+        {!backendReady && (
           <div className="flex gap-2">
             {[0, 1, 2].map(i => (
               <span

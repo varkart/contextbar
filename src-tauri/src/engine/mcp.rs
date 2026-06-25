@@ -101,9 +101,9 @@ fn read_source(source: &McpSourceSpec, home: &std::path::Path) -> (Vec<McpServer
         McpSourceSpec::YamlKeyPair { file, active_key } => {
             read_yaml_key_pair(&expand_home(file, home), active_key)
         }
-        McpSourceSpec::TomlKeyPair { file, active_key, .. } => {
-            read_toml_key_pair(&expand_home(file, home), active_key)
-        }
+        McpSourceSpec::TomlKeyPair {
+            file, active_key, ..
+        } => read_toml_key_pair(&expand_home(file, home), active_key),
         McpSourceSpec::ClaudeDotfile { file } => read_claude_dotfile(&expand_home(file, home)),
         McpSourceSpec::ClaudeMcpList { binary, timeout_ms } => {
             read_claude_mcp_list(binary, *timeout_ms, home)
@@ -460,7 +460,10 @@ fn read_toml_key_pair(
         }
     }
     let mut mcps = parse_mcp_servers(&serde_json::Value::Object(active_map), true);
-    mcps.extend(parse_mcp_servers(&serde_json::Value::Object(inactive_map), false));
+    mcps.extend(parse_mcp_servers(
+        &serde_json::Value::Object(inactive_map),
+        false,
+    ));
     (mcps, None)
 }
 
