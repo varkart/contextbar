@@ -131,13 +131,7 @@ pub struct CachedSkill {
 }
 
 /// Upsert a skill into the cache. `method` is one of: "url", "local", "template", "copy".
-pub fn cache_skill(
-    state: &DbState,
-    name: &str,
-    content: &str,
-    method: &str,
-    source: Option<&str>,
-) {
+pub fn cache_skill(state: &DbState, name: &str, content: &str, method: &str, source: Option<&str>) {
     let hash = fnv1a_hex(content.as_bytes());
     let now = now_ms();
     let Ok(conn) = state.0.lock() else { return };
@@ -176,7 +170,9 @@ pub fn get_cached_skill(state: &DbState, name: &str) -> Option<CachedSkill> {
 }
 
 pub fn is_skill_cached(state: &DbState, name: &str) -> bool {
-    let Ok(conn) = state.0.lock() else { return false };
+    let Ok(conn) = state.0.lock() else {
+        return false;
+    };
     conn.query_row(
         "SELECT EXISTS(SELECT 1 FROM skill_cache WHERE name = ?1)",
         rusqlite::params![name],
@@ -257,7 +253,9 @@ pub fn get_cached_mcp(state: &DbState, name: &str) -> Option<CachedMcp> {
 }
 
 pub fn get_all_cached_mcps(state: &DbState) -> Vec<CachedMcp> {
-    let Ok(conn) = state.0.lock() else { return vec![] };
+    let Ok(conn) = state.0.lock() else {
+        return vec![];
+    };
     let Ok(mut stmt) = conn.prepare(
         "SELECT name, command, args, url, source_url, cached_at, updated_at FROM mcp_cache ORDER BY updated_at DESC",
     ) else { return vec![] };
@@ -279,7 +277,9 @@ pub fn get_all_cached_mcps(state: &DbState) -> Vec<CachedMcp> {
 }
 
 pub fn is_mcp_cached(state: &DbState, name: &str) -> bool {
-    let Ok(conn) = state.0.lock() else { return false };
+    let Ok(conn) = state.0.lock() else {
+        return false;
+    };
     conn.query_row(
         "SELECT EXISTS(SELECT 1 FROM mcp_cache WHERE name = ?1)",
         rusqlite::params![name],

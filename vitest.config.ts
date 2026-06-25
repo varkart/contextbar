@@ -9,9 +9,6 @@ export default defineConfig({
     setupFiles: ['./src/vitest.setup.ts'],
     exclude: ['e2e/**', 'node_modules/**', '.claude/**'],
     pool: 'threads',
-    poolOptions: {
-      threads: { maxThreads: 8, minThreads: 2 },
-    },
     coverage: {
       provider: 'v8',
       reporter: ['text', 'html', 'lcov'],
