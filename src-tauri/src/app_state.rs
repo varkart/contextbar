@@ -268,7 +268,9 @@ pub fn add_mcp_to_config(
     let section = obj
         .entry(active_key)
         .or_insert_with(|| serde_json::Value::Object(serde_json::Map::new()));
-    let map = section.as_object_mut().ok_or("mcpServers is not a JSON object")?;
+    let map = section
+        .as_object_mut()
+        .ok_or("mcpServers is not a JSON object")?;
 
     if map.contains_key(name) {
         return Err(format!("MCP '{name}' already exists"));
@@ -372,7 +374,9 @@ pub fn add_mcp_to_toml_config(
     let section = root
         .entry(active_key)
         .or_insert_with(|| toml::Value::Table(toml::map::Map::new()));
-    let map = section.as_table_mut().ok_or("MCP section is not a TOML table")?;
+    let map = section
+        .as_table_mut()
+        .ok_or("MCP section is not a TOML table")?;
 
     if map.contains_key(name) {
         return Err(format!("MCP '{name}' already exists"));
@@ -387,12 +391,17 @@ pub fn add_mcp_to_toml_config(
         }
         entry.insert(
             "args".into(),
-            toml::Value::Array(args.iter().map(|a| toml::Value::String(a.clone())).collect()),
+            toml::Value::Array(
+                args.iter()
+                    .map(|a| toml::Value::String(a.clone()))
+                    .collect(),
+            ),
         );
     }
     map.insert(name.to_string(), toml::Value::Table(entry));
 
-    let updated = toml::to_string_pretty(&doc).map_err(|e| format!("TOML serialization error: {e}"))?;
+    let updated =
+        toml::to_string_pretty(&doc).map_err(|e| format!("TOML serialization error: {e}"))?;
 
     if let Some(parent) = std::path::Path::new(config_path).parent() {
         std::fs::create_dir_all(parent).map_err(|e| format!("cannot create dir: {e}"))?;
@@ -438,7 +447,8 @@ pub fn toggle_toml_mcp_enabled(
 
     entry.insert(toggle_field.to_string(), toml::Value::Boolean(active));
 
-    let updated = toml::to_string_pretty(&doc).map_err(|e| format!("TOML serialization error: {e}"))?;
+    let updated =
+        toml::to_string_pretty(&doc).map_err(|e| format!("TOML serialization error: {e}"))?;
 
     let tmp_path = format!("{config_path}.tmp");
     std::fs::write(&tmp_path, &updated).map_err(|e| format!("cannot write temp file: {e}"))?;
@@ -487,7 +497,8 @@ pub fn move_mcp_in_toml_config(
         .ok_or("destination section is not a TOML table")?
         .insert(mcp_name.to_string(), entry);
 
-    let updated = toml::to_string_pretty(&doc).map_err(|e| format!("TOML serialization error: {e}"))?;
+    let updated =
+        toml::to_string_pretty(&doc).map_err(|e| format!("TOML serialization error: {e}"))?;
 
     let tmp_path = format!("{config_path}.tmp");
     std::fs::write(&tmp_path, &updated).map_err(|e| format!("cannot write temp file: {e}"))?;
@@ -528,7 +539,8 @@ pub fn remove_mcp_from_toml_config(
         return Err(format!("MCP '{name}' not found in config"));
     }
 
-    let updated = toml::to_string_pretty(&doc).map_err(|e| format!("TOML serialization error: {e}"))?;
+    let updated =
+        toml::to_string_pretty(&doc).map_err(|e| format!("TOML serialization error: {e}"))?;
 
     let tmp_path = format!("{config_path}.tmp");
     std::fs::write(&tmp_path, &updated).map_err(|e| format!("cannot write temp file: {e}"))?;
@@ -568,12 +580,16 @@ pub fn toggle_toml_config_skill(
     let skill_md = format!("{skill_dir}/SKILL.md");
 
     // Navigate to the array, creating intermediate tables as needed
-    let array = navigate_or_create_toml_array(doc.as_table_mut().ok_or("TOML root is not a table")?, key_path)?;
+    let array = navigate_or_create_toml_array(
+        doc.as_table_mut().ok_or("TOML root is not a table")?,
+        key_path,
+    )?;
 
     // Find existing entry for this skill path
-    if let Some(entry) = array.iter_mut().find(|e| {
-        e.get(path_field).and_then(|v| v.as_str()) == Some(&skill_md)
-    }) {
+    if let Some(entry) = array
+        .iter_mut()
+        .find(|e| e.get(path_field).and_then(|v| v.as_str()) == Some(&skill_md))
+    {
         // Update in place
         if let Some(t) = entry.as_table_mut() {
             t.insert(enabled_field.to_string(), toml::Value::Boolean(active));
@@ -587,7 +603,8 @@ pub fn toggle_toml_config_skill(
     }
     // If active=true and no existing entry, nothing to write (default is enabled)
 
-    let updated = toml::to_string_pretty(&doc).map_err(|e| format!("TOML serialization error: {e}"))?;
+    let updated =
+        toml::to_string_pretty(&doc).map_err(|e| format!("TOML serialization error: {e}"))?;
 
     if let Some(parent) = std::path::Path::new(config_path).parent() {
         std::fs::create_dir_all(parent).map_err(|e| format!("cannot create dir: {e}"))?;
@@ -613,13 +630,17 @@ fn navigate_or_create_toml_array<'a>(
         let entry = table
             .entry(key.clone())
             .or_insert_with(|| toml::Value::Table(toml::map::Map::new()));
-        table = entry.as_table_mut().ok_or_else(|| format!("'{key}' is not a TOML table"))?;
+        table = entry
+            .as_table_mut()
+            .ok_or_else(|| format!("'{key}' is not a TOML table"))?;
     }
     let last = key_path.last().unwrap();
     let entry = table
         .entry(last.clone())
         .or_insert_with(|| toml::Value::Array(vec![]));
-    entry.as_array_mut().ok_or_else(|| format!("'{last}' is not a TOML array"))
+    entry
+        .as_array_mut()
+        .ok_or_else(|| format!("'{last}' is not a TOML array"))
 }
 
 pub fn move_skill_folder(skill_path: &str, skill_name: &str, active: bool) -> Result<(), String> {
@@ -762,8 +783,13 @@ mod tests {
             }),
         );
 
-        remove_mcp_from_config(&config_path, "mcpServers", Some("disabledMcpServers"), "target")
-            .unwrap();
+        remove_mcp_from_config(
+            &config_path,
+            "mcpServers",
+            Some("disabledMcpServers"),
+            "target",
+        )
+        .unwrap();
 
         let content: serde_json::Value =
             serde_json::from_str(&fs::read_to_string(&config_path).unwrap()).unwrap();
@@ -782,8 +808,13 @@ mod tests {
             }),
         );
 
-        remove_mcp_from_config(&config_path, "mcpServers", Some("disabledMcpServers"), "target")
-            .unwrap();
+        remove_mcp_from_config(
+            &config_path,
+            "mcpServers",
+            Some("disabledMcpServers"),
+            "target",
+        )
+        .unwrap();
 
         let content: serde_json::Value =
             serde_json::from_str(&fs::read_to_string(&config_path).unwrap()).unwrap();
@@ -799,8 +830,12 @@ mod tests {
             serde_json::json!({ "mcpServers": {} }),
         );
 
-        let result =
-            remove_mcp_from_config(&config_path, "mcpServers", Some("disabledMcpServers"), "ghost");
+        let result = remove_mcp_from_config(
+            &config_path,
+            "mcpServers",
+            Some("disabledMcpServers"),
+            "ghost",
+        );
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("not found"));
     }
@@ -1109,12 +1144,26 @@ mod tests {
         let tmp = TempDir::new().unwrap();
         let path = make_toml(tmp.path(), "config.toml", "[mcpServers]\n");
 
-        add_mcp_to_toml_config(&path, "mcpServers", "my-server", Some("npx"), &["mcp-pkg".to_string()], None).unwrap();
+        add_mcp_to_toml_config(
+            &path,
+            "mcpServers",
+            "my-server",
+            Some("npx"),
+            &["mcp-pkg".to_string()],
+            None,
+        )
+        .unwrap();
 
         let raw = fs::read_to_string(&path).unwrap();
         let doc: toml::Value = toml::from_str(&raw).unwrap();
-        assert_eq!(doc["mcpServers"]["my-server"]["command"].as_str(), Some("npx"));
-        assert_eq!(doc["mcpServers"]["my-server"]["args"][0].as_str(), Some("mcp-pkg"));
+        assert_eq!(
+            doc["mcpServers"]["my-server"]["command"].as_str(),
+            Some("npx")
+        );
+        assert_eq!(
+            doc["mcpServers"]["my-server"]["args"][0].as_str(),
+            Some("mcp-pkg")
+        );
     }
 
     #[test]
@@ -1122,20 +1171,36 @@ mod tests {
         let tmp = TempDir::new().unwrap();
         let path = make_toml(tmp.path(), "config.toml", "");
 
-        add_mcp_to_toml_config(&path, "mcpServers", "http-server", None, &[], Some("https://mcp.example.com/sse")).unwrap();
+        add_mcp_to_toml_config(
+            &path,
+            "mcpServers",
+            "http-server",
+            None,
+            &[],
+            Some("https://mcp.example.com/sse"),
+        )
+        .unwrap();
 
         let raw = fs::read_to_string(&path).unwrap();
         let doc: toml::Value = toml::from_str(&raw).unwrap();
-        assert_eq!(doc["mcpServers"]["http-server"]["url"].as_str(), Some("https://mcp.example.com/sse"));
+        assert_eq!(
+            doc["mcpServers"]["http-server"]["url"].as_str(),
+            Some("https://mcp.example.com/sse")
+        );
         assert!(doc["mcpServers"]["http-server"].get("command").is_none());
     }
 
     #[test]
     fn toml_add_mcp_fails_when_already_exists() {
         let tmp = TempDir::new().unwrap();
-        let path = make_toml(tmp.path(), "config.toml", "[mcpServers]\n[mcpServers.existing]\ncommand = \"npx\"\n");
+        let path = make_toml(
+            tmp.path(),
+            "config.toml",
+            "[mcpServers]\n[mcpServers.existing]\ncommand = \"npx\"\n",
+        );
 
-        let result = add_mcp_to_toml_config(&path, "mcpServers", "existing", Some("node"), &[], None);
+        let result =
+            add_mcp_to_toml_config(&path, "mcpServers", "existing", Some("node"), &[], None);
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("already exists"));
     }
@@ -1145,7 +1210,15 @@ mod tests {
         let tmp = TempDir::new().unwrap();
         let path = make_toml(tmp.path(), "config.toml", "");
 
-        add_mcp_to_toml_config(&path, "mcpServers", "new-server", Some("uvx"), &["tool".to_string()], None).unwrap();
+        add_mcp_to_toml_config(
+            &path,
+            "mcpServers",
+            "new-server",
+            Some("uvx"),
+            &["tool".to_string()],
+            None,
+        )
+        .unwrap();
 
         let raw = fs::read_to_string(&path).unwrap();
         let doc: toml::Value = toml::from_str(&raw).unwrap();
@@ -1167,7 +1240,10 @@ mod tests {
 
         let raw = fs::read_to_string(&path).unwrap();
         let doc: toml::Value = toml::from_str(&raw).unwrap();
-        assert_eq!(doc["mcpServers"]["my-server"]["enabled"].as_bool(), Some(false));
+        assert_eq!(
+            doc["mcpServers"]["my-server"]["enabled"].as_bool(),
+            Some(false)
+        );
     }
 
     #[test]
@@ -1183,7 +1259,10 @@ mod tests {
 
         let raw = fs::read_to_string(&path).unwrap();
         let doc: toml::Value = toml::from_str(&raw).unwrap();
-        assert_eq!(doc["mcpServers"]["my-server"]["enabled"].as_bool(), Some(true));
+        assert_eq!(
+            doc["mcpServers"]["my-server"]["enabled"].as_bool(),
+            Some(true)
+        );
     }
 
     #[test]
@@ -1207,7 +1286,8 @@ mod tests {
             "[mcpServers.target]\ncommand = \"npx\"\n",
         );
 
-        move_mcp_in_toml_config(&path, "target", false, "mcpServers", "disabledMcpServers").unwrap();
+        move_mcp_in_toml_config(&path, "target", false, "mcpServers", "disabledMcpServers")
+            .unwrap();
 
         let raw = fs::read_to_string(&path).unwrap();
         let doc: toml::Value = toml::from_str(&raw).unwrap();
@@ -1237,7 +1317,8 @@ mod tests {
         let tmp = TempDir::new().unwrap();
         let path = make_toml(tmp.path(), "config.toml", "[mcpServers]\n");
 
-        let result = move_mcp_in_toml_config(&path, "ghost", false, "mcpServers", "disabledMcpServers");
+        let result =
+            move_mcp_in_toml_config(&path, "ghost", false, "mcpServers", "disabledMcpServers");
         assert!(result.is_err());
     }
 
