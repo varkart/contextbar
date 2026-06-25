@@ -14,6 +14,34 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  pii-scan:
+    name: PII scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Scan for personal info in staged files
+        run: |
+          PATTERNS=(
+            "[removed]"
+            "varkart\.os@gmail\.com"
+          )
+          FAIL=0
+          for pattern in "${PATTERNS[@]}"; do
+            MATCHES=$(grep -rIiE "$pattern" \
+              --include="*.ts" --include="*.tsx" --include="*.rs" \
+              --include="*.toml" --include="*.json" --include="*.yml" \
+              --include="*.yaml" --include="*.md" --include="*.rb" \
+              . 2>/dev/null | grep -v "node_modules" || true)
+            if [[ -n "$MATCHES" ]]; then
+              echo "BLOCKED: personal info pattern found: $pattern"
+              echo "$MATCHES"
+              FAIL=1
+            fi
+          done
+          if [[ $FAIL -ne 0 ]]; then exit 1; fi
+          echo "PII scan passed."
+
   frontend:
     name: Frontend — typecheck, build, test
     runs-on: ubuntu-latest
