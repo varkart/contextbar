@@ -33,12 +33,19 @@ fn validate_tool_path(path: &str) -> Result<std::path::PathBuf, String> {
     let home = dirs::home_dir().ok_or("cannot resolve home dir")?;
     let allowed_roots: &[std::path::PathBuf] = &[
         home.join(".claude"),
+        home.join(".claude.json"),
         home.join(".cursor"),
         home.join(".config"),
         home.join(".windsurf"),
         home.join(".codeium"),
         home.join(".kiro"),
         home.join(".amazon-q"),
+        home.join(".gemini"),
+        home.join(".agents"),
+        home.join(".codex"),
+        home.join(".aws"),
+        home.join(".q"),
+        home.join(".vscode"),
         home.join("Library").join("Application Support"),
     ];
     let canonical = p
