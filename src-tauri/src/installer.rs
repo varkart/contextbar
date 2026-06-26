@@ -69,7 +69,7 @@ fn augmented_path(npm: &std::path::Path) -> String {
         "/bin",
     ];
     let existing = std::env::var("PATH").unwrap_or_default();
-    let mut parts: Vec<&str> = extra.iter().copied().collect();
+    let mut parts: Vec<&str> = extra.to_vec();
     for p in existing.split(':') {
         if !parts.contains(&p) {
             parts.push(p);
