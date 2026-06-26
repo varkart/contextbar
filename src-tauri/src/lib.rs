@@ -507,7 +507,7 @@ fn skill_dir_for(tool_id: &str) -> Result<SkillWriteTarget, String> {
     let home = dirs::home_dir().ok_or("cannot find home dir")?;
     let manifest = crate::engine::load_manifest(tool_id)
         .ok_or_else(|| format!("no manifest for '{tool_id}'"))?;
-    for source in &manifest.skill_sources {
+    if let Some(source) = manifest.skill_sources.first() {
         match &source.spec {
             SkillSourceSpec::Directory {
                 path, flat_files, ..
@@ -848,7 +848,7 @@ async fn install_skill_from_url(
 
     let derived_name = name.unwrap_or_else(|| {
         url.split('/')
-            .last()
+            .next_back()
             .unwrap_or("skill")
             .trim_end_matches(".md")
             .to_string()
@@ -1469,6 +1469,7 @@ fn add_mcp(
 }
 
 #[tauri::command]
+#[allow(clippy::too_many_arguments)]
 fn remove_mcp(
     app: tauri::AppHandle,
     db: tauri::State<'_, db::DbState>,
