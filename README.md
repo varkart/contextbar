@@ -77,13 +77,14 @@ Claude Code, Cursor, Gemini CLI, GitHub Copilot, Windsurf, ChatGPT, Codex CLI, K
 
 **macOS security prompt:**
 
-Because Context Bar is not notarized with an Apple Developer certificate, macOS may block the first launch. Run this once:
+Because Context Bar is not notarized with an Apple Developer certificate, macOS may block the first launch with a warning. You can bypass this in one of three ways:
 
-```bash
-xattr -d com.apple.quarantine /Applications/Context\ Bar.app
-```
-
-Or: System Settings → Privacy & Security → scroll down → **Open Anyway**
+1. **Right-Click Open (Easiest)**: Right-click (or Control-click) `/Applications/Context Bar.app` in Finder, select **Open**, and click **Open** again in the confirmation dialog.
+2. **Terminal**: Run this command once to clear the quarantine flag:
+   ```bash
+   xattr -d com.apple.quarantine /Applications/Context\ Bar.app
+   ```
+3. **System Settings**: Go to **System Settings → Privacy & Security**, scroll down to the Security section, and click **Open Anyway**.
 
 ---
 
