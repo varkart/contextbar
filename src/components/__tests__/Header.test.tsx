@@ -18,9 +18,10 @@ const defaultProps = {
 }
 
 describe('Header', () => {
-  it('shows Home breadcrumb on main view', () => {
+  it('shows Context Bar branding on main view', () => {
     render(<Header {...defaultProps} />)
-    expect(screen.getByText('Home')).toBeInTheDocument()
+    expect(screen.getByText('Context Bar')).toBeInTheDocument()
+    expect(screen.queryByText('Home')).not.toBeInTheDocument()
   })
 
   it('shows breadcrumb for settings view', () => {

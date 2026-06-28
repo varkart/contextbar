@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>LLM Manager</title>
+    <title>Context Bar</title>
     <style>
       #splash {
         position: fixed;
@@ -56,30 +56,22 @@
         flex-direction: column;
         align-items: center;
         justify-content: center;
-        height: 44px;
-        gap: 4px;
+        gap: 8px;
+        margin-top: 12px;
       }
-      #splash-tip {
-        font-family: 'SF Mono', ui-monospace, monospace;
-        font-size: 14px;
-        color: #a78bfa;
-        margin: 0;
-      }
-      .splash-cursor {
-        display: inline-block;
-        width: 8px;
-        height: 16px;
-        background-color: #a78bfa;
-        vertical-align: middle;
-        margin-left: 4px;
-        animation: sp-blink 0.8s step-end infinite;
+      .splash-tip-item {
+        font-size: 13px;
+        color: rgba(167, 139, 250, 0.8);
+        margin: 2px 0;
+        font-weight: 500;
       }
       #splash-dots {
         display: flex;
         align-items: center;
         justify-content: center;
-        min-height: 44px;
+        min-height: 32px;
         gap: 8px;
+        margin-top: 16px;
       }
       #splash-dots span {
         width: 6px;
@@ -95,7 +87,7 @@
         0%, 100% { transform: translateY(0); }
         50%       { transform: translateY(-8px); }
       }
-@keyframes sp-dot {
+      @keyframes sp-dot {
         0%, 80%, 100% { opacity: 0.3; transform: scale(0.8); }
         40%           { opacity: 1;   transform: scale(1); }
       }
@@ -107,35 +99,66 @@
   </head>
   <body>
     <div id="splash">
-      <img id="splash-logo" src="/sloth.png" alt="LLM Manager" draggable="false" />
+      <img id="splash-logo" src="/sloth.png" alt="Context Bar" draggable="false" />
       <div class="splash-text-wrap">
-        <p id="splash-title">LLM Manager</p>
+        <p id="splash-title">Context Bar</p>
         <div id="splash-tip-container">
-          <span style="font-size: 14px; color: #71717a; margin-right: 6px;">we are loading, until then</span>
-          <span id="splash-tip"></span><span class="splash-cursor"></span>
+          <span style="font-size: 13px; color: #71717a; margin-bottom: 4px;">we are loading, until then</span>
+          <div id="splash-tips-list" style="display: flex; flex-direction: column; align-items: center; width: 100%;"></div>
         </div>
       </div>
       <div id="splash-dots"><span></span><span></span><span></span></div>
-      <script>
-        var msgs = [
-          'take a small break',
-          'rest ur eyes',
-          'stretch ur back',
-          'have a sip of water'
-        ];
-        var p2Idx = 0, charIdx = 0, isDel = false;
-        var p2El = document.getElementById('splash-tip');
-        function type() {
-          if (!p2El) return;
-          var msg = msgs[p2Idx];
-          p2El.textContent = isDel ? msg.substring(0, charIdx - 1) : msg.substring(0, charIdx + 1);
-          charIdx += isDel ? -1 : 1;
-          var spd = isDel ? 30 : 70;
-          if (!isDel && charIdx === msg.length) { spd = 1500; isDel = true; }
-          else if (isDel && charIdx === 0) { isDel = false; p2Idx = (p2Idx + 1) % msgs.length; spd = 500; }
-          setTimeout(type, spd);
+      <script type="module">
+        import { TIPS } from './src/constants/tips.ts';
+        var listEl = document.getElementById('splash-tips-list');
+        var tipIndex = 0;
+
+        function typeTip() {
+          if (!listEl || tipIndex >= TIPS.length) return;
+
+          var fullText = TIPS[tipIndex];
+          var charIdx = 0;
+
+          var row = document.createElement('div');
+          row.style.display = 'flex';
+          row.style.alignItems = 'center';
+          row.style.justifyContent = 'center';
+          row.style.height = '20px';
+
+          var textSpan = document.createElement('span');
+          textSpan.style.fontSize = '13px';
+          textSpan.style.color = '#a78bfa';
+          textSpan.style.fontWeight = '500';
+
+          var cursorSpan = document.createElement('span');
+          cursorSpan.style.display = 'inline-block';
+          cursorSpan.style.width = '6px';
+          cursorSpan.style.height = '14px';
+          cursorSpan.style.backgroundColor = '#a78bfa';
+          cursorSpan.style.marginLeft = '4px';
+          cursorSpan.style.animation = 'sp-blink 0.8s step-end infinite';
+
+          row.appendChild(textSpan);
+          row.appendChild(cursorSpan);
+          listEl.appendChild(row);
+
+          function typeChar() {
+            if (charIdx < fullText.length) {
+              charIdx++;
+              textSpan.textContent = fullText.substring(0, charIdx);
+              setTimeout(typeChar, 60);
+            } else {
+              cursorSpan.remove();
+              textSpan.style.color = 'rgba(167, 139, 250, 0.8)';
+              tipIndex++;
+              setTimeout(typeTip, 1500);
+            }
+          }
+
+          setTimeout(typeChar, 200);
         }
-        type();
+
+        setTimeout(typeTip, 400);
       </script>
     </div>
     <div id="root"></div>
