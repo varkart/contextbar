@@ -2030,7 +2030,9 @@ fn open_main_window(app: &tauri::AppHandle, hash: Option<&str>) {
 
 #[cfg(test)]
 mod tests {
-    use super::{github_blob_to_raw, parse_github_repo_url, validate_skill_content, validate_tool_path};
+    use super::{
+        github_blob_to_raw, parse_github_repo_url, validate_skill_content, validate_tool_path,
+    };
 
     #[test]
     fn test_validate_tool_path() {
