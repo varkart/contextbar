@@ -31,28 +31,11 @@ use tauri_plugin_positioner::{Position, WindowExt};
 fn validate_tool_path(path: &str) -> Result<std::path::PathBuf, String> {
     let p = std::path::Path::new(path);
     let home = dirs::home_dir().ok_or("cannot resolve home dir")?;
-    let allowed_roots: &[std::path::PathBuf] = &[
-        home.join(".claude"),
-        home.join(".claude.json"),
-        home.join(".cursor"),
-        home.join(".config"),
-        home.join(".windsurf"),
-        home.join(".codeium"),
-        home.join(".kiro"),
-        home.join(".amazon-q"),
-        home.join(".gemini"),
-        home.join(".agents"),
-        home.join(".codex"),
-        home.join(".aws"),
-        home.join(".q"),
-        home.join(".vscode"),
-        home.join("Library").join("Application Support"),
-    ];
     let canonical = p
         .canonicalize()
         .map_err(|e| format!("cannot access path: {e}"))?;
-    if !allowed_roots.iter().any(|root| canonical.starts_with(root)) {
-        return Err("access denied: path outside allowed tool directories".to_string());
+    if !canonical.starts_with(&home) {
+        return Err("access denied: path outside home directory".to_string());
     }
     Ok(canonical)
 }
@@ -1870,6 +1853,7 @@ pub fn run() {
                 .icon(tauri::include_image!("icons/tray_icon@2x.png"))
                 .icon_as_template(true)
                 .menu(&menu)
+                .tooltip("Context Bar\nUnified view of AI tool skills and MCP servers.")
                 .show_menu_on_left_click(false)
                 .on_tray_icon_event(|tray, event| {
                     tauri_plugin_positioner::on_tray_event(tray.app_handle(), &event);
@@ -2046,7 +2030,14 @@ fn open_main_window(app: &tauri::AppHandle, hash: Option<&str>) {
 
 #[cfg(test)]
 mod tests {
-    use super::{github_blob_to_raw, parse_github_repo_url, validate_skill_content};
+    use super::{github_blob_to_raw, parse_github_repo_url, validate_skill_content, validate_tool_path};
+
+    #[test]
+    fn test_validate_tool_path() {
+        let cargo_toml = std::env::current_dir().unwrap().join("Cargo.toml");
+        assert!(validate_tool_path(cargo_toml.to_str().unwrap()).is_ok());
+        assert!(validate_tool_path("/etc/hosts").is_err());
+    }
 
     #[test]
     fn valid_markdown_passes() {
