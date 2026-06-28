@@ -18,7 +18,6 @@ function buildBreadcrumbs(
   goTo: (v: View) => void,
   openLlmsList: () => void,
 ): BreadcrumbSegment[] {
-  const home: BreadcrumbSegment = { label: 'Home', onClick: () => goTo('main') }
   const providers: BreadcrumbSegment = { label: 'Providers', onClick: () => openLlmsList() }
   const toolCrumb = (clickable = true): BreadcrumbSegment => ({
     label: selectedTool?.name ?? '…',
@@ -27,70 +26,70 @@ function buildBreadcrumbs(
 
   switch (view) {
     case 'main':
-      return [{ label: 'Home' }]
+      return []
 
     case 'llms-list':
-      return [home, { label: 'Providers' }]
+      return [{ label: 'Providers' }]
 
     case 'tool-detail':
-      return [home, providers, { label: selectedTool?.name ?? '…' }]
+      return [providers, { label: selectedTool?.name ?? '…' }]
 
     case 'skills-list':
-      return [home, toolCrumb(), { label: 'Skills' }]
+      return [toolCrumb(), { label: 'Skills' }]
 
     case 'mcps-list':
-      return [home, toolCrumb(), { label: 'MCPs' }]
+      return [toolCrumb(), { label: 'MCPs' }]
 
     case 'all-skills-list':
       if (allSkillsBackView === 'tool-detail' && selectedTool) {
-        return [home, providers, toolCrumb(), { label: 'All Skills' }]
+        return [providers, toolCrumb(), { label: 'All Skills' }]
       }
-      return [home, { label: 'All Skills' }]
+      return [{ label: 'All Skills' }]
 
     case 'all-mcps-list':
       if (allMcpsBackView === 'tool-detail' && selectedTool) {
-        return [home, providers, toolCrumb(), { label: 'All MCPs' }]
+        return [providers, toolCrumb(), { label: 'All MCPs' }]
       }
-      return [home, { label: 'All MCPs' }]
+      return [{ label: 'All MCPs' }]
 
     case 'skill-detail':
       if (skillBackView === 'all-skills-list') {
-        return [home, { label: 'All Skills', onClick: () => goTo('all-skills-list') }, { label: selectedSkill?.name ?? '…' }]
+        return [{ label: 'All Skills', onClick: () => goTo('all-skills-list') }, { label: selectedSkill?.name ?? '…' }]
       }
       if (skillBackView === 'skills-list') {
-        return [home, toolCrumb(), { label: 'Skills', onClick: () => goTo('skills-list') }, { label: selectedSkill?.name ?? '…' }]
+        return [toolCrumb(), { label: 'Skills', onClick: () => goTo('skills-list') }, { label: selectedSkill?.name ?? '…' }]
       }
-      return [home, toolCrumb(), { label: selectedSkill?.name ?? '…' }]
+      return [toolCrumb(), { label: selectedSkill?.name ?? '…' }]
 
     case 'mcp-detail':
       if (mcpBackView === 'all-mcps-list') {
-        return [home, { label: 'All MCPs', onClick: () => goTo('all-mcps-list') }, { label: selectedMcp?.name ?? '…' }]
+        return [{ label: 'All MCPs', onClick: () => goTo('all-mcps-list') }, { label: selectedMcp?.name ?? '…' }]
       }
       if (mcpBackView === 'mcps-list') {
-        return [home, toolCrumb(), { label: 'MCPs', onClick: () => goTo('mcps-list') }, { label: selectedMcp?.name ?? '…' }]
+        return [toolCrumb(), { label: 'MCPs', onClick: () => goTo('mcps-list') }, { label: selectedMcp?.name ?? '…' }]
       }
-      return [home, toolCrumb(), { label: selectedMcp?.name ?? '…' }]
+      return [toolCrumb(), { label: selectedMcp?.name ?? '…' }]
 
     case 'settings':
-      return [home, { label: 'Settings' }]
+      return [{ label: 'Settings' }]
 
     case 'notifications':
-      return [home, { label: 'Notifications' }]
+      return [{ label: 'Notifications' }]
 
     case 'logs':
-      return [home, { label: 'Logs' }]
+      return [{ label: 'Logs' }]
 
     case 'add-skill':
-      return [home, { label: 'Add Skill' }]
+      return [{ label: 'Add Skill' }]
 
     case 'add-mcp':
-      return [home, { label: 'Add MCP' }]
+      return [{ label: 'Add MCP' }]
 
     case 'permissions-detail':
-      return [home, toolCrumb(), { label: 'Permissions' }]
+      return [toolCrumb(), { label: 'Permissions' }]
 
     default:
-      return [home]
+      return []
   }
 }
 
@@ -157,6 +156,28 @@ export default function Header({
 
   return (
     <div className="flex items-center justify-between px-3 py-0 border-b border-[var(--c-border)] flex-shrink-0" style={{ height: 40 }}>
+      {/* Pinned Left Brand Logo & Title */}
+      <div 
+        onClick={() => goTo('main')} 
+        className="flex items-center gap-1.5 border-r border-[var(--c-border)] pr-3 mr-2 cursor-pointer flex-shrink-0 hover:opacity-80 transition-opacity"
+        title="Context Bar Home"
+      >
+        <span 
+          className="w-3.5 h-3.5 rounded flex-shrink-0" 
+          style={{ background: 'linear-gradient(135deg, #a5b4fc, #6366f1)' }}
+        />
+        <span 
+          className="text-[12.5px] font-bold tracking-tight"
+          style={{ 
+            background: 'linear-gradient(135deg, #f0f2f5, #a5b4fc)', 
+            WebkitBackgroundClip: 'text', 
+            WebkitTextFillColor: 'transparent' 
+          }}
+        >
+          Context Bar
+        </span>
+      </div>
+
       {/* Breadcrumb */}
       <nav className="flex items-center gap-1 min-w-0 flex-1 overflow-hidden" aria-label="Breadcrumb">
         {crumbs.map((crumb, i) => {
