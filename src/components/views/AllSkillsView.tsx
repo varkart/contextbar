@@ -9,6 +9,7 @@ interface Props {
   tools: AiTool[]
   onBack: () => void
   onSelectSkill: (skill: Skill) => void
+  onAddSkill?: () => void
 }
 
 interface SkillVariant extends Skill {
@@ -41,7 +42,7 @@ function buildGroups(tools: AiTool[]): SkillGroup[] {
   return groups.sort((a, b) => a.name.localeCompare(b.name))
 }
 
-export default function AllSkillsView({ tools, onSelectSkill }: Props) {
+export default function AllSkillsView({ tools, onSelectSkill, onAddSkill }: Props) {
   const [query, setQuery] = useState('')
   const { installedTools, selectedTools, toggleTool, allSelected } = useProviderFilter(tools)
   const groups = useMemo(() => buildGroups(tools), [tools])
@@ -68,8 +69,21 @@ export default function AllSkillsView({ tools, onSelectSkill }: Props) {
 
   return (
     <div className="flex flex-col h-full bg-[var(--c-bg)]">
-      <div className="flex items-center justify-end px-4 py-2 border-b border-[var(--c-border)] flex-shrink-0">
+      <div className="flex items-center justify-between px-4 py-2 border-b border-[var(--c-border)] flex-shrink-0">
         <span className="text-[12px] text-[var(--c-text-3)]">{countLabel}</span>
+        {onAddSkill && (
+          <button
+            onClick={onAddSkill}
+            className="flex items-center gap-1 px-2 py-1 rounded-md bg-indigo-500/10 text-indigo-400 hover:bg-indigo-500/20 transition-colors text-[12px] font-medium"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
+              className="w-3 h-3">
+              <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+            </svg>
+            Add skill
+          </button>
+        )}
       </div>
 
       <div className="px-3 py-2 border-b border-[var(--c-border)] flex-shrink-0">
