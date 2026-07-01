@@ -53,6 +53,8 @@ export interface RouterState {
   mcpBackView: View
   allSkillsBackView: View
   allMcpsBackView: View
+  addSkillBackView: View
+  addMcpBackView: View
 }
 
 export type RouterAction =
@@ -66,6 +68,8 @@ export type RouterAction =
   | { type: 'OPEN_SKILLS_PAGE'; fromView: View }
   | { type: 'OPEN_MCPS_PAGE'; fromView: View }
   | { type: 'GO_TO'; view: View }
+  | { type: 'OPEN_ADD_SKILL'; fromView: View }
+  | { type: 'OPEN_ADD_MCP'; fromView: View }
   | { type: 'REFRESH_SELECTED'; tools: AiTool[] }
 
 export type EscapeResult =
@@ -79,6 +83,8 @@ export function escapeTransition(
   selectedTool: AiTool | null,
   allSkillsBackView: View,
   allMcpsBackView: View,
+  addSkillBackView: View = 'all-skills-list',
+  addMcpBackView: View = 'all-mcps-list',
 ): EscapeResult {
   if (view === 'skill-detail') return { type: 'navigate', to: skillBackView }
   if (view === 'mcp-detail') return { type: 'navigate', to: mcpBackView }
@@ -88,8 +94,8 @@ export function escapeTransition(
   if (view === 'skills-list') return { type: 'navigate', to: 'tool-detail' }
   if (view === 'mcps-list') return { type: 'navigate', to: 'tool-detail' }
   if (view === 'tool-detail') return { type: 'navigate', to: 'llms-list' }
-  if (view === 'add-skill') return { type: 'navigate', to: 'llms-list' }
-  if (view === 'add-mcp') return { type: 'navigate', to: 'llms-list' }
+  if (view === 'add-skill') return { type: 'navigate', to: addSkillBackView }
+  if (view === 'add-mcp') return { type: 'navigate', to: addMcpBackView }
   if (view === 'llms-list') return { type: 'navigate', to: 'main' }
   if (view === 'settings' || view === 'notifications' || view === 'logs')
     return { type: 'navigate', to: 'main' }
@@ -107,6 +113,8 @@ export function initialRouterState(hash = ''): RouterState {
     mcpBackView: 'tool-detail',
     allSkillsBackView: 'tool-detail',
     allMcpsBackView: 'tool-detail',
+    addSkillBackView: 'all-skills-list',
+    addMcpBackView: 'all-mcps-list',
   }
 }
 
@@ -138,6 +146,12 @@ export function routerReducer(state: RouterState, action: RouterAction): RouterS
 
     case 'OPEN_MCPS_PAGE':
       return { ...state, view: 'all-mcps-list', allMcpsBackView: action.fromView }
+
+    case 'OPEN_ADD_SKILL':
+      return { ...state, view: 'add-skill', addSkillBackView: action.fromView }
+
+    case 'OPEN_ADD_MCP':
+      return { ...state, view: 'add-mcp', addMcpBackView: action.fromView }
 
     case 'GO_TO':
       return { ...state, view: action.view }
