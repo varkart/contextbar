@@ -22,6 +22,8 @@ export interface UseViewRouterResult extends RouterState {
   selectMcp: (mcp: McpServer, fromView?: View) => void
   openSkillsPage: () => void
   openMcpsPage: () => void
+  openAddSkill: () => void
+  openAddMcp: () => void
   goTo: (view: View) => void
   escape: () => void
   refreshSelected: (tools: AiTool[]) => void
@@ -71,16 +73,21 @@ export function useViewRouter(): UseViewRouterResult {
 
   const openMcpsPage = useCallback(() => dispatch({ type: 'OPEN_MCPS_PAGE', fromView: state.view }), [state.view])
 
+  const openAddSkill = useCallback(() => dispatch({ type: 'OPEN_ADD_SKILL', fromView: state.view }), [state.view])
+
+  const openAddMcp = useCallback(() => dispatch({ type: 'OPEN_ADD_MCP', fromView: state.view }), [state.view])
+
   const goTo = useCallback((view: View) => dispatch({ type: 'GO_TO', view }), [])
 
   const escape = useCallback(() => {
     const result = escapeTransition(
       state.view, state.skillBackView, state.mcpBackView, state.selectedTool,
       state.allSkillsBackView, state.allMcpsBackView,
+      state.addSkillBackView, state.addMcpBackView,
     )
     if (result.type === 'navigate') dispatch({ type: 'GO_TO', view: result.to })
     else invoke('hide_window').catch(() => {})
-  }, [state.view, state.skillBackView, state.mcpBackView, state.selectedTool, state.allSkillsBackView, state.allMcpsBackView])
+  }, [state.view, state.skillBackView, state.mcpBackView, state.selectedTool, state.allSkillsBackView, state.allMcpsBackView, state.addSkillBackView, state.addMcpBackView])
 
   const refreshSelected = useCallback((tools: AiTool[]) => {
     dispatch({ type: 'REFRESH_SELECTED', tools })
@@ -96,6 +103,8 @@ export function useViewRouter(): UseViewRouterResult {
     selectMcp,
     openSkillsPage,
     openMcpsPage,
+    openAddSkill,
+    openAddMcp,
     goTo,
     escape,
     refreshSelected,
