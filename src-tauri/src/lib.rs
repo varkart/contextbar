@@ -1815,6 +1815,23 @@ async fn check_for_update(app: tauri::AppHandle) -> Result<Option<serde_json::Va
     }
 }
 
+#[tauri::command]
+async fn install_update(app: tauri::AppHandle) -> Result<(), String> {
+    use tauri_plugin_updater::UpdaterExt;
+    let update = app
+        .updater()
+        .map_err(|e| e.to_string())?
+        .check()
+        .await
+        .map_err(|e| e.to_string())?
+        .ok_or_else(|| "No update available".to_string())?;
+    update
+        .download_and_install(|_, _| {}, || {})
+        .await
+        .map_err(|e| e.to_string())?;
+    app.restart();
+}
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -1939,6 +1956,7 @@ pub fn run() {
             install_skill_from_github,
             read_text_file,
             check_for_update,
+            install_update,
             query_mcp_tools,
             remove_skill,
             set_skill_active,

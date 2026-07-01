@@ -113,7 +113,7 @@ describe('Settings', () => {
 
   it('shows update info when provided', async () => {
     render(<Settings {...defaultProps} updateInfo={{ latestVersion: '1.0.0', releaseUrl: 'https://example.com' }} />)
-    await waitFor(() => expect(screen.getByText(/1\.0\.0 available/)).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByRole('button', { name: /Install 1\.0\.0/ })).toBeInTheDocument())
   })
 
   it('does not show update row when updateInfo is null', async () => {
