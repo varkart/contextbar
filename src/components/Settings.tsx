@@ -202,6 +202,8 @@ export default function Settings({ updateInfo, theme, onThemeChange, onOpenLogs 
   const [vibrancyLoading, setVibrancyLoading] = useState(true)
   const [version, setVersion] = useState('')
   const [accessibilityGranted, setAccessibilityGranted] = useState<boolean | null>(null)
+  const [installing, setInstalling] = useState(false)
+  const [installError, setInstallError] = useState<string | null>(null)
 
   useEffect(() => {
     Promise.all([
@@ -309,10 +311,27 @@ export default function Settings({ updateInfo, theme, onThemeChange, onOpenLogs 
           </SettingRow>
           {updateInfo && (
             <SettingRow label="Update">
-              <a href={updateInfo.releaseUrl} target="_blank" rel="noopener noreferrer"
-                className="text-[13px] text-indigo-500 hover:text-indigo-400 transition-colors flex items-center gap-1">
-                {updateInfo.latestVersion} available <ExternalLinkIcon />
-              </a>
+              <div className="flex flex-col items-end gap-1">
+                <button
+                  onClick={async () => {
+                    setInstalling(true)
+                    setInstallError(null)
+                    try {
+                      await invoke('install_update')
+                    } catch (e) {
+                      setInstallError(String(e))
+                      setInstalling(false)
+                    }
+                  }}
+                  disabled={installing}
+                  className="text-[13px] px-2 py-0.5 rounded-md bg-indigo-500 text-white hover:bg-indigo-400 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                >
+                  {installing ? 'Installing…' : `Install ${updateInfo.latestVersion}`}
+                </button>
+                {installError && (
+                  <span className="text-[11px] text-red-400 max-w-[160px] text-right">{installError}</span>
+                )}
+              </div>
             </SettingRow>
           )}
           <SettingRow label="Source">
