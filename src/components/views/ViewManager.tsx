@@ -27,6 +27,8 @@ export default function ViewManager({
   selectMcp,
   openSkillsPage,
   openMcpsPage,
+  openAddSkill,
+  openAddMcp,
   goTo,
   escape,
   query,
@@ -59,7 +61,7 @@ export default function ViewManager({
     return (
       <AddSkillView
         installedTools={installedTools}
-        onBack={() => goTo('llms-list')}
+        onBack={() => escape()}
         onCreated={handleFetchTools}
       />
     )
@@ -68,7 +70,7 @@ export default function ViewManager({
     return (
       <AddMcpView
         installedTools={installedTools}
-        onBack={() => goTo('llms-list')}
+        onBack={() => escape()}
         onAdded={handleFetchTools}
       />
     )
@@ -88,7 +90,7 @@ export default function ViewManager({
         tool={selectedTool}
         onBack={() => escape()}
         onSelectSkill={skill => selectSkill(skill, 'skills-list')}
-        onAddSkill={() => goTo('add-skill')}
+        onAddSkill={openAddSkill}
       />
     )
   }
@@ -98,7 +100,7 @@ export default function ViewManager({
         tool={selectedTool}
         onBack={() => escape()}
         onSelectMcp={mcp => selectMcp(mcp, 'mcps-list')}
-        onAddMcp={() => goTo('add-mcp')}
+        onAddMcp={openAddMcp}
       />
     )
   }
@@ -108,6 +110,7 @@ export default function ViewManager({
         tools={tools}
         onBack={() => escape()}
         onSelectSkill={skill => selectSkill(skill, 'all-skills-list')}
+        onAddSkill={openAddSkill}
       />
     )
   }
@@ -117,6 +120,7 @@ export default function ViewManager({
         tools={tools}
         onBack={() => escape()}
         onSelectMcp={mcp => selectMcp(mcp, 'all-mcps-list')}
+        onAddMcp={openAddMcp}
       />
     )
   }
