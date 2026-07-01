@@ -97,7 +97,10 @@ pub fn report(tools: &[AiTool]) -> Vec<DoctorSection> {
                 shell_dirs, app_dirs
             )),
             fix_hint: if shell_dirs <= app_dirs {
-                Some("Shell PATH looks minimal. Make sure your shell config exports PATH correctly.".into())
+                Some(
+                    "Shell PATH looks minimal. Make sure your shell config exports PATH correctly."
+                        .into(),
+                )
             } else {
                 None
             },
@@ -106,13 +109,37 @@ pub fn report(tools: &[AiTool]) -> Vec<DoctorSection> {
 
     // ── Section 2: Runtime binaries ───────────────────────────────────────────
     let runtimes = [
-        ("node", "Node.js", "Install via https://nodejs.org or `brew install node`"),
+        (
+            "node",
+            "Node.js",
+            "Install via https://nodejs.org or `brew install node`",
+        ),
         ("npx", "npx", "Comes with Node.js — install Node.js first"),
-        ("python3", "Python 3", "Install via https://python.org or `brew install python`"),
-        ("uv", "uv (Python runner)", "Install via `brew install uv` or `curl -Ls https://astral.sh/uv/install.sh | sh`"),
-        ("docker", "Docker", "Install Docker Desktop from https://docker.com"),
-        ("bun", "Bun", "Install via `brew install bun` or `curl -fsSL https://bun.sh/install | bash`"),
-        ("deno", "Deno", "Install via `brew install deno` or `curl -fsSL https://deno.land/install.sh | sh`"),
+        (
+            "python3",
+            "Python 3",
+            "Install via https://python.org or `brew install python`",
+        ),
+        (
+            "uv",
+            "uv (Python runner)",
+            "Install via `brew install uv` or `curl -Ls https://astral.sh/uv/install.sh | sh`",
+        ),
+        (
+            "docker",
+            "Docker",
+            "Install Docker Desktop from https://docker.com",
+        ),
+        (
+            "bun",
+            "Bun",
+            "Install via `brew install bun` or `curl -fsSL https://bun.sh/install | bash`",
+        ),
+        (
+            "deno",
+            "Deno",
+            "Install via `brew install deno` or `curl -fsSL https://deno.land/install.sh | sh`",
+        ),
     ];
 
     let runtime_items: Vec<DoctorItem> = runtimes
@@ -122,7 +149,11 @@ pub fn report(tools: &[AiTool]) -> Vec<DoctorSection> {
             DoctorItem {
                 id: format!("runtime:{}", bin),
                 label: label.to_string(),
-                status: if found { DoctorStatus::Ok } else { DoctorStatus::Warn },
+                status: if found {
+                    DoctorStatus::Ok
+                } else {
+                    DoctorStatus::Warn
+                },
                 detail: if found {
                     // find the actual path
                     shell_path
@@ -161,7 +192,11 @@ pub fn report(tools: &[AiTool]) -> Vec<DoctorSection> {
             mcp_items.push(DoctorItem {
                 id: format!("mcp:{}:{}:cmd", tool.id, mcp.name),
                 label: format!("{} › {} ({})", tool.name, mcp.name, mcp.command),
-                status: if found { DoctorStatus::Ok } else { DoctorStatus::Error },
+                status: if found {
+                    DoctorStatus::Ok
+                } else {
+                    DoctorStatus::Error
+                },
                 detail: if found {
                     None
                 } else {
@@ -378,8 +413,7 @@ mod tests {
     fn absolute_path_exists() {
         let path = "";
         assert!(
-            command_on_custom_path("/bin/ls", path)
-                || command_on_custom_path("/usr/bin/ls", path),
+            command_on_custom_path("/bin/ls", path) || command_on_custom_path("/usr/bin/ls", path),
             "at least one known ls path should exist"
         );
     }
