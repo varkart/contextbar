@@ -19,30 +19,50 @@ type RunState = 'idle' | 'running' | 'done'
 function StatusIcon({ status }: { status: DoctorItem['status'] }) {
   if (status === 'ok') {
     return (
-      <svg className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+      <svg className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0 mt-px" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
         <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
       </svg>
     )
   }
   if (status === 'warn') {
     return (
-      <svg className="w-3.5 h-3.5 text-amber-400 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+      <svg className="w-3.5 h-3.5 text-amber-400 flex-shrink-0 mt-px" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
         <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
       </svg>
     )
   }
   return (
-    <svg className="w-3.5 h-3.5 text-red-400 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+    <svg className="w-3.5 h-3.5 text-red-400 flex-shrink-0 mt-px" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
       <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
     </svg>
   )
 }
 
-function SectionLabel({ children }: { children: React.ReactNode }) {
+function DoctorItemRow({ item }: { item: DoctorItem }) {
+  const hasIssue = item.status !== 'ok'
   return (
-    <p className="text-[11px] font-semibold uppercase tracking-wider text-[var(--c-text-3)] px-3 pt-4 pb-1 first:pt-2">
-      {children}
-    </p>
+    <div className="bg-[var(--c-surface-1)] px-3 py-2.5">
+      <div className="flex items-start gap-2">
+        <StatusIcon status={item.status} />
+        <div className="flex-1 min-w-0">
+          <span className={`text-[12px] font-medium ${hasIssue ? 'text-[var(--c-text-1)]' : 'text-[var(--c-text-2)]'}`}>
+            {item.label}
+          </span>
+          {item.detail && (
+            <p className="text-[11px] text-[var(--c-text-3)] mt-0.5 truncate">{item.detail}</p>
+          )}
+          {hasIssue && item.fixHint && (
+            <p className={`text-[11px] mt-1.5 leading-relaxed px-2 py-1.5 rounded ${
+              item.status === 'error'
+                ? 'bg-red-500/8 text-red-300'
+                : 'bg-amber-500/8 text-amber-300'
+            }`}>
+              <span className="font-medium">Fix: </span>{item.fixHint}
+            </p>
+          )}
+        </div>
+      </div>
+    </div>
   )
 }
 
@@ -50,13 +70,13 @@ export default function DoctorView({ onBack }: { onBack: () => void }) {
   const [runState, setRunState] = useState<RunState>('idle')
   const [sections, setSections] = useState<DoctorSection[]>([])
   const [error, setError] = useState<string | null>(null)
-  const [expandedHints, setExpandedHints] = useState<Set<string>>(new Set())
+  const [showAllMcps, setShowAllMcps] = useState(false)
 
   const runDoctor = useCallback(async () => {
     setRunState('running')
     setError(null)
     setSections([])
-    setExpandedHints(new Set())
+    setShowAllMcps(false)
     try {
       const result = await invoke<DoctorSection[]>('run_doctor')
       setSections(result)
@@ -66,15 +86,6 @@ export default function DoctorView({ onBack }: { onBack: () => void }) {
       setRunState('idle')
     }
   }, [])
-
-  const toggleHint = (id: string) => {
-    setExpandedHints(prev => {
-      const next = new Set(prev)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
-      return next
-    })
-  }
 
   const issueCount = sections.reduce(
     (n, s) => n + s.items.filter(i => i.status !== 'ok').length,
@@ -120,7 +131,10 @@ export default function DoctorView({ onBack }: { onBack: () => void }) {
             <svg className="w-8 h-8 opacity-40" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
-            <p className="text-[13px]">Checks runtimes, PATH, and active MCP commands</p>
+            <div>
+              <p className="text-[13px] font-medium text-[var(--c-text-2)]">Environment health check</p>
+              <p className="text-[12px] mt-0.5">Shell PATH · required runtimes · active MCP commands</p>
+            </div>
             <button
               onClick={runDoctor}
               className="text-[13px] px-4 py-1.5 rounded-lg bg-indigo-500 text-white hover:bg-indigo-400 transition-colors font-medium"
@@ -146,44 +160,47 @@ export default function DoctorView({ onBack }: { onBack: () => void }) {
           </div>
         )}
 
-        {runState === 'done' && sections.map(section => (
-          <div key={section.title}>
-            <SectionLabel>{section.title}</SectionLabel>
-            <div className="divide-y divide-[var(--c-border-sub)] mx-2 rounded-lg overflow-hidden border border-[var(--c-border)]">
-              {section.items.map(item => (
-                <div key={item.id} className="bg-[var(--c-surface-1)]">
-                  <div className="flex items-center gap-2 px-3 py-2">
-                    <StatusIcon status={item.status} />
-                    <span className="text-[12px] text-[var(--c-text-1)] flex-1 min-w-0 truncate">
-                      {item.label}
-                    </span>
-                    {item.detail && (
-                      <span className="text-[11px] text-[var(--c-text-3)] flex-shrink-0 max-w-[120px] truncate">
-                        {item.detail}
-                      </span>
-                    )}
-                    {item.fixHint && (
-                      <button
-                        onClick={() => toggleHint(item.id)}
-                        className="text-[11px] text-indigo-400 hover:text-indigo-300 flex-shrink-0"
-                        aria-label="Show fix"
-                      >
-                        {expandedHints.has(item.id) ? 'Hide' : 'Fix'}
-                      </button>
-                    )}
+        {runState === 'done' && sections.map(section => {
+          const isMcpSection = section.title === 'Active MCPs'
+          const issueItems = section.items.filter(i => i.status !== 'ok')
+          const displayItems = isMcpSection && !showAllMcps
+            ? (issueItems.length > 0 ? issueItems : section.items)
+            : section.items
+          const hasHiddenOk = isMcpSection && !showAllMcps && issueItems.length > 0 &&
+            section.items.length > issueItems.length
+
+          return (
+            <div key={section.title}>
+              <div className="flex items-center justify-between px-3 pt-4 pb-1 first:pt-2">
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-[var(--c-text-3)]">
+                  {section.title}
+                </p>
+                {isMcpSection && section.items.length > 1 && (
+                  <button
+                    onClick={() => setShowAllMcps(v => !v)}
+                    className="text-[11px] text-indigo-400 hover:text-indigo-300 transition-colors"
+                  >
+                    {showAllMcps
+                      ? 'Show issues only'
+                      : `Show all ${section.items.length}`}
+                  </button>
+                )}
+              </div>
+              <div className="divide-y divide-[var(--c-border-sub)] mx-2 rounded-lg overflow-hidden border border-[var(--c-border)]">
+                {displayItems.map(item => (
+                  <DoctorItemRow key={item.id} item={item} />
+                ))}
+                {hasHiddenOk && (
+                  <div className="bg-[var(--c-surface-1)] px-3 py-2 text-[11px] text-[var(--c-text-3)]">
+                    {section.items.length - issueItems.length} healthy MCP{section.items.length - issueItems.length > 1 ? 's' : ''} hidden
                   </div>
-                  {item.fixHint && expandedHints.has(item.id) && (
-                    <div className="px-3 pb-2 ml-5">
-                      <p className="text-[11px] text-amber-400 bg-amber-500/5 rounded px-2 py-1.5 leading-relaxed">
-                        {item.fixHint}
-                      </p>
-                    </div>
-                  )}
-                </div>
-              ))}
+                )}
+              </div>
             </div>
-          </div>
-        ))}
+          )
+        })}
+
+        {runState === 'done' && <div className="h-4" />}
       </div>
     </div>
   )

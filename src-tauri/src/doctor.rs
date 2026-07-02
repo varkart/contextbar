@@ -68,43 +68,53 @@ pub enum DoctorStatus {
 
 pub fn report(tools: &[AiTool]) -> Vec<DoctorSection> {
     let shell_path = get_shell_path();
-    let app_path = std::env::var("PATH").unwrap_or_default();
 
     let mut sections = vec![];
 
+    // Collect commands used by active MCPs — used to decide which runtimes matter.
+    let active_commands: std::collections::HashSet<String> = tools
+        .iter()
+        .filter(|t| t.installed)
+        .flat_map(|t| t.mcps.iter())
+        .filter(|m| m.active && !m.command.is_empty())
+        .map(|m| m.command.clone())
+        .collect();
+
     // ── Section 1: PATH ───────────────────────────────────────────────────────
-    let path_status = if shell_path != app_path && !shell_path.is_empty() {
-        DoctorStatus::Ok
-    } else if shell_path.is_empty() {
-        DoctorStatus::Warn
-    } else {
-        DoctorStatus::Ok
-    };
+    let shell_ok = !shell_path.is_empty();
     let shell_dirs: usize = shell_path.split(':').filter(|s| !s.is_empty()).count();
-    let app_dirs: usize = app_path.split(':').filter(|s| !s.is_empty()).count();
     sections.push(DoctorSection {
         title: "Environment".into(),
         items: vec![DoctorItem {
             id: "path".into(),
             label: "Shell PATH".into(),
-            status: path_status,
-            detail: Some(format!(
-                "Shell: {} dirs — App: {} dirs",
-                shell_dirs, app_dirs
-            )),
-            fix_hint: if shell_dirs <= app_dirs {
+            status: if shell_ok {
+                DoctorStatus::Ok
+            } else {
+                DoctorStatus::Warn
+            },
+            detail: if shell_ok {
+                Some(format!(
+                    "{shell_dirs} directories — resolved from login shell"
+                ))
+            } else {
+                Some("Could not resolve shell PATH from login shell".into())
+            },
+            fix_hint: if shell_ok {
+                None
+            } else {
                 Some(
-                    "Shell PATH looks minimal. Make sure your shell config exports PATH correctly."
+                    "Check ~/.zshrc or ~/.bash_profile — make sure PATH is exported correctly"
                         .into(),
                 )
-            } else {
-                None
             },
         }],
     });
 
-    // ── Section 2: Runtime binaries ───────────────────────────────────────────
-    let runtimes = [
+    // ── Section 2: Runtimes needed by active MCPs ─────────────────────────────
+    // Only show runtimes that at least one active MCP actually uses.
+    // No active MCP uses it → not shown (not your problem).
+    let runtime_hints = [
         (
             "node",
             "Node.js",
@@ -117,9 +127,14 @@ pub fn report(tools: &[AiTool]) -> Vec<DoctorSection> {
             "Install via https://python.org or `brew install python`",
         ),
         (
+            "python",
+            "Python",
+            "Install via https://python.org or `brew install python`",
+        ),
+        (
             "uv",
-            "uv (Python runner)",
-            "Install via `brew install uv` or `curl -Ls https://astral.sh/uv/install.sh | sh`",
+            "uv",
+            "Install: `brew install uv` or `curl -Ls https://astral.sh/uv/install.sh | sh`",
         ),
         (
             "docker",
@@ -129,45 +144,58 @@ pub fn report(tools: &[AiTool]) -> Vec<DoctorSection> {
         (
             "bun",
             "Bun",
-            "Install via `brew install bun` or `curl -fsSL https://bun.sh/install | bash`",
+            "Install: `brew install bun` or `curl -fsSL https://bun.sh/install | bash`",
         ),
         (
             "deno",
             "Deno",
-            "Install via `brew install deno` or `curl -fsSL https://deno.land/install.sh | sh`",
+            "Install: `brew install deno` or `curl -fsSL https://deno.land/install.sh | sh`",
         ),
     ];
 
-    let runtime_items: Vec<DoctorItem> = runtimes
+    let runtime_items: Vec<DoctorItem> = runtime_hints
         .iter()
+        .filter(|(bin, _, _)| active_commands.contains(*bin))
         .map(|(bin, label, hint)| {
             let found = command_on_custom_path(bin, &shell_path);
+            let resolved_path = shell_path
+                .split(':')
+                .map(|dir| std::path::Path::new(dir).join(bin))
+                .find(|p| p.exists())
+                .map(|p| p.to_string_lossy().into_owned());
             DoctorItem {
                 id: format!("runtime:{}", bin),
                 label: label.to_string(),
                 status: if found {
                     DoctorStatus::Ok
                 } else {
-                    DoctorStatus::Warn
+                    DoctorStatus::Error
                 },
                 detail: if found {
-                    // find the actual path
-                    shell_path
-                        .split(':')
-                        .map(|dir| std::path::Path::new(dir).join(bin))
-                        .find(|p| p.exists())
-                        .map(|p| p.to_string_lossy().into_owned())
+                    resolved_path
                 } else {
-                    Some("Not found on shell PATH".into())
+                    Some("Not found on PATH — required by an active MCP".into())
                 },
                 fix_hint: if found { None } else { Some(hint.to_string()) },
             }
         })
         .collect();
 
+    let runtime_section_items = if runtime_items.is_empty() {
+        vec![DoctorItem {
+            id: "runtime:none".into(),
+            label: "No specific runtimes required by active MCPs".into(),
+            status: DoctorStatus::Ok,
+            detail: None,
+            fix_hint: None,
+        }]
+    } else {
+        runtime_items
+    };
+
     sections.push(DoctorSection {
         title: "Runtimes".into(),
-        items: runtime_items,
+        items: runtime_section_items,
     });
 
     // ── Section 3: MCP commands ───────────────────────────────────────────────
