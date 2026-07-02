@@ -29,10 +29,6 @@ pub fn get_shell_path() -> String {
     }
 }
 
-pub(crate) fn command_on_path(command: &str) -> bool {
-    command_on_custom_path(command, &get_shell_path())
-}
-
 pub(crate) fn command_on_custom_path(command: &str, path_val: &str) -> bool {
     if command.contains('/') {
         std::path::Path::new(command).exists()
