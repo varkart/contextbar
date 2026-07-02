@@ -12,6 +12,7 @@ import AllSkillsView from './AllSkillsView'
 import AllMcpsView from './AllMcpsView'
 import AddSkillView from './AddSkillView'
 import AddMcpView from './AddMcpView'
+import DoctorView from './DoctorView'
 
 import type { ThemePreference } from '../../useTheme'
 import type { AiTool, Skill } from '../../types'
@@ -45,6 +46,9 @@ export default function ViewManager({
   setTheme,
   fetchNotifications,
 }: any) {
+  if (view === 'doctor') {
+    return <DoctorView onBack={() => goTo('main')} />
+  }
   if (view === 'logs') {
     return <LogsPanel onBack={() => goTo('main')} />
   }
@@ -181,6 +185,7 @@ export default function ViewManager({
         theme={theme}
         onThemeChange={(t: ThemePreference) => setTheme(t)}
         onOpenLogs={() => goTo('logs')}
+        onOpenDoctor={() => goTo('doctor')}
       />
     )
   }

@@ -16,6 +16,7 @@ export type View =
   | 'permissions-detail'
   | 'notifications'
   | 'logs'
+  | 'doctor'
 
 export type LlmsListMode = 'default'
 
@@ -38,6 +39,7 @@ const _VIEW_REGISTRY: Record<View, true> = {
   'permissions-detail': true,
   'notifications': true,
   'logs': true,
+  'doctor': true,
 }
 
 /** Every registered view. Used by tests to assert Escape is handled for all of them. */
@@ -97,7 +99,7 @@ export function escapeTransition(
   if (view === 'add-skill') return { type: 'navigate', to: addSkillBackView }
   if (view === 'add-mcp') return { type: 'navigate', to: addMcpBackView }
   if (view === 'llms-list') return { type: 'navigate', to: 'main' }
-  if (view === 'settings' || view === 'notifications' || view === 'logs')
+  if (view === 'settings' || view === 'notifications' || view === 'logs' || view === 'doctor')
     return { type: 'navigate', to: 'main' }
   return { type: 'hide' }
 }
