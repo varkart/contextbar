@@ -361,7 +361,7 @@ type = "dir"
 path = "/tmp/this_dir_does_not_exist_xyzzy_12345"
 "#;
         let m: Manifest = toml::from_str(toml).unwrap();
-        let tool = detect_from_manifest(&m);
+        let agent = detect_from_manifest(&m);
         assert!(!agent.installed);
         assert_eq!(agent.id, "test-tool");
     }
