@@ -1832,6 +1832,14 @@ async fn install_update(app: tauri::AppHandle) -> Result<(), String> {
     app.restart();
 }
 
+#[tauri::command]
+async fn run_doctor() -> Result<Vec<doctor::DoctorSection>, String> {
+    let tools = tokio::task::spawn_blocking(detectors::detect_all)
+        .await
+        .map_err(|e| e.to_string())?;
+    Ok(doctor::report(&tools))
+}
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -1957,6 +1965,7 @@ pub fn run() {
             read_text_file,
             check_for_update,
             install_update,
+            run_doctor,
             query_mcp_tools,
             remove_skill,
             set_skill_active,
