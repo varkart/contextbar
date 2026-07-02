@@ -30,7 +30,7 @@ describe('skill enable/disable', () => {
     // Wait for FSEvents watcher to pick up new skill
     await browser.pause(1500)
     // Refresh tools list via the refresh button or re-open
-    const refreshBtn = await $('[aria-label="Refresh tools"]')
+    const refreshBtn = await $('[aria-label="Refresh agents"]')
     if (await refreshBtn.isExisting()) await refreshBtn.click()
     await browser.pause(500)
   })

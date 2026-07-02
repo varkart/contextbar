@@ -1,33 +1,33 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
-import type { AiTool } from './types'
+import type { Agent } from './types'
 import { capture } from './analytics'
 
-export interface UseToolsResult {
-  tools: AiTool[]
+export interface UseAgentsResult {
+  agents: Agent[]
   loading: boolean
   cloudSyncing: boolean
   lastUpdated: Date | null
-  fetchTools: () => Promise<AiTool[]>
+  fetchAgents: () => Promise<Agent[]>
 }
 
-export function useTools(): UseToolsResult {
-  const [tools, setTools] = useState<AiTool[]>([])
+export function useAgents(): UseAgentsResult {
+  const [agents, setAgents] = useState<Agent[]>([])
   const [loading, setLoading] = useState(true)
   const [cloudSyncing, setCloudSyncing] = useState(false)
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
   const fetchingRef = useRef(false)
 
-  const fetchTools = useCallback(async (): Promise<AiTool[]> => {
+  const fetchAgents = useCallback(async (): Promise<Agent[]> => {
     if (fetchingRef.current) return []
     fetchingRef.current = true
     setLoading(true)
     const t0 = Date.now()
     try {
-      const result = await invoke<AiTool[]>('get_tools')
+      const result = await invoke<Agent[]>('get_agents')
       const duration_ms = Date.now() - t0
-      setTools(result)
+      setAgents(result)
       // Warm caches in background — skills and MCPs
       invoke('warm_skill_cache').catch(() => {})
       invoke('warm_mcp_cache').catch(() => {})
@@ -51,17 +51,17 @@ export function useTools(): UseToolsResult {
     }
   }, [])
 
-  useEffect(() => { fetchTools() }, [fetchTools])
+  useEffect(() => { fetchAgents() }, [fetchAgents])
 
   useEffect(() => {
-    const unlisten = listen('tools-changed', () => { setCloudSyncing(false); fetchTools() })
+    const unlisten = listen('agents-changed', () => { setCloudSyncing(false); fetchAgents() })
     return () => { unlisten.then(fn => fn()) }
-  }, [fetchTools])
+  }, [fetchAgents])
 
   useEffect(() => {
     const unlisten = listen('cloud-mcps-loading', () => setCloudSyncing(true))
     return () => { unlisten.then(fn => fn()) }
   }, [])
 
-  return { tools, loading, cloudSyncing, lastUpdated, fetchTools }
+  return { agents, loading, cloudSyncing, lastUpdated, fetchAgents }
 }

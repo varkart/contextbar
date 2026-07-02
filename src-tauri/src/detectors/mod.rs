@@ -1,4 +1,4 @@
-use crate::models::AiTool;
+use crate::models::Agent;
 
 /// Find a binary in PATH without spawning a subprocess.
 pub fn find_in_path(binary: &str) -> Option<String> {
@@ -25,7 +25,7 @@ where
     rx.recv_timeout(dur).ok().flatten()
 }
 
-pub fn detect_all() -> Vec<AiTool> {
+pub fn detect_all() -> Vec<Agent> {
     crate::engine::detect_all()
 }
 

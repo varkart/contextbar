@@ -18,7 +18,7 @@ describe('Footer', () => {
   it('refresh button triggers onRefresh callback', () => {
     const onRefresh = vi.fn()
     render(<Footer lastUpdated={null} onRefresh={onRefresh} loading={false} />)
-    fireEvent.click(screen.getByRole('button', { name: 'Refresh tools' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh agents' }))
     expect(onRefresh).toHaveBeenCalledTimes(1)
   })
 })

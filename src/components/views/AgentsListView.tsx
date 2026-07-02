@@ -1,12 +1,12 @@
 import { useState } from 'react';
-import ToolRow from '../ToolRow';
-import { searchTools } from '../../search';
-import type { AiTool } from '../../types';
+import AgentRow from '../AgentRow';
+import { searchAgents } from '../../search';
+import type { Agent } from '../../types';
 
-interface LlmsListViewProps {
-  tools: AiTool[];
+interface AgentsListViewProps {
+  agents: Agent[];
   loading: boolean;
-  onSelectTool: (tool: AiTool) => void;
+  onSelectAgent: (tool: Agent) => void;
 }
 
 function SkeletonRows() {
@@ -25,16 +25,16 @@ function SkeletonRows() {
   );
 }
 
-export default function LlmsListView({ tools, loading, onSelectTool }: LlmsListViewProps) {
+export default function AgentsListView({ agents, loading, onSelectAgent }: AgentsListViewProps) {
   const [query, setQuery] = useState('');
-  const installedTools = tools.filter(t => t.installed);
-  const searchResults = searchTools(installedTools, query);
+  const installedAgents = agents.filter(t => t.installed);
+  const searchResults = searchAgents(installedAgents, query);
 
   return (
     <div className="flex flex-col h-full bg-[var(--c-bg)] animate-slide-in-right">
       <div className="flex items-center justify-end px-4 py-2 border-b border-[var(--c-border)] flex-shrink-0">
         <span className="text-[12px] text-[var(--c-text-3)] tabular-nums">
-          {installedTools.length} installed
+          {installedAgents.length} installed
         </span>
       </div>
 
@@ -49,7 +49,7 @@ export default function LlmsListView({ tools, loading, onSelectTool }: LlmsListV
             type="text"
             value={query}
             onChange={e => setQuery(e.target.value)}
-            placeholder="Search tools, skills, MCPs…"
+            placeholder="Search agents, skills, MCPs…"
             className="w-full bg-[var(--c-input)] border border-[var(--c-border)] rounded-md pl-7 pr-7 py-1.5 text-[14px] text-[var(--c-text)] placeholder-[var(--c-text-3)] outline-none focus:border-[var(--c-text-2)] transition-colors"
             autoComplete="off"
             spellCheck={false}
@@ -70,22 +70,22 @@ export default function LlmsListView({ tools, loading, onSelectTool }: LlmsListV
       </div>
 
       <div className="flex-1 overflow-y-auto divide-y divide-[var(--c-border-sub)]">
-        {loading && tools.length === 0 ? (
+        {loading && agents.length === 0 ? (
           <SkeletonRows />
         ) : searchResults.length === 0 && query ? (
           <div className="px-4 py-8 text-center">
             <p className="text-[14px] text-[var(--c-text-3)]">No results for "{query}"</p>
           </div>
-        ) : installedTools.length === 0 ? (
+        ) : installedAgents.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full px-6 py-12 text-center gap-3">
-            <p className="text-[15px] font-semibold text-[var(--c-text)]">No AI tools detected</p>
+            <p className="text-[15px] font-semibold text-[var(--c-text)]">No agents detected</p>
             <p className="text-[13px] text-[var(--c-text-3)] leading-relaxed max-w-[240px]">
               Install Claude Code, Cursor, Gemini CLI, or GitHub Copilot and Context Bar will pick them up automatically.
             </p>
           </div>
         ) : (
-          searchResults.map(({ tool }) => (
-            <ToolRow key={tool.id} tool={tool} onSelectTool={onSelectTool} />
+          searchResults.map(({ agent }) => (
+            <AgentRow key={agent.id} tool={agent} onSelectAgent={onSelectAgent} />
           ))
         )}
       </div>

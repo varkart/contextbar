@@ -1,10 +1,10 @@
 import type React from 'react';
 import StatusDot from './StatusDot';
-import type { AiTool } from '../types';
-import { TOOL_COLORS } from '../constants/toolColors';
+import type { Agent } from '../types';
+import { AGENT_COLORS } from '../constants/agentColors';
 
-function ToolIcon({ tool }: { tool: AiTool }) {
-  const colors = TOOL_COLORS[tool.id] ?? { bg: 'bg-zinc-500/10', text: 'text-zinc-500' };
+function AgentIcon({ tool }: { tool: Agent }) {
+  const colors = AGENT_COLORS[tool.id] ?? { bg: 'bg-zinc-500/10', text: 'text-zinc-500' };
   return (
     <span
       className={`inline-flex items-center justify-center w-[20px] h-[20px] rounded text-[12px] font-bold flex-shrink-0 select-none ${colors.bg} ${colors.text}`}
@@ -25,30 +25,30 @@ function ChevronRight() {
   );
 }
 
-function getStatusState(tool: AiTool): 'installed' | 'no-config' | 'not-installed' | 'error' {
+function getStatusState(tool: Agent): 'installed' | 'no-config' | 'not-installed' | 'error' {
   if (!tool.installed) return 'not-installed';
   if (tool.error) return 'error';
   if (tool.skills.length === 0 && tool.mcps.length === 0) return 'no-config';
   return 'installed';
 }
 
-interface ToolRowProps {
-  tool: AiTool;
-  onSelectTool: (tool: AiTool) => void;
+interface AgentRowProps {
+  tool: Agent;
+  onSelectAgent: (tool: Agent) => void;
   tabIndex?: number;
   onKeyDown?: (e: React.KeyboardEvent<HTMLButtonElement>) => void;
   rowRef?: React.RefCallback<HTMLElement>;
   onFocus?: () => void;
 }
 
-export default function ToolRow({ tool, onSelectTool, tabIndex, onKeyDown, rowRef, onFocus }: ToolRowProps) {
+export default function AgentRow({ tool, onSelectAgent, tabIndex, onKeyDown, rowRef, onFocus }: AgentRowProps) {
   const statusState = getStatusState(tool);
   const canNavigate = tool.installed;
 
   return (
     <button
       ref={rowRef as React.RefCallback<HTMLButtonElement>}
-      onClick={() => canNavigate && onSelectTool(tool)}
+      onClick={() => canNavigate && onSelectAgent(tool)}
       disabled={!canNavigate}
       tabIndex={tabIndex}
       onKeyDown={onKeyDown}
@@ -58,7 +58,7 @@ export default function ToolRow({ tool, onSelectTool, tabIndex, onKeyDown, rowRe
       }`}
     >
       <StatusDot state={statusState} />
-      <ToolIcon tool={tool} />
+      <AgentIcon tool={tool} />
 
       <span className="text-[16px] font-semibold text-[var(--c-text)] flex-1 truncate leading-5">
         {tool.name}

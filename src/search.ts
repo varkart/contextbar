@@ -1,7 +1,7 @@
-import type { AiTool } from './types'
+import type { Agent } from './types'
 
-export interface ToolMatch {
-  tool: AiTool
+export interface AgentMatch {
+  agent: Agent
   matchedSkills: Set<string>   // skill paths that matched
   matchedMcps: Set<string>     // mcp names that matched
   score: number
@@ -23,15 +23,15 @@ function scoreText(query: string, text: string | undefined): number {
   return 0
 }
 
-export function searchTools(tools: AiTool[], query: string): ToolMatch[] {
+export function searchAgents(tools: Agent[], query: string): AgentMatch[] {
   if (!query.trim()) return tools.map(t => ({
-    tool: t,
+    agent: t,
     matchedSkills: new Set<string>(),
     matchedMcps: new Set<string>(),
     score: 1,
   }))
 
-  const results: ToolMatch[] = []
+  const results: AgentMatch[] = []
 
   for (const tool of tools) {
     const toolScore = Math.max(
@@ -67,7 +67,7 @@ export function searchTools(tools: AiTool[], query: string): ToolMatch[] {
 
     const totalScore = toolScore + skillScore + mcpScore
     if (totalScore > 0) {
-      results.push({ tool, matchedSkills, matchedMcps, score: totalScore })
+      results.push({ agent: tool, matchedSkills, matchedMcps, score: totalScore })
     }
   }
 

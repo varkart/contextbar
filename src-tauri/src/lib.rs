@@ -11,7 +11,7 @@ pub(crate) mod models;
 pub(crate) mod permissions;
 mod watcher;
 
-use crate::models::AiTool;
+use crate::models::Agent;
 use tauri::{
     menu::{Menu, MenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
@@ -67,12 +67,12 @@ fn write_settings(val: serde_json::Value) -> Result<(), String> {
 }
 
 // ---------------------------------------------------------------------------
-// IPC commands – tools / window
+// IPC commands – agents / window
 // ---------------------------------------------------------------------------
 
 #[tauri::command]
-async fn get_tools(app: tauri::AppHandle) -> Vec<AiTool> {
-    let tools = tokio::task::spawn_blocking(detectors::detect_all)
+async fn get_agents(app: tauri::AppHandle) -> Vec<Agent> {
+    let agents = tokio::task::spawn_blocking(detectors::detect_all)
         .await
         .unwrap_or_default();
     // If the claude mcp list cache is cold, warm it in the background and
@@ -85,10 +85,10 @@ async fn get_tools(app: tauri::AppHandle) -> Vec<AiTool> {
             if let Some(h) = home {
                 engine::mcp::warm_claude_mcp_list(&h);
             }
-            let _ = app_bg.emit("tools-changed", ());
+            let _ = app_bg.emit("agents-changed", ());
         });
     }
-    tools
+    agents
 }
 
 #[tauri::command]
@@ -294,9 +294,9 @@ fn reveal_in_finder(path: String) -> Result<(), String> {
 /// with method="detected" if the skill has no existing cache entry with a richer method.
 #[tauri::command]
 fn warm_skill_cache(db: tauri::State<'_, db::DbState>) {
-    let tools = detectors::detect_all();
-    for tool in tools {
-        for skill in tool.skills {
+    let agents = detectors::detect_all();
+    for agent in agents {
+        for skill in agent.skills {
             if db::is_skill_cached(&db, &skill.name) {
                 continue;
             }
@@ -336,11 +336,11 @@ async fn warm_mcp_cache(
     app: tauri::AppHandle,
     db: tauri::State<'_, db::DbState>,
 ) -> Result<(), ()> {
-    let tools = tokio::task::spawn_blocking(detectors::detect_all)
+    let agents = tokio::task::spawn_blocking(detectors::detect_all)
         .await
         .unwrap_or_default();
-    for tool in tools {
-        for mcp in tool.mcps {
+    for agent in agents {
+        for mcp in agent.mcps {
             let already_cached = db::is_mcp_cached(&db, &mcp.name);
             if !already_cached {
                 db::cache_mcp(
@@ -391,11 +391,11 @@ fn get_skill_cache_status(
 ///
 /// This replaces the old `install_skill_from_path` path for cross-tool adds.
 #[tauri::command]
-async fn add_skill_to_tool(
+async fn add_skill_to_agent(
     db: tauri::State<'_, db::DbState>,
     app: tauri::AppHandle,
     skill_name: String,
-    tool_id: String,
+    agent_id: String,
 ) -> Result<String, String> {
     // 1. Try cache
     if let Some(cached) = db::get_cached_skill(&db, &skill_name) {
@@ -427,29 +427,29 @@ async fn add_skill_to_tool(
             cached.content
         };
 
-        let dir = skill_dir_for(&tool_id)?;
+        let dir = skill_dir_for(&agent_id)?;
         let path = write_skill_file(&dir, &skill_name, &content)?;
         db::log_event(
             &db,
             "skill_added_to_tool",
-            &tool_id,
+            &agent_id,
             &skill_name,
             Some("from_cache"),
         );
-        let _ = app.emit("tools-changed", ());
+        let _ = app.emit("agents-changed", ());
         return Ok(path);
     }
 
     // 2. Live copy: find skill in any detected tool (enabled or disabled)
-    let tools = tokio::task::spawn_blocking(detectors::detect_all)
+    let agents = tokio::task::spawn_blocking(detectors::detect_all)
         .await
         .unwrap_or_default();
 
-    for tool in &tools {
-        if tool.id == tool_id {
+    for agent in &agents {
+        if agent.id == agent_id {
             continue;
         }
-        if let Some(skill) = tool.skills.iter().find(|s| s.name == skill_name) {
+        if let Some(skill) = agent.skills.iter().find(|s| s.name == skill_name) {
             if let Some(content) =
                 detectors::read_skill_file_content(std::path::Path::new(&skill.path))
             {
@@ -460,16 +460,16 @@ async fn add_skill_to_tool(
                     "copy",
                     skill.source_url.as_deref(),
                 );
-                let dir = skill_dir_for(&tool_id)?;
+                let dir = skill_dir_for(&agent_id)?;
                 let path = write_skill_file(&dir, &skill_name, &content)?;
                 db::log_event(
                     &db,
                     "skill_added_to_tool",
-                    &tool_id,
+                    &agent_id,
                     &skill_name,
                     Some("from_live_copy"),
                 );
-                let _ = app.emit("tools-changed", ());
+                let _ = app.emit("agents-changed", ());
                 return Ok(path);
             }
         }
@@ -485,18 +485,18 @@ fn open_url(url: String) -> Result<(), String> {
     tauri_plugin_opener::open_url(url, None::<&str>).map_err(|e| e.to_string())
 }
 
-/// Returns the first writable skills directory for `tool_id`, or an error.
+/// Returns the first writable skills directory for `agent_id`, or an error.
 struct SkillWriteTarget {
     dir: std::path::PathBuf,
     flat_files: bool,
 }
 
-fn skill_dir_for(tool_id: &str) -> Result<SkillWriteTarget, String> {
+fn skill_dir_for(agent_id: &str) -> Result<SkillWriteTarget, String> {
     use crate::engine::manifest::SkillSourceSpec;
     use crate::engine::resolve::expand_home;
     let home = dirs::home_dir().ok_or("cannot find home dir")?;
-    let manifest = crate::engine::load_manifest(tool_id)
-        .ok_or_else(|| format!("no manifest for '{tool_id}'"))?;
+    let manifest = crate::engine::load_manifest(agent_id)
+        .ok_or_else(|| format!("no manifest for '{agent_id}'"))?;
     if let Some(source) = manifest.skill_sources.first() {
         match &source.spec {
             SkillSourceSpec::Directory {
@@ -515,7 +515,7 @@ fn skill_dir_for(tool_id: &str) -> Result<SkillWriteTarget, String> {
             }
         }
     }
-    Err(format!("'{tool_id}' has no writable skill source"))
+    Err(format!("'{agent_id}' has no writable skill source"))
 }
 
 /// Slugify a name for use as a filename.
@@ -573,7 +573,7 @@ fn write_skill_file(
 #[tauri::command]
 fn create_skill(
     db: tauri::State<'_, db::DbState>,
-    tool_ids: Vec<String>,
+    agent_ids: Vec<String>,
     name: String,
     description: Option<String>,
 ) -> Result<Vec<String>, String> {
@@ -595,10 +595,10 @@ fn create_skill(
 
     db::cache_skill(&db, &slug, &content, "template", None);
     let mut paths = Vec::new();
-    for tool_id in &tool_ids {
-        let dir = skill_dir_for(tool_id)?;
+    for agent_id in &agent_ids {
+        let dir = skill_dir_for(agent_id)?;
         let path = write_skill_file(&dir, &slug, &content)?;
-        db::log_event(&db, "skill_created", tool_id, &slug, None);
+        db::log_event(&db, "skill_created", agent_id, &slug, None);
         paths.push(path);
     }
     Ok(paths)
@@ -792,7 +792,7 @@ async fn github_find_skill_mds(
 #[tauri::command]
 async fn install_skill_from_url(
     db: tauri::State<'_, db::DbState>,
-    tool_ids: Vec<String>,
+    agent_ids: Vec<String>,
     url: String,
     name: Option<String>,
     max_depth: Option<u32>,
@@ -817,10 +817,10 @@ async fn install_skill_from_url(
                 continue;
             }
             db::cache_skill(&db, &slug, &content, "url", Some(&url));
-            for tool_id in &tool_ids {
-                let dir = skill_dir_for(tool_id)?;
+            for agent_id in &agent_ids {
+                let dir = skill_dir_for(agent_id)?;
                 let path = write_skill_file(&dir, &slug, &content)?;
-                db::log_event(&db, "skill_installed_url", tool_id, &slug, Some(&url));
+                db::log_event(&db, "skill_installed_url", agent_id, &slug, Some(&url));
                 all_paths.push(path);
             }
         }
@@ -850,10 +850,10 @@ async fn install_skill_from_url(
 
     db::cache_skill(&db, &slug, &content, "url", Some(&url));
     let mut paths = Vec::new();
-    for tool_id in &tool_ids {
-        let dir = skill_dir_for(tool_id)?;
+    for agent_id in &agent_ids {
+        let dir = skill_dir_for(agent_id)?;
         let path = write_skill_file(&dir, &slug, &content)?;
-        db::log_event(&db, "skill_installed_url", tool_id, &slug, Some(&url));
+        db::log_event(&db, "skill_installed_url", agent_id, &slug, Some(&url));
         paths.push(path);
     }
     Ok(paths)
@@ -862,7 +862,7 @@ async fn install_skill_from_url(
 #[tauri::command]
 fn install_skill_from_path(
     db: tauri::State<'_, db::DbState>,
-    tool_ids: Vec<String>,
+    agent_ids: Vec<String>,
     src_path: String,
     name: Option<String>,
 ) -> Result<Vec<String>, String> {
@@ -905,10 +905,10 @@ fn install_skill_from_path(
 
     db::cache_skill(&db, &slug, &content, "local", Some(&src_path));
     let mut paths = Vec::new();
-    for tool_id in &tool_ids {
-        let dir = skill_dir_for(tool_id)?;
+    for agent_id in &agent_ids {
+        let dir = skill_dir_for(agent_id)?;
         let path = write_skill_file(&dir, &slug, &content)?;
-        db::log_event(&db, "skill_installed_path", tool_id, &slug, Some(&src_path));
+        db::log_event(&db, "skill_installed_path", agent_id, &slug, Some(&src_path));
         paths.push(path);
     }
     Ok(paths)
@@ -954,8 +954,8 @@ fn clean_skills_output(raw: &str) -> String {
 }
 
 /// Map our tool ID to the agent name expected by the `skills` CLI (vercel-labs/skills).
-fn skills_agent_name(tool_id: &str) -> Option<&'static str> {
-    match tool_id {
+fn skills_agent_name(agent_id: &str) -> Option<&'static str> {
+    match agent_id {
         "claude" => Some("claude-code"),
         "gemini" => Some("gemini-cli"),
         "cursor" => Some("cursor"),
@@ -969,7 +969,7 @@ fn skills_agent_name(tool_id: &str) -> Option<&'static str> {
 async fn install_skill_from_github(
     app: tauri::AppHandle,
     db: tauri::State<'_, db::DbState>,
-    tool_ids: Vec<String>,
+    agent_ids: Vec<String>,
     source: String,
     skill_filter: Option<String>,
 ) -> Result<String, String> {
@@ -977,9 +977,9 @@ async fn install_skill_from_github(
 
     let mut combined_output = String::new();
 
-    for tool_id in &tool_ids {
-        let agent = skills_agent_name(tool_id)
-            .ok_or_else(|| format!("'{tool_id}' is not supported by the skills CLI"))?;
+    for agent_id in &agent_ids {
+        let agent = skills_agent_name(agent_id)
+            .ok_or_else(|| format!("'{agent_id}' is not supported by the skills CLI"))?;
 
         let mut cmd = tokio::process::Command::new(&npx);
         cmd.args([
@@ -1013,14 +1013,14 @@ async fn install_skill_from_github(
             return Err(format!("skills add failed:\n{cleaned}"));
         }
 
-        db::log_event(&db, "skill_github_installed", tool_id, source.trim(), None);
+        db::log_event(&db, "skill_github_installed", agent_id, source.trim(), None);
         if !combined_output.is_empty() {
             combined_output.push('\n');
         }
         combined_output.push_str(&clean_skills_output(stdout.trim()));
     }
 
-    let _ = app.emit("tools-changed", ());
+    let _ = app.emit("agents-changed", ());
     Ok(combined_output)
 }
 
@@ -1073,7 +1073,7 @@ async fn query_mcp_tools(
 #[tauri::command]
 fn remove_skill(
     db: tauri::State<'_, db::DbState>,
-    tool_id: String,
+    agent_id: String,
     skill_name: String,
     skill_path: String,
 ) -> Result<(), String> {
@@ -1104,14 +1104,14 @@ fn remove_skill(
     if !deleted {
         return Err(format!("skill not found at {skill_path}"));
     }
-    db::log_event(&db, "skill_removed", &tool_id, &skill_name, None);
+    db::log_event(&db, "skill_removed", &agent_id, &skill_name, None);
     Ok(())
 }
 
 #[tauri::command]
 fn set_skill_active(
     db: tauri::State<'_, db::DbState>,
-    tool_id: String,
+    agent_id: String,
     skill_name: String,
     skill_path: String,
     source_id: Option<String>,
@@ -1122,7 +1122,7 @@ fn set_skill_active(
     use crate::engine::resolve::expand_home;
 
     let result = if let Some(sid) = &source_id {
-        if let Some(manifest) = crate::engine::load_manifest(&tool_id) {
+        if let Some(manifest) = crate::engine::load_manifest(&agent_id) {
             let home = dirs::home_dir().ok_or("cannot find home dir")?;
             let matched = manifest
                 .skill_sources
@@ -1162,7 +1162,7 @@ fn set_skill_active(
 
     if result.is_ok() {
         let detail = format!(r#"{{"active":{active}}}"#);
-        db::log_event(&db, "skill_toggled", &tool_id, &skill_name, Some(&detail));
+        db::log_event(&db, "skill_toggled", &agent_id, &skill_name, Some(&detail));
     }
     result
 }
@@ -1170,7 +1170,7 @@ fn set_skill_active(
 #[tauri::command]
 fn set_mcp_active(
     db: tauri::State<'_, db::DbState>,
-    tool_id: String,
+    agent_id: String,
     mcp_name: String,
     source_id: String,
     active: bool,
@@ -1180,8 +1180,8 @@ fn set_mcp_active(
     use crate::engine::resolve::expand_home;
 
     let home = dirs::home_dir().ok_or("cannot find home dir")?;
-    let manifest = crate::engine::load_manifest(&tool_id)
-        .ok_or_else(|| format!("no manifest for '{tool_id}'"))?;
+    let manifest = crate::engine::load_manifest(&agent_id)
+        .ok_or_else(|| format!("no manifest for '{agent_id}'"))?;
 
     for (idx, source) in manifest.mcp_sources.iter().enumerate() {
         let eff_id = source
@@ -1253,13 +1253,13 @@ fn set_mcp_active(
         };
         if result.is_ok() {
             let detail = format!(r#"{{"active":{active}}}"#);
-            db::log_event(&db, "mcp_toggled", &tool_id, &mcp_name, Some(&detail));
+            db::log_event(&db, "mcp_toggled", &agent_id, &mcp_name, Some(&detail));
         }
         return result;
     }
 
     Err(format!(
-        "source '{source_id}' not found in '{tool_id}' manifest"
+        "source '{source_id}' not found in '{agent_id}' manifest"
     ))
 }
 
@@ -1300,7 +1300,7 @@ fn which_in_path(bin: &str) -> bool {
 
 #[tauri::command]
 fn validate_mcp(
-    tool_id: String,
+    agent_id: String,
     name: String,
     command: Option<String>,
     url: Option<String>,
@@ -1322,7 +1322,7 @@ fn validate_mcp(
             Some("Name may only contain letters, numbers, hyphens, underscores, dots".into());
     } else if let Ok(home) = dirs::home_dir().ok_or("") {
         // Check for existing name in tool's config
-        if let Some(manifest) = crate::engine::load_manifest(&tool_id) {
+        if let Some(manifest) = crate::engine::load_manifest(&agent_id) {
             for source in &manifest.mcp_sources {
                 if let McpSourceSpec::JsonKeyPair {
                     file,
@@ -1391,7 +1391,7 @@ fn validate_mcp(
 fn add_mcp(
     app: tauri::AppHandle,
     db: tauri::State<'_, db::DbState>,
-    tool_id: String,
+    agent_id: String,
     name: String,
     command: Option<String>,
     args: Option<Vec<String>>,
@@ -1401,8 +1401,8 @@ fn add_mcp(
     use crate::engine::resolve::expand_home;
 
     let home = dirs::home_dir().ok_or("cannot find home dir")?;
-    let manifest = crate::engine::load_manifest(&tool_id)
-        .ok_or_else(|| format!("no manifest for '{tool_id}'"))?;
+    let manifest = crate::engine::load_manifest(&agent_id)
+        .ok_or_else(|| format!("no manifest for '{agent_id}'"))?;
 
     for source in &manifest.mcp_sources {
         let result = match &source.spec {
@@ -1442,7 +1442,7 @@ fn add_mcp(
         };
         if let Some(result) = result {
             if result.is_ok() {
-                db::log_event(&db, "mcp_added", &tool_id, &name, None);
+                db::log_event(&db, "mcp_added", &agent_id, &name, None);
                 let args_slice = args.as_deref().unwrap_or(&[]);
                 db::cache_mcp(&db, &name, command.as_deref(), args_slice, url.as_deref());
                 // Enrich with validated source URL in background
@@ -1455,7 +1455,7 @@ fn add_mcp(
             return result;
         }
     }
-    Err(format!("'{tool_id}' has no writable MCP source"))
+    Err(format!("'{agent_id}' has no writable MCP source"))
 }
 
 #[tauri::command]
@@ -1463,7 +1463,7 @@ fn add_mcp(
 fn remove_mcp(
     app: tauri::AppHandle,
     db: tauri::State<'_, db::DbState>,
-    tool_id: String,
+    agent_id: String,
     mcp_name: String,
     source_id: String,
     // Install data passed from frontend so we can cache without re-detecting
@@ -1475,8 +1475,8 @@ fn remove_mcp(
     use crate::engine::resolve::expand_home;
 
     let home = dirs::home_dir().ok_or("cannot find home dir")?;
-    let manifest = crate::engine::load_manifest(&tool_id)
-        .ok_or_else(|| format!("no manifest for '{tool_id}'"))?;
+    let manifest = crate::engine::load_manifest(&agent_id)
+        .ok_or_else(|| format!("no manifest for '{agent_id}'"))?;
 
     for (idx, source) in manifest.mcp_sources.iter().enumerate() {
         let eff_id = source
@@ -1514,7 +1514,7 @@ fn remove_mcp(
             _ => Err(format!("source '{source_id}' does not support MCP removal")),
         };
         if result.is_ok() {
-            db::log_event(&db, "mcp_removed", &tool_id, &mcp_name, None);
+            db::log_event(&db, "mcp_removed", &agent_id, &mcp_name, None);
             let args_slice = args.as_deref().unwrap_or(&[]);
             db::cache_mcp(
                 &db,
@@ -1538,7 +1538,7 @@ fn remove_mcp(
         return result;
     }
     Err(format!(
-        "source '{source_id}' not found in '{tool_id}' manifest"
+        "source '{source_id}' not found in '{agent_id}' manifest"
     ))
 }
 
@@ -1547,43 +1547,43 @@ fn remove_mcp(
 // ---------------------------------------------------------------------------
 
 #[tauri::command]
-fn get_permissions(tool_id: String) -> Result<permissions::ToolPermissions, String> {
+fn get_permissions(agent_id: String) -> Result<permissions::AgentPermissions, String> {
     let home = dirs::home_dir().ok_or("cannot find home dir")?;
-    let manifest = crate::engine::load_manifest(&tool_id)
-        .ok_or_else(|| format!("no manifest for '{tool_id}'"))?;
+    let manifest = crate::engine::load_manifest(&agent_id)
+        .ok_or_else(|| format!("no manifest for '{agent_id}'"))?;
     let spec = manifest
         .permissions
-        .ok_or_else(|| format!("'{tool_id}' manifest has no permissions section"))?;
+        .ok_or_else(|| format!("'{agent_id}' manifest has no permissions section"))?;
     permissions::read(&spec, &home)
 }
 
 #[tauri::command]
 fn add_permission_rule(
-    tool_id: String,
+    agent_id: String,
     rule: String,
     section: permissions::PermissionSection,
 ) -> Result<(), String> {
     let home = dirs::home_dir().ok_or("cannot find home dir")?;
-    let manifest = crate::engine::load_manifest(&tool_id)
-        .ok_or_else(|| format!("no manifest for '{tool_id}'"))?;
+    let manifest = crate::engine::load_manifest(&agent_id)
+        .ok_or_else(|| format!("no manifest for '{agent_id}'"))?;
     let spec = manifest
         .permissions
-        .ok_or_else(|| format!("'{tool_id}' manifest has no permissions section"))?;
+        .ok_or_else(|| format!("'{agent_id}' manifest has no permissions section"))?;
     permissions::add_rule(&spec, &home, &rule, section)
 }
 
 #[tauri::command]
 fn remove_permission_rule(
-    tool_id: String,
+    agent_id: String,
     rule: String,
     section: permissions::PermissionSection,
 ) -> Result<(), String> {
     let home = dirs::home_dir().ok_or("cannot find home dir")?;
-    let manifest = crate::engine::load_manifest(&tool_id)
-        .ok_or_else(|| format!("no manifest for '{tool_id}'"))?;
+    let manifest = crate::engine::load_manifest(&agent_id)
+        .ok_or_else(|| format!("no manifest for '{agent_id}'"))?;
     let spec = manifest
         .permissions
-        .ok_or_else(|| format!("'{tool_id}' manifest has no permissions section"))?;
+        .ok_or_else(|| format!("'{agent_id}' manifest has no permissions section"))?;
     permissions::remove_rule(&spec, &home, &rule, section)
 }
 
@@ -1666,7 +1666,7 @@ fn get_mcp_install_state(command: String, args: Vec<String>) -> NpmInstallState 
 #[tauri::command]
 async fn install_mcp_npm(
     app: tauri::AppHandle,
-    tool_id: String,
+    agent_id: String,
     mcp_name: String,
     package_name: String,
 ) -> Result<String, String> {
@@ -1676,13 +1676,13 @@ async fn install_mcp_npm(
         version, package_name
     );
     let db = app.state::<db::DbState>();
-    db::log_event(&db, "mcp_npm_installed", &tool_id, &mcp_name, Some(&detail));
+    db::log_event(&db, "mcp_npm_installed", &agent_id, &mcp_name, Some(&detail));
 
     // Clear the doctor "pkg-missing" notification now that the package is installed.
-    let dedup_key = format!("doctor:mcp:{}:{}:pkg-missing", tool_id, mcp_name);
+    let dedup_key = format!("doctor:mcp:{}:{}:pkg-missing", agent_id, mcp_name);
     db::dismiss_by_dedup_key(&db, &dedup_key);
 
-    let _ = app.emit("tools-changed", ());
+    let _ = app.emit("agents-changed", ());
     let _ = app.emit("notifications-changed", ());
     Ok(version)
 }
@@ -1716,7 +1716,7 @@ struct AuditEvent {
     id: i64,
     ts_ms: i64,
     event_type: String,
-    tool_id: String,
+    agent_id: String,
     item_name: String,
     detail: Option<String>,
 }
@@ -1730,7 +1730,7 @@ fn get_audit_log(
     let limit = limit.unwrap_or(200);
     let mut stmt = conn
         .prepare(
-            "SELECT id, ts_ms, event_type, tool_id, item_name, detail
+            "SELECT id, ts_ms, event_type, agent_id, item_name, detail
              FROM audit_events ORDER BY id DESC LIMIT ?1",
         )
         .map_err(|e| e.to_string())?;
@@ -1740,7 +1740,7 @@ fn get_audit_log(
                 id: row.get(0)?,
                 ts_ms: row.get(1)?,
                 event_type: row.get(2)?,
-                tool_id: row.get(3)?,
+                agent_id: row.get(3)?,
                 item_name: row.get(4)?,
                 detail: row.get(5)?,
             })
@@ -1909,16 +1909,16 @@ pub fn run() {
                 }
             }
 
-            // Start FSEvents file watcher — emits "tools-changed" to frontend
+            // Start FSEvents file watcher — emits "agents-changed" to frontend
             watcher::start(app.handle().clone());
 
             // Initial Doctor run — detect missing MCP binaries
             {
                 let app_bg = app.handle().clone();
                 std::thread::spawn(move || {
-                    let tools = detectors::detect_all();
+                    let agents = detectors::detect_all();
                     let db = app_bg.state::<db::DbState>();
-                    doctor::run(&tools, &db, &app_bg);
+                    doctor::run(&agents, &db, &app_bg);
                 });
             }
 
@@ -1931,7 +1931,7 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
-            get_tools,
+            get_agents,
             get_skill_full_description,
             hide_window,
             get_version,
@@ -1947,7 +1947,7 @@ pub fn run() {
             open_url,
             warm_skill_cache,
             get_skill_cache_status,
-            add_skill_to_tool,
+            add_skill_to_agent,
             warm_mcp_cache,
             get_all_cached_mcps,
             create_skill,

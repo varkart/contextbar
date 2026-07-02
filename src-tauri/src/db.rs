@@ -56,7 +56,7 @@ fn migrate(conn: &mut Connection) -> Result<(), AppError> {
                 id         INTEGER PRIMARY KEY AUTOINCREMENT,
                 ts_ms      INTEGER NOT NULL,
                 event_type TEXT    NOT NULL,
-                tool_id    TEXT    NOT NULL,
+                agent_id    TEXT    NOT NULL,
                 item_name  TEXT    NOT NULL,
                 detail     TEXT
             );
@@ -308,15 +308,15 @@ fn now_ms() -> i64 {
 pub fn log_event(
     state: &DbState,
     event_type: &str,
-    tool_id: &str,
+    agent_id: &str,
     item_name: &str,
     detail: Option<&str>,
 ) {
     let Ok(conn) = state.0.lock() else { return };
     let _ = conn.execute(
-        "INSERT INTO audit_events (ts_ms, event_type, tool_id, item_name, detail)
+        "INSERT INTO audit_events (ts_ms, event_type, agent_id, item_name, detail)
          VALUES (?1, ?2, ?3, ?4, ?5)",
-        rusqlite::params![now_ms(), event_type, tool_id, item_name, detail],
+        rusqlite::params![now_ms(), event_type, agent_id, item_name, detail],
     );
 }
 

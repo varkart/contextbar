@@ -1,9 +1,9 @@
 import { render, screen, fireEvent } from '@testing-library/react'
 import { describe, it, expect, vi } from 'vitest'
-import ProviderChips from '../ProviderChips'
-import type { AiTool } from '../../types'
+import AgentChips from '../AgentChips'
+import type { Agent } from '../../types'
 
-function makeTools(ids: string[]): AiTool[] {
+function makeTools(ids: string[]): Agent[] {
   return ids.map(id => ({
     id,
     name: id.charAt(0).toUpperCase() + id.slice(1),
@@ -15,11 +15,11 @@ function makeTools(ids: string[]): AiTool[] {
   }))
 }
 
-describe('ProviderChips', () => {
+describe('AgentChips', () => {
   it('renders nothing when only one installed tool', () => {
     const { container } = render(
-      <ProviderChips
-        installedTools={makeTools(['claude'])}
+      <AgentChips
+        installedAgents={makeTools(['claude'])}
         selectedTools={new Set(['claude'])}
         onToggle={vi.fn()}
       />
@@ -30,8 +30,8 @@ describe('ProviderChips', () => {
   it('renders a chip for each installed tool', () => {
     const tools = makeTools(['claude', 'cursor', 'gemini'])
     render(
-      <ProviderChips
-        installedTools={tools}
+      <AgentChips
+        installedAgents={tools}
         selectedTools={new Set(tools.map(t => t.id))}
         onToggle={vi.fn()}
       />
@@ -45,8 +45,8 @@ describe('ProviderChips', () => {
     const tools = makeTools(['claude', 'cursor'])
     const onToggle = vi.fn()
     render(
-      <ProviderChips
-        installedTools={tools}
+      <AgentChips
+        installedAgents={tools}
         selectedTools={new Set(tools.map(t => t.id))}
         onToggle={onToggle}
       />
@@ -59,8 +59,8 @@ describe('ProviderChips', () => {
   it('unselected chip has opacity-50', () => {
     const tools = makeTools(['claude', 'cursor'])
     render(
-      <ProviderChips
-        installedTools={tools}
+      <AgentChips
+        installedAgents={tools}
         selectedTools={new Set(['claude'])}
         onToggle={vi.fn()}
       />
@@ -72,8 +72,8 @@ describe('ProviderChips', () => {
   it('selected chip does not have opacity-50', () => {
     const tools = makeTools(['claude', 'cursor'])
     render(
-      <ProviderChips
-        installedTools={tools}
+      <AgentChips
+        installedAgents={tools}
         selectedTools={new Set(['claude', 'cursor'])}
         onToggle={vi.fn()}
       />

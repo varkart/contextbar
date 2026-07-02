@@ -2,18 +2,18 @@ import { useState, useEffect, useRef } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import type { Skill, FileEntry, AiTool } from '../types'
+import type { Skill, FileEntry, Agent } from '../types'
 import { capture, captureException } from '../analytics'
 import { SkillInstalledOn } from './InstalledOnSection'
-import { TOOL_COLORS } from '../constants/toolColors'
+import { AGENT_COLORS } from '../constants/agentColors'
 
 interface SkillDetailPanelProps {
   skill: Skill
   onBack: () => void
-  toolName?: string
-  toolId?: string
+  agentName?: string
+  agentId?: string
   onToggled?: () => void
-  allTools?: AiTool[]
+  allAgents?: Agent[]
   /** All variants of this skill across tools (same name, possibly different content). */
   variants?: Skill[]
 }
@@ -128,7 +128,7 @@ const ChevronLeft = () => (
   </svg>
 )
 
-export default function SkillDetailPanel({ skill: initialSkill, toolId, onToggled, allTools, variants }: SkillDetailPanelProps) {
+export default function SkillDetailPanel({ skill: initialSkill, agentId, onToggled, allAgents, variants }: SkillDetailPanelProps) {
   // Variant switcher — active skill may change if user picks a different variant
   const hasVariants = variants && variants.length > 1 &&
     new Set(variants.map(v => v.contentHash).filter(Boolean)).size > 1
@@ -136,11 +136,11 @@ export default function SkillDetailPanel({ skill: initialSkill, toolId, onToggle
   const skill = hasVariants ? activeVariant : initialSkill
 
   // Which provider row is selected — determines which path shows at the bottom
-  const initialToolId = toolId ?? initialSkill.toolId ?? ''
-  const [selectedPathToolId, setSelectedPathToolId] = useState<string>(initialToolId)
+  const initialAgentId = agentId ?? initialSkill.agentId ?? ''
+  const [selectedPathAgentId, setSelectedPathToolId] = useState<string>(initialAgentId)
 
   // Derive path to display from the selected provider's variant
-  const displayedSkill = variants?.find(v => v.toolId === selectedPathToolId) ?? skill
+  const displayedSkill = variants?.find(v => v.agentId === selectedPathAgentId) ?? skill
   const displayedPath = displayedSkill.path
   const displayedSourceUrl = displayedSkill.sourceUrl ?? skill.sourceUrl
 
@@ -211,7 +211,7 @@ export default function SkillDetailPanel({ skill: initialSkill, toolId, onToggle
         <div className="flex items-center gap-1.5 px-4 py-2 border-b border-[var(--c-border)] bg-[var(--c-surface)]/40 flex-shrink-0 flex-wrap">
           <span className="text-[11px] text-[var(--c-text-3)] flex-shrink-0">Variant:</span>
           {variants.map(v => {
-            const colors = TOOL_COLORS[v.toolId ?? ''] ?? { bg: 'bg-zinc-500/15', text: 'text-zinc-400' }
+            const colors = AGENT_COLORS[v.agentId ?? ''] ?? { bg: 'bg-zinc-500/15', text: 'text-zinc-400' }
             const selected = v.path === activeVariant.path
             return (
               <button
@@ -223,7 +223,7 @@ export default function SkillDetailPanel({ skill: initialSkill, toolId, onToggle
                     : 'bg-transparent text-[var(--c-text-3)] border-[var(--c-border)] hover:text-[var(--c-text-2)]'
                 }`}
               >
-                {v.toolName ?? v.toolId}
+                {v.agentName ?? v.agentId}
               </button>
             )
           })}
@@ -252,14 +252,14 @@ export default function SkillDetailPanel({ skill: initialSkill, toolId, onToggle
         )}
 
         {/* Installed on */}
-        {allTools && (
+        {allAgents && (
           <SkillInstalledOn
             skill={skill}
-            currentToolId={toolId ?? skill.toolId ?? ''}
-            allTools={allTools}
+            currentAgentId={agentId ?? skill.agentId ?? ''}
+            allAgents={allAgents}
             onInstalled={async () => { await onToggled?.() }}
             onSelectForPath={tool => setSelectedPathToolId(tool.id)}
-            selectedToolId={selectedPathToolId}
+            selectedAgentId={selectedPathAgentId}
           />
         )}
 

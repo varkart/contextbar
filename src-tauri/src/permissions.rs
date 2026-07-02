@@ -3,16 +3,16 @@ use crate::engine::resolve::expand_home;
 
 #[derive(Default, Debug, Clone, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ToolPermissions {
+pub struct AgentPermissions {
     pub allow: Vec<String>,
     pub deny: Vec<String>,
 }
 
 /// Read the allow/deny lists from the tool's permissions file.
-pub fn read(spec: &PermissionsSpec, home: &std::path::Path) -> Result<ToolPermissions, String> {
+pub fn read(spec: &PermissionsSpec, home: &std::path::Path) -> Result<AgentPermissions, String> {
     let path = expand_home(&spec.file, home);
     if !path.exists() {
-        return Ok(ToolPermissions::default());
+        return Ok(AgentPermissions::default());
     }
 
     let raw = std::fs::read_to_string(&path)
@@ -22,7 +22,7 @@ pub fn read(spec: &PermissionsSpec, home: &std::path::Path) -> Result<ToolPermis
 
     let perms = json.get(&spec.key).cloned().unwrap_or_default();
 
-    Ok(ToolPermissions {
+    Ok(AgentPermissions {
         allow: extract_string_list(&perms, "allow"),
         deny: extract_string_list(&perms, "deny"),
     })

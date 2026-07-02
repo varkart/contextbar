@@ -53,7 +53,7 @@ export default function Footer({ lastUpdated, onRefresh, loading, cloudSyncing }
         onClick={onRefresh}
         disabled={loading}
         className="text-[var(--c-text-3)] hover:text-[var(--c-text-2)] disabled:opacity-30 disabled:cursor-not-allowed transition-colors p-1 -ml-1 rounded"
-        aria-label="Refresh tools"
+        aria-label="Refresh agents"
         title="Refresh"
       >
         <RefreshIcon spinning={loading} />

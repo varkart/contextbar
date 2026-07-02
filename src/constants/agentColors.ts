@@ -1,4 +1,4 @@
-export const TOOL_COLORS: Record<string, { bg: string; text: string }> = {
+export const AGENT_COLORS: Record<string, { bg: string; text: string }> = {
   claude:   { bg: 'bg-orange-500/10',   text: 'text-orange-500'  },
   cursor:   { bg: 'bg-sky-500/10',      text: 'text-sky-500'     },
   gemini:   { bg: 'bg-blue-500/10',     text: 'text-blue-500'    },

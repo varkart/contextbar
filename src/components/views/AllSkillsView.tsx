@@ -1,12 +1,12 @@
 import { useState, useMemo } from 'react'
-import type { AiTool, Skill } from '../../types'
-import ToolDot from '../ToolDot'
-import ProviderChips from '../ProviderChips'
+import type { Agent, Skill } from '../../types'
+import AgentDot from '../AgentDot'
+import AgentChips from '../AgentChips'
 import SearchInput from '../SearchInput'
-import { useProviderFilter } from '../../hooks/useProviderFilter'
+import { useAgentFilter } from '../../hooks/useAgentFilter'
 
 interface Props {
-  tools: AiTool[]
+  agents: Agent[]
   onBack: () => void
   onSelectSkill: (skill: Skill) => void
   onAddSkill?: () => void
@@ -23,9 +23,9 @@ interface SkillGroup {
   variants: SkillVariant[]
 }
 
-function buildGroups(tools: AiTool[]): SkillGroup[] {
+function buildGroups(agents: Agent[]): SkillGroup[] {
   const map = new Map<string, SkillVariant[]>()
-  for (const tool of tools) {
+  for (const tool of agents) {
     if (!tool.installed) continue
     for (const skill of tool.skills) {
       const key = skill.name.toLowerCase()
@@ -42,10 +42,10 @@ function buildGroups(tools: AiTool[]): SkillGroup[] {
   return groups.sort((a, b) => a.name.localeCompare(b.name))
 }
 
-export default function AllSkillsView({ tools, onSelectSkill, onAddSkill }: Props) {
+export default function AllSkillsView({ agents, onSelectSkill, onAddSkill }: Props) {
   const [query, setQuery] = useState('')
-  const { installedTools, selectedTools, toggleTool, allSelected } = useProviderFilter(tools)
-  const groups = useMemo(() => buildGroups(tools), [tools])
+  const { installedAgents, selectedTools, toggleTool, allSelected } = useAgentFilter(agents)
+  const groups = useMemo(() => buildGroups(agents), [agents])
 
   const filtered = useMemo(() => {
     let result = query.trim()
@@ -90,7 +90,7 @@ export default function AllSkillsView({ tools, onSelectSkill, onAddSkill }: Prop
         <SearchInput value={query} onChange={setQuery} placeholder="Search skills…" accentColor="indigo" />
       </div>
 
-      <ProviderChips installedTools={installedTools} selectedTools={selectedTools} onToggle={toggleTool} />
+      <AgentChips installedAgents={installedAgents} selectedTools={selectedTools} onToggle={toggleTool} />
 
       <div className="flex-1 overflow-y-auto">
         {filtered.length === 0 && (
@@ -115,7 +115,7 @@ export default function AllSkillsView({ tools, onSelectSkill, onAddSkill }: Prop
               )}
               <div className="flex gap-1 mt-1">
                 {group.variants.map(v => (
-                  <ToolDot key={v.toolId + v.path} toolId={v.toolId} toolName={v.toolName} />
+                  <AgentDot key={v.toolId + v.path} toolId={v.toolId} toolName={v.toolName} />
                 ))}
               </div>
             </div>

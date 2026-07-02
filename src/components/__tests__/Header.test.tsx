@@ -4,15 +4,15 @@ import Header from '../Header'
 
 const defaultProps = {
   view: 'main' as const,
-  selectedTool: null,
+  selectedAgent: null,
   selectedSkill: null,
   selectedMcp: null,
-  skillBackView: 'tool-detail' as const,
-  mcpBackView: 'tool-detail' as const,
-  allSkillsBackView: 'tool-detail' as const,
-  allMcpsBackView: 'tool-detail' as const,
+  skillBackView: 'agent-detail' as const,
+  mcpBackView: 'agent-detail' as const,
+  allSkillsBackView: 'agent-detail' as const,
+  allMcpsBackView: 'agent-detail' as const,
   goTo: vi.fn(),
-  openLlmsList: vi.fn(),
+  openAgentsList: vi.fn(),
   onSettingsClick: vi.fn(),
   onNotificationsClick: vi.fn(),
 }

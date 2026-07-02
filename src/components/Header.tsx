@@ -1,4 +1,4 @@
-import type { AiTool, Skill, McpServer } from '../types'
+import type { Agent, Skill, McpServer } from '../types'
 import type { View } from '../viewRouter'
 
 interface BreadcrumbSegment {
@@ -8,7 +8,7 @@ interface BreadcrumbSegment {
 
 function buildBreadcrumbs(
   view: View,
-  selectedTool: AiTool | null,
+  selectedAgent: Agent | null,
   selectedSkill: Skill | null,
   selectedMcp: McpServer | null,
   skillBackView: View,
@@ -16,23 +16,23 @@ function buildBreadcrumbs(
   allSkillsBackView: View,
   allMcpsBackView: View,
   goTo: (v: View) => void,
-  openLlmsList: () => void,
+  openAgentsList: () => void,
 ): BreadcrumbSegment[] {
-  const providers: BreadcrumbSegment = { label: 'Providers', onClick: () => openLlmsList() }
+  const providers: BreadcrumbSegment = { label: 'Providers', onClick: () => openAgentsList() }
   const toolCrumb = (clickable = true): BreadcrumbSegment => ({
-    label: selectedTool?.name ?? '…',
-    onClick: clickable ? () => goTo('tool-detail') : undefined,
+    label: selectedAgent?.name ?? '…',
+    onClick: clickable ? () => goTo('agent-detail') : undefined,
   })
 
   switch (view) {
     case 'main':
       return []
 
-    case 'llms-list':
+    case 'agents-list':
       return [{ label: 'Providers' }]
 
-    case 'tool-detail':
-      return [providers, { label: selectedTool?.name ?? '…' }]
+    case 'agent-detail':
+      return [providers, { label: selectedAgent?.name ?? '…' }]
 
     case 'skills-list':
       return [toolCrumb(), { label: 'Skills' }]
@@ -41,13 +41,13 @@ function buildBreadcrumbs(
       return [toolCrumb(), { label: 'MCPs' }]
 
     case 'all-skills-list':
-      if (allSkillsBackView === 'tool-detail' && selectedTool) {
+      if (allSkillsBackView === 'agent-detail' && selectedAgent) {
         return [providers, toolCrumb(), { label: 'All Skills' }]
       }
       return [{ label: 'All Skills' }]
 
     case 'all-mcps-list':
-      if (allMcpsBackView === 'tool-detail' && selectedTool) {
+      if (allMcpsBackView === 'agent-detail' && selectedAgent) {
         return [providers, toolCrumb(), { label: 'All MCPs' }]
       }
       return [{ label: 'All MCPs' }]
@@ -117,7 +117,7 @@ function GearIcon() {
 
 export interface HeaderProps {
   view: View
-  selectedTool: AiTool | null
+  selectedAgent: Agent | null
   selectedSkill: Skill | null
   selectedMcp: McpServer | null
   skillBackView: View
@@ -125,7 +125,7 @@ export interface HeaderProps {
   allSkillsBackView: View
   allMcpsBackView: View
   goTo: (view: View) => void
-  openLlmsList: () => void
+  openAgentsList: () => void
   updateAvailable?: boolean
   notificationCount?: number
   onSettingsClick: () => void
@@ -134,7 +134,7 @@ export interface HeaderProps {
 
 export default function Header({
   view,
-  selectedTool,
+  selectedAgent,
   selectedSkill,
   selectedMcp,
   skillBackView,
@@ -142,15 +142,15 @@ export default function Header({
   allSkillsBackView,
   allMcpsBackView,
   goTo,
-  openLlmsList,
+  openAgentsList,
   updateAvailable,
   notificationCount,
   onSettingsClick,
   onNotificationsClick,
 }: HeaderProps) {
   const crumbs = buildBreadcrumbs(
-    view, selectedTool, selectedSkill, selectedMcp,
-    skillBackView, mcpBackView, allSkillsBackView, allMcpsBackView, goTo, openLlmsList,
+    view, selectedAgent, selectedSkill, selectedMcp,
+    skillBackView, mcpBackView, allSkillsBackView, allMcpsBackView, goTo, openAgentsList,
   )
   const hasNotifications = (notificationCount ?? 0) > 0
 

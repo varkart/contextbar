@@ -1,14 +1,14 @@
 import { render, screen, fireEvent } from '@testing-library/react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import ToolDetailPage from '../ToolDetailPage'
-import type { AiTool } from '../../types'
+import AgentDetailPage from '../AgentDetailPage'
+import type { Agent } from '../../types'
 
 vi.mock('../../analytics', () => ({
   capture: vi.fn(),
   captureException: vi.fn(),
 }))
 
-const mockTool: AiTool = {
+const mockAgent: Agent = {
   id: 'claude',
   name: 'Claude Code',
   version: '1.0.0',
@@ -24,35 +24,35 @@ const mockTool: AiTool = {
 }
 
 const defaultProps = {
-  tool: mockTool,
+  agent: mockAgent,
   onBack: vi.fn(),
   onSelectSkill: vi.fn(),
   onSelectMcp: vi.fn(),
   onSelectPermissions: vi.fn(),
   onOpenSkillsPage: vi.fn(),
   onOpenMcpsPage: vi.fn(),
-  onToolUpdated: vi.fn(),
+  onAgentUpdated: vi.fn(),
 }
 
 beforeEach(() => {
   vi.clearAllMocks()
 })
 
-describe('ToolDetailPage', () => {
+describe('AgentDetailPage', () => {
   it('renders both active and disabled skills', () => {
-    render(<ToolDetailPage {...defaultProps} />)
+    render(<AgentDetailPage {...defaultProps} />)
     expect(screen.getByText('impeccable')).toBeInTheDocument()
     expect(screen.getByText('graphify')).toBeInTheDocument()
   })
 
   it('clicking a skill calls onSelectSkill', () => {
-    render(<ToolDetailPage {...defaultProps} />)
+    render(<AgentDetailPage {...defaultProps} />)
     fireEvent.click(screen.getByText('impeccable'))
-    expect(defaultProps.onSelectSkill).toHaveBeenCalledWith(mockTool.skills[0])
+    expect(defaultProps.onSelectSkill).toHaveBeenCalledWith(mockAgent.skills[0])
   })
 
   it('no inline toggle buttons in list — enable/disable only from detail page', () => {
-    render(<ToolDetailPage {...defaultProps} />)
+    render(<AgentDetailPage {...defaultProps} />)
     expect(screen.queryByRole('button', { name: /disable skill/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /enable skill/i })).not.toBeInTheDocument()
   })

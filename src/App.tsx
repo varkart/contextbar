@@ -1,10 +1,10 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { invoke } from '@tauri-apps/api/core'
-import { searchTools } from './search'
+import { searchAgents } from './search'
 import { useUpdateCheck } from './useUpdateCheck'
-import { useToolsDiff } from './useToolsDiff'
+import { useAgentsDiff } from './useAgentsDiff'
 import { useTheme } from './useTheme'
-import { useTools } from './useTools'
+import { useAgents } from './useAgents'
 import { useNotifications } from './useNotifications'
 import { useViewRouter } from './useViewRouter'
 import { capture } from './analytics'
@@ -18,7 +18,7 @@ const isE2E = !!(globalThis as Record<string, unknown>).__skipSplash
 
 export default function App() {
   const routerProps = useViewRouter()
-  const { view, selectedTool, selectedSkill, selectedMcp, skillBackView, mcpBackView, allSkillsBackView, allMcpsBackView, refreshSelected, escape, goTo, openLlmsList } = routerProps
+  const { view, selectedAgent, selectedSkill, selectedMcp, skillBackView, mcpBackView, allSkillsBackView, allMcpsBackView, refreshSelected, escape, goTo, openAgentsList } = routerProps
 
   const [version, setVersion] = useState('')
   const { theme, setTheme } = useTheme()
@@ -29,13 +29,13 @@ export default function App() {
   const [backendReady, setBackendReady] = useState(false)
   const [query, setQuery] = useState('')
 
-  const { tools, loading, cloudSyncing, lastUpdated, fetchTools } = useTools()
+  const { agents, loading, cloudSyncing, lastUpdated, fetchAgents } = useAgents()
   const { notifications, fetchNotifications } = useNotifications()
 
   const handleFetchTools = useCallback(async () => {
-    const fresh = await fetchTools()
+    const fresh = await fetchAgents()
     refreshSelected(fresh)
-  }, [fetchTools, refreshSelected])
+  }, [fetchAgents, refreshSelected])
 
   useEffect(() => {
     invoke<string>('get_version').then(setVersion).catch(() => setVersion('0.5.0'))
@@ -68,7 +68,7 @@ export default function App() {
   }, [loading, backendReady])
 
   const updateInfo = useUpdateCheck(version)
-  useToolsDiff()
+  useAgentsDiff()
 
   useEffect(() => {
     if (view === 'settings') capture('settings_opened')
@@ -88,8 +88,8 @@ export default function App() {
     return () => window.removeEventListener('keydown', handler)
   }, [escape])
 
-  const installedTools = useMemo(() => tools.filter(t => t.installed), [tools])
-  const searchResults = useMemo(() => searchTools(installedTools, query), [installedTools, query])
+  const installedAgents = useMemo(() => agents.filter(t => t.installed), [agents])
+  const searchResults = useMemo(() => searchAgents(installedAgents, query), [installedAgents, query])
 
   return (
     <div className="w-[380px] h-[520px] bg-[var(--c-bg)] text-[var(--c-text)] flex flex-col overflow-hidden">
@@ -104,7 +104,7 @@ export default function App() {
       )}
       <Header
         view={view}
-        selectedTool={selectedTool}
+        selectedAgent={selectedAgent}
         selectedSkill={selectedSkill}
         selectedMcp={selectedMcp}
         skillBackView={skillBackView}
@@ -112,7 +112,7 @@ export default function App() {
         allSkillsBackView={allSkillsBackView}
         allMcpsBackView={allMcpsBackView}
         goTo={goTo}
-        openLlmsList={openLlmsList}
+        openAgentsList={openAgentsList}
         updateAvailable={!!updateInfo}
         notificationCount={notifications.length}
         onSettingsClick={() => goTo('settings')}
@@ -124,8 +124,8 @@ export default function App() {
           query={query}
           setQuery={setQuery}
           loading={loading}
-          tools={tools}
-          installedTools={installedTools}
+          agents={agents}
+          installedAgents={installedAgents}
           searchResults={searchResults}
           notifications={notifications}
           updateInfo={updateInfo}

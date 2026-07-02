@@ -1,8 +1,8 @@
 import { useState, useMemo } from 'react'
-import type { AiTool } from '../types'
+import type { Agent } from '../types'
 
-export function useProviderFilter(tools: AiTool[]) {
-  const installedTools = useMemo(() => tools.filter(t => t.installed), [tools])
+export function useAgentFilter(tools: Agent[]) {
+  const installedAgents = useMemo(() => tools.filter(t => t.installed), [tools])
   const [selectedTools, setSelectedTools] = useState<Set<string>>(
     () => new Set(tools.filter(t => t.installed).map(t => t.id))
   )
@@ -16,7 +16,7 @@ export function useProviderFilter(tools: AiTool[]) {
     })
   }
 
-  const allSelected = selectedTools.size === installedTools.length
+  const allSelected = selectedTools.size === installedAgents.length
 
-  return { installedTools, selectedTools, toggleTool, allSelected }
+  return { installedAgents, selectedTools, toggleTool, allSelected }
 }

@@ -1,20 +1,20 @@
 import { useState } from 'react';
 import React from 'react';
-import type { AiTool, Notification } from '../../types';
-import ToolDot from '../ToolDot';
+import type { Agent, Notification } from '../../types';
+import AgentDot from '../AgentDot';
 
 interface MainViewProps {
   loading: boolean;
-  tools: AiTool[];
-  installedTools: AiTool[];
+  agents: Agent[];
+  installedAgents: Agent[];
   searchResults: any[];
   notifications: Notification[];
   updateInfo: any;
   lastUpdated: Date | null;
   cloudSyncing: boolean;
-  onFetchTools: () => Promise<void>;
+  onFetchAgents: () => Promise<void>;
   onGoTo: (view: any) => void;
-  onOpenLlmsList: () => void;
+  onOpenAgentsList: () => void;
   onOpenSkillsPage: () => void;
   onOpenMcpsPage: () => void;
 }
@@ -128,8 +128,8 @@ interface RowConfig {
   accentBg: string;       // icon bg
   icon: () => React.ReactElement;
   countLabel: (n: number) => string;
-  activeCount: (tools: AiTool[]) => number;
-  totalCount: (tools: AiTool[]) => number;
+  activeCount: (agents: Agent[]) => number;
+  totalCount: (agents: Agent[]) => number;
 }
 
 const ROWS: RowConfig[] = [
@@ -137,7 +137,7 @@ const ROWS: RowConfig[] = [
     key: 'default',
     label: 'Coding Agents',
     subdesc: null,
-    expandHdr: 'Detected AI coding tools',
+    expandHdr: 'Detected AI coding agents',
     bullets: [
       { text: 'Claude Code, Cursor, Windsurf, Copilot, Gemini CLI and more' },
       { text: 'Auto-detected from config dirs — no setup required' },
@@ -148,8 +148,8 @@ const ROWS: RowConfig[] = [
     accentBg: 'bg-emerald-500/10',
     icon: NeuronIcon,
     countLabel: (n) => `${n} agent${n === 1 ? '' : 's'}`,
-    totalCount: (tools) => tools.length,
-    activeCount: (tools) => tools.filter(t => t.installed).length,
+    totalCount: (agents) => agents.length,
+    activeCount: (agents) => agents.filter(t => t.installed).length,
   },
   {
     key: 'skills',
@@ -166,13 +166,13 @@ const ROWS: RowConfig[] = [
     accentBg: 'bg-indigo-500/10',
     icon: ScrollIcon,
     countLabel: (n) => `${n} skill${n === 1 ? '' : 's'}`,
-    totalCount: (tools) => tools.reduce((s, t) => s + t.skills.length, 0),
-    activeCount: (tools) => tools.reduce((s, t) => s + t.skills.filter(sk => sk.active).length, 0),
+    totalCount: (agents) => agents.reduce((s, t) => s + t.skills.length, 0),
+    activeCount: (agents) => agents.reduce((s, t) => s + t.skills.filter(sk => sk.active).length, 0),
   },
   {
     key: 'mcps',
     label: 'MCPs',
-    subdesc: 'Connect agents to external tools',
+    subdesc: 'Connect agents to external agents',
     expandHdr: 'Tools agents can call mid-task',
     bullets: [
       { text: 'File access, APIs, databases, GitHub, shell commands' },
@@ -184,18 +184,18 @@ const ROWS: RowConfig[] = [
     accentBg: 'bg-violet-500/10',
     icon: NetworkIcon,
     countLabel: (n) => `${n} server${n === 1 ? '' : 's'}`,
-    totalCount: (tools) => tools.reduce((s, t) => s + t.mcps.length, 0),
-    activeCount: (tools) => tools.reduce((s, t) => s + t.mcps.filter(m => m.active).length, 0),
+    totalCount: (agents) => agents.reduce((s, t) => s + t.mcps.length, 0),
+    activeCount: (agents) => agents.reduce((s, t) => s + t.mcps.filter(m => m.active).length, 0),
   },
 ];
 
 // ── Tool dots ─────────────────────────────────────────────────
 
-function ToolDots({ tools }: { tools: AiTool[] }) {
+function AgentDots({ agents }: { agents: Agent[] }) {
   return (
     <div className="flex items-center gap-1.5 flex-wrap">
-      {tools.map(t => (
-        <ToolDot key={t.id} toolId={t.id} toolName={t.name} size="md" />
+      {agents.map(t => (
+        <AgentDot key={t.id} toolId={t.id} toolName={t.name} size="md" />
       ))}
     </div>
   );
@@ -205,18 +205,18 @@ function ToolDots({ tools }: { tools: AiTool[] }) {
 
 function TileRow({
   row,
-  tools,
+  agents,
   loading,
   onClick,
 }: {
   row: RowConfig;
-  tools: AiTool[];
+  agents: Agent[];
   loading: boolean;
   onClick: () => void;
 }) {
   const [expanded, setExpanded] = useState(false);
-  const total = row.totalCount(tools);
-  const active = row.activeCount(tools);
+  const total = row.totalCount(agents);
+  const active = row.activeCount(agents);
 
   return (
     <button
@@ -292,15 +292,15 @@ function TileRow({
 
 export default function MainView({
   loading,
-  installedTools,
-  onOpenLlmsList,
+  installedAgents,
+  onOpenAgentsList,
   onOpenSkillsPage,
   onOpenMcpsPage,
 }: MainViewProps) {
   return (
     <div className="flex flex-col h-full">
       <div className="flex-1 overflow-y-auto flex flex-col gap-2.5 p-3">
-        {/* detected tools row */}
+        {/* detected agents row */}
         <div className="flex items-center gap-2 px-0.5">
           <span className="text-[10px] text-[var(--c-text-3)] uppercase tracking-wider flex-shrink-0">Detected</span>
           {loading ? (
@@ -309,10 +309,10 @@ export default function MainView({
                 <div key={i} className="w-[22px] h-[22px] rounded bg-[var(--c-skeleton)] animate-pulse" />
               ))}
             </div>
-          ) : installedTools.length > 0 ? (
-            <ToolDots tools={installedTools} />
+          ) : installedAgents.length > 0 ? (
+            <AgentDots agents={installedAgents} />
           ) : (
-            <span className="text-[12px] text-[var(--c-text-3)]">No tools detected</span>
+            <span className="text-[12px] text-[var(--c-text-3)]">No agents detected</span>
           )}
         </div>
 
@@ -322,12 +322,12 @@ export default function MainView({
             <TileRow
               key={row.key}
               row={row}
-              tools={installedTools}
+              agents={installedAgents}
               loading={loading}
               onClick={() =>
                 row.key === 'skills' ? onOpenSkillsPage()
                 : row.key === 'mcps' ? onOpenMcpsPage()
-                : onOpenLlmsList()
+                : onOpenAgentsList()
               }
             />
           ))}

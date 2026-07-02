@@ -1,21 +1,21 @@
 import { useState, useRef, useCallback } from 'react'
 import type React from 'react'
-import type { AiTool, Skill } from '../types'
+import type { Agent, Skill } from '../types'
 import { useRovingFocus } from '../useRovingFocus'
 
 interface SkillsListPanelProps {
-  tool: AiTool
+  agent: Agent
   onBack: () => void
   onSelectSkill: (skill: Skill) => void
   onAddSkill: () => void
 }
 
-export default function SkillsListPanel({ tool, onSelectSkill, onAddSkill }: SkillsListPanelProps) {
+export default function SkillsListPanel({ agent, onSelectSkill, onAddSkill }: SkillsListPanelProps) {
   const [q, setQ] = useState('')
   const filterInputRef = useRef<HTMLInputElement | null>(null)
   const filtered = q
-    ? tool.skills.filter(s => s.name.toLowerCase().includes(q.toLowerCase()))
-    : tool.skills
+    ? agent.skills.filter(s => s.name.toLowerCase().includes(q.toLowerCase()))
+    : agent.skills
 
   const { getItemProps, setFocusedIndex } = useRovingFocus({
     count: filtered.length,

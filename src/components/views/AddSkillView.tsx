@@ -1,11 +1,11 @@
 import { useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { capture, captureException } from '../../analytics';
-import { TOOL_COLORS } from '../../constants/toolColors';
-import type { AiTool } from '../../types';
+import { AGENT_COLORS } from '../../constants/agentColors';
+import type { Agent } from '../../types';
 
 interface AddSkillViewProps {
-  installedTools: AiTool[];
+  installedAgents: Agent[];
   onBack: () => void;
   onCreated: () => void;
 }
@@ -13,12 +13,12 @@ interface AddSkillViewProps {
 type SourceType = 'template' | 'url' | 'local';
 
 
-function ToolMultiSelect({
+function AgentMultiSelect({
   tools,
   selected,
   onChange,
 }: {
-  tools: AiTool[];
+  tools: Agent[];
   selected: Set<string>;
   onChange: (ids: Set<string>) => void;
 }) {
@@ -36,7 +36,7 @@ function ToolMultiSelect({
       </label>
       <div className="flex flex-wrap gap-2">
         {tools.map(tool => {
-          const colors = TOOL_COLORS[tool.id] ?? { bg: 'bg-zinc-500/10', text: 'text-zinc-500' };
+          const colors = AGENT_COLORS[tool.id] ?? { bg: 'bg-zinc-500/10', text: 'text-zinc-500' };
           const active = selected.has(tool.id);
           return (
             <button
@@ -78,7 +78,7 @@ function SuccessState({ paths, name, onReveal, onDone }: { paths: string[]; name
       </div>
       <div>
         <p className="text-[15px] font-semibold text-[var(--c-text)] mb-1">{name}</p>
-        <p className="text-[12px] text-[var(--c-text-3)]">Added to {paths.length} tool{paths.length !== 1 ? 's' : ''}</p>
+        <p className="text-[12px] text-[var(--c-text-3)]">Added to {paths.length} agent{paths.length !== 1 ? 's' : ''}</p>
       </div>
       <p className="text-[13px] text-[var(--c-text-3)] leading-relaxed max-w-[260px]">
         Edit the file to customise content, then it will appear in Skills.
@@ -95,9 +95,9 @@ function SuccessState({ paths, name, onReveal, onDone }: { paths: string[]; name
   );
 }
 
-export default function AddSkillView({ installedTools, onBack, onCreated }: AddSkillViewProps) {
+export default function AddSkillView({ installedAgents, onBack, onCreated }: AddSkillViewProps) {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(
-    new Set(installedTools.slice(0, 1).map(t => t.id))
+    new Set(installedAgents.slice(0, 1).map(t => t.id))
   );
   const [sourceType, setSourceType] = useState<SourceType>('template');
   const [name, setName] = useState('');
@@ -109,11 +109,11 @@ export default function AddSkillView({ installedTools, onBack, onCreated }: AddS
   const [error, setError] = useState<string | null>(null);
   const [createdPaths, setCreatedPaths] = useState<string[] | null>(null);
 
-  const toolIds = Array.from(selectedIds);
+  const agentIds = Array.from(selectedIds);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (toolIds.length === 0) { setError('Select at least one tool'); return; }
+    if (agentIds.length === 0) { setError('Select at least one agent'); return; }
 
     setSaving(true);
     setError(null);
@@ -123,30 +123,30 @@ export default function AddSkillView({ installedTools, onBack, onCreated }: AddS
         const trimmedName = name.trim();
         if (!trimmedName) { setError('Name is required'); setSaving(false); return; }
         paths = await invoke<string[]>('create_skill', {
-          toolIds,
+          agentIds,
           name: trimmedName,
           description: description.trim() || undefined,
         });
-        capture('skill_created', { tool_ids: toolIds, skill_name: trimmedName });
+        capture('skill_created', { tool_ids: agentIds, skill_name: trimmedName });
       } else if (sourceType === 'url') {
         const trimmedUrl = url.trim();
         if (!trimmedUrl) { setError('URL is required'); setSaving(false); return; }
         paths = await invoke<string[]>('install_skill_from_url', {
-          toolIds,
+          agentIds,
           url: trimmedUrl,
           name: name.trim() || undefined,
           maxDepth: searchDepth,
         });
-        capture('skill_installed_url', { tool_ids: toolIds });
+        capture('skill_installed_url', { tool_ids: agentIds });
       } else {
         const trimmedPath = localPath.trim();
         if (!trimmedPath) { setError('Path is required'); setSaving(false); return; }
         paths = await invoke<string[]>('install_skill_from_path', {
-          toolIds,
+          agentIds,
           srcPath: trimmedPath,
           name: name.trim() || undefined,
         });
-        capture('skill_installed_path', { tool_ids: toolIds });
+        capture('skill_installed_path', { tool_ids: agentIds });
       }
       setCreatedPaths(paths);
       await onCreated();
@@ -177,7 +177,7 @@ export default function AddSkillView({ installedTools, onBack, onCreated }: AddS
       ) : (
         <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-4 space-y-4">
           {/* Multi-select tools */}
-          <ToolMultiSelect tools={installedTools} selected={selectedIds} onChange={setSelectedIds} />
+          <AgentMultiSelect tools={installedAgents} selected={selectedIds} onChange={setSelectedIds} />
 
           {/* Source type */}
           <div>

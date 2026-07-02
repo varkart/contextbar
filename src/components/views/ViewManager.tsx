@@ -4,25 +4,25 @@ import SkillsListPanel from '../SkillsListPanel'
 import McpsListPanel from '../McpsListPanel'
 import SkillDetailPanel from '../SkillDetailPanel'
 import McpDetailPanel from '../McpDetailPanel'
-import ToolDetailPage from '../ToolDetailPage'
+import AgentDetailPage from '../AgentDetailPage'
 import Settings from '../Settings'
 import MainView from './MainView'
-import LlmsListView from './LlmsListView'
+import AgentsListView from './AgentsListView'
 import AllSkillsView from './AllSkillsView'
 import AllMcpsView from './AllMcpsView'
 import AddSkillView from './AddSkillView'
 import AddMcpView from './AddMcpView'
 
 import type { ThemePreference } from '../../useTheme'
-import type { AiTool, Skill } from '../../types'
+import type { Agent, Skill } from '../../types'
 
 export default function ViewManager({
   view,
-  selectedTool,
+  selectedAgent,
   selectedSkill,
   selectedMcp,
-  selectTool,
-  openLlmsList,
+  selectAgent,
+  openAgentsList,
   selectSkill,
   selectMcp,
   openSkillsPage,
@@ -33,8 +33,8 @@ export default function ViewManager({
   escape,
   query,
   loading,
-  tools,
-  installedTools,
+  agents,
+  installedAgents,
   searchResults,
   notifications,
   updateInfo,
@@ -60,7 +60,7 @@ export default function ViewManager({
   if (view === 'add-skill') {
     return (
       <AddSkillView
-        installedTools={installedTools}
+        installedAgents={installedAgents}
         onBack={() => escape()}
         onCreated={handleFetchTools}
       />
@@ -69,35 +69,35 @@ export default function ViewManager({
   if (view === 'add-mcp') {
     return (
       <AddMcpView
-        installedTools={installedTools}
+        installedAgents={installedAgents}
         onBack={() => escape()}
         onAdded={handleFetchTools}
       />
     )
   }
-  if (view === 'llms-list') {
+  if (view === 'agents-list') {
     return (
-      <LlmsListView
-        tools={tools}
+      <AgentsListView
+        agents={agents}
         loading={loading}
-        onSelectTool={selectTool}
+        onSelectAgent={selectAgent}
       />
     )
   }
-  if (view === 'skills-list' && selectedTool) {
+  if (view === 'skills-list' && selectedAgent) {
     return (
       <SkillsListPanel
-        tool={selectedTool}
+        agent={selectedAgent}
         onBack={() => escape()}
         onSelectSkill={skill => selectSkill(skill, 'skills-list')}
         onAddSkill={openAddSkill}
       />
     )
   }
-  if (view === 'mcps-list' && selectedTool) {
+  if (view === 'mcps-list' && selectedAgent) {
     return (
       <McpsListPanel
-        tool={selectedTool}
+        agent={selectedAgent}
         onBack={() => escape()}
         onSelectMcp={mcp => selectMcp(mcp, 'mcps-list')}
         onAddMcp={openAddMcp}
@@ -107,7 +107,7 @@ export default function ViewManager({
   if (view === 'all-skills-list') {
     return (
       <AllSkillsView
-        tools={tools}
+        agents={agents}
         onBack={() => escape()}
         onSelectSkill={skill => selectSkill(skill, 'all-skills-list')}
         onAddSkill={openAddSkill}
@@ -117,7 +117,7 @@ export default function ViewManager({
   if (view === 'all-mcps-list') {
     return (
       <AllMcpsView
-        tools={tools}
+        agents={agents}
         onBack={() => escape()}
         onSelectMcp={mcp => selectMcp(mcp, 'all-mcps-list')}
         onAddMcp={openAddMcp}
@@ -125,21 +125,21 @@ export default function ViewManager({
     )
   }
   if (view === 'skill-detail' && selectedSkill) {
-    // Compute all variants (same name, any tool) with toolId/toolName populated
-    const skillVariants = (tools as AiTool[])
-      .filter((t: AiTool) => t.installed)
-      .flatMap((t: AiTool) => t.skills
+    // Compute all variants (same name, any tool) with agentId/agentName populated
+    const skillVariants = (agents as Agent[])
+      .filter((t: Agent) => t.installed)
+      .flatMap((t: Agent) => t.skills
         .filter((s: Skill) => s.name.toLowerCase() === selectedSkill.name.toLowerCase())
-        .map((s: Skill) => ({ ...s, toolId: t.id, toolName: t.name }))
+        .map((s: Skill) => ({ ...s, agentId: t.id, agentName: t.name }))
       )
     return (
       <SkillDetailPanel
         skill={selectedSkill}
-        toolName={selectedTool?.name ?? selectedSkill.toolName}
-        toolId={selectedTool?.id ?? selectedSkill.toolId}
+        agentName={selectedAgent?.name ?? selectedSkill.agentName}
+        agentId={selectedAgent?.id ?? selectedSkill.agentId}
         onToggled={handleFetchTools}
         onBack={() => escape()}
-        allTools={tools}
+        allAgents={agents}
         variants={skillVariants}
       />
     )
@@ -148,28 +148,28 @@ export default function ViewManager({
     return (
       <McpDetailPanel
         mcp={selectedMcp}
-        toolName={selectedTool?.name}
-        toolId={selectedTool?.id}
+        agentName={selectedAgent?.name}
+        agentId={selectedAgent?.id}
         onToggled={handleFetchTools}
         onRemoved={handleFetchTools}
         onBack={() => escape()}
-        allTools={tools}
+        allAgents={agents}
       />
     )
   }
-  if (view === 'tool-detail' && selectedTool) {
+  if (view === 'agent-detail' && selectedAgent) {
     return (
-      <ToolDetailPage
-        tool={selectedTool}
-        onBack={() => goTo('llms-list')}
-        onSelectSkill={skill => selectSkill(skill, 'tool-detail')}
-        onSelectMcp={mcp => selectMcp(mcp, 'tool-detail')}
+      <AgentDetailPage
+        agent={selectedAgent}
+        onBack={() => goTo('agents-list')}
+        onSelectSkill={skill => selectSkill(skill, 'agent-detail')}
+        onSelectMcp={mcp => selectMcp(mcp, 'agent-detail')}
         onOpenSkillsPage={openSkillsPage}
         onOpenMcpsPage={openMcpsPage}
-        onToolUpdated={handleFetchTools}
+        onAgentUpdated={handleFetchTools}
         query={query || undefined}
-        matchedSkills={searchResults.find((r: any) => r.tool.id === selectedTool.id)?.matchedSkills}
-        matchedMcps={searchResults.find((r: any) => r.tool.id === selectedTool.id)?.matchedMcps}
+        matchedSkills={searchResults.find((r: any) => r.agent.id === selectedAgent.id)?.matchedSkills}
+        matchedMcps={searchResults.find((r: any) => r.agent.id === selectedAgent.id)?.matchedMcps}
       />
     )
   }
@@ -188,16 +188,16 @@ export default function ViewManager({
   return (
     <MainView
       loading={loading}
-      tools={tools}
-      installedTools={installedTools}
+      agents={agents}
+      installedAgents={installedAgents}
       searchResults={searchResults}
       notifications={notifications}
       updateInfo={updateInfo}
       lastUpdated={lastUpdated}
       cloudSyncing={cloudSyncing}
-      onFetchTools={handleFetchTools}
+      onFetchAgents={handleFetchTools}
       onGoTo={goTo}
-      onOpenLlmsList={openLlmsList}
+      onOpenAgentsList={openAgentsList}
       onOpenSkillsPage={openSkillsPage}
       onOpenMcpsPage={openMcpsPage}
     />

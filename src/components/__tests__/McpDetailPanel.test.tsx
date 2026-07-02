@@ -152,14 +152,14 @@ describe('NpmInstallSection', () => {
       if (cmd === 'install_mcp_npm') return Promise.resolve('1.2.3')
       return Promise.resolve([])
     })
-    render(<McpDetailPanel mcp={baseMcp} onBack={vi.fn()} toolId="claude" />)
+    render(<McpDetailPanel mcp={baseMcp} onBack={vi.fn()} agentId="claude" />)
     await waitFor(() =>
       expect(screen.getByRole('button', { name: /install package/i })).toBeInTheDocument()
     )
     fireEvent.click(screen.getByRole('button', { name: /install package/i }))
     await waitFor(() =>
       expect(mockInvoke).toHaveBeenCalledWith('install_mcp_npm', {
-        toolId: 'claude',
+        agentId: 'claude',
         mcpName: 'github',
         packageName: '@modelcontextprotocol/server-github',
       })

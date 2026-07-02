@@ -1,40 +1,40 @@
 use crate::db::{self, DbState};
 use crate::installer;
-use crate::models::AiTool;
+use crate::models::Agent;
 use std::collections::HashSet;
 use tauri::{AppHandle, Emitter};
 
 const KEY_PREFIX: &str = "doctor:mcp:";
 
-pub fn run(tools: &[AiTool], db: &DbState, app: &AppHandle) {
-    if check(tools, db) {
+pub fn run(agents: &[Agent], db: &DbState, app: &AppHandle) {
+    if check(agents, db) {
         let _ = app.emit("notifications-changed", ());
     }
 }
 
 /// Core health-check logic. Returns true if any notification was inserted or dismissed.
-pub(crate) fn check(tools: &[AiTool], db: &DbState) -> bool {
+pub(crate) fn check(agents: &[Agent], db: &DbState) -> bool {
     let existing_keys = db::active_keys_with_prefix(db, KEY_PREFIX);
     let mut current_keys: HashSet<String> = HashSet::new();
     let mut any_change = false;
 
-    for tool in tools {
-        if !tool.installed {
+    for agent in agents {
+        if !agent.installed {
             continue;
         }
-        for mcp in &tool.mcps {
+        for mcp in &agent.mcps {
             if !mcp.active || mcp.command.is_empty() {
                 continue;
             }
 
             // Check the launcher binary (npx, node, python3, etc.) is on PATH.
             if !command_on_path(&mcp.command) {
-                let key = format!("{KEY_PREFIX}{}:{}:missing", tool.id, mcp.name);
+                let key = format!("{KEY_PREFIX}{}:{}:missing", agent.id, mcp.name);
                 current_keys.insert(key.clone());
                 let title = format!("'{}' not found", mcp.command);
                 let body = format!(
                     "MCP '{}' ({}) requires '{}' but it isn't on PATH.",
-                    mcp.name, tool.name, mcp.command,
+                    mcp.name, agent.name, mcp.command,
                 );
                 if let Ok(inserted) = db::add_notification(db, "warn", &title, &body, Some(&key)) {
                     if inserted {
@@ -49,12 +49,12 @@ pub(crate) fn check(tools: &[AiTool], db: &DbState) -> bool {
             if !auto_download {
                 if let Some(pkg) = installer::npm_package_from_mcp(&mcp.command, &mcp.args) {
                     if installer::get_npm_installed_version(&pkg).is_none() {
-                        let key = format!("{KEY_PREFIX}{}:{}:pkg-missing", tool.id, mcp.name);
+                        let key = format!("{KEY_PREFIX}{}:{}:pkg-missing", agent.id, mcp.name);
                         current_keys.insert(key.clone());
                         let title = format!("'{}' not installed", pkg);
                         let body = format!(
                             "MCP '{}' ({}) needs npm package '{}'. Open it to install.",
-                            mcp.name, tool.name, pkg,
+                            mcp.name, agent.name, pkg,
                         );
                         if let Ok(inserted) =
                             db::add_notification(db, "warn", &title, &body, Some(&key))
@@ -94,7 +94,7 @@ pub(crate) fn command_on_path(command: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::{AiTool, McpServer};
+    use crate::models::{Agent, McpServer};
     use rusqlite::Connection;
     use std::sync::{Arc, Mutex};
 
@@ -104,8 +104,8 @@ mod tests {
         DbState(Arc::new(Mutex::new(conn)))
     }
 
-    fn make_tool(id: &str, mcps: Vec<McpServer>) -> AiTool {
-        AiTool {
+    fn make_agent(id: &str, mcps: Vec<McpServer>) -> Agent {
+        Agent {
             id: id.to_string(),
             name: id.to_string(),
             version: None,
@@ -188,8 +188,8 @@ mod tests {
     #[test]
     fn not_installed_tool_skipped() {
         let db = test_db();
-        let mut tool = make_tool("t", vec![make_mcp("bad", "__not_real__", true)]);
-        tool.installed = false;
+        let mut tool = make_agent("t", vec![make_mcp("bad", "__not_real__", true)]);
+        agent.installed = false;
         assert!(!check(&[tool], &db));
         assert!(db::get_active_notifications(&db).unwrap().is_empty());
     }
@@ -197,7 +197,7 @@ mod tests {
     #[test]
     fn inactive_mcp_skipped() {
         let db = test_db();
-        let tool = make_tool("t", vec![make_mcp("bad", "__not_real__", false)]);
+        let tool = make_agent("t", vec![make_mcp("bad", "__not_real__", false)]);
         assert!(!check(&[tool], &db));
         assert!(db::get_active_notifications(&db).unwrap().is_empty());
     }
@@ -205,7 +205,7 @@ mod tests {
     #[test]
     fn http_mcp_empty_command_skipped() {
         let db = test_db();
-        let tool = make_tool("t", vec![make_mcp("http-mcp", "", true)]);
+        let tool = make_agent("t", vec![make_mcp("http-mcp", "", true)]);
         assert!(!check(&[tool], &db));
         assert!(db::get_active_notifications(&db).unwrap().is_empty());
     }
@@ -213,7 +213,7 @@ mod tests {
     #[test]
     fn missing_command_adds_warn_notification() {
         let db = test_db();
-        let tool = make_tool("claude", vec![make_mcp("my-mcp", "__not_real__", true)]);
+        let tool = make_agent("claude", vec![make_mcp("my-mcp", "__not_real__", true)]);
         assert!(check(&[tool], &db));
         let notifs = db::get_active_notifications(&db).unwrap();
         assert_eq!(notifs.len(), 1);
@@ -225,7 +225,7 @@ mod tests {
     #[test]
     fn existing_command_no_notification() {
         let db = test_db();
-        let tool = make_tool("t", vec![make_mcp("ls-mcp", "ls", true)]);
+        let tool = make_agent("t", vec![make_mcp("ls-mcp", "ls", true)]);
         assert!(!check(&[tool], &db));
         assert!(db::get_active_notifications(&db).unwrap().is_empty());
     }
@@ -233,7 +233,7 @@ mod tests {
     #[test]
     fn second_check_same_issue_no_duplicate() {
         let db = test_db();
-        let tool = || make_tool("t", vec![make_mcp("bad", "__not_real__", true)]);
+        let tool = || make_agent("t", vec![make_mcp("bad", "__not_real__", true)]);
         check(&[tool()], &db);
         assert!(
             !check(&[tool()], &db),
@@ -247,13 +247,13 @@ mod tests {
         let db = test_db();
         // First run: binary missing
         check(
-            &[make_tool("t", vec![make_mcp("mcp1", "__not_real__", true)])],
+            &[make_agent("t", vec![make_mcp("mcp1", "__not_real__", true)])],
             &db,
         );
         assert_eq!(db::get_active_notifications(&db).unwrap().len(), 1);
 
         // Second run: binary now found
-        let changed = check(&[make_tool("t", vec![make_mcp("mcp1", "ls", true)])], &db);
+        let changed = check(&[make_agent("t", vec![make_mcp("mcp1", "ls", true)])], &db);
         assert!(changed, "should detect change when stale warning dismissed");
         assert!(db::get_active_notifications(&db).unwrap().is_empty());
     }
@@ -261,7 +261,7 @@ mod tests {
     #[test]
     fn only_bad_mcps_get_notifications() {
         let db = test_db();
-        let tool = make_tool(
+        let tool = make_agent(
             "t",
             vec![
                 make_mcp("good", "ls", true),
@@ -280,7 +280,7 @@ mod tests {
     fn npx_mcp_with_dash_y_skips_pkg_check() {
         let db = test_db();
         // -y means "auto-download on demand" — no pkg-missing notification expected.
-        let tool = make_tool(
+        let tool = make_agent(
             "t",
             vec![make_npx_mcp("my-mcp", &["-y", "__fake_npm_pkg__"], true)],
         );
@@ -295,7 +295,7 @@ mod tests {
     #[test]
     fn npx_mcp_with_yes_flag_skips_pkg_check() {
         let db = test_db();
-        let tool = make_tool(
+        let tool = make_agent(
             "t",
             vec![make_npx_mcp("my-mcp", &["--yes", "__fake_npm_pkg__"], true)],
         );
@@ -311,7 +311,7 @@ mod tests {
     fn npx_mcp_missing_pkg_fires_pkg_missing_notification() {
         let db = test_db();
         let pkg = "__llmmanager_definitely_not_a_real_npm_pkg__";
-        let tool = make_tool("claude", vec![make_npx_mcp("my-mcp", &[pkg], true)]);
+        let tool = make_agent("claude", vec![make_npx_mcp("my-mcp", &[pkg], true)]);
         check(&[tool], &db);
         let notifs = db::get_active_notifications(&db).unwrap();
         assert!(
@@ -324,7 +324,7 @@ mod tests {
     fn npx_mcp_pkg_missing_dedup_key_format() {
         let db = test_db();
         let pkg = "__llmmanager_definitely_not_a_real_npm_pkg__";
-        let tool = make_tool("claude", vec![make_npx_mcp("my-mcp", &[pkg], true)]);
+        let tool = make_agent("claude", vec![make_npx_mcp("my-mcp", &[pkg], true)]);
         // Two runs should not duplicate the notification.
         check(std::slice::from_ref(&tool), &db);
         let changed = check(std::slice::from_ref(&tool), &db);

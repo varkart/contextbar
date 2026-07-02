@@ -7,12 +7,12 @@ vi.mock('../analytics', () => ({ capture: vi.fn(), captureException: vi.fn() }))
 import { invoke } from '@tauri-apps/api/core'
 import { capture } from '../analytics'
 import { useViewRouter } from '../useViewRouter'
-import type { AiTool, Skill, McpServer } from '../types'
+import type { Agent, Skill, McpServer } from '../types'
 
 const mockInvoke = vi.mocked(invoke)
 const mockCapture = vi.mocked(capture)
 
-const tool: AiTool = {
+const tool: Agent = {
   id: 'claude', name: 'Claude Code', installed: true, supportsSkills: true, supportsMcps: true, skills: [], mcps: [],
 }
 
@@ -49,17 +49,17 @@ describe('useViewRouter — initial state', () => {
   })
 })
 
-describe('useViewRouter — selectTool', () => {
-  it('navigates to tool-detail and sets selectedTool', () => {
+describe('useViewRouter — selectAgent', () => {
+  it('navigates to tool-detail and sets selectedAgent', () => {
     const { result } = renderHook(() => useViewRouter())
-    act(() => { result.current.selectTool(tool) })
-    expect(result.current.view).toBe('tool-detail')
-    expect(result.current.selectedTool).toBe(tool)
+    act(() => { result.current.selectAgent(tool) })
+    expect(result.current.view).toBe('agent-detail')
+    expect(result.current.selectedAgent).toBe(tool)
   })
 
   it('fires capture event', () => {
     const { result } = renderHook(() => useViewRouter())
-    act(() => { result.current.selectTool(tool) })
+    act(() => { result.current.selectAgent(tool) })
     expect(mockCapture).toHaveBeenCalledWith('tool_detail_viewed', { tool_id: 'claude' })
   })
 })
@@ -67,16 +67,16 @@ describe('useViewRouter — selectTool', () => {
 describe('useViewRouter — selectSkill', () => {
   it('navigates to skill-detail', () => {
     const { result } = renderHook(() => useViewRouter())
-    act(() => { result.current.selectSkill(skill, 'tool-detail') })
+    act(() => { result.current.selectSkill(skill, 'agent-detail') })
     expect(result.current.view).toBe('skill-detail')
     expect(result.current.selectedSkill).toBe(skill)
-    expect(result.current.skillBackView).toBe('tool-detail')
+    expect(result.current.skillBackView).toBe('agent-detail')
   })
 
   it('defaults fromView to tool-detail', () => {
     const { result } = renderHook(() => useViewRouter())
     act(() => { result.current.selectSkill(skill) })
-    expect(result.current.skillBackView).toBe('tool-detail')
+    expect(result.current.skillBackView).toBe('agent-detail')
   })
 
   it('fires capture event', () => {
@@ -98,7 +98,7 @@ describe('useViewRouter — selectMcp', () => {
   it('defaults fromView to tool-detail', () => {
     const { result } = renderHook(() => useViewRouter())
     act(() => { result.current.selectMcp(mcp) })
-    expect(result.current.mcpBackView).toBe('tool-detail')
+    expect(result.current.mcpBackView).toBe('agent-detail')
   })
 
   it('fires capture event', () => {
@@ -141,9 +141,9 @@ describe('useViewRouter — escape', () => {
 
   it('from tool-detail navigates to llms-list', () => {
     const { result } = renderHook(() => useViewRouter())
-    act(() => { result.current.selectTool(tool) })
+    act(() => { result.current.selectAgent(tool) })
     act(() => { result.current.escape() })
-    expect(result.current.view).toBe('llms-list')
+    expect(result.current.view).toBe('agents-list')
   })
 
   it('from skill-detail goes to skillBackView', () => {
@@ -191,24 +191,24 @@ describe('useViewRouter — URL hash sync', () => {
   it('non-settings views clear hash', () => {
     const { result } = renderHook(() => useViewRouter())
     act(() => { result.current.goTo('settings') })
-    act(() => { result.current.selectTool(tool) })
+    act(() => { result.current.selectAgent(tool) })
     expect(window.location.hash).toBe('')
   })
 })
 
 describe('useViewRouter — refreshSelected', () => {
-  it('updates selectedTool in state', () => {
+  it('updates selectedAgent in state', () => {
     const updatedTool = { ...tool, skills: [skill] }
     const { result } = renderHook(() => useViewRouter())
-    act(() => { result.current.selectTool(tool) })
+    act(() => { result.current.selectAgent(tool) })
     act(() => { result.current.refreshSelected([updatedTool]) })
-    expect(result.current.selectedTool?.skills).toHaveLength(1)
+    expect(result.current.selectedAgent?.skills).toHaveLength(1)
   })
 
-  it('keeps selectedTool when not found in fresh list', () => {
+  it('keeps selectedAgent when not found in fresh list', () => {
     const { result } = renderHook(() => useViewRouter())
-    act(() => { result.current.selectTool(tool) })
+    act(() => { result.current.selectAgent(tool) })
     act(() => { result.current.refreshSelected([]) })
-    expect(result.current.selectedTool).toBe(tool)
+    expect(result.current.selectedAgent).toBe(tool)
   })
 })

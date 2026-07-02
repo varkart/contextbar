@@ -4,7 +4,7 @@ pub mod mcp;
 pub mod resolve;
 pub mod skill;
 
-use crate::models::AiTool;
+use crate::models::Agent;
 use manifest::{DetectionSpec, Manifest, VersionSpec};
 use resolve::expand_home;
 
@@ -38,7 +38,7 @@ pub fn load_manifest(tool_id: &str) -> Option<manifest::Manifest> {
         .and_then(|(_, toml_str)| toml::from_str(toml_str).ok())
 }
 
-pub fn detect_all() -> Vec<AiTool> {
+pub fn detect_all() -> Vec<Agent> {
     const TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
 
     all_manifest_strs()
@@ -57,7 +57,7 @@ pub fn detect_all() -> Vec<AiTool> {
                 TIMEOUT,
             )
             .or_else(|| {
-                Some(AiTool {
+                Some(Agent {
                     id: manifest_id.clone(),
                     name: manifest_id,
                     version: None,
@@ -82,7 +82,7 @@ struct DetectionResult {
     detected_binary: Option<String>,
 }
 
-fn detect_from_manifest(m: &Manifest) -> AiTool {
+fn detect_from_manifest(m: &Manifest) -> Agent {
     let home = match dirs::home_dir() {
         Some(h) => h,
         None => return not_installed(m),
@@ -102,7 +102,7 @@ fn detect_from_manifest(m: &Manifest) -> AiTool {
     let (mcps, error) = mcp::collect(&m.mcp_sources, version.as_deref(), &home);
     let skills = skill::collect(&m.skill_sources, version.as_deref(), &home);
 
-    AiTool {
+    Agent {
         id: m.id.clone(),
         name: m.name.clone(),
         version,
@@ -116,8 +116,8 @@ fn detect_from_manifest(m: &Manifest) -> AiTool {
     }
 }
 
-fn not_installed(m: &Manifest) -> AiTool {
-    AiTool {
+fn not_installed(m: &Manifest) -> Agent {
+    Agent {
         id: m.id.clone(),
         name: m.name.clone(),
         version: None,
@@ -362,8 +362,8 @@ path = "/tmp/this_dir_does_not_exist_xyzzy_12345"
 "#;
         let m: Manifest = toml::from_str(toml).unwrap();
         let tool = detect_from_manifest(&m);
-        assert!(!tool.installed);
-        assert_eq!(tool.id, "test-tool");
+        assert!(!agent.installed);
+        assert_eq!(agent.id, "test-tool");
     }
 
     #[test]

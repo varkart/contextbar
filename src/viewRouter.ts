@@ -1,12 +1,12 @@
-import type { AiTool, Skill, McpServer } from './types'
+import type { Agent, Skill, McpServer } from './types'
 
 export type View =
   | 'main'
-  | 'llms-list'
+  | 'agents-list'
   | 'add-skill'
   | 'add-mcp'
   | 'settings'
-  | 'tool-detail'
+  | 'agent-detail'
   | 'skills-list'
   | 'all-skills-list'
   | 'all-mcps-list'
@@ -17,18 +17,18 @@ export type View =
   | 'notifications'
   | 'logs'
 
-export type LlmsListMode = 'default'
+export type AgentsListMode = 'default'
 
 // Exhaustive map — TypeScript errors if a View variant is added here but missing from the type,
 // or if the type gains a new variant without updating this map.
 // This keeps ALL_VIEWS automatically in sync with the View union.
 const _VIEW_REGISTRY: Record<View, true> = {
   'main': true,
-  'llms-list': true,
+  'agents-list': true,
   'add-skill': true,
   'add-mcp': true,
   'settings': true,
-  'tool-detail': true,
+  'agent-detail': true,
   'skills-list': true,
   'all-skills-list': true,
   'all-mcps-list': true,
@@ -45,8 +45,8 @@ export const ALL_VIEWS = Object.keys(_VIEW_REGISTRY) as View[]
 
 export interface RouterState {
   view: View
-  llmsListMode: LlmsListMode
-  selectedTool: AiTool | null
+  agentsListMode: AgentsListMode
+  selectedAgent: Agent | null
   selectedSkill: Skill | null
   selectedMcp: McpServer | null
   skillBackView: View
@@ -58,10 +58,10 @@ export interface RouterState {
 }
 
 export type RouterAction =
-  | { type: 'SELECT_TOOL'; tool: AiTool }
-  | { type: 'OPEN_LLMS_LIST'; mode: LlmsListMode }
-  | { type: 'OPEN_SKILLS_LIST_FOR_TOOL'; tool: AiTool }
-  | { type: 'OPEN_MCPS_LIST_FOR_TOOL'; tool: AiTool }
+  | { type: 'SELECT_AGENT'; tool: Agent }
+  | { type: 'OPEN_AGENTS_LIST'; mode: AgentsListMode }
+  | { type: 'OPEN_SKILLS_LIST_FOR_AGENT'; tool: Agent }
+  | { type: 'OPEN_MCPS_LIST_FOR_AGENT'; tool: Agent }
   | { type: 'SELECT_SKILL'; skill: Skill; fromView: View }
   | { type: 'SELECT_MCP'; mcp: McpServer; fromView: View }
   | { type: 'SELECT_PERMISSIONS' }
@@ -70,7 +70,7 @@ export type RouterAction =
   | { type: 'GO_TO'; view: View }
   | { type: 'OPEN_ADD_SKILL'; fromView: View }
   | { type: 'OPEN_ADD_MCP'; fromView: View }
-  | { type: 'REFRESH_SELECTED'; tools: AiTool[] }
+  | { type: 'REFRESH_SELECTED'; tools: Agent[] }
 
 export type EscapeResult =
   | { type: 'navigate'; to: View }
@@ -80,7 +80,7 @@ export function escapeTransition(
   view: View,
   skillBackView: View,
   mcpBackView: View,
-  selectedTool: AiTool | null,
+  selectedAgent: Agent | null,
   allSkillsBackView: View,
   allMcpsBackView: View,
   addSkillBackView: View = 'all-skills-list',
@@ -88,15 +88,15 @@ export function escapeTransition(
 ): EscapeResult {
   if (view === 'skill-detail') return { type: 'navigate', to: skillBackView }
   if (view === 'mcp-detail') return { type: 'navigate', to: mcpBackView }
-  if (view === 'permissions-detail') return { type: 'navigate', to: selectedTool ? 'tool-detail' : 'main' }
+  if (view === 'permissions-detail') return { type: 'navigate', to: selectedAgent ? 'agent-detail' : 'main' }
   if (view === 'all-skills-list') return { type: 'navigate', to: allSkillsBackView }
   if (view === 'all-mcps-list') return { type: 'navigate', to: allMcpsBackView }
-  if (view === 'skills-list') return { type: 'navigate', to: 'tool-detail' }
-  if (view === 'mcps-list') return { type: 'navigate', to: 'tool-detail' }
-  if (view === 'tool-detail') return { type: 'navigate', to: 'llms-list' }
+  if (view === 'skills-list') return { type: 'navigate', to: 'agent-detail' }
+  if (view === 'mcps-list') return { type: 'navigate', to: 'agent-detail' }
+  if (view === 'agent-detail') return { type: 'navigate', to: 'agents-list' }
   if (view === 'add-skill') return { type: 'navigate', to: addSkillBackView }
   if (view === 'add-mcp') return { type: 'navigate', to: addMcpBackView }
-  if (view === 'llms-list') return { type: 'navigate', to: 'main' }
+  if (view === 'agents-list') return { type: 'navigate', to: 'main' }
   if (view === 'settings' || view === 'notifications' || view === 'logs')
     return { type: 'navigate', to: 'main' }
   return { type: 'hide' }
@@ -105,14 +105,14 @@ export function escapeTransition(
 export function initialRouterState(hash = ''): RouterState {
   return {
     view: hash === '#settings' ? 'settings' : 'main',
-    llmsListMode: 'default',
-    selectedTool: null,
+    agentsListMode: 'default',
+    selectedAgent: null,
     selectedSkill: null,
     selectedMcp: null,
-    skillBackView: 'tool-detail',
-    mcpBackView: 'tool-detail',
-    allSkillsBackView: 'tool-detail',
-    allMcpsBackView: 'tool-detail',
+    skillBackView: 'agent-detail',
+    mcpBackView: 'agent-detail',
+    allSkillsBackView: 'agent-detail',
+    allMcpsBackView: 'agent-detail',
     addSkillBackView: 'all-skills-list',
     addMcpBackView: 'all-mcps-list',
   }
@@ -120,17 +120,17 @@ export function initialRouterState(hash = ''): RouterState {
 
 export function routerReducer(state: RouterState, action: RouterAction): RouterState {
   switch (action.type) {
-    case 'SELECT_TOOL':
-      return { ...state, selectedTool: action.tool, view: 'tool-detail' }
+    case 'SELECT_AGENT':
+      return { ...state, selectedAgent: action.tool, view: 'agent-detail' }
 
-    case 'OPEN_LLMS_LIST':
-      return { ...state, llmsListMode: action.mode, view: 'llms-list' }
+    case 'OPEN_AGENTS_LIST':
+      return { ...state, agentsListMode: action.mode, view: 'agents-list' }
 
-    case 'OPEN_SKILLS_LIST_FOR_TOOL':
-      return { ...state, selectedTool: action.tool, view: 'skills-list' }
+    case 'OPEN_SKILLS_LIST_FOR_AGENT':
+      return { ...state, selectedAgent: action.tool, view: 'skills-list' }
 
-    case 'OPEN_MCPS_LIST_FOR_TOOL':
-      return { ...state, selectedTool: action.tool, view: 'mcps-list' }
+    case 'OPEN_MCPS_LIST_FOR_AGENT':
+      return { ...state, selectedAgent: action.tool, view: 'mcps-list' }
 
     case 'SELECT_SKILL':
       return { ...state, selectedSkill: action.skill, skillBackView: action.fromView, view: 'skill-detail' }
@@ -158,12 +158,12 @@ export function routerReducer(state: RouterState, action: RouterAction): RouterS
 
     case 'REFRESH_SELECTED': {
       const tools = action.tools
-      let selectedTool = state.selectedTool
+      let selectedAgent = state.selectedAgent
       let selectedSkill = state.selectedSkill
       let selectedMcp = state.selectedMcp
 
-      if (selectedTool) {
-        selectedTool = tools.find(t => t.id === selectedTool!.id) ?? selectedTool
+      if (selectedAgent) {
+        selectedAgent = tools.find(t => t.id === selectedAgent!.id) ?? selectedAgent
       }
       if (selectedSkill) {
         for (const tool of tools) {
@@ -177,7 +177,7 @@ export function routerReducer(state: RouterState, action: RouterAction): RouterS
           if (found) { selectedMcp = found; break }
         }
       }
-      return { ...state, selectedTool, selectedSkill, selectedMcp }
+      return { ...state, selectedAgent, selectedSkill, selectedMcp }
     }
 
     default:

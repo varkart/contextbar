@@ -6,20 +6,20 @@ interface DiffItem {
   itemName: string
 }
 
-interface ToolsDiff {
+interface AgentsDiff {
   addedSkills: DiffItem[]
   removedSkills: DiffItem[]
   addedMcps: DiffItem[]
   removedMcps: DiffItem[]
 }
 
-export function useToolsDiff() {
+export function useAgentsDiff() {
   useEffect(() => {
     let cancelled = false
     let unlisten: (() => void) | null = null
 
     ;(async () => {
-      unlisten = await listen<ToolsDiff>('tools-diff', async (event) => {
+      unlisten = await listen<AgentsDiff>('agents-diff', async (event) => {
         const diff = event.payload
         const changes = [
           ...diff.addedSkills.map(i => `${i.toolName}: skill "${i.itemName}" added`),

@@ -1,13 +1,13 @@
 import { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { capture, captureException } from '../../analytics';
-import { TOOL_COLORS } from '../../constants/toolColors';
+import { AGENT_COLORS } from '../../constants/agentColors';
 import { parsePasteJson, detectNameFromPaste, buildMcpPayload, prefillTypeAndFields } from '../../utils/mcpPayload';
 import type { McpType } from '../../utils/mcpPayload';
-import type { AiTool, CachedMcp } from '../../types';
+import type { Agent, CachedMcp } from '../../types';
 
 interface AddMcpViewProps {
-  installedTools: AiTool[];
+  installedAgents: Agent[];
   onBack: () => void;
   onAdded: () => void;
 }
@@ -38,12 +38,12 @@ function ErrorBox({ message }: { message: string }) {
   );
 }
 
-function ToolMultiSelect({
+function AgentMultiSelect({
   tools,
   selected,
   onChange,
 }: {
-  tools: AiTool[];
+  tools: Agent[];
   selected: Set<string>;
   onChange: (ids: Set<string>) => void;
 }) {
@@ -61,7 +61,7 @@ function ToolMultiSelect({
       </label>
       <div className="flex flex-wrap gap-2">
         {tools.map(tool => {
-          const colors = TOOL_COLORS[tool.id] ?? { bg: 'bg-zinc-500/10', text: 'text-zinc-500' };
+          const colors = AGENT_COLORS[tool.id] ?? { bg: 'bg-zinc-500/10', text: 'text-zinc-500' };
           const active = selected.has(tool.id);
           return (
             <button
@@ -131,9 +131,9 @@ function TypeDropdown({ value, onChange }: { value: McpType; onChange: (t: McpTy
   );
 }
 
-export default function AddMcpView({ installedTools, onBack, onAdded }: AddMcpViewProps) {
+export default function AddMcpView({ installedAgents, onBack, onAdded }: AddMcpViewProps) {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(
-    new Set(installedTools.slice(0, 1).map(t => t.id))
+    new Set(installedAgents.slice(0, 1).map(t => t.id))
   );
   const [mcpType, setMcpType] = useState<McpType>('npx');
   const [name, setName] = useState('');
@@ -146,14 +146,14 @@ export default function AddMcpView({ installedTools, onBack, onAdded }: AddMcpVi
 
   // Load MCPs from cache that aren't currently installed in any tool
   useEffect(() => {
-    const currentMcpNames = new Set(installedTools.flatMap(t => t.mcps.map(m => m.name)));
+    const currentMcpNames = new Set(installedAgents.flatMap(t => t.mcps.map(m => m.name)));
     invoke<CachedMcp[]>('get_all_cached_mcps')
       .then(all => setCachedMcps(all.filter(m => !currentMcpNames.has(m.name))))
       .catch(() => {});
-  }, [installedTools]);
+  }, [installedAgents]);
 
   const setField = (key: string, val: string) => setFields(f => ({ ...f, [key]: val }));
-  const toolIds = Array.from(selectedIds);
+  const agentIds = Array.from(selectedIds);
 
   const handlePasteChange = (raw: string) => {
     setField('json', raw);
@@ -165,7 +165,7 @@ export default function AddMcpView({ installedTools, onBack, onAdded }: AddMcpVi
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (toolIds.length === 0) { setError('Select at least one tool'); return; }
+    if (agentIds.length === 0) { setError('Select at least one agent'); return; }
     const trimmedName = name.trim();
     if (!trimmedName) { setError('Name is required'); return; }
 
@@ -188,7 +188,7 @@ export default function AddMcpView({ installedTools, onBack, onAdded }: AddMcpVi
         command_error: string | null;
         url_error: string | null;
       }>('validate_mcp', {
-        toolId: toolIds[0],
+        agentId: agentIds[0],
         name: trimmedName,
         command: payload.command ?? null,
         url: payload.url ?? null,
@@ -205,9 +205,9 @@ export default function AddMcpView({ installedTools, onBack, onAdded }: AddMcpVi
       }
 
       let count = 0;
-      for (const toolId of toolIds) {
+      for (const agentId of agentIds) {
         await invoke('add_mcp', {
-          toolId,
+          agentId,
           name: trimmedName,
           command: payload.command,
           args: payload.args,
@@ -215,7 +215,7 @@ export default function AddMcpView({ installedTools, onBack, onAdded }: AddMcpVi
         });
         count++;
       }
-      capture('mcp_added', { tool_ids: toolIds, mcp_name: trimmedName, mcp_type: mcpType });
+      capture('mcp_added', { tool_ids: agentIds, mcp_name: trimmedName, mcp_type: mcpType });
       setAddedCount(count);
       await onAdded();
     } catch (e) {
@@ -237,7 +237,7 @@ export default function AddMcpView({ installedTools, onBack, onAdded }: AddMcpVi
           </div>
           <div>
             <p className="text-[15px] font-semibold text-[var(--c-text)] mb-1">{name}</p>
-            <p className="text-[12px] text-[var(--c-text-3)]">Added to {addedCount} tool{addedCount !== 1 ? 's' : ''}</p>
+            <p className="text-[12px] text-[var(--c-text-3)]">Added to {addedCount} agent{addedCount !== 1 ? 's' : ''}</p>
           </div>
           <button onClick={onBack} className="px-6 py-2 rounded-lg bg-violet-500/20 text-violet-400 text-[14px] font-medium hover:bg-violet-500/30 transition-colors">
             Done
@@ -296,7 +296,7 @@ export default function AddMcpView({ installedTools, onBack, onAdded }: AddMcpVi
         )}
 
         {/* Multi-select tools */}
-        <ToolMultiSelect tools={installedTools} selected={selectedIds} onChange={setSelectedIds} />
+        <AgentMultiSelect tools={installedAgents} selected={selectedIds} onChange={setSelectedIds} />
 
         {/* Type dropdown */}
         <TypeDropdown value={mcpType} onChange={t => { setMcpType(t); setFields({}); setValidationErrors({}); }} />

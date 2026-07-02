@@ -1,16 +1,16 @@
 import { useState } from 'react'
 import { flushSync } from 'react-dom'
 import { invoke } from '@tauri-apps/api/core'
-import type { AiTool, Skill, McpServer } from '../types'
-import { TOOL_COLORS } from '../constants/toolColors'
+import type { Agent, Skill, McpServer } from '../types'
+import { AGENT_COLORS } from '../constants/agentColors'
 import { capture, captureException } from '../analytics'
 
 
 const MIN_SPINNER_MS = 1000
 const sleep = (ms: number) => new Promise<void>(r => setTimeout(r, ms))
 
-function ToolAvatar({ tool }: { tool: AiTool }) {
-  const colors = TOOL_COLORS[tool.id] ?? { bg: 'bg-zinc-500/15', text: 'text-zinc-400' }
+function AgentAvatar({ tool }: { tool: Agent }) {
+  const colors = AGENT_COLORS[tool.id] ?? { bg: 'bg-zinc-500/15', text: 'text-zinc-400' }
   return (
     <span className={`inline-flex items-center justify-center w-[22px] h-[22px] rounded text-[12px] font-bold flex-shrink-0 select-none ${colors.bg} ${colors.text}`}>
       {tool.name[0].toUpperCase()}
@@ -39,21 +39,21 @@ function MiniSpinner() {
 
 interface SkillInstalledOnProps {
   skill: Skill
-  currentToolId: string
-  allTools: AiTool[]
+  currentAgentId: string
+  allAgents: Agent[]
   onInstalled: () => void
   /** Called when user clicks an installed provider row to preview its file path. */
-  onSelectForPath?: (tool: AiTool) => void
+  onSelectForPath?: (tool: Agent) => void
   /** Tool id whose path is currently shown at the bottom — highlights that row. */
-  selectedToolId?: string
+  selectedAgentId?: string
 }
 
 interface PendingDisable {
-  tool: AiTool
+  tool: Agent
   matchedSkill: Skill
 }
 
-export function SkillInstalledOn({ skill, currentToolId, allTools, onInstalled, onSelectForPath, selectedToolId }: SkillInstalledOnProps) {
+export function SkillInstalledOn({ skill, currentAgentId, allAgents, onInstalled, onSelectForPath, selectedAgentId }: SkillInstalledOnProps) {
   const [collapsed, setCollapsed] = useState(false)
   const [installing, setInstalling] = useState<string | null>(null)
   const [toggling, setToggling] = useState<string | null>(null)
@@ -62,14 +62,14 @@ export function SkillInstalledOn({ skill, currentToolId, allTools, onInstalled, 
   // Pending disable when skill has no cache and this is the last provider
   const [pendingDisable, setPendingDisable] = useState<PendingDisable | null>(null)
 
-  const installedTools = allTools.filter(t => t.installed)
+  const installedAgents = allAgents.filter(t => t.installed)
 
-  const doToggle = async (targetTool: AiTool, matchedSkill: Skill, newActive: boolean) => {
+  const doToggle = async (targetTool: Agent, matchedSkill: Skill, newActive: boolean) => {
     flushSync(() => setToggling(targetTool.id))
     const started = Date.now()
     try {
       await invoke('set_skill_active', {
-        toolId: targetTool.id,
+        agentId: targetTool.id,
         skillName: matchedSkill.name,
         skillPath: matchedSkill.path,
         sourceId: matchedSkill.sourceId,
@@ -87,10 +87,10 @@ export function SkillInstalledOn({ skill, currentToolId, allTools, onInstalled, 
     }
   }
 
-  const handleToggle = async (targetTool: AiTool, matchedSkill: Skill, newActive: boolean) => {
+  const handleToggle = async (targetTool: Agent, matchedSkill: Skill, newActive: boolean) => {
     // Disabling from the last provider that has this skill → check cache first
     if (!newActive) {
-      const otherHaveIt = installedTools.some(
+      const otherHaveIt = installedAgents.some(
         t => t.id !== targetTool.id && t.skills.some(s => s.name === skill.name)
       )
       if (!otherHaveIt) {
@@ -104,12 +104,12 @@ export function SkillInstalledOn({ skill, currentToolId, allTools, onInstalled, 
     await doToggle(targetTool, matchedSkill, newActive)
   }
 
-  const handleDelete = async (targetTool: AiTool, matchedSkill: Skill) => {
+  const handleDelete = async (targetTool: Agent, matchedSkill: Skill) => {
     flushSync(() => setDeleting(targetTool.id))
     const started = Date.now()
     try {
       await invoke('remove_skill', {
-        toolId: targetTool.id,
+        agentId: targetTool.id,
         skillName: matchedSkill.name,
         skillPath: matchedSkill.path,
       })
@@ -126,15 +126,15 @@ export function SkillInstalledOn({ skill, currentToolId, allTools, onInstalled, 
   }
 
   // Cache-aware add: uses add_skill_to_tool which tries cache → live copy
-  const handleAdd = async (targetTool: AiTool) => {
+  const handleAdd = async (targetTool: Agent) => {
     flushSync(() => {
       setInstalling(targetTool.id)
       setErrors(e => ({ ...e, [targetTool.id]: '' }))
     })
     const started = Date.now()
     try {
-      await invoke('add_skill_to_tool', { skillName: skill.name, toolId: targetTool.id })
-      capture('skill_cross_installed', { from: currentToolId, to: targetTool.id, skill_name: skill.name })
+      await invoke('add_skill_to_agent', { skillName: skill.name, agentId: targetTool.id })
+      capture('skill_cross_installed', { from: currentAgentId, to: targetTool.id, skill_name: skill.name })
     } catch (e) {
       setErrors(prev => ({ ...prev, [targetTool.id]: String(e) }))
       captureException(e)
@@ -146,7 +146,7 @@ export function SkillInstalledOn({ skill, currentToolId, allTools, onInstalled, 
     }
   }
 
-  const installedCount = installedTools.filter(t =>
+  const installedCount = installedAgents.filter(t =>
     t.skills.some(s => s.name.toLowerCase().trim() === skill.name.toLowerCase().trim())
   ).length
 
@@ -202,14 +202,14 @@ export function SkillInstalledOn({ skill, currentToolId, allTools, onInstalled, 
       )}
 
       <div className="flex flex-col gap-1.5">
-        {installedTools.map(tool => {
+        {installedAgents.map(tool => {
           const noSupport = !tool.supportsSkills
           const match = tool.skills.find(s => s.name.toLowerCase().trim() === skill.name.toLowerCase().trim())
           const isInstalled = !!match
           const isActive = match?.active ?? false
           const isDisabled = isInstalled && !isActive
 
-          const isSelected = selectedToolId === tool.id
+          const isSelected = selectedAgentId === tool.id
           return (
             <div key={tool.id}>
               <div
@@ -226,7 +226,7 @@ export function SkillInstalledOn({ skill, currentToolId, allTools, onInstalled, 
                   className={`flex items-center gap-2 flex-1 min-w-0 text-left ${isInstalled && !noSupport ? 'cursor-pointer hover:opacity-80 transition-opacity' : 'cursor-default'}`}
                   disabled={noSupport || !isInstalled}
                 >
-                  <ToolAvatar tool={tool} />
+                  <AgentAvatar tool={tool} />
                   <span className={`text-[13px] truncate ${noSupport ? 'text-[var(--c-text-3)]' : 'text-[var(--c-text-2)]'}`}>
                     {tool.name}
                   </span>
@@ -309,27 +309,27 @@ export function SkillInstalledOn({ skill, currentToolId, allTools, onInstalled, 
 
 interface McpInstalledOnProps {
   mcp: McpServer
-  currentToolId: string
-  allTools: AiTool[]
+  currentAgentId: string
+  allAgents: Agent[]
   onInstalled: () => void
   onBack?: () => void
 }
 
-export function McpInstalledOn({ mcp, currentToolId, allTools, onInstalled, onBack }: McpInstalledOnProps) {
+export function McpInstalledOn({ mcp, currentAgentId, allAgents, onInstalled, onBack }: McpInstalledOnProps) {
   const [collapsed, setCollapsed] = useState(false)
   const [installing, setInstalling] = useState<string | null>(null)
   const [toggling, setToggling] = useState<string | null>(null)
   const [removing, setRemoving] = useState<string | null>(null)
   const [errors, setErrors] = useState<Record<string, string>>({})
 
-  const installedTools = allTools.filter(t => t.installed)
+  const installedAgents = allAgents.filter(t => t.installed)
 
-  const handleToggle = async (targetTool: AiTool, matchedMcp: McpServer) => {
+  const handleToggle = async (targetTool: Agent, matchedMcp: McpServer) => {
     flushSync(() => setToggling(targetTool.id))
     const started = Date.now()
     try {
       await invoke('set_mcp_active', {
-        toolId: targetTool.id,
+        agentId: targetTool.id,
         mcpName: matchedMcp.name,
         sourceId: matchedMcp.sourceId,
         active: !matchedMcp.active,
@@ -347,12 +347,12 @@ export function McpInstalledOn({ mcp, currentToolId, allTools, onInstalled, onBa
     }
   }
 
-  const handleRemove = async (targetTool: AiTool, matchedMcp: McpServer) => {
+  const handleRemove = async (targetTool: Agent, matchedMcp: McpServer) => {
     flushSync(() => setRemoving(targetTool.id))
     const started = Date.now()
     try {
       await invoke('remove_mcp', {
-        toolId: targetTool.id,
+        agentId: targetTool.id,
         mcpName: matchedMcp.name,
         sourceId: matchedMcp.sourceId,
         command: matchedMcp.command || null,
@@ -368,11 +368,11 @@ export function McpInstalledOn({ mcp, currentToolId, allTools, onInstalled, onBa
       if (elapsed < MIN_SPINNER_MS) await sleep(MIN_SPINNER_MS - elapsed)
       await onInstalled()
       setRemoving(null)
-      if (targetTool.id === currentToolId) onBack?.()
+      if (targetTool.id === currentAgentId) onBack?.()
     }
   }
 
-  const handleAdd = async (targetTool: AiTool) => {
+  const handleAdd = async (targetTool: Agent) => {
     flushSync(() => {
       setInstalling(targetTool.id)
       setErrors(e => ({ ...e, [targetTool.id]: '' }))
@@ -380,13 +380,13 @@ export function McpInstalledOn({ mcp, currentToolId, allTools, onInstalled, onBa
     const started = Date.now()
     try {
       await invoke('add_mcp', {
-        toolId: targetTool.id,
+        agentId: targetTool.id,
         name: mcp.name,
         command: mcp.command || null,
         args: mcp.args,
         url: mcp.url ?? null,
       })
-      capture('mcp_cross_installed', { from: currentToolId, to: targetTool.id, mcp_name: mcp.name })
+      capture('mcp_cross_installed', { from: currentAgentId, to: targetTool.id, mcp_name: mcp.name })
     } catch (e) {
       setErrors(prev => ({ ...prev, [targetTool.id]: String(e) }))
       captureException(e)
@@ -400,7 +400,7 @@ export function McpInstalledOn({ mcp, currentToolId, allTools, onInstalled, onBa
 
   const hasSecrets = mcp.hasSecrets && mcp.secretKeyNames.length > 0
 
-  const installedMcpCount = installedTools.filter(t =>
+  const installedMcpCount = installedAgents.filter(t =>
     t.mcps.some(m => m.name.toLowerCase().trim() === mcp.name.toLowerCase().trim())
   ).length
 
@@ -420,7 +420,7 @@ export function McpInstalledOn({ mcp, currentToolId, allTools, onInstalled, onBa
       </button>
       {!collapsed && <>
       <div className="flex flex-col gap-1.5">
-        {installedTools.map(tool => {
+        {installedAgents.map(tool => {
           const noSupport = !tool.supportsMcps
           const match = tool.mcps.find(m => m.name.toLowerCase().trim() === mcp.name.toLowerCase().trim())
           const isInstalled = !!match
@@ -428,7 +428,7 @@ export function McpInstalledOn({ mcp, currentToolId, allTools, onInstalled, onBa
           return (
             <div key={tool.id}>
               <div className={`flex items-center gap-2.5 px-2.5 py-1.5 rounded-md border border-[var(--c-border)] transition-colors ${noSupport ? 'opacity-30 cursor-not-allowed' : ''}`}>
-                <ToolAvatar tool={tool} />
+                <AgentAvatar tool={tool} />
                 <span className={`text-[13px] flex-1 truncate ${noSupport ? 'text-[var(--c-text-3)]' : 'text-[var(--c-text-2)]'}`}>{tool.name}</span>
 
                 {noSupport && (
@@ -501,7 +501,7 @@ export function McpInstalledOn({ mcp, currentToolId, allTools, onInstalled, onBa
             <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
           </svg>
           <p className="text-[12px] text-amber-400/80 leading-relaxed">
-            Uses <span className="font-mono text-amber-400">{mcp.secretKeyNames.join(', ')}</span> — set these env vars in the target tool separately.
+            Uses <span className="font-mono text-amber-400">{mcp.secretKeyNames.join(', ')}</span> — set these env vars in the target agent separately.
           </p>
         </div>
       )}

@@ -8,7 +8,7 @@ vi.mock('@tauri-apps/api/event', () => ({ listen: vi.fn(() => Promise.resolve(vi
 vi.mock('../../analytics', () => ({ capture: vi.fn(), captureException: vi.fn() }))
 
 import ViewManager from '../views/ViewManager'
-import type { AiTool, Skill, McpServer } from '../../types'
+import type { Agent, Skill, McpServer } from '../../types'
 
 function makeSkill(name: string): Skill {
   return {
@@ -32,7 +32,7 @@ function makeMcp(name: string): McpServer {
   }
 }
 
-const mockTool: AiTool = {
+const mockTool: Agent = {
   id: 'claude',
   name: 'Claude Code',
   version: '1.0.0',
@@ -48,14 +48,14 @@ const mockTool: AiTool = {
 function makeProps(overrides: Record<string, unknown> = {}) {
   return {
     view: 'main',
-    llmsListMode: 'default',
-    selectedTool: null,
+    agentsListMode: 'default',
+    selectedAgent: null,
     selectedSkill: null,
     selectedMcp: null,
-    selectTool: vi.fn(),
-    openLlmsList: vi.fn(),
-    openSkillsListForTool: vi.fn(),
-    openMcpsListForTool: vi.fn(),
+    selectAgent: vi.fn(),
+    openAgentsList: vi.fn(),
+    openSkillsListForAgent: vi.fn(),
+    openMcpsListForAgent: vi.fn(),
     selectSkill: vi.fn(),
     selectMcp: vi.fn(),
     openSkillsPage: vi.fn(),
@@ -64,8 +64,8 @@ function makeProps(overrides: Record<string, unknown> = {}) {
     escape: vi.fn(),
     query: '',
     loading: false,
-    tools: [mockTool],
-    installedTools: [mockTool],
+    agents: [mockTool],
+    installedAgents: [mockTool],
     searchResults: [],
     notifications: [],
     updateInfo: null,
@@ -109,9 +109,9 @@ describe('ViewManager — settings view', () => {
 })
 
 describe('ViewManager — llms-list view', () => {
-  it('renders LlmsListView when view is "llms-list"', () => {
-    render(<ViewManager {...makeProps({ view: 'llms-list' })} />)
-    // LlmsListView renders the tool name
+  it('renders AgentsListView when view is "agents-list"', () => {
+    render(<ViewManager {...makeProps({ view: 'agents-list' })} />)
+    // AgentsListView renders the tool name
     expect(screen.getByText('Claude Code')).toBeInTheDocument()
   })
 })
@@ -135,39 +135,39 @@ describe('ViewManager — all-mcps-list view', () => {
 })
 
 describe('ViewManager — skills-list view', () => {
-  it('renders SkillsListPanel when view is "skills-list" and selectedTool is set', () => {
-    render(<ViewManager {...makeProps({ view: 'skills-list', selectedTool: mockTool })} />)
+  it('renders SkillsListPanel when view is "skills-list" and selectedAgent is set', () => {
+    render(<ViewManager {...makeProps({ view: 'skills-list', selectedAgent: mockTool })} />)
     // SkillsListPanel shows a "Filter skills…" placeholder
     expect(screen.getByPlaceholderText('Filter skills…')).toBeInTheDocument()
   })
 
-  it('falls back to MainView when view is "skills-list" but selectedTool is null', () => {
-    render(<ViewManager {...makeProps({ view: 'skills-list', selectedTool: null })} />)
+  it('falls back to MainView when view is "skills-list" but selectedAgent is null', () => {
+    render(<ViewManager {...makeProps({ view: 'skills-list', selectedAgent: null })} />)
     expect(screen.getByText('Coding Agents')).toBeInTheDocument()
   })
 })
 
 describe('ViewManager — mcps-list view', () => {
-  it('renders McpsListPanel when view is "mcps-list" and selectedTool is set', () => {
-    render(<ViewManager {...makeProps({ view: 'mcps-list', selectedTool: mockTool })} />)
+  it('renders McpsListPanel when view is "mcps-list" and selectedAgent is set', () => {
+    render(<ViewManager {...makeProps({ view: 'mcps-list', selectedAgent: mockTool })} />)
     expect(screen.getByPlaceholderText('Filter MCPs…')).toBeInTheDocument()
   })
 
-  it('falls back to MainView when view is "mcps-list" but selectedTool is null', () => {
-    render(<ViewManager {...makeProps({ view: 'mcps-list', selectedTool: null })} />)
+  it('falls back to MainView when view is "mcps-list" but selectedAgent is null', () => {
+    render(<ViewManager {...makeProps({ view: 'mcps-list', selectedAgent: null })} />)
     expect(screen.getByText('Coding Agents')).toBeInTheDocument()
   })
 })
 
 describe('ViewManager — tool-detail view', () => {
-  it('renders ToolDetailPage when view is "tool-detail" and selectedTool is set', () => {
-    render(<ViewManager {...makeProps({ view: 'tool-detail', selectedTool: mockTool })} />)
-    // ToolDetailPage shows the tool name prominently
+  it('renders AgentDetailPage when view is "agent-detail" and selectedAgent is set', () => {
+    render(<ViewManager {...makeProps({ view: 'agent-detail', selectedAgent: mockTool })} />)
+    // AgentDetailPage shows the tool name prominently
     expect(screen.getByText('Claude Code')).toBeInTheDocument()
   })
 
-  it('falls back to MainView when view is "tool-detail" but selectedTool is null', () => {
-    render(<ViewManager {...makeProps({ view: 'tool-detail', selectedTool: null })} />)
+  it('falls back to MainView when view is "agent-detail" but selectedAgent is null', () => {
+    render(<ViewManager {...makeProps({ view: 'agent-detail', selectedAgent: null })} />)
     expect(screen.getByText('Coding Agents')).toBeInTheDocument()
   })
 })

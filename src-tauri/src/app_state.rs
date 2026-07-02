@@ -175,10 +175,10 @@ pub fn toggle_extension_active(
 
 /// Read-modify-write a config file's permissions section under the per-file mutex.
 /// Takes a backup before writing. The caller provides a closure that mutates a
-/// `ToolPermissions` value in place.
+/// `AgentPermissions` value in place.
 pub fn update_permissions_file(
     config_path: &str,
-    mutate: impl FnOnce(&mut crate::permissions::ToolPermissions),
+    mutate: impl FnOnce(&mut crate::permissions::AgentPermissions),
     permissions_key: &str,
 ) -> Result<(), String> {
     let lock = config_lock(config_path);
@@ -197,7 +197,7 @@ pub fn update_permissions_file(
 
     // Extract current permissions (default empty)
     let perms_val = obj.get(permissions_key).cloned().unwrap_or_default();
-    let mut perms = crate::permissions::ToolPermissions {
+    let mut perms = crate::permissions::AgentPermissions {
         allow: perms_val
             .get("allow")
             .and_then(|v| v.as_array())

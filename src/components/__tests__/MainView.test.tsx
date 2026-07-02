@@ -1,20 +1,20 @@
 import { render, screen, fireEvent } from '@testing-library/react'
 import { describe, it, expect, vi } from 'vitest'
 import MainView from '../views/MainView'
-import { mockClaudeTool } from '../../__tests__/fixtures'
+import { mockClaudeAgent } from '../../__tests__/fixtures'
 
 const defaultProps = {
   loading: false,
-  tools: [mockClaudeTool],
-  installedTools: [mockClaudeTool],
+  agents: [mockClaudeAgent],
+  installedAgents: [mockClaudeAgent],
   searchResults: [],
   notifications: [],
   updateInfo: null,
   lastUpdated: null,
   cloudSyncing: false,
-  onFetchTools: vi.fn(),
+  onFetchAgents: vi.fn(),
   onGoTo: vi.fn(),
-  onOpenLlmsList: vi.fn(),
+  onOpenAgentsList: vi.fn(),
   onOpenSkillsPage: vi.fn(),
   onOpenMcpsPage: vi.fn(),
 }
@@ -24,29 +24,29 @@ function getTileButton(label: string) {
 }
 
 describe('MainView tile navigation', () => {
-  it('clicking Coding Agents tile calls onOpenLlmsList with default', () => {
-    const onOpenLlmsList = vi.fn()
-    render(<MainView {...defaultProps} onOpenLlmsList={onOpenLlmsList} />)
+  it('clicking Coding Agents tile calls onOpenAgentsList with default', () => {
+    const onOpenAgentsList = vi.fn()
+    render(<MainView {...defaultProps} onOpenAgentsList={onOpenAgentsList} />)
     fireEvent.click(getTileButton('Coding Agents'))
-    expect(onOpenLlmsList).toHaveBeenCalledTimes(1)
+    expect(onOpenAgentsList).toHaveBeenCalledTimes(1)
   })
 
-  it('clicking Skills tile calls onOpenSkillsPage, not onOpenLlmsList', () => {
+  it('clicking Skills tile calls onOpenSkillsPage, not onOpenAgentsList', () => {
     const onOpenSkillsPage = vi.fn()
-    const onOpenLlmsList = vi.fn()
-    render(<MainView {...defaultProps} onOpenSkillsPage={onOpenSkillsPage} onOpenLlmsList={onOpenLlmsList} />)
+    const onOpenAgentsList = vi.fn()
+    render(<MainView {...defaultProps} onOpenSkillsPage={onOpenSkillsPage} onOpenAgentsList={onOpenAgentsList} />)
     fireEvent.click(getTileButton('Skills'))
     expect(onOpenSkillsPage).toHaveBeenCalledTimes(1)
-    expect(onOpenLlmsList).not.toHaveBeenCalled()
+    expect(onOpenAgentsList).not.toHaveBeenCalled()
   })
 
-  it('clicking MCPs tile calls onOpenMcpsPage, not onOpenLlmsList', () => {
+  it('clicking MCPs tile calls onOpenMcpsPage, not onOpenAgentsList', () => {
     const onOpenMcpsPage = vi.fn()
-    const onOpenLlmsList = vi.fn()
-    render(<MainView {...defaultProps} onOpenMcpsPage={onOpenMcpsPage} onOpenLlmsList={onOpenLlmsList} />)
+    const onOpenAgentsList = vi.fn()
+    render(<MainView {...defaultProps} onOpenMcpsPage={onOpenMcpsPage} onOpenAgentsList={onOpenAgentsList} />)
     fireEvent.click(getTileButton('MCPs'))
     expect(onOpenMcpsPage).toHaveBeenCalledTimes(1)
-    expect(onOpenLlmsList).not.toHaveBeenCalled()
+    expect(onOpenAgentsList).not.toHaveBeenCalled()
   })
 
   it('renders all three tile labels', () => {

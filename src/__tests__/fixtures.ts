@@ -1,6 +1,6 @@
-import type { AiTool } from '../types'
+import type { Agent } from '../types'
 
-export const mockClaudeTool: AiTool = {
+export const mockClaudeAgent: Agent = {
   id: 'claude',
   name: 'Claude Code',
   version: '1.0.0',
@@ -17,7 +17,7 @@ export const mockClaudeTool: AiTool = {
   ],
 }
 
-export const mockNotInstalledTool: AiTool = {
+export const mockNotInstalledAgent: Agent = {
   id: 'ollama',
   name: 'Ollama',
   installed: false,

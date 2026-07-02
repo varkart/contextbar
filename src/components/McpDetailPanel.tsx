@@ -1,17 +1,17 @@
 import { useState, useEffect } from 'react'
 import { invoke } from '@tauri-apps/api/core'
-import type { McpServer, McpTool, NpmInstallState, AiTool } from '../types'
+import type { McpServer, McpTool, NpmInstallState, Agent } from '../types'
 import { capture, captureException } from '../analytics'
 import { McpInstalledOn } from './InstalledOnSection'
 
 interface McpDetailPanelProps {
   mcp: McpServer
   onBack: () => void
-  toolName?: string
-  toolId?: string
+  agentName?: string
+  agentId?: string
   onToggled?: () => void
   onRemoved?: () => void
-  allTools?: AiTool[]
+  allAgents?: Agent[]
 }
 
 function ToolItem({ tool }: { tool: McpTool }) {
@@ -41,7 +41,7 @@ function ToolItem({ tool }: { tool: McpTool }) {
   )
 }
 
-function NpmInstallSection({ mcp, toolId }: { mcp: McpServer; toolId?: string }) {
+function NpmInstallSection({ mcp, agentId }: { mcp: McpServer; agentId?: string }) {
   const [state, setState] = useState<NpmInstallState | null>(null)
   const [installing, setInstalling] = useState(false)
   const [installError, setInstallError] = useState<string | null>(null)
@@ -97,7 +97,7 @@ function NpmInstallSection({ mcp, toolId }: { mcp: McpServer; toolId?: string })
     setInstallError(null)
     try {
       const version = await invoke<string>('install_mcp_npm', {
-        toolId: toolId ?? '',
+        agentId: agentId ?? '',
         mcpName: mcp.name,
         packageName: pkg,
       })
@@ -235,7 +235,7 @@ function NpmInstallSection({ mcp, toolId }: { mcp: McpServer; toolId?: string })
   )
 }
 
-export default function McpDetailPanel({ mcp, onBack, toolId, onToggled, allTools }: McpDetailPanelProps) {
+export default function McpDetailPanel({ mcp, onBack, agentId, onToggled, allAgents }: McpDetailPanelProps) {
   const [tools, setTools] = useState<McpTool[]>([])
   const [loading, setLoading] = useState(true)
   const [elapsed, setElapsed] = useState(0)
@@ -275,7 +275,7 @@ export default function McpDetailPanel({ mcp, onBack, toolId, onToggled, allTool
 
       <div className="flex-1 overflow-y-auto">
         {/* npm package card — top, only for npx MCPs */}
-        <NpmInstallSection mcp={mcp} toolId={toolId} />
+        <NpmInstallSection mcp={mcp} agentId={agentId} />
 
         {/* Name / command / URL */}
         <div className="px-4 py-3 border-b border-[var(--c-border)]">
@@ -296,11 +296,11 @@ export default function McpDetailPanel({ mcp, onBack, toolId, onToggled, allTool
         </div>
 
         {/* Installed on */}
-        {allTools && (
+        {allAgents && (
           <McpInstalledOn
             mcp={mcp}
-            currentToolId={toolId ?? ''}
-            allTools={allTools}
+            currentAgentId={agentId ?? ''}
+            allAgents={allAgents}
             onInstalled={async () => { await onToggled?.() }}
             onBack={onBack}
           />

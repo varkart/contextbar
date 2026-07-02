@@ -5,7 +5,7 @@ use std::time::Duration;
 use tauri::{AppHandle, Emitter, Manager};
 
 #[derive(Debug, Clone, Serialize)]
-pub struct ToolsDiff {
+pub struct AgentsDiff {
     pub added_skills: Vec<DiffItem>,
     pub removed_skills: Vec<DiffItem>,
     pub added_mcps: Vec<DiffItem>,
@@ -14,32 +14,32 @@ pub struct ToolsDiff {
 
 #[derive(Debug, Clone, Serialize)]
 pub struct DiffItem {
-    pub tool_name: String,
+    pub agent_name: String,
     pub item_name: String,
 }
 
-// Snapshot: tool_id → set of skill paths or mcp names
+// Snapshot: agent_id → set of skill paths or mcp names
 type SkillSnapshot = HashMap<String, HashSet<String>>;
 type McpSnapshot = HashMap<String, HashSet<String>>;
 
-fn take_snapshot(_app: &AppHandle) -> (Vec<crate::models::AiTool>, SkillSnapshot, McpSnapshot) {
-    let tools = crate::detectors::detect_all();
+fn take_snapshot(_app: &AppHandle) -> (Vec<crate::models::Agent>, SkillSnapshot, McpSnapshot) {
+    let agents = crate::detectors::detect_all();
     let mut skills: SkillSnapshot = HashMap::new();
     let mut mcps: McpSnapshot = HashMap::new();
-    for tool in &tools {
-        if !tool.installed {
+    for agent in &agents {
+        if !agent.installed {
             continue;
         }
         skills.insert(
-            tool.id.clone(),
-            tool.skills.iter().map(|s| s.name.clone()).collect(),
+            agent.id.clone(),
+            agent.skills.iter().map(|s| s.name.clone()).collect(),
         );
         mcps.insert(
-            tool.id.clone(),
-            tool.mcps.iter().map(|m| m.name.clone()).collect(),
+            agent.id.clone(),
+            agent.mcps.iter().map(|m| m.name.clone()).collect(),
         );
     }
-    (tools, skills, mcps)
+    (agents, skills, mcps)
 }
 
 fn diff_snapshots(
@@ -47,54 +47,54 @@ fn diff_snapshots(
     new_skills: &SkillSnapshot,
     old_mcps: &McpSnapshot,
     new_mcps: &McpSnapshot,
-    // tool_id → display name
-    tool_names: &HashMap<String, String>,
-) -> ToolsDiff {
+    // agent_id → display name
+    agent_names: &HashMap<String, String>,
+) -> AgentsDiff {
     let mut added_skills = vec![];
     let mut removed_skills = vec![];
     let mut added_mcps = vec![];
     let mut removed_mcps = vec![];
 
-    let all_tool_ids: HashSet<&String> = old_skills.keys().chain(new_skills.keys()).collect();
+    let all_agent_ids: HashSet<&String> = old_skills.keys().chain(new_skills.keys()).collect();
 
-    for tool_id in all_tool_ids {
-        let tool_name = tool_names
-            .get(tool_id)
+    for agent_id in all_agent_ids {
+        let agent_name = agent_names
+            .get(agent_id)
             .cloned()
-            .unwrap_or_else(|| tool_id.clone());
+            .unwrap_or_else(|| agent_id.clone());
 
-        let old_s = old_skills.get(tool_id).cloned().unwrap_or_default();
-        let new_s = new_skills.get(tool_id).cloned().unwrap_or_default();
+        let old_s = old_skills.get(agent_id).cloned().unwrap_or_default();
+        let new_s = new_skills.get(agent_id).cloned().unwrap_or_default();
         for name in new_s.difference(&old_s) {
             added_skills.push(DiffItem {
-                tool_name: tool_name.clone(),
+                agent_name: agent_name.clone(),
                 item_name: name.clone(),
             });
         }
         for name in old_s.difference(&new_s) {
             removed_skills.push(DiffItem {
-                tool_name: tool_name.clone(),
+                agent_name: agent_name.clone(),
                 item_name: name.clone(),
             });
         }
 
-        let old_m = old_mcps.get(tool_id).cloned().unwrap_or_default();
-        let new_m = new_mcps.get(tool_id).cloned().unwrap_or_default();
+        let old_m = old_mcps.get(agent_id).cloned().unwrap_or_default();
+        let new_m = new_mcps.get(agent_id).cloned().unwrap_or_default();
         for name in new_m.difference(&old_m) {
             added_mcps.push(DiffItem {
-                tool_name: tool_name.clone(),
+                agent_name: agent_name.clone(),
                 item_name: name.clone(),
             });
         }
         for name in old_m.difference(&new_m) {
             removed_mcps.push(DiffItem {
-                tool_name: tool_name.clone(),
+                agent_name: agent_name.clone(),
                 item_name: name.clone(),
             });
         }
     }
 
-    ToolsDiff {
+    AgentsDiff {
         added_skills,
         removed_skills,
         added_mcps,
@@ -144,7 +144,7 @@ pub fn start(app: AppHandle) {
         }
 
         // Tool id → display name map
-        let tool_names: HashMap<String, String> = [
+        let agent_names: HashMap<String, String> = [
             ("claude", "Claude Code"),
             ("cursor", "Cursor"),
             ("gemini", "Gemini CLI"),
@@ -172,7 +172,7 @@ pub fn start(app: AppHandle) {
                 &new_skills,
                 &last_mcps,
                 &new_mcps,
-                &tool_names,
+                &agent_names,
             );
 
             let has_changes = !diff.added_skills.is_empty()
@@ -181,8 +181,8 @@ pub fn start(app: AppHandle) {
                 || !diff.removed_mcps.is_empty();
 
             if has_changes {
-                let _ = app.emit("tools-changed", ());
-                let _ = app.emit("tools-diff", &diff);
+                let _ = app.emit("agents-changed", ());
+                let _ = app.emit("agents-diff", &diff);
             }
 
             // Re-run Doctor on every relevant FS event (catches command edits too)

@@ -15,13 +15,13 @@ vi.mock('../analytics', () => ({ capture: vi.fn(), captureException: vi.fn() }))
 const mockFetchTools = vi.fn().mockResolvedValue([])
 const mockFetchNotifications = vi.fn()
 
-vi.mock('../useTools', () => ({
-  useTools: vi.fn(() => ({
-    tools: [],
+vi.mock('../useAgents', () => ({
+  useAgents: vi.fn(() => ({
+    agents: [],
     loading: false,
     cloudSyncing: false,
     lastUpdated: null,
-    fetchTools: mockFetchTools,
+    fetchAgents: mockFetchTools,
   })),
 }))
 
@@ -33,21 +33,21 @@ vi.mock('../useNotifications', () => ({
 }))
 
 vi.mock('../useUpdateCheck', () => ({ useUpdateCheck: vi.fn(() => null) }))
-vi.mock('../useToolsDiff', () => ({ useToolsDiff: vi.fn() }))
+vi.mock('../useAgentsDiff', () => ({ useAgentsDiff: vi.fn() }))
 vi.mock('../useTheme', () => ({
   useTheme: vi.fn(() => ({ theme: 'system' as const, setTheme: vi.fn() })),
 }))
 
 import App from '../App'
 import { invoke } from '@tauri-apps/api/core'
-import { useTools } from '../useTools'
+import { useAgents } from '../useAgents'
 import { useNotifications } from '../useNotifications'
 
 const mockInvoke = vi.mocked(invoke)
-const mockUseTools = vi.mocked(useTools)
+const mockUseTools = vi.mocked(useAgents)
 const mockUseNotifications = vi.mocked(useNotifications)
 
-const installedTool = {
+const installedAgent = {
   id: 'claude',
   name: 'Claude Code',
   version: '1.0',
@@ -71,11 +71,11 @@ beforeEach(() => {
     return '0.7.0'
   })
   mockUseTools.mockReturnValue({
-    tools: [],
+    agents: [],
     loading: false,
     cloudSyncing: false,
     lastUpdated: null,
-    fetchTools: mockFetchTools,
+    fetchAgents: mockFetchTools,
   })
   mockUseNotifications.mockReturnValue({
     notifications: [],
@@ -96,16 +96,16 @@ describe('App — main view', () => {
 
   it('shows no tools detected when no tools installed', () => {
     render(<App />)
-    expect(screen.getByText('No tools detected')).toBeInTheDocument()
+    expect(screen.getByText('No agents detected')).toBeInTheDocument()
   })
 
   it('shows skeleton rows while loading', () => {
     mockUseTools.mockReturnValue({
-      tools: [],
+      agents: [],
       loading: true,
       cloudSyncing: false,
       lastUpdated: null,
-      fetchTools: mockFetchTools,
+      fetchAgents: mockFetchTools,
     })
     const { container } = render(<App />)
     expect(container.querySelectorAll('.animate-pulse').length).toBeGreaterThan(0)
@@ -142,11 +142,11 @@ describe('App — navigation', () => {
 
   it('Escape from tool-detail returns to llms-list', () => {
     mockUseTools.mockReturnValue({
-      tools: [installedTool],
+      agents: [installedAgent],
       loading: false,
       cloudSyncing: false,
       lastUpdated: null,
-      fetchTools: mockFetchTools,
+      fetchAgents: mockFetchTools,
     })
     render(<App />)
     fireEvent.click(screen.getByText('Coding Agents'))
@@ -184,8 +184,8 @@ describe('App — navigation', () => {
 
   it('navigates to skills-list and skill-detail', async () => {
     mockUseTools.mockReturnValue({
-      tools: [installedTool],
-      loading: false, cloudSyncing: false, lastUpdated: null, fetchTools: mockFetchTools,
+      agents: [installedAgent],
+      loading: false, cloudSyncing: false, lastUpdated: null, fetchAgents: mockFetchTools,
     })
     render(<App />)
     fireEvent.click(screen.getByText('Coding Agents'))
@@ -198,8 +198,8 @@ describe('App — navigation', () => {
 
   it('navigates to mcps-list and mcp-detail', async () => {
     mockUseTools.mockReturnValue({
-      tools: [installedTool],
-      loading: false, cloudSyncing: false, lastUpdated: null, fetchTools: mockFetchTools,
+      agents: [installedAgent],
+      loading: false, cloudSyncing: false, lastUpdated: null, fetchAgents: mockFetchTools,
     })
     render(<App />)
     fireEvent.click(screen.getByText('Coding Agents'))

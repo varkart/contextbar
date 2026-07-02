@@ -1,18 +1,18 @@
-import type { AiTool } from '../types'
-import { TOOL_COLORS } from '../constants/toolColors'
+import type { Agent } from '../types'
+import { AGENT_COLORS } from '../constants/agentColors'
 
 interface Props {
-  installedTools: AiTool[]
+  installedAgents: Agent[]
   selectedTools: Set<string>
   onToggle: (id: string) => void
 }
 
-export default function ProviderChips({ installedTools, selectedTools, onToggle }: Props) {
-  if (installedTools.length <= 1) return null
+export default function AgentChips({ installedAgents, selectedTools, onToggle }: Props) {
+  if (installedAgents.length <= 1) return null
   return (
     <div className="px-3 py-1.5 border-b border-[var(--c-border)] flex gap-1.5 flex-wrap flex-shrink-0">
-      {installedTools.map(tool => {
-        const colors = TOOL_COLORS[tool.id] ?? { bg: 'bg-zinc-500/15', text: 'text-zinc-400' }
+      {installedAgents.map(tool => {
+        const colors = AGENT_COLORS[tool.id] ?? { bg: 'bg-zinc-500/15', text: 'text-zinc-400' }
         const selected = selectedTools.has(tool.id)
         return (
           <button

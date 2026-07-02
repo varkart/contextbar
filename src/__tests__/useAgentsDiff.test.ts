@@ -2,7 +2,7 @@ import { renderHook, act } from '@testing-library/react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { listen } from '@tauri-apps/api/event'
 import { sendNotification } from '@tauri-apps/plugin-notification'
-import { useToolsDiff } from '../useToolsDiff'
+import { useAgentsDiff } from '../useAgentsDiff'
 
 vi.mock('@tauri-apps/api/event')
 vi.mock('@tauri-apps/plugin-notification')
@@ -21,7 +21,7 @@ const emptyDiff = (): DiffPayload => ({
   removedMcps: [],
 })
 
-describe('useToolsDiff', () => {
+describe('useAgentsDiff', () => {
   let capturedCallback: ((event: { payload: DiffPayload }) => Promise<void>) | null = null
   let unlisten: ReturnType<typeof vi.fn>
 
@@ -36,20 +36,20 @@ describe('useToolsDiff', () => {
   })
 
   it('registers listener on mount', async () => {
-    renderHook(() => useToolsDiff())
+    renderHook(() => useAgentsDiff())
     await act(async () => {})
-    expect(listen).toHaveBeenCalledWith('tools-diff', expect.any(Function))
+    expect(listen).toHaveBeenCalledWith('agents-diff', expect.any(Function))
   })
 
   it('calls unlisten on unmount', async () => {
-    const { unmount } = renderHook(() => useToolsDiff())
+    const { unmount } = renderHook(() => useAgentsDiff())
     await act(async () => {})
     unmount()
     expect(unlisten).toHaveBeenCalled()
   })
 
   it('does nothing when diff is empty', async () => {
-    renderHook(() => useToolsDiff())
+    renderHook(() => useAgentsDiff())
     await act(async () => {})
     await act(async () => {
       await capturedCallback?.({ payload: emptyDiff() })
@@ -58,7 +58,7 @@ describe('useToolsDiff', () => {
   })
 
   it('sends single notification for one added skill', async () => {
-    renderHook(() => useToolsDiff())
+    renderHook(() => useAgentsDiff())
     await act(async () => {})
     await act(async () => {
       await capturedCallback?.({
@@ -75,7 +75,7 @@ describe('useToolsDiff', () => {
   })
 
   it('sends single notification for one added MCP', async () => {
-    renderHook(() => useToolsDiff())
+    renderHook(() => useAgentsDiff())
     await act(async () => {})
     await act(async () => {
       await capturedCallback?.({
@@ -92,7 +92,7 @@ describe('useToolsDiff', () => {
   })
 
   it('sends summary notification for multiple changes', async () => {
-    renderHook(() => useToolsDiff())
+    renderHook(() => useAgentsDiff())
     await act(async () => {})
     await act(async () => {
       await capturedCallback?.({

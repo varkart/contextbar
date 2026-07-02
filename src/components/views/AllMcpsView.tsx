@@ -1,12 +1,12 @@
 import { useState, useMemo } from 'react'
-import type { AiTool, McpServer } from '../../types'
-import ToolDot from '../ToolDot'
-import ProviderChips from '../ProviderChips'
+import type { Agent, McpServer } from '../../types'
+import AgentDot from '../AgentDot'
+import AgentChips from '../AgentChips'
 import SearchInput from '../SearchInput'
-import { useProviderFilter } from '../../hooks/useProviderFilter'
+import { useAgentFilter } from '../../hooks/useAgentFilter'
 
 interface Props {
-  tools: AiTool[]
+  agents: Agent[]
   onBack: () => void
   onSelectMcp: (mcp: McpServer) => void
   onAddMcp?: () => void
@@ -23,9 +23,9 @@ interface McpGroup {
   variants: McpVariant[]
 }
 
-function buildMcpGroups(tools: AiTool[]): McpGroup[] {
+function buildMcpGroups(agents: Agent[]): McpGroup[] {
   const map = new Map<string, McpVariant[]>()
-  for (const tool of tools) {
+  for (const tool of agents) {
     if (!tool.installed) continue
     for (const mcp of tool.mcps) {
       const key = mcp.name.toLowerCase()
@@ -42,10 +42,10 @@ function buildMcpGroups(tools: AiTool[]): McpGroup[] {
   return groups.sort((a, b) => a.name.localeCompare(b.name))
 }
 
-export default function AllMcpsView({ tools, onSelectMcp, onAddMcp }: Props) {
+export default function AllMcpsView({ agents, onSelectMcp, onAddMcp }: Props) {
   const [query, setQuery] = useState('')
-  const { installedTools, selectedTools, toggleTool, allSelected } = useProviderFilter(tools)
-  const groups = useMemo(() => buildMcpGroups(tools), [tools])
+  const { installedAgents, selectedTools, toggleTool, allSelected } = useAgentFilter(agents)
+  const groups = useMemo(() => buildMcpGroups(agents), [agents])
 
   const filtered = useMemo(() => {
     let result = query.trim()
@@ -58,11 +58,11 @@ export default function AllMcpsView({ tools, onSelectMcp, onAddMcp }: Props) {
   }, [groups, query, selectedTools, allSelected])
 
   const totalMcps = groups.length
-  const installedToolCount = installedTools.length
+  const installedAgentCount = installedAgents.length
   const isFiltered = filtered.length !== totalMcps
   const countLabel = isFiltered
     ? `${filtered.length} of ${totalMcps} MCPs`
-    : `${totalMcps} MCPs · ${installedToolCount} providers`
+    : `${totalMcps} MCPs · ${installedAgentCount} providers`
 
   return (
     <div className="flex flex-col h-full bg-[var(--c-bg)]">
@@ -87,7 +87,7 @@ export default function AllMcpsView({ tools, onSelectMcp, onAddMcp }: Props) {
         <SearchInput value={query} onChange={setQuery} placeholder="Search MCPs…" accentColor="violet" />
       </div>
 
-      <ProviderChips installedTools={installedTools} selectedTools={selectedTools} onToggle={toggleTool} />
+      <AgentChips installedAgents={installedAgents} selectedTools={selectedTools} onToggle={toggleTool} />
 
       <div className="flex-1 overflow-y-auto">
         {filtered.length === 0 && (
@@ -112,7 +112,7 @@ export default function AllMcpsView({ tools, onSelectMcp, onAddMcp }: Props) {
               )}
               <div className="flex gap-1 mt-1">
                 {group.variants.map(v => (
-                  <ToolDot key={v.toolId + v.name} toolId={v.toolId} toolName={v.toolName} />
+                  <AgentDot key={v.toolId + v.name} toolId={v.toolId} toolName={v.toolName} />
                 ))}
               </div>
             </div>

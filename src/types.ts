@@ -1,4 +1,4 @@
-export interface AiTool {
+export interface Agent {
   id: string;
   name: string;
   version?: string;
@@ -25,9 +25,9 @@ export interface Skill {
   /** FNV-1a hex hash of SKILL.md content — used to detect variants across tools. */
   contentHash?: string;
   /** Which tool this skill belongs to — populated by the aggregated skills view. */
-  toolId?: string;
+  agentId?: string;
   /** Which tool name this skill belongs to — populated by the aggregated skills view. */
-  toolName?: string;
+  agentName?: string;
 }
 
 export interface McpServer {

@@ -1,11 +1,11 @@
 import { describe, it, expect } from 'vitest'
 import { routerReducer, initialRouterState } from '../viewRouter'
 import type { RouterState } from '../viewRouter'
-import type { AiTool, Skill, McpServer } from '../types'
+import type { Agent, Skill, McpServer } from '../types'
 
 const tool = {
   id: 'claude', name: 'Claude Code', installed: true, supportsSkills: true, supportsMcps: true, skills: [], mcps: [],
-} as AiTool
+} as Agent
 
 const skill: Skill = {
   name: 'graphify', path: '/skills/graphify', description: 'g', hasFullDescription: false, active: true, sourceId: 's',
@@ -32,39 +32,39 @@ describe('initialRouterState', () => {
   })
 })
 
-describe('routerReducer — OPEN_LLMS_LIST', () => {
+describe('routerReducer — OPEN_AGENTS_LIST', () => {
   it('navigates to llms-list', () => {
-    const next = routerReducer(base, { type: 'OPEN_LLMS_LIST', mode: 'default' })
-    expect(next.view).toBe('llms-list')
-    expect(next.llmsListMode).toBe('default')
+    const next = routerReducer(base, { type: 'OPEN_AGENTS_LIST', mode: 'default' })
+    expect(next.view).toBe('agents-list')
+    expect(next.agentsListMode).toBe('default')
   })
 })
 
-describe('routerReducer — OPEN_SKILLS_LIST_FOR_TOOL', () => {
-  it('sets selectedTool and navigates to skills-list', () => {
-    const next = routerReducer(base, { type: 'OPEN_SKILLS_LIST_FOR_TOOL', tool })
+describe('routerReducer — OPEN_SKILLS_LIST_FOR_AGENT', () => {
+  it('sets selectedAgent and navigates to skills-list', () => {
+    const next = routerReducer(base, { type: 'OPEN_SKILLS_LIST_FOR_AGENT', tool })
     expect(next.view).toBe('skills-list')
-    expect(next.selectedTool).toBe(tool)
+    expect(next.selectedAgent).toBe(tool)
   })
 })
 
-describe('routerReducer — OPEN_MCPS_LIST_FOR_TOOL', () => {
-  it('sets selectedTool and navigates to mcps-list', () => {
-    const next = routerReducer(base, { type: 'OPEN_MCPS_LIST_FOR_TOOL', tool })
+describe('routerReducer — OPEN_MCPS_LIST_FOR_AGENT', () => {
+  it('sets selectedAgent and navigates to mcps-list', () => {
+    const next = routerReducer(base, { type: 'OPEN_MCPS_LIST_FOR_AGENT', tool })
     expect(next.view).toBe('mcps-list')
-    expect(next.selectedTool).toBe(tool)
+    expect(next.selectedAgent).toBe(tool)
   })
 })
 
-describe('routerReducer — SELECT_TOOL', () => {
-  it('sets selectedTool and navigates to tool-detail', () => {
-    const next = routerReducer(base, { type: 'SELECT_TOOL', tool })
-    expect(next.view).toBe('tool-detail')
-    expect(next.selectedTool).toBe(tool)
+describe('routerReducer — SELECT_AGENT', () => {
+  it('sets selectedAgent and navigates to tool-detail', () => {
+    const next = routerReducer(base, { type: 'SELECT_AGENT', tool })
+    expect(next.view).toBe('agent-detail')
+    expect(next.selectedAgent).toBe(tool)
   })
 
   it('preserves other state', () => {
-    const next = routerReducer(base, { type: 'SELECT_TOOL', tool })
+    const next = routerReducer(base, { type: 'SELECT_AGENT', tool })
     expect(next.selectedSkill).toBeNull()
     expect(next.selectedMcp).toBeNull()
   })
@@ -79,8 +79,8 @@ describe('routerReducer — SELECT_SKILL', () => {
   })
 
   it('defaults fromView to tool-detail', () => {
-    const next = routerReducer(base, { type: 'SELECT_SKILL', skill, fromView: 'tool-detail' })
-    expect(next.skillBackView).toBe('tool-detail')
+    const next = routerReducer(base, { type: 'SELECT_SKILL', skill, fromView: 'agent-detail' })
+    expect(next.skillBackView).toBe('agent-detail')
   })
 })
 
@@ -102,25 +102,25 @@ describe('routerReducer — SELECT_PERMISSIONS', () => {
 
 describe('routerReducer — OPEN_SKILLS_PAGE', () => {
   it('navigates to all-skills-list', () => {
-    const next = routerReducer(base, { type: 'OPEN_SKILLS_PAGE', fromView: 'tool-detail' })
+    const next = routerReducer(base, { type: 'OPEN_SKILLS_PAGE', fromView: 'agent-detail' })
     expect(next.view).toBe('all-skills-list')
   })
 
   it('stores allSkillsBackView from fromView', () => {
-    const next = routerReducer(base, { type: 'OPEN_SKILLS_PAGE', fromView: 'tool-detail' })
-    expect(next.allSkillsBackView).toBe('tool-detail')
+    const next = routerReducer(base, { type: 'OPEN_SKILLS_PAGE', fromView: 'agent-detail' })
+    expect(next.allSkillsBackView).toBe('agent-detail')
   })
 })
 
 describe('routerReducer — OPEN_MCPS_PAGE', () => {
   it('navigates to all-mcps-list', () => {
-    const next = routerReducer(base, { type: 'OPEN_MCPS_PAGE', fromView: 'tool-detail' })
+    const next = routerReducer(base, { type: 'OPEN_MCPS_PAGE', fromView: 'agent-detail' })
     expect(next.view).toBe('all-mcps-list')
   })
 
   it('stores allMcpsBackView from fromView', () => {
-    const next = routerReducer(base, { type: 'OPEN_MCPS_PAGE', fromView: 'tool-detail' })
-    expect(next.allMcpsBackView).toBe('tool-detail')
+    const next = routerReducer(base, { type: 'OPEN_MCPS_PAGE', fromView: 'agent-detail' })
+    expect(next.allMcpsBackView).toBe('agent-detail')
   })
 })
 
@@ -137,24 +137,24 @@ describe('routerReducer — REFRESH_SELECTED', () => {
     ...tool,
     skills: [{ ...skill, active: false }],
     mcps: [{ ...mcp, active: false }],
-  } as AiTool
+  } as Agent
 
-  it('updates selectedTool from fresh tools', () => {
-    const state: RouterState = { ...base, selectedTool: tool }
+  it('updates selectedAgent from fresh tools', () => {
+    const state: RouterState = { ...base, selectedAgent: tool }
     const next = routerReducer(state, { type: 'REFRESH_SELECTED', tools: [updatedTool] })
-    expect(next.selectedTool?.skills).toEqual([{ ...skill, active: false }])
+    expect(next.selectedAgent?.skills).toEqual([{ ...skill, active: false }])
   })
 
-  it('keeps selectedTool when not found in fresh tools', () => {
-    const state: RouterState = { ...base, selectedTool: tool }
+  it('keeps selectedAgent when not found in fresh tools', () => {
+    const state: RouterState = { ...base, selectedAgent: tool }
     const next = routerReducer(state, { type: 'REFRESH_SELECTED', tools: [] })
-    expect(next.selectedTool).toBe(tool)
+    expect(next.selectedAgent).toBe(tool)
   })
 
   it('updates selectedSkill from fresh tools', () => {
     const updatedSkill = { ...skill, active: false }
-    const freshTool = { ...tool, skills: [updatedSkill], mcps: [] } as AiTool
-    const state: RouterState = { ...base, selectedTool: freshTool, selectedSkill: skill }
+    const freshTool = { ...tool, skills: [updatedSkill], mcps: [] } as Agent
+    const state: RouterState = { ...base, selectedAgent: freshTool, selectedSkill: skill }
     const next = routerReducer(state, { type: 'REFRESH_SELECTED', tools: [freshTool] })
     expect(next.selectedSkill?.active).toBe(false)
   })
@@ -167,8 +167,8 @@ describe('routerReducer — REFRESH_SELECTED', () => {
 
   it('updates selectedMcp from fresh tools', () => {
     const updatedMcp = { ...mcp, active: false }
-    const freshTool = { ...tool, skills: [], mcps: [updatedMcp] } as AiTool
-    const state: RouterState = { ...base, selectedTool: freshTool, selectedMcp: mcp }
+    const freshTool = { ...tool, skills: [], mcps: [updatedMcp] } as Agent
+    const state: RouterState = { ...base, selectedAgent: freshTool, selectedMcp: mcp }
     const next = routerReducer(state, { type: 'REFRESH_SELECTED', tools: [freshTool] })
     expect(next.selectedMcp?.active).toBe(false)
   })
@@ -181,7 +181,7 @@ describe('routerReducer — REFRESH_SELECTED', () => {
 
   it('nulls are preserved through refresh', () => {
     const next = routerReducer(base, { type: 'REFRESH_SELECTED', tools: [tool] })
-    expect(next.selectedTool).toBeNull()
+    expect(next.selectedAgent).toBeNull()
     expect(next.selectedSkill).toBeNull()
     expect(next.selectedMcp).toBeNull()
   })

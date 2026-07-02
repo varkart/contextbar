@@ -1,10 +1,10 @@
 import { useState, useRef, useCallback } from 'react'
 import type React from 'react'
-import type { AiTool, McpServer } from '../types'
+import type { Agent, McpServer } from '../types'
 import { useRovingFocus } from '../useRovingFocus'
 
 interface McpsListPanelProps {
-  tool: AiTool
+  agent: Agent
   onBack: () => void
   onSelectMcp: (mcp: McpServer) => void
   onAddMcp: () => void
@@ -22,13 +22,13 @@ function LockIcon() {
   )
 }
 
-export default function McpsListPanel({ tool, onSelectMcp, onAddMcp }: McpsListPanelProps) {
+export default function McpsListPanel({ agent, onSelectMcp, onAddMcp }: McpsListPanelProps) {
   const [q, setQ] = useState('')
   const filterInputRef = useRef<HTMLInputElement | null>(null)
 
   const filtered = q
-    ? tool.mcps.filter(m => m.name.toLowerCase().includes(q.toLowerCase()))
-    : tool.mcps
+    ? agent.mcps.filter(m => m.name.toLowerCase().includes(q.toLowerCase()))
+    : agent.mcps
 
   const { getItemProps, setFocusedIndex } = useRovingFocus({
     count: filtered.length,
