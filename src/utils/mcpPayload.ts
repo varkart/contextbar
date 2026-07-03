@@ -56,7 +56,8 @@ export function buildMcpPayload(type: McpType, fields: Record<string, string>): 
   switch (type) {
     case 'npx': {
       const pkg = fields.package?.trim() ?? ''
-      return { command: 'npx', args: ['-y', pkg] }
+      const extra = fields.npxArgs?.trim() ? fields.npxArgs.trim().split(/\s+/) : []
+      return { command: 'npx', args: ['-y', pkg, ...extra] }
     }
     case 'http':
       return { url: fields.url?.trim() }
@@ -87,8 +88,10 @@ export function prefillTypeAndFields(cached: CachedMcp): { type: McpType; fields
     return { type: 'http', fields: { url: cached.url } }
   }
   if (cached.command === 'npx' && cached.args.includes('-y')) {
-    const pkg = cached.args.find(a => !a.startsWith('-')) ?? ''
-    return { type: 'npx', fields: { package: pkg } }
+    const pkgIndex = cached.args.findIndex(a => !a.startsWith('-'))
+    const pkg = pkgIndex >= 0 ? cached.args[pkgIndex] : ''
+    const npxArgs = cached.args.slice(pkgIndex + 1).join(' ')
+    return { type: 'npx', fields: { package: pkg, ...(npxArgs ? { npxArgs } : {}) } }
   }
   if (cached.command === 'docker') {
     const image = cached.args.find(a => !a.startsWith('-') && a !== 'run' && a !== '--rm' && a !== '-i') ?? ''

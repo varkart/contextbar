@@ -322,22 +322,39 @@ export default function AddMcpView({ installedAgents, onBack, onAdded }: AddMcpV
 
         {/* Type-specific fields */}
         {mcpType === 'npx' && (
-          <div>
-            <label className="block text-[12px] font-semibold text-[var(--c-text-3)] uppercase tracking-wider mb-1.5">Package *</label>
-            <input
-              type="text"
-              value={fields.package ?? ''}
-              onChange={e => setField('package', e.target.value)}
-              placeholder="@modelcontextprotocol/server-github"
-              required
-              className={`w-full bg-[var(--c-surface)] border rounded-lg px-3 py-2 text-[14px] text-[var(--c-text)] placeholder-[var(--c-text-3)] outline-none transition-colors font-mono text-[13px] ${
-                validationErrors.command ? 'border-red-500/50 focus:border-red-400' : 'border-[var(--c-border)] focus:border-violet-400/60'
-              }`}
-            />
+          <div className="space-y-3">
+            <div>
+              <label className="block text-[12px] font-semibold text-[var(--c-text-3)] uppercase tracking-wider mb-1.5">Package *</label>
+              <input
+                type="text"
+                value={fields.package ?? ''}
+                onChange={e => setField('package', e.target.value)}
+                placeholder="@modelcontextprotocol/server-github"
+                required
+                className={`w-full bg-[var(--c-surface)] border rounded-lg px-3 py-2 text-[14px] text-[var(--c-text)] placeholder-[var(--c-text-3)] outline-none transition-colors font-mono text-[13px] ${
+                  validationErrors.command ? 'border-red-500/50 focus:border-red-400' : 'border-[var(--c-border)] focus:border-violet-400/60'
+                }`}
+              />
+              {validationErrors.command && <ErrorBox message={validationErrors.command} />}
+            </div>
+            <div>
+              <label className="block text-[12px] font-semibold text-[var(--c-text-3)] uppercase tracking-wider mb-1.5">
+                Extra args <span className="normal-case font-normal text-[var(--c-text-3)]">(optional)</span>
+              </label>
+              <input
+                type="text"
+                value={fields.npxArgs ?? ''}
+                onChange={e => setField('npxArgs', e.target.value)}
+                placeholder="--spec https://example.com/openapi.json"
+                className="w-full bg-[var(--c-surface)] border border-[var(--c-border)] rounded-lg px-3 py-2 text-[14px] text-[var(--c-text)] placeholder-[var(--c-text-3)] outline-none focus:border-violet-400/60 transition-colors font-mono text-[13px]"
+              />
+              <p className="mt-1 text-[11px] text-[var(--c-text-3)]">Passed after the package name</p>
+            </div>
             {fields.package && (
-              <p className="mt-1.5 text-[11px] text-[var(--c-text-3)] font-mono">npx -y {fields.package}</p>
+              <p className="text-[11px] text-[var(--c-text-3)] font-mono">
+                npx -y {fields.package}{fields.npxArgs ? ` ${fields.npxArgs}` : ''}
+              </p>
             )}
-            {validationErrors.command && <ErrorBox message={validationErrors.command} />}
           </div>
         )}
 
