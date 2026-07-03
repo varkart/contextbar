@@ -576,14 +576,30 @@ pub fn toggle_toml_config_skill(
         toml::from_str(&raw).map_err(|e| format!("cannot parse {config_path}: {e}"))?
     };
 
-    // The path referenced in config is the SKILL.md file path
-    let skill_md = format!("{skill_dir}/SKILL.md");
+    // For directory skills the config stores path/SKILL.md; for flat .md files just the file path.
+    let skill_path_obj = std::path::Path::new(skill_dir);
+    let skill_md = if skill_path_obj.is_dir() {
+        format!("{skill_dir}/SKILL.md")
+    } else {
+        skill_dir.to_string()
+    };
+    // Stale key that may exist if a flat file was previously written with the wrong /SKILL.md suffix
+    let stale_skill_md = if !skill_path_obj.is_dir() {
+        Some(format!("{skill_dir}/SKILL.md"))
+    } else {
+        None
+    };
 
     // Navigate to the array, creating intermediate tables as needed
     let array = navigate_or_create_toml_array(
         doc.as_table_mut().ok_or("TOML root is not a table")?,
         key_path,
     )?;
+
+    // Remove stale entry with wrong /SKILL.md suffix if it exists (flat file bug cleanup)
+    if let Some(ref stale) = stale_skill_md {
+        array.retain(|e| e.get(path_field).and_then(|v| v.as_str()) != Some(stale.as_str()));
+    }
 
     // Find existing entry for this skill path
     if let Some(entry) = array

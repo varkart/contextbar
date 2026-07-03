@@ -85,8 +85,8 @@ jobs:
           TARGZ=$(find "$BUNDLE" -name "*.app.tar.gz" -maxdepth 1 | head -1)
           SIG=$(find "$BUNDLE" -name "*.app.tar.gz.sig" -maxdepth 1 | head -1)
           if [ -z "$TARGZ" ] || [ -z "$SIG" ]; then
-            echo "No signed updater artifacts — TAURI_SIGNING_PRIVATE_KEY may not be set."
-            echo "HAS_UPDATER=false" >> $GITHUB_ENV
+            echo "::error::No signed updater artifacts found. Set TAURI_SIGNING_PRIVATE_KEY in repo secrets."
+            exit 1
           else
             TARGZ_NAME=$(basename "$TARGZ")
             cp "$TARGZ" "$TARGZ_NAME"
@@ -96,7 +96,6 @@ jobs:
           fi
 
       - name: Generate latest.json
-        if: env.HAS_UPDATER == 'true'
         run: |
           VERSION="${{ steps.ref.outputs.tag }}"
           VERSION_NUM="${VERSION#v}"
@@ -160,11 +159,9 @@ jobs:
           {
             echo "RELEASE_FILES<<RFEOF"
             echo "${{ env.DMG_NAME }}"
-            if [ "$HAS_UPDATER" = "true" ]; then
-              echo "${{ env.TARGZ_NAME }}"
-              echo "${{ env.TARGZ_NAME }}.sig"
-              echo "latest.json"
-            fi
+            echo "${{ env.TARGZ_NAME }}"
+            echo "${{ env.TARGZ_NAME }}.sig"
+            echo "latest.json"
             echo "RFEOF"
           } >> $GITHUB_ENV
 

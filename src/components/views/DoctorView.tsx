@@ -54,8 +54,8 @@ function DoctorItemRow({ item }: { item: DoctorItem }) {
           {hasIssue && item.fixHint && (
             <p className={`text-[11px] mt-1.5 leading-relaxed px-2 py-1.5 rounded ${
               item.status === 'error'
-                ? 'bg-red-500/8 text-red-300'
-                : 'bg-amber-500/8 text-amber-300'
+                ? 'bg-red-500/10 text-red-400'
+                : 'bg-amber-500/10 text-[var(--c-text-2)]'
             }`}>
               <span className="font-medium">Fix: </span>{item.fixHint}
             </p>

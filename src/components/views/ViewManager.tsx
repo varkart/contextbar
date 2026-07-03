@@ -47,7 +47,7 @@ export default function ViewManager({
   fetchNotifications,
 }: any) {
   if (view === 'doctor') {
-    return <DoctorView onBack={() => goTo('main')} />
+    return <DoctorView onBack={() => goTo('settings')} />
   }
   if (view === 'logs') {
     return <LogsPanel onBack={() => goTo('main')} />

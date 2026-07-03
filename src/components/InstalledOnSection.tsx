@@ -18,14 +18,6 @@ function AgentAvatar({ tool }: { tool: Agent }) {
   )
 }
 
-function SpinnerKnob() {
-  return (
-    <svg className="w-2.5 h-2.5 text-zinc-400 animate-spin" viewBox="0 0 24 24" fill="none">
-      <circle cx="12" cy="12" r="8" stroke="currentColor" strokeWidth="3.5" strokeDasharray="38" strokeDashoffset="9" strokeLinecap="round"/>
-    </svg>
-  )
-}
-
 function MiniSpinner() {
   return (
     <svg className="w-3 h-3 animate-spin" viewBox="0 0 24 24" fill="none">
@@ -236,21 +228,15 @@ export function SkillInstalledOn({ skill, currentAgentId, allAgents, onInstalled
                   <span className="text-[11px] text-[var(--c-text-3)]">No skills support</span>
                 )}
 
-                {/* Active: toggle switch */}
+                {/* Active: Disable button */}
                 {!noSupport && isInstalled && isActive && (
                   <button
                     onClick={() => handleToggle(tool, match, false)}
                     disabled={toggling === tool.id}
                     aria-label="Disable skill"
-                    style={{ transition: 'background-color 0.25s ease' }}
-                    className="relative w-9 h-5 rounded-full flex-shrink-0 focus:outline-none disabled:opacity-40 bg-emerald-500"
+                    className="text-[11px] px-2 py-0.5 rounded text-[var(--c-text-3)] hover:text-[var(--c-text)] border border-[var(--c-border)] transition-colors disabled:opacity-40 flex-shrink-0"
                   >
-                    <span
-                      style={{ transition: 'left 0.25s cubic-bezier(0.34,1.56,0.64,1)' }}
-                      className="absolute top-0.5 left-4 w-4 h-4 rounded-full bg-white shadow-md flex items-center justify-center"
-                    >
-                      {toggling === tool.id && <SpinnerKnob />}
-                    </span>
+                    {toggling === tool.id ? <MiniSpinner /> : 'Disable'}
                   </button>
                 )}
 
@@ -436,26 +422,31 @@ export function McpInstalledOn({ mcp, currentAgentId, allAgents, onInstalled, on
                 )}
 
                 {!noSupport && isInstalled && (
-                  <>
-                    <button
-                      onClick={() => handleToggle(tool, match)}
-                      disabled={toggling === tool.id || removing === tool.id}
-                      aria-label={match.active ? 'Disable MCP' : 'Enable MCP'}
-                      style={{ transition: 'background-color 0.25s ease' }}
-                      className={`relative w-9 h-5 rounded-full flex-shrink-0 focus:outline-none disabled:opacity-40 ${match.active ? 'bg-emerald-500' : 'bg-[var(--c-track)]'}`}
-                    >
-                      <span
-                        style={{ transition: 'left 0.25s cubic-bezier(0.34,1.56,0.64,1)' }}
-                        className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow-md flex items-center justify-center ${match.active ? 'left-4' : 'left-0.5'}`}
+                  <div className="flex items-center gap-1 flex-shrink-0">
+                    {match.active ? (
+                      <button
+                        onClick={() => handleToggle(tool, match)}
+                        disabled={toggling === tool.id || removing === tool.id}
+                        aria-label="Disable MCP"
+                        className="text-[11px] px-2 py-0.5 rounded text-[var(--c-text-3)] hover:text-[var(--c-text)] border border-[var(--c-border)] transition-colors disabled:opacity-40"
                       >
-                        {toggling === tool.id && <SpinnerKnob />}
-                      </span>
-                    </button>
+                        {toggling === tool.id ? <MiniSpinner /> : 'Disable'}
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => handleToggle(tool, match)}
+                        disabled={toggling === tool.id || removing === tool.id}
+                        aria-label="Enable MCP"
+                        className="text-[11px] font-medium px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/20 transition-colors disabled:opacity-40"
+                      >
+                        {toggling === tool.id ? <MiniSpinner /> : 'Enable'}
+                      </button>
+                    )}
                     <button
                       onClick={() => handleRemove(tool, match)}
                       disabled={removing === tool.id || toggling === tool.id}
                       aria-label="Remove MCP"
-                      className="p-0.5 text-[var(--c-text-3)] hover:text-red-400 transition-colors disabled:opacity-40 flex-shrink-0"
+                      className="p-0.5 text-[var(--c-text-3)] hover:text-red-400 transition-colors disabled:opacity-40"
                     >
                       {removing === tool.id ? (
                         <MiniSpinner />
@@ -469,7 +460,7 @@ export function McpInstalledOn({ mcp, currentAgentId, allAgents, onInstalled, on
                         </svg>
                       )}
                     </button>
-                  </>
+                  </div>
                 )}
 
                 {!noSupport && !isInstalled && (
