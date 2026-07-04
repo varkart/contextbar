@@ -198,6 +198,7 @@ pub fn report(agents: &[Agent]) -> Vec<DoctorSection> {
             }
             let found = command_on_custom_path(&mcp.command, &shell_path);
             let auto_dl = mcp.args.iter().any(|a| a == "-y" || a == "--yes");
+            let is_abs = mcp.command.contains('/');
 
             // Binary check
             mcp_items.push(DoctorItem {
@@ -210,11 +211,18 @@ pub fn report(agents: &[Agent]) -> Vec<DoctorSection> {
                 },
                 detail: if found {
                     None
+                } else if is_abs {
+                    Some(format!("'{}' not found", mcp.command))
                 } else {
                     Some(format!("'{}' not found on PATH", mcp.command))
                 },
                 fix_hint: if found {
                     None
+                } else if is_abs {
+                    Some(format!(
+                        "Reinstall or update the application that provides '{}'",
+                        mcp.command
+                    ))
                 } else {
                     Some(format!(
                         "Install '{}' or add it to your shell PATH",
