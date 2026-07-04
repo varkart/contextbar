@@ -13,6 +13,7 @@ import AllMcpsView from './AllMcpsView'
 import AddSkillView from './AddSkillView'
 import AddMcpView from './AddMcpView'
 import DoctorView from './DoctorView'
+import ConfigBackupView from './ConfigBackupView'
 
 import type { ThemePreference } from '../../useTheme'
 import type { Agent, Skill } from '../../types'
@@ -161,6 +162,15 @@ export default function ViewManager({
       />
     )
   }
+  if (view === 'config-backup' && selectedAgent) {
+    return (
+      <ConfigBackupView
+        agent={selectedAgent}
+        onBack={() => goTo('agent-detail')}
+        onRestored={handleFetchTools}
+      />
+    )
+  }
   if (view === 'agent-detail' && selectedAgent) {
     return (
       <AgentDetailPage
@@ -171,6 +181,7 @@ export default function ViewManager({
         onOpenSkillsPage={openSkillsPage}
         onOpenMcpsPage={openMcpsPage}
         onAgentUpdated={handleFetchTools}
+        onOpenBackups={() => goTo('config-backup')}
         query={query || undefined}
         matchedSkills={searchResults.find((r: any) => r.agent.id === selectedAgent.id)?.matchedSkills}
         matchedMcps={searchResults.find((r: any) => r.agent.id === selectedAgent.id)?.matchedMcps}

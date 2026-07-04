@@ -9,6 +9,8 @@ export interface Agent {
   error?: string;
   supportsSkills: boolean;
   supportsMcps: boolean;
+  /** Absolute paths of config files this agent reads/writes — used by restore UI. */
+  configFiles?: string[];
 }
 
 export interface Skill {
