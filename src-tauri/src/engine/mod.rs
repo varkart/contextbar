@@ -69,6 +69,7 @@ pub fn detect_all() -> Vec<Agent> {
                     supports_skills: false,
                     supports_mcps: false,
                     config_files: vec![],
+                    config_errors: vec![],
                 })
             })
         })
@@ -102,6 +103,7 @@ fn detect_from_manifest(m: &Manifest) -> Agent {
 
     let (mcps, error) = mcp::collect(&m.mcp_sources, version.as_deref(), &home);
     let skills = skill::collect(&m.skill_sources, version.as_deref(), &home);
+    let config_errors: Vec<String> = error.iter().cloned().collect();
 
     Agent {
         id: m.id.clone(),
@@ -115,6 +117,7 @@ fn detect_from_manifest(m: &Manifest) -> Agent {
         supports_skills: !m.skill_sources.is_empty(),
         supports_mcps: !m.mcp_sources.is_empty(),
         config_files: extract_config_files(m, &home),
+        config_errors,
     }
 }
 
@@ -132,6 +135,7 @@ fn not_installed(m: &Manifest) -> Agent {
         supports_skills: !m.skill_sources.is_empty(),
         supports_mcps: !m.mcp_sources.is_empty(),
         config_files: extract_config_files(m, &home),
+        config_errors: vec![],
     }
 }
 

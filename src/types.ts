@@ -11,6 +11,8 @@ export interface Agent {
   supportsMcps: boolean;
   /** Absolute paths of config files this agent reads/writes — used by restore UI. */
   configFiles?: string[];
+  /** Parse errors from reading config files. Non-empty → read-only mode: toggles disabled, banner shown. */
+  configErrors?: string[];
 }
 
 export interface Skill {
