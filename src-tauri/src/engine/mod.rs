@@ -5,7 +5,7 @@ pub mod resolve;
 pub mod skill;
 
 use crate::models::Agent;
-use manifest::{DetectionSpec, Manifest, VersionSpec};
+use manifest::{DetectionSpec, Manifest, McpSourceSpec, SkillSourceSpec, VersionSpec};
 use resolve::expand_home;
 
 // ── Embed all manifests at compile time ──────────────────────────────────────
@@ -68,6 +68,7 @@ pub fn detect_all() -> Vec<Agent> {
                     error: Some("detector timed out".to_string()),
                     supports_skills: false,
                     supports_mcps: false,
+                    config_files: vec![],
                 })
             })
         })
@@ -113,10 +114,12 @@ fn detect_from_manifest(m: &Manifest) -> Agent {
         error,
         supports_skills: !m.skill_sources.is_empty(),
         supports_mcps: !m.mcp_sources.is_empty(),
+        config_files: extract_config_files(m, &home),
     }
 }
 
 fn not_installed(m: &Manifest) -> Agent {
+    let home = dirs::home_dir().unwrap_or_default();
     Agent {
         id: m.id.clone(),
         name: m.name.clone(),
@@ -128,7 +131,48 @@ fn not_installed(m: &Manifest) -> Agent {
         error: None,
         supports_skills: !m.skill_sources.is_empty(),
         supports_mcps: !m.mcp_sources.is_empty(),
+        config_files: extract_config_files(m, &home),
     }
+}
+
+/// Collect all unique config file paths this manifest reads/writes.
+fn extract_config_files(m: &Manifest, home: &std::path::Path) -> Vec<String> {
+    let mut seen = std::collections::HashSet::new();
+    let mut files = vec![];
+
+    let mut push = |raw: &str| {
+        let expanded = expand_home(raw, home);
+        let s = expanded.to_string_lossy().into_owned();
+        if seen.insert(s.clone()) {
+            files.push(s);
+        }
+    };
+
+    for src in &m.mcp_sources {
+        match &src.spec {
+            McpSourceSpec::JsonKeyPair { file, .. }
+            | McpSourceSpec::JsonNested { file, .. }
+            | McpSourceSpec::ZedContextServers { file, .. }
+            | McpSourceSpec::YamlKeyPair { file, .. }
+            | McpSourceSpec::TomlKeyPair { file, .. }
+            | McpSourceSpec::ClaudeDotfile { file } => push(file),
+            McpSourceSpec::ExtensionDir { .. }
+            | McpSourceSpec::ClaudePlugins { .. }
+            | McpSourceSpec::ClaudeMcpList { .. } => {}
+        }
+    }
+
+    for src in &m.skill_sources {
+        if let SkillSourceSpec::TomlConfigDirectory { config_file, .. } = &src.spec {
+            push(config_file);
+        }
+    }
+
+    if let Some(perms) = &m.permissions {
+        push(&perms.file);
+    }
+
+    files
 }
 
 // ── Detection ────────────────────────────────────────────────────────────────

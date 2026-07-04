@@ -278,7 +278,80 @@ pub fn report(agents: &[Agent]) -> Vec<DoctorSection> {
         items: mcp_items,
     });
 
+    // ── Section 4: Config file health ─────────────────────────────────────────
+    let config_items: Vec<DoctorItem> = agents
+        .iter()
+        .filter(|a| a.installed)
+        .flat_map(|a| {
+            a.config_files.iter().map(move |path| {
+                let p = std::path::Path::new(path);
+                let exists = p.exists();
+                let (status, detail, fix_hint) = if !exists {
+                    (
+                        DoctorStatus::Warn,
+                        Some(format!("File not found: {path}")),
+                        Some("The file will be created automatically when you first use this tool.".to_string()),
+                    )
+                } else {
+                    let parse_err = validate_config_file(path);
+                    match parse_err {
+                        Some(err) => (
+                            DoctorStatus::Error,
+                            Some(format!("Parse error: {err}")),
+                            Some(format!("Edit or restore a backup of {path} to fix.")),
+                        ),
+                        None => (DoctorStatus::Ok, None, None),
+                    }
+                };
+                let short = p.file_name()
+                    .and_then(|n| n.to_str())
+                    .unwrap_or(path);
+                DoctorItem {
+                    id: format!("config:{}:{}", a.id, short),
+                    label: format!("{} › {}", a.name, short),
+                    status,
+                    detail,
+                    fix_hint,
+                }
+            })
+        })
+        .collect();
+
+    if !config_items.is_empty() {
+        sections.push(DoctorSection {
+            title: "Config Files".into(),
+            items: config_items,
+        });
+    }
+
     sections
+}
+
+fn validate_config_file(path: &str) -> Option<String> {
+    let content = std::fs::read_to_string(path).ok()?;
+    let ext = std::path::Path::new(path)
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("");
+    match ext {
+        "json" => {
+            if let Err(e) = serde_json::from_str::<serde_json::Value>(&content) {
+                return Some(e.to_string());
+            }
+        }
+        "toml" => {
+            if let Err(e) = toml::from_str::<toml::Value>(&content) {
+                return Some(e.to_string());
+            }
+        }
+        "yaml" | "yml" => {
+            if let Err(e) = serde_yaml::from_str::<serde_yaml::Value>(&content) {
+                return Some(e.to_string());
+            }
+        }
+        _ => {}
+    }
+    None
 }
 
 // ── Notification-based background check (existing behaviour) ──────────────────

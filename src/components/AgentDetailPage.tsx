@@ -11,12 +11,13 @@ interface AgentDetailPageProps {
   onOpenSkillsPage: () => void;
   onOpenMcpsPage: () => void;
   onAgentUpdated: () => void;
+  onOpenBackups?: () => void;
   query?: string;
   matchedSkills?: Set<string>;
   matchedMcps?: Set<string>;
 }
 
-export default function AgentDetailPage({ agent, onSelectSkill, onSelectMcp, onOpenSkillsPage, onOpenMcpsPage, query, matchedSkills, matchedMcps }: AgentDetailPageProps) {
+export default function AgentDetailPage({ agent, onSelectSkill, onSelectMcp, onOpenSkillsPage, onOpenMcpsPage, onOpenBackups, query, matchedSkills, matchedMcps }: AgentDetailPageProps) {
   const colors = AGENT_COLORS[agent.id] ?? { bg: 'bg-zinc-500/10', text: 'text-zinc-500' };
 
   return (
@@ -28,14 +29,28 @@ export default function AgentDetailPage({ agent, onSelectSkill, onSelectMcp, onO
         <span className="text-[13px] font-semibold text-[var(--c-text)] tracking-[-0.01em] truncate">
           {agent.name}
         </span>
-        {(agent.skills.length > 0 || agent.mcps.length > 0) && (
-          <span className="ml-auto text-[12px] text-[var(--c-text-3)] tabular-nums flex-shrink-0">
-            {[
-              agent.skills.length > 0 && `${agent.skills.length} skills`,
-              agent.mcps.length > 0 && `${agent.mcps.length} mcp`,
-            ].filter(Boolean).join('  ')}
-          </span>
-        )}
+        <div className="ml-auto flex items-center gap-2 flex-shrink-0">
+          {(agent.skills.length > 0 || agent.mcps.length > 0) && (
+            <span className="text-[12px] text-[var(--c-text-3)] tabular-nums">
+              {[
+                agent.skills.length > 0 && `${agent.skills.length} skills`,
+                agent.mcps.length > 0 && `${agent.mcps.length} mcp`,
+              ].filter(Boolean).join('  ')}
+            </span>
+          )}
+          {onOpenBackups && (agent.configFiles ?? []).length > 0 && (
+            <button
+              onClick={onOpenBackups}
+              aria-label="View config backups"
+              title="Config backups"
+              className="p-1 rounded hover:bg-[var(--c-surface-2)] text-[var(--c-text-3)] hover:text-[var(--c-text-2)] transition-colors"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="flex-1 overflow-y-auto">

@@ -15,6 +15,9 @@ pub struct Agent {
     pub supports_skills: bool,
     /// True when the tool's manifest defines at least one [[mcp_sources]] entry.
     pub supports_mcps: bool,
+    /// Expanded absolute paths of the config files this agent reads/writes.
+    /// Used by the restore UI to list backup snapshots.
+    pub config_files: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
