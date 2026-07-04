@@ -11,6 +11,7 @@ import { capture } from './analytics'
 import ViewManager from './components/views/ViewManager'
 import SplashScreen from './components/SplashScreen'
 import PermissionsSetupScreen from './components/PermissionsSetupScreen'
+import WelcomeSheet from './components/WelcomeSheet'
 import Header from './components/Header'
 import Footer from './components/Footer'
 
@@ -25,6 +26,9 @@ export default function App() {
   const [splashDismissed, setSplashDismissed] = useState(isE2E)
   const [permissionsSetupDone, setPermissionsSetupDone] = useState(
     isE2E || !!localStorage.getItem('permissions_setup_v1')
+  )
+  const [welcomeSeen, setWelcomeSeen] = useState(
+    isE2E || !!localStorage.getItem('welcome_v1')
   )
   const [backendReady, setBackendReady] = useState(false)
   const [query, setQuery] = useState('')
@@ -91,6 +95,8 @@ export default function App() {
   const installedAgents = useMemo(() => agents.filter(t => t.installed), [agents])
   const searchResults = useMemo(() => searchAgents(installedAgents, query), [installedAgents, query])
 
+  const showWelcome = splashDismissed && permissionsSetupDone && backendReady && !welcomeSeen
+
   return (
     <div className="w-[380px] h-[520px] bg-[var(--c-bg)] text-[var(--c-text)] flex flex-col overflow-hidden">
       {!splashDismissed && (
@@ -100,6 +106,12 @@ export default function App() {
         <PermissionsSetupScreen onDone={() => {
           localStorage.setItem('permissions_setup_v1', '1')
           setPermissionsSetupDone(true)
+        }} />
+      )}
+      {showWelcome && (
+        <WelcomeSheet onDismiss={() => {
+          localStorage.setItem('welcome_v1', '1')
+          setWelcomeSeen(true)
         }} />
       )}
       <Header
