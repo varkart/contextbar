@@ -63,6 +63,7 @@ export default function AgentDetailPage({ agent, onSelectSkill, onSelectMcp, onO
           onSelectMcp={onSelectMcp}
           onOpenSkillsPage={onOpenSkillsPage}
           onOpenMcpsPage={onOpenMcpsPage}
+          onOpenBackups={onOpenBackups}
         />
       </div>
     </div>

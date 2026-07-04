@@ -196,6 +196,7 @@ export function SkillInstalledOn({ skill, currentAgentId, allAgents, onInstalled
       <div className="flex flex-col gap-1.5">
         {installedAgents.map(tool => {
           const noSupport = !tool.supportsSkills
+          const hasConfigError = (tool.configErrors ?? []).length > 0
           const match = tool.skills.find(s => s.name.toLowerCase().trim() === skill.name.toLowerCase().trim())
           const isInstalled = !!match
           const isActive = match?.active ?? false
@@ -228,8 +229,15 @@ export function SkillInstalledOn({ skill, currentAgentId, allAgents, onInstalled
                   <span className="text-[11px] text-[var(--c-text-3)]">No skills support</span>
                 )}
 
+                {/* Config error: locked */}
+                {!noSupport && hasConfigError && (
+                  <span title="Config file has errors — restore a backup to re-enable toggles" className="text-[11px] text-amber-400/70 flex-shrink-0 cursor-default select-none">
+                    locked
+                  </span>
+                )}
+
                 {/* Active: Disable button */}
-                {!noSupport && isInstalled && isActive && (
+                {!noSupport && !hasConfigError && isInstalled && isActive && (
                   <button
                     onClick={() => handleToggle(tool, match, false)}
                     disabled={toggling === tool.id}
@@ -241,7 +249,7 @@ export function SkillInstalledOn({ skill, currentAgentId, allAgents, onInstalled
                 )}
 
                 {/* Disabled: Enable + Delete buttons */}
-                {!noSupport && isDisabled && (
+                {!noSupport && !hasConfigError && isDisabled && (
                   <div className="flex items-center gap-1 flex-shrink-0">
                     <button
                       onClick={() => doToggle(tool, match, true)}
@@ -269,7 +277,7 @@ export function SkillInstalledOn({ skill, currentAgentId, allAgents, onInstalled
                 )}
 
                 {/* Not installed: Add button (cache-aware) */}
-                {!noSupport && !isInstalled && (
+                {!noSupport && !hasConfigError && !isInstalled && (
                   <button
                     onClick={() => handleAdd(tool)}
                     disabled={installing === tool.id}
@@ -408,6 +416,7 @@ export function McpInstalledOn({ mcp, currentAgentId, allAgents, onInstalled, on
       <div className="flex flex-col gap-1.5">
         {installedAgents.map(tool => {
           const noSupport = !tool.supportsMcps
+          const hasConfigError = (tool.configErrors ?? []).length > 0
           const match = tool.mcps.find(m => m.name.toLowerCase().trim() === mcp.name.toLowerCase().trim())
           const isInstalled = !!match
 
@@ -421,7 +430,14 @@ export function McpInstalledOn({ mcp, currentAgentId, allAgents, onInstalled, on
                   <span className="text-[11px] text-[var(--c-text-3)]">No MCP support</span>
                 )}
 
-                {!noSupport && isInstalled && (
+                {/* Config error: locked */}
+                {!noSupport && hasConfigError && (
+                  <span title="Config file has errors — restore a backup to re-enable toggles" className="text-[11px] text-amber-400/70 flex-shrink-0 cursor-default select-none">
+                    locked
+                  </span>
+                )}
+
+                {!noSupport && !hasConfigError && isInstalled && (
                   <div className="flex items-center gap-1 flex-shrink-0">
                     {match.active ? (
                       <button
@@ -463,7 +479,7 @@ export function McpInstalledOn({ mcp, currentAgentId, allAgents, onInstalled, on
                   </div>
                 )}
 
-                {!noSupport && !isInstalled && (
+                {!noSupport && !hasConfigError && !isInstalled && (
                   <button
                     onClick={() => handleAdd(tool)}
                     disabled={installing === tool.id}

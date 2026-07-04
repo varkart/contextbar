@@ -18,6 +18,9 @@ pub struct Agent {
     /// Expanded absolute paths of the config files this agent reads/writes.
     /// Used by the restore UI to list backup snapshots.
     pub config_files: Vec<String>,
+    /// Parse errors encountered while reading config files (e.g. malformed JSON/YAML/TOML).
+    /// When non-empty the UI shows a read-only banner and disables toggles.
+    pub config_errors: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

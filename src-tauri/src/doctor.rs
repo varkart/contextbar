@@ -452,6 +452,8 @@ mod tests {
             error: None,
             supports_skills: false,
             supports_mcps: true,
+            config_files: vec![],
+            config_errors: vec![],
         }
     }
 
