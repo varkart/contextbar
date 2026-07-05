@@ -46,6 +46,8 @@ export interface McpServer {
   extensionName?: string; // set for extension-dir MCPs (e.g. Gemini extensions)
   /** Which [[mcp_sources]] entry produced this server. Used to route toggle commands. */
   sourceId: string;
+  /** Tools disabled per-server via "disabledTools" key (agy/Gemini mcp_config.json). */
+  disabledTools?: string[];
 }
 
 export interface CachedMcp {

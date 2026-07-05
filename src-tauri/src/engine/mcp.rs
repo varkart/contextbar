@@ -380,6 +380,7 @@ fn read_extension_dir(
                 secret_key_names,
                 extension_name: Some(ext_name.clone()),
                 source_id: String::new(), // stamped by collect()
+                disabled_tools: vec![],
             });
         }
     }
@@ -663,6 +664,7 @@ fn parse_mcp_list_output(output: &str) -> Vec<McpServer> {
             secret_key_names: vec![],
             extension_name: None,
             source_id: String::new(), // stamped by collect()
+            disabled_tools: vec![],
         });
     }
     mcps

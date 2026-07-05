@@ -20,6 +20,7 @@ const MCP_TYPES: { value: McpType; label: string; description: string }[] = [
   { value: 'docker',  label: 'Docker',          description: 'Run in a Docker container' },
   { value: 'local',   label: 'Local script',    description: 'Local binary or script file' },
   { value: 'paste',   label: 'Paste JSON',      description: 'Paste a raw JSON MCP config block' },
+  { value: 'plugin',  label: 'Plugin directory', description: 'Install via agy plugin install (Antigravity CLI only)' },
 ];
 
 interface ValidationErrors {
@@ -170,21 +171,40 @@ export default function AddMcpView({ installedAgents, onBack, onAdded, initialAg
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (agentIds.length === 0) { setError('Select at least one agent'); return; }
-    const trimmedName = name.trim();
-    if (!trimmedName) { setError('Name is required'); return; }
-
-    const payload = buildMcpPayload(mcpType, fields);
-
-    if (mcpType === 'paste' && !payload.command && !payload.url) {
-      setError('Invalid JSON — must include "command" or "url"');
-      return;
-    }
 
     setSaving(true);
     setError(null);
     setValidationErrors({});
 
     try {
+      // Plugin directory type — uses agy plugin install, only works for agy
+      if (mcpType === 'plugin') {
+        const pluginDir = fields.pluginDir?.trim();
+        if (!pluginDir) { setError('Plugin directory is required'); setSaving(false); return; }
+        const agyAgents = agentIds.filter(id => id === 'agy');
+        if (agyAgents.length === 0) { setError('Plugin install only supported for Antigravity CLI (agy)'); setSaving(false); return; }
+        let count = 0;
+        for (const agentId of agyAgents) {
+          await invoke('install_agy_plugin', { agentId, pluginDir });
+          count++;
+        }
+        capture('mcp_added', { tool_ids: agyAgents, mcp_name: pluginDir, mcp_type: mcpType });
+        setAddedCount(count);
+        await onAdded();
+        return;
+      }
+
+      const trimmedName = name.trim();
+      if (!trimmedName) { setError('Name is required'); setSaving(false); return; }
+
+      const payload = buildMcpPayload(mcpType, fields);
+
+      if (mcpType === 'paste' && !payload.command && !payload.url) {
+        setError('Invalid JSON — must include "command" or "url"');
+        setSaving(false);
+        return;
+      }
+
       // Validate against first selected tool before writing
       const validation = await invoke<{
         ok: boolean;
@@ -504,6 +524,31 @@ export default function AddMcpView({ installedAgents, onBack, onAdded, initialAg
             })()}
             {validationErrors.command && <ErrorBox message={validationErrors.command} />}
             {validationErrors.url && <ErrorBox message={validationErrors.url} />}
+          </div>
+        )}
+
+        {mcpType === 'plugin' && (
+          <div className="space-y-3">
+            <div>
+              <label className="block text-[12px] font-semibold text-[var(--c-text-3)] uppercase tracking-wider mb-1.5">Plugin directory *</label>
+              <input
+                type="text"
+                value={fields.pluginDir ?? ''}
+                onChange={e => setField('pluginDir', e.target.value)}
+                placeholder="~/my-plugin or /path/to/plugin-dir"
+                required
+                className="w-full bg-[var(--c-surface)] border border-[var(--c-border)] rounded-lg px-3 py-2 text-[14px] text-[var(--c-text)] placeholder-[var(--c-text-3)] outline-none focus:border-violet-400/60 transition-colors font-mono text-[13px]"
+              />
+              <p className="mt-1 text-[11px] text-[var(--c-text-3)]">
+                Directory must contain a <span className="font-mono">gemini-extension.json</span> file.
+                Runs <span className="font-mono">agy plugin install &lt;dir&gt;</span>.
+              </p>
+            </div>
+            {!agentIds.includes('agy') && (
+              <div className="flex items-start gap-2 p-2.5 bg-amber-500/10 border border-amber-500/30 rounded-lg">
+                <p className="text-[13px] text-amber-400 leading-relaxed">Plugin install only works for Antigravity CLI (agy). Select agy above.</p>
+              </div>
+            )}
           </div>
         )}
 

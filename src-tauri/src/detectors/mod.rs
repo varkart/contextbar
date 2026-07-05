@@ -225,17 +225,35 @@ pub fn parse_mcp_servers(
                 .and_then(|v| v.as_str())
                 .map(|s| s.to_string());
 
+            // Inline "disabled": true overrides the caller-supplied active flag.
+            let inline_disabled = cfg
+                .get("disabled")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false);
+            let effective_active = active && !inline_disabled;
+
+            let disabled_tools: Vec<String> = cfg
+                .get("disabledTools")
+                .and_then(|v| v.as_array())
+                .map(|arr| {
+                    arr.iter()
+                        .filter_map(|s| s.as_str().map(|s| s.to_string()))
+                        .collect()
+                })
+                .unwrap_or_default();
+
             mcps.push(crate::models::McpServer {
                 name: name.clone(),
                 command,
                 args,
                 url,
                 description,
-                active,
+                active: effective_active,
                 has_secrets,
                 secret_key_names,
                 extension_name: None,
                 source_id: String::new(), // stamped by engine::mcp::collect()
+                disabled_tools,
             });
         }
     }
@@ -306,5 +324,55 @@ mod tests {
         let s = "a".repeat(200);
         let truncated: String = s.chars().take(120).collect();
         assert_eq!(truncated.len(), 120);
+    }
+
+    #[test]
+    fn parse_mcp_servers_inline_disabled_overrides_active() {
+        let json = serde_json::json!({
+            "my-server": {
+                "command": "npx",
+                "args": ["my-mcp"],
+                "disabled": true
+            }
+        });
+        let mcps = parse_mcp_servers(&json, true);
+        assert_eq!(mcps.len(), 1);
+        assert!(!mcps[0].active, "disabled:true should set active=false");
+    }
+
+    #[test]
+    fn parse_mcp_servers_disabled_false_preserves_active() {
+        let json = serde_json::json!({
+            "my-server": {
+                "command": "npx",
+                "disabled": false
+            }
+        });
+        let mcps = parse_mcp_servers(&json, true);
+        assert!(mcps[0].active);
+    }
+
+    #[test]
+    fn parse_mcp_servers_reads_disabled_tools() {
+        let json = serde_json::json!({
+            "postman": {
+                "command": "npx",
+                "disabledTools": ["dangerous_tool", "another_tool"]
+            }
+        });
+        let mcps = parse_mcp_servers(&json, true);
+        assert_eq!(
+            mcps[0].disabled_tools,
+            vec!["dangerous_tool", "another_tool"]
+        );
+    }
+
+    #[test]
+    fn parse_mcp_servers_empty_disabled_tools() {
+        let json = serde_json::json!({
+            "server": { "command": "uvx" }
+        });
+        let mcps = parse_mcp_servers(&json, true);
+        assert!(mcps[0].disabled_tools.is_empty());
     }
 }

@@ -470,6 +470,7 @@ mod tests {
             secret_key_names: vec![],
             extension_name: None,
             source_id: "test".to_string(),
+            disabled_tools: vec![],
         }
     }
 
@@ -485,6 +486,7 @@ mod tests {
             secret_key_names: vec![],
             extension_name: None,
             source_id: "test".to_string(),
+            disabled_tools: vec![],
         }
     }
 
