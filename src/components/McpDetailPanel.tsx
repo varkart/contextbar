@@ -306,6 +306,25 @@ export default function McpDetailPanel({ mcp, onBack, agentId, onToggled, allAge
           />
         )}
 
+        {/* Disabled tools (statically configured via disabledTools key) */}
+        {(mcp.disabledTools?.length ?? 0) > 0 && (
+          <div className="px-4 py-3 border-t border-[var(--c-border)]">
+            <p className="text-[12px] font-semibold text-[var(--c-text-3)] uppercase tracking-wider mb-2">
+              Disabled tools ({mcp.disabledTools?.length ?? 0})
+            </p>
+            <div className="flex flex-wrap gap-1.5">
+              {(mcp.disabledTools ?? []).map(tool => (
+                <span
+                  key={tool}
+                  className="px-2 py-0.5 rounded bg-amber-500/10 text-amber-400 text-[12px] font-mono"
+                >
+                  {tool}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Live tools */}
         {isHttp ? (
           <div className="px-4 py-3 border-t border-[var(--c-border)]">

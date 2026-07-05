@@ -1477,6 +1477,44 @@ fn add_mcp(
 }
 
 #[tauri::command]
+fn install_agy_plugin(
+    db: tauri::State<'_, db::DbState>,
+    agent_id: String,
+    plugin_dir: String,
+) -> Result<(), String> {
+    use crate::engine::resolve::expand_home;
+
+    if agent_id != "agy" {
+        return Err(format!(
+            "install_agy_plugin is only supported for agy, not '{agent_id}'"
+        ));
+    }
+
+    let home = dirs::home_dir().ok_or("cannot find home dir")?;
+    let plugin_path = expand_home(&plugin_dir, &home);
+
+    if !plugin_path.join("gemini-extension.json").exists() {
+        return Err(format!(
+            "gemini-extension.json not found in {}",
+            plugin_path.display()
+        ));
+    }
+
+    let output = std::process::Command::new("agy")
+        .args(["plugin", "install", &plugin_path.to_string_lossy()])
+        .output()
+        .map_err(|e| format!("failed to run agy: {e}"))?;
+
+    if output.status.success() {
+        db::log_event(&db, "agy_plugin_installed", &agent_id, &plugin_dir, None);
+        Ok(())
+    } else {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        Err(format!("agy plugin install failed: {stderr}"))
+    }
+}
+
+#[tauri::command]
 #[allow(clippy::too_many_arguments)]
 fn remove_mcp(
     app: tauri::AppHandle,
@@ -1996,6 +2034,7 @@ pub fn run() {
             set_mcp_active,
             validate_mcp,
             add_mcp,
+            install_agy_plugin,
             remove_mcp,
             list_config_backups,
             restore_config_backup,

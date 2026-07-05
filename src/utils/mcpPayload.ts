@@ -1,6 +1,6 @@
 import type { CachedMcp } from '../types'
 
-export type McpType = 'npx' | 'http' | 'command' | 'docker' | 'local' | 'paste'
+export type McpType = 'npx' | 'http' | 'command' | 'docker' | 'local' | 'paste' | 'plugin'
 
 export interface McpPayload {
   command?: string
@@ -80,6 +80,8 @@ export function buildMcpPayload(type: McpType, fields: Record<string, string>): 
     }
     case 'paste':
       return parsePasteJson(fields.json ?? '') ?? {}
+    case 'plugin':
+      return {}
   }
 }
 

@@ -54,6 +54,9 @@ pub struct McpServer {
     pub extension_name: Option<String>, // set for extension-dir MCPs (e.g. Gemini extensions)
     /// Which [[mcp_sources]] entry produced this server. Matches McpSource.id or "source_{n}".
     pub source_id: String,
+    /// Tools disabled per-server via "disabledTools" key (agy/Gemini mcp_config.json).
+    #[serde(default)]
+    pub disabled_tools: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
