@@ -25,12 +25,19 @@ file = "~/.gemini/antigravity-cli/settings.json"
 active_key = "mcpServers"
 disabled_key = "disabledMcpServers"
 
-# MCPs from plugins — agy uses mcp_config.json (not gemini-extension.json which is for Gemini CLI)
+# MCPs from plugins in ~/.gemini/antigravity-cli/plugins (all plugins have gemini-extension.json)
 [[mcp_sources]]
 id = "plugins"
 type = "extension_dir"
 dir = "~/.gemini/antigravity-cli/plugins"
-manifest_file = "mcp_config.json"
+manifest_file = "gemini-extension.json"
+
+# MCPs from plugins installed via `agy plugin install` (goes to ~/.gemini/config/plugins)
+[[mcp_sources]]
+id = "plugins_native"
+type = "extension_dir"
+dir = "~/.gemini/config/plugins"
+manifest_file = "gemini-extension.json"
 
 # User skills (global)
 [[skill_sources]]
