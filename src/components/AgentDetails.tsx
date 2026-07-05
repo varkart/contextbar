@@ -1,5 +1,6 @@
 import SkillSection from './SkillSection';
 import McpSection from './McpSection';
+import PermissionsSection from './PermissionsSection';
 import type { Agent, Skill, McpServer } from '../types';
 
 interface AgentDetailsProps {
@@ -14,9 +15,10 @@ interface AgentDetailsProps {
   onOpenBackups?: () => void;
   onAddSkill?: () => void;
   onAddMcp?: () => void;
+  onOpenPermissions?: () => void;
 }
 
-export default function AgentDetails({ agent, query, matchedSkills, matchedMcps, onSelectSkill, onSelectMcp, onOpenSkillsPage, onOpenMcpsPage, onOpenBackups, onAddSkill, onAddMcp }: AgentDetailsProps) {
+export default function AgentDetails({ agent, query, matchedSkills, matchedMcps, onSelectSkill, onSelectMcp, onOpenSkillsPage, onOpenMcpsPage, onOpenBackups, onAddSkill, onAddMcp, onOpenPermissions }: AgentDetailsProps) {
   const hasConfigErrors = (agent.configErrors ?? []).length > 0
   return (
     <div className="px-2 pt-1 pb-3 space-y-3">
@@ -76,6 +78,7 @@ export default function AgentDetails({ agent, query, matchedSkills, matchedMcps,
         onOpenPage={onOpenMcpsPage}
         onAddMcp={onAddMcp}
       />
+      <PermissionsSection toolId={agent.id} onOpen={onOpenPermissions} />
     </div>
   );
 }

@@ -52,7 +52,7 @@ export default function PermissionsDetailPanel({ toolId, toolName, onBack }: Per
 
   const load = useCallback(async () => {
     try {
-      const p = await invoke<ToolPermissions>('get_permissions', { toolId })
+      const p = await invoke<ToolPermissions>('get_permissions', { agentId: toolId })
       setPerms(p)
       setError(null)
     } catch (e) {
@@ -65,7 +65,7 @@ export default function PermissionsDetailPanel({ toolId, toolName, onBack }: Per
   const removeRule = useCallback(async (rule: string, section: PermissionSection) => {
     setRemovingRule(rule)
     try {
-      await invoke('remove_permission_rule', { toolId, rule, section })
+      await invoke('remove_permission_rule', { agentId: toolId, rule, section })
       capture('permission_rule_removed', { tool_id: toolId, section })
       await load()
     } catch (e) {
@@ -81,7 +81,7 @@ export default function PermissionsDetailPanel({ toolId, toolName, onBack }: Per
     if (!rule) return
     setAdding(true)
     try {
-      await invoke('add_permission_rule', { toolId, rule, section: addSection })
+      await invoke('add_permission_rule', { agentId: toolId, rule, section: addSection })
       capture('permission_rule_added', { tool_id: toolId, section: addSection })
       setNewRule('')
       await load()

@@ -5,6 +5,7 @@ import McpsListPanel from '../McpsListPanel'
 import SkillDetailPanel from '../SkillDetailPanel'
 import McpDetailPanel from '../McpDetailPanel'
 import AgentDetailPage from '../AgentDetailPage'
+import PermissionsDetailPanel from '../PermissionsDetailPanel'
 import Settings from '../Settings'
 import MainView from './MainView'
 import AgentsListView from './AgentsListView'
@@ -173,6 +174,15 @@ export default function ViewManager({
       />
     )
   }
+  if (view === 'permissions-detail' && selectedAgent) {
+    return (
+      <PermissionsDetailPanel
+        toolId={selectedAgent.id}
+        toolName={selectedAgent.name}
+        onBack={() => escape()}
+      />
+    )
+  }
   if (view === 'agent-detail' && selectedAgent) {
     return (
       <AgentDetailPage
@@ -186,6 +196,7 @@ export default function ViewManager({
         onOpenBackups={() => goTo('config-backup')}
         onAddSkill={openAddSkill}
         onAddMcp={openAddMcp}
+        onOpenPermissions={() => goTo('permissions-detail')}
         query={query || undefined}
         matchedSkills={searchResults.find((r: any) => r.agent.id === selectedAgent.id)?.matchedSkills}
         matchedMcps={searchResults.find((r: any) => r.agent.id === selectedAgent.id)?.matchedMcps}

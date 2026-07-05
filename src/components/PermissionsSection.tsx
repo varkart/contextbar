@@ -14,7 +14,7 @@ export default function PermissionsSection({ toolId, refreshKey, onOpen }: Permi
 
   const load = useCallback(async () => {
     try {
-      const p = await invoke<ToolPermissions>('get_permissions', { toolId });
+      const p = await invoke<ToolPermissions>('get_permissions', { agentId: toolId });
       setPerms(p);
       setSupported(true);
     } catch (e) {
