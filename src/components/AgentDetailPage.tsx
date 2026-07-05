@@ -12,12 +12,14 @@ interface AgentDetailPageProps {
   onOpenMcpsPage: () => void;
   onAgentUpdated: () => void;
   onOpenBackups?: () => void;
+  onAddSkill?: () => void;
+  onAddMcp?: () => void;
   query?: string;
   matchedSkills?: Set<string>;
   matchedMcps?: Set<string>;
 }
 
-export default function AgentDetailPage({ agent, onSelectSkill, onSelectMcp, onOpenSkillsPage, onOpenMcpsPage, onOpenBackups, query, matchedSkills, matchedMcps }: AgentDetailPageProps) {
+export default function AgentDetailPage({ agent, onSelectSkill, onSelectMcp, onOpenSkillsPage, onOpenMcpsPage, onOpenBackups, onAddSkill, onAddMcp, query, matchedSkills, matchedMcps }: AgentDetailPageProps) {
   const colors = AGENT_COLORS[agent.id] ?? { bg: 'bg-zinc-500/10', text: 'text-zinc-500' };
 
   return (
@@ -64,6 +66,8 @@ export default function AgentDetailPage({ agent, onSelectSkill, onSelectMcp, onO
           onOpenSkillsPage={onOpenSkillsPage}
           onOpenMcpsPage={onOpenMcpsPage}
           onOpenBackups={onOpenBackups}
+          onAddSkill={onAddSkill}
+          onAddMcp={onAddMcp}
         />
       </div>
     </div>

@@ -8,6 +8,7 @@ interface McpSectionProps {
   matchedNames?: Set<string>;
   onSelectMcp?: (mcp: McpServer) => void;
   onOpenPage?: () => void;
+  onAddMcp?: () => void;
 }
 
 function ChevronIcon({ open }: { open: boolean }) {
@@ -20,7 +21,7 @@ function ChevronIcon({ open }: { open: boolean }) {
   );
 }
 
-export default function McpSection({ mcps, query, matchedNames, onSelectMcp, onOpenPage }: McpSectionProps) {
+export default function McpSection({ mcps, query, matchedNames, onSelectMcp, onOpenPage, onAddMcp }: McpSectionProps) {
   const [sectionOpen, setSectionOpen] = useState(true);
   const [tooltipOpen, setTooltipOpen] = useState(false);
   const tooltipRef = useRef<HTMLDivElement>(null);
@@ -104,14 +105,24 @@ export default function McpSection({ mcps, query, matchedNames, onSelectMcp, onO
             <p className="text-[11px] text-[var(--c-text-2)] leading-relaxed mb-2.5">
               MCPs connect your agent to external tools via a standard protocol — databases, APIs, file browsers, and more.
             </p>
-            {onOpenPage && (
-              <button
-                onClick={onOpenPage}
-                className="text-[11px] font-medium bg-violet-500/10 text-violet-400 border border-violet-500/20 rounded-[5px] px-2.5 py-1 hover:bg-violet-500/20 transition-colors"
-              >
-                Browse servers
-              </button>
-            )}
+            <div className="flex items-center gap-2">
+              {onAddMcp && (
+                <button
+                  onClick={onAddMcp}
+                  className="text-[11px] font-medium bg-violet-500/10 text-violet-400 border border-violet-500/20 rounded-[5px] px-2.5 py-1 hover:bg-violet-500/20 transition-colors"
+                >
+                  Add MCP
+                </button>
+              )}
+              {onOpenPage && (
+                <button
+                  onClick={onOpenPage}
+                  className="text-[11px] font-medium text-[var(--c-text-3)] border border-[var(--c-border)] rounded-[5px] px-2.5 py-1 hover:text-[var(--c-text-2)] transition-colors"
+                >
+                  Browse servers
+                </button>
+              )}
+            </div>
           </div>
         ) : (
           filtered.map((mcp) => (

@@ -10,6 +10,7 @@ interface SkillSectionProps {
   matchedPaths?: Set<string>;
   onSelectSkill?: (skill: Skill) => void;
   onOpenPage?: () => void;
+  onAddSkill?: () => void;
 }
 
 function ChevronIcon({ open }: { open: boolean }) {
@@ -22,7 +23,7 @@ function ChevronIcon({ open }: { open: boolean }) {
   );
 }
 
-export default function SkillSection({ skills, query, matchedPaths, onSelectSkill, onOpenPage }: SkillSectionProps) {
+export default function SkillSection({ skills, query, matchedPaths, onSelectSkill, onOpenPage, onAddSkill }: SkillSectionProps) {
   const [sectionOpen, setSectionOpen] = useState(true);
   const [listExpanded, setListExpanded] = useState(false);
   const [tooltipOpen, setTooltipOpen] = useState(false);
@@ -110,14 +111,24 @@ export default function SkillSection({ skills, query, matchedPaths, onSelectSkil
             <p className="text-[11px] text-[var(--c-text-2)] leading-relaxed mb-2.5">
               Skills are markdown files that give your agent standing instructions — like a handbook it always consults.
             </p>
-            {onOpenPage && (
-              <button
-                onClick={onOpenPage}
-                className="text-[11px] font-medium bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 rounded-[5px] px-2.5 py-1 hover:bg-indigo-500/20 transition-colors"
-              >
-                Add first skill
-              </button>
-            )}
+            <div className="flex items-center gap-2">
+              {onAddSkill && (
+                <button
+                  onClick={onAddSkill}
+                  className="text-[11px] font-medium bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 rounded-[5px] px-2.5 py-1 hover:bg-indigo-500/20 transition-colors"
+                >
+                  Add first skill
+                </button>
+              )}
+              {onOpenPage && (
+                <button
+                  onClick={onOpenPage}
+                  className="text-[11px] font-medium text-[var(--c-text-3)] border border-[var(--c-border)] rounded-[5px] px-2.5 py-1 hover:text-[var(--c-text-2)] transition-colors"
+                >
+                  Browse skills
+                </button>
+              )}
+            </div>
           </div>
         ) : (
           <>

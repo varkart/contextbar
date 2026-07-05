@@ -12,9 +12,11 @@ interface AgentDetailsProps {
   onOpenSkillsPage?: () => void;
   onOpenMcpsPage?: () => void;
   onOpenBackups?: () => void;
+  onAddSkill?: () => void;
+  onAddMcp?: () => void;
 }
 
-export default function AgentDetails({ agent, query, matchedSkills, matchedMcps, onSelectSkill, onSelectMcp, onOpenSkillsPage, onOpenMcpsPage, onOpenBackups }: AgentDetailsProps) {
+export default function AgentDetails({ agent, query, matchedSkills, matchedMcps, onSelectSkill, onSelectMcp, onOpenSkillsPage, onOpenMcpsPage, onOpenBackups, onAddSkill, onAddMcp }: AgentDetailsProps) {
   const hasConfigErrors = (agent.configErrors ?? []).length > 0
   return (
     <div className="px-2 pt-1 pb-3 space-y-3">
@@ -64,6 +66,7 @@ export default function AgentDetails({ agent, query, matchedSkills, matchedMcps,
         matchedPaths={matchedSkills}
         onSelectSkill={onSelectSkill}
         onOpenPage={onOpenSkillsPage}
+        onAddSkill={onAddSkill}
       />
       <McpSection
         mcps={agent.mcps}
@@ -71,6 +74,7 @@ export default function AgentDetails({ agent, query, matchedSkills, matchedMcps,
         matchedNames={matchedMcps}
         onSelectMcp={onSelectMcp}
         onOpenPage={onOpenMcpsPage}
+        onAddMcp={onAddMcp}
       />
     </div>
   );

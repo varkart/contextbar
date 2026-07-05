@@ -182,6 +182,8 @@ export default function ViewManager({
         onOpenMcpsPage={openMcpsPage}
         onAgentUpdated={handleFetchTools}
         onOpenBackups={() => goTo('config-backup')}
+        onAddSkill={openAddSkill}
+        onAddMcp={openAddMcp}
         query={query || undefined}
         matchedSkills={searchResults.find((r: any) => r.agent.id === selectedAgent.id)?.matchedSkills}
         matchedMcps={searchResults.find((r: any) => r.agent.id === selectedAgent.id)?.matchedMcps}
