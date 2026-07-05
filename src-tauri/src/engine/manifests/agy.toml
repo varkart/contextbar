@@ -17,7 +17,15 @@ args = ["--version"]
 timeout_ms = 800
 parse = "first_line"
 
-# MCPs from plugins (gemini-extension.json format — same schema as Gemini extensions)
+# MCPs added via settings.json (writable — supports Add/Remove MCP)
+[[mcp_sources]]
+id = "settings_json"
+type = "json_key_pair"
+file = "~/.gemini/antigravity-cli/settings.json"
+active_key = "mcpServers"
+disabled_key = "disabledMcpServers"
+
+# MCPs from plugins (gemini-extension.json format — same schema as Gemini extensions, read-only)
 [[mcp_sources]]
 id = "plugins"
 type = "extension_dir"
