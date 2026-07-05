@@ -908,7 +908,13 @@ fn install_skill_from_path(
     for agent_id in &agent_ids {
         let dir = skill_dir_for(agent_id)?;
         let path = write_skill_file(&dir, &slug, &content)?;
-        db::log_event(&db, "skill_installed_path", agent_id, &slug, Some(&src_path));
+        db::log_event(
+            &db,
+            "skill_installed_path",
+            agent_id,
+            &slug,
+            Some(&src_path),
+        );
         paths.push(path);
     }
     Ok(paths)
@@ -1688,7 +1694,13 @@ async fn install_mcp_npm(
         version, package_name
     );
     let db = app.state::<db::DbState>();
-    db::log_event(&db, "mcp_npm_installed", &agent_id, &mcp_name, Some(&detail));
+    db::log_event(
+        &db,
+        "mcp_npm_installed",
+        &agent_id,
+        &mcp_name,
+        Some(&detail),
+    );
 
     // Clear the doctor "pkg-missing" notification now that the package is installed.
     let dedup_key = format!("doctor:mcp:{}:{}:pkg-missing", agent_id, mcp_name);

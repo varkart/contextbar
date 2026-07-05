@@ -290,7 +290,10 @@ pub fn report(agents: &[Agent]) -> Vec<DoctorSection> {
                     (
                         DoctorStatus::Warn,
                         Some(format!("File not found: {path}")),
-                        Some("The file will be created automatically when you first use this tool.".to_string()),
+                        Some(
+                            "The file will be created automatically when you first use this tool."
+                                .to_string(),
+                        ),
                     )
                 } else {
                     let parse_err = validate_config_file(path);
@@ -303,9 +306,7 @@ pub fn report(agents: &[Agent]) -> Vec<DoctorSection> {
                         None => (DoctorStatus::Ok, None, None),
                     }
                 };
-                let short = p.file_name()
-                    .and_then(|n| n.to_str())
-                    .unwrap_or(path);
+                let short = p.file_name().and_then(|n| n.to_str()).unwrap_or(path);
                 DoctorItem {
                     id: format!("config:{}:{}", a.id, short),
                     label: format!("{} › {}", a.name, short),
@@ -588,7 +589,10 @@ mod tests {
     fn resolves_stale_notification_when_issue_fixed() {
         let db = test_db();
         check(
-            &[make_agent("t", vec![make_mcp("mcp1", "__not_real__", true)])],
+            &[make_agent(
+                "t",
+                vec![make_mcp("mcp1", "__not_real__", true)],
+            )],
             &db,
         );
         assert_eq!(db::get_active_notifications(&db).unwrap().len(), 1);

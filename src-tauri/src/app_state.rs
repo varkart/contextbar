@@ -132,8 +132,7 @@ pub fn set_plugin_mcp_disabled(
         if trimmed.is_empty() {
             serde_json::json!({"mcpServers": {}})
         } else {
-            serde_json::from_str(trimmed)
-                .map_err(|e| format!("cannot parse {config_path}: {e}"))?
+            serde_json::from_str(trimmed).map_err(|e| format!("cannot parse {config_path}: {e}"))?
         }
     } else {
         serde_json::json!({"mcpServers": {}})
@@ -163,8 +162,8 @@ pub fn set_plugin_mcp_disabled(
         }
     }
 
-    let updated = serde_json::to_string_pretty(&json)
-        .map_err(|e| format!("serialization error: {e}"))?;
+    let updated =
+        serde_json::to_string_pretty(&json).map_err(|e| format!("serialization error: {e}"))?;
     let tmp = format!("{config_path}.tmp");
     std::fs::write(&tmp, &updated).map_err(|e| format!("cannot write {tmp}: {e}"))?;
     std::fs::rename(&tmp, config_path).map_err(|e| {
@@ -290,7 +289,10 @@ pub fn update_permissions_file(
     let mut perms_obj = serde_json::Map::new();
     perms_obj.insert(allow_key.to_string(), serde_json::json!(perms.allow));
     perms_obj.insert(deny_key.to_string(), serde_json::json!(perms.deny));
-    obj.insert(permissions_key.to_string(), serde_json::Value::Object(perms_obj));
+    obj.insert(
+        permissions_key.to_string(),
+        serde_json::Value::Object(perms_obj),
+    );
 
     let updated =
         serde_json::to_string_pretty(&json).map_err(|e| format!("serialization error: {e}"))?;
@@ -1441,7 +1443,10 @@ mod tests {
         set_plugin_mcp_disabled(&path.to_string_lossy(), "postman", true).unwrap();
         let v: serde_json::Value =
             serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
-        assert_eq!(v["mcpServers"]["postman"]["disabled"], serde_json::Value::Bool(true));
+        assert_eq!(
+            v["mcpServers"]["postman"]["disabled"],
+            serde_json::Value::Bool(true)
+        );
 
         // Re-enable → removes disabled flag, cleans up empty entry
         set_plugin_mcp_disabled(&path.to_string_lossy(), "postman", false).unwrap();
@@ -1465,7 +1470,10 @@ mod tests {
             serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
         // Existing command/args preserved
         assert_eq!(v["mcpServers"]["postman"]["command"], "npx");
-        assert_eq!(v["mcpServers"]["postman"]["disabled"], serde_json::Value::Bool(true));
+        assert_eq!(
+            v["mcpServers"]["postman"]["disabled"],
+            serde_json::Value::Bool(true)
+        );
     }
 
     #[test]

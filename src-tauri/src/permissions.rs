@@ -271,15 +271,27 @@ mod tests {
             serde_json::json!({ "tools": { "allowed": [] } }),
         );
         let spec = make_gemini_spec(&tmp.path().join("settings.json").to_string_lossy());
-        add_rule(&spec, tmp.path(), "run_shell_command", PermissionSection::Allow).unwrap();
+        add_rule(
+            &spec,
+            tmp.path(),
+            "run_shell_command",
+            PermissionSection::Allow,
+        )
+        .unwrap();
         let perms = read(&spec, tmp.path()).unwrap();
         assert_eq!(perms.allow, vec!["run_shell_command"]);
         // Confirm the file uses "allowed" not "allow"
         let raw: serde_json::Value =
             serde_json::from_str(&fs::read_to_string(tmp.path().join("settings.json")).unwrap())
                 .unwrap();
-        assert!(raw["tools"]["allowed"].is_array(), "key should be 'allowed'");
-        assert!(raw["tools"].get("allow").is_none(), "'allow' key must not appear");
+        assert!(
+            raw["tools"]["allowed"].is_array(),
+            "key should be 'allowed'"
+        );
+        assert!(
+            raw["tools"].get("allow").is_none(),
+            "'allow' key must not appear"
+        );
     }
 
     #[test]

@@ -294,7 +294,9 @@ fn read_extension_dir(
                     .ok()
                     .and_then(|raw| {
                         let t = raw.trim().to_string();
-                        if t.is_empty() { return None; }
+                        if t.is_empty() {
+                            return None;
+                        }
                         serde_json::from_str::<serde_json::Value>(&t).ok()
                     })
                     .and_then(|v| v.get("mcpServers").cloned())
