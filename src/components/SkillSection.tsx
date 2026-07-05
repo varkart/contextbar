@@ -68,8 +68,8 @@ export default function SkillSection({ skills, query, matchedPaths, onSelectSkil
             ?
           </button>
           {tooltipOpen && (
-            <div className="absolute right-0 top-[-4px] w-[220px] bg-[var(--c-surface-2)] border border-[var(--c-border)] rounded-[10px] p-3 z-30 shadow-lg animate-tooltip-in">
-              <div className="absolute right-[-5px] top-[10px] w-2 h-2 bg-[var(--c-surface-2)] border-r border-t border-[var(--c-border)] rotate-45" />
+            <div className="absolute right-0 top-[-4px] w-[220px] bg-[var(--c-surface)] border border-[var(--c-border)] rounded-[10px] p-3 z-30 shadow-lg animate-tooltip-in">
+              <div className="absolute right-[-5px] top-[10px] w-2 h-2 bg-[var(--c-surface)] border-r border-t border-[var(--c-border)] rotate-45" />
               <p className="text-[12px] font-semibold text-[var(--c-text)] mb-1.5">Skills</p>
               <p className="text-[11px] text-[var(--c-text-2)] leading-relaxed">
                 Markdown files your agent reads as standing instructions — persona, rules, project context.
