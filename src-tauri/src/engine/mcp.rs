@@ -281,6 +281,34 @@ fn read_extension_dir(
 
         let ext_path_str = ext_dir.to_string_lossy();
 
+        // Load per-server disabled overrides from mcp_config.json (sibling to manifest).
+        // Allows toggling individual servers even when manifest_file is gemini-extension.json.
+        let disabled_overrides: std::collections::HashSet<String> = {
+            let override_path = ext_dir.join("mcp_config.json");
+            if override_path.exists() && override_path != manifest_path {
+                std::fs::read_to_string(&override_path)
+                    .ok()
+                    .and_then(|raw| {
+                        let t = raw.trim().to_string();
+                        if t.is_empty() { return None; }
+                        serde_json::from_str::<serde_json::Value>(&t).ok()
+                    })
+                    .and_then(|v| v.get("mcpServers").cloned())
+                    .and_then(|s| s.as_object().cloned())
+                    .map(|m| {
+                        m.into_iter()
+                            .filter(|(_, v)| {
+                                v.get("disabled").and_then(|d| d.as_bool()).unwrap_or(false)
+                            })
+                            .map(|(k, _)| k)
+                            .collect()
+                    })
+                    .unwrap_or_default()
+            } else {
+                std::collections::HashSet::new()
+            }
+        };
+
         // Resolve headers secrets and httpUrl for each server
         let obj = match servers_val.as_object() {
             Some(o) => o,
@@ -341,7 +369,7 @@ fn read_extension_dir(
                 args,
                 url,
                 description,
-                active,
+                active: active && !disabled_overrides.contains(name),
                 has_secrets,
                 secret_key_names,
                 extension_name: Some(ext_name.clone()),

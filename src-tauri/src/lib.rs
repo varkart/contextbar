@@ -1249,6 +1249,18 @@ fn set_mcp_active(
                 let ef_path = expand_home(ef, &home);
                 app_state::toggle_extension_active(&ef_path.to_string_lossy(), ext_name, active)
             }
+            McpSourceSpec::ExtensionDir { dir, .. } => {
+                let ext_name = extension_name
+                    .as_deref()
+                    .ok_or("extension_name required for extension-dir MCP toggle")?;
+                let plugin_dir = expand_home(dir, &home).join(ext_name);
+                let mcp_config = plugin_dir.join("mcp_config.json");
+                app_state::set_plugin_mcp_disabled(
+                    &mcp_config.to_string_lossy(),
+                    &mcp_name,
+                    !active,
+                )
+            }
             _ => Err(format!("source '{source_id}' does not support toggling")),
         };
         if result.is_ok() {

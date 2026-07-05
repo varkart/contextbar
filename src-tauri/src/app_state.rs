@@ -111,6 +111,70 @@ pub fn move_mcp_in_config(
     Ok(())
 }
 
+/// Set `disabled: true/false` on a specific server in a plugin's mcp_config.json.
+/// Creates the file if it doesn't exist. Used to toggle plugin-sourced MCPs.
+pub fn set_plugin_mcp_disabled(
+    config_path: &str,
+    mcp_name: &str,
+    disabled: bool,
+) -> Result<(), String> {
+    let lock = config_lock(config_path);
+    let _guard = lock.lock().unwrap_or_else(|e| e.into_inner());
+
+    if let Err(e) = crate::backup::snapshot(config_path) {
+        eprintln!("[backup] snapshot failed for {config_path}: {e}");
+    }
+
+    let mut json: serde_json::Value = if std::path::Path::new(config_path).exists() {
+        let raw = std::fs::read_to_string(config_path)
+            .map_err(|e| format!("cannot read {config_path}: {e}"))?;
+        let trimmed = raw.trim();
+        if trimmed.is_empty() {
+            serde_json::json!({"mcpServers": {}})
+        } else {
+            serde_json::from_str(trimmed)
+                .map_err(|e| format!("cannot parse {config_path}: {e}"))?
+        }
+    } else {
+        serde_json::json!({"mcpServers": {}})
+    };
+
+    let servers = json
+        .as_object_mut()
+        .ok_or("mcp_config.json is not an object")?
+        .entry("mcpServers")
+        .or_insert_with(|| serde_json::Value::Object(serde_json::Map::new()))
+        .as_object_mut()
+        .ok_or("mcpServers is not an object")?;
+
+    let entry = servers
+        .entry(mcp_name.to_string())
+        .or_insert_with(|| serde_json::Value::Object(serde_json::Map::new()));
+
+    if let Some(obj) = entry.as_object_mut() {
+        if disabled {
+            obj.insert("disabled".to_string(), serde_json::Value::Bool(true));
+        } else {
+            obj.remove("disabled");
+            // Remove the entry entirely if it has no other fields
+            if obj.is_empty() {
+                servers.remove(mcp_name);
+            }
+        }
+    }
+
+    let updated = serde_json::to_string_pretty(&json)
+        .map_err(|e| format!("serialization error: {e}"))?;
+    let tmp = format!("{config_path}.tmp");
+    std::fs::write(&tmp, &updated).map_err(|e| format!("cannot write {tmp}: {e}"))?;
+    std::fs::rename(&tmp, config_path).map_err(|e| {
+        let _ = std::fs::remove_file(&tmp);
+        format!("cannot rename to {config_path}: {e}")
+    })?;
+
+    Ok(())
+}
+
 /// Toggle an extension in extension-enablement.json.
 /// Disabled entries are preserved under a `_disabled` key so re-enabling
 /// restores any previous overrides.
@@ -1366,6 +1430,42 @@ mod tests {
         let result = remove_mcp_from_toml_config(&path, "mcpServers", "ghost");
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("not found"));
+    }
+
+    #[test]
+    fn set_plugin_mcp_disabled_creates_file_and_sets_flag() {
+        let tmp = TempDir::new().unwrap();
+        let path = tmp.path().join("mcp_config.json");
+
+        // Disable on non-existent file → creates file with disabled: true
+        set_plugin_mcp_disabled(&path.to_string_lossy(), "postman", true).unwrap();
+        let v: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
+        assert_eq!(v["mcpServers"]["postman"]["disabled"], serde_json::Value::Bool(true));
+
+        // Re-enable → removes disabled flag, cleans up empty entry
+        set_plugin_mcp_disabled(&path.to_string_lossy(), "postman", false).unwrap();
+        let v: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
+        assert!(v["mcpServers"].get("postman").is_none());
+    }
+
+    #[test]
+    fn set_plugin_mcp_disabled_preserves_existing_config() {
+        let tmp = TempDir::new().unwrap();
+        let path = tmp.path().join("mcp_config.json");
+        fs::write(
+            &path,
+            r#"{"mcpServers":{"postman":{"command":"npx","args":["@postman/mcp"]}}}"#,
+        )
+        .unwrap();
+
+        set_plugin_mcp_disabled(&path.to_string_lossy(), "postman", true).unwrap();
+        let v: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
+        // Existing command/args preserved
+        assert_eq!(v["mcpServers"]["postman"]["command"], "npx");
+        assert_eq!(v["mcpServers"]["postman"]["disabled"], serde_json::Value::Bool(true));
     }
 
     #[test]
