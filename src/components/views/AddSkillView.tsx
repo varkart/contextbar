@@ -8,6 +8,7 @@ interface AddSkillViewProps {
   installedAgents: Agent[];
   onBack: () => void;
   onCreated: () => void;
+  initialAgentId?: string;
 }
 
 type SourceType = 'template' | 'url' | 'local';
@@ -95,10 +96,13 @@ function SuccessState({ paths, name, onReveal, onDone }: { paths: string[]; name
   );
 }
 
-export default function AddSkillView({ installedAgents, onBack, onCreated }: AddSkillViewProps) {
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(
-    new Set(installedAgents.slice(0, 1).map(t => t.id))
-  );
+export default function AddSkillView({ installedAgents, onBack, onCreated, initialAgentId }: AddSkillViewProps) {
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => {
+    const id = initialAgentId && installedAgents.some(a => a.id === initialAgentId)
+      ? initialAgentId
+      : installedAgents[0]?.id
+    return new Set(id ? [id] : [])
+  });
   const [sourceType, setSourceType] = useState<SourceType>('template');
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');

@@ -68,6 +68,7 @@ export default function ViewManager({
         installedAgents={installedAgents}
         onBack={() => escape()}
         onCreated={handleFetchTools}
+        initialAgentId={selectedAgent?.id}
       />
     )
   }
@@ -77,6 +78,7 @@ export default function ViewManager({
         installedAgents={installedAgents}
         onBack={() => escape()}
         onAdded={handleFetchTools}
+        initialAgentId={selectedAgent?.id}
       />
     )
   }
