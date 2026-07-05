@@ -37,7 +37,7 @@ describe('McpSection', () => {
 
   it('shows "None detected" for empty list', () => {
     render(<McpSection mcps={[]} />)
-    expect(screen.getByText(/none detected/i)).toBeInTheDocument()
+    expect(screen.getByText(/no mcp servers yet/i)).toBeInTheDocument()
   })
 
   it('collapses on header click', () => {
@@ -69,7 +69,7 @@ describe('McpSection', () => {
 
   it('shows "None detected" when filter yields 0 results', () => {
     render(<McpSection mcps={[mcp('github')]} matchedNames={new Set(['no-match'])} />)
-    expect(screen.getByText(/none detected/i)).toBeInTheDocument()
+    expect(screen.getByText(/no mcp servers yet/i)).toBeInTheDocument()
   })
 
   it('calls onSelectMcp when mcp row is clicked', () => {

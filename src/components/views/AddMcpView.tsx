@@ -10,6 +10,7 @@ interface AddMcpViewProps {
   installedAgents: Agent[];
   onBack: () => void;
   onAdded: () => void;
+  initialAgentId?: string;
 }
 
 const MCP_TYPES: { value: McpType; label: string; description: string }[] = [
@@ -131,10 +132,13 @@ function TypeDropdown({ value, onChange }: { value: McpType; onChange: (t: McpTy
   );
 }
 
-export default function AddMcpView({ installedAgents, onBack, onAdded }: AddMcpViewProps) {
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(
-    new Set(installedAgents.slice(0, 1).map(t => t.id))
-  );
+export default function AddMcpView({ installedAgents, onBack, onAdded, initialAgentId }: AddMcpViewProps) {
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => {
+    const id = initialAgentId && installedAgents.some(a => a.id === initialAgentId)
+      ? initialAgentId
+      : installedAgents[0]?.id
+    return new Set(id ? [id] : [])
+  });
   const [mcpType, setMcpType] = useState<McpType>('npx');
   const [name, setName] = useState('');
   const [fields, setFields] = useState<Record<string, string>>({});

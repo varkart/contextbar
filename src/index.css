@@ -138,6 +138,15 @@ body {
   animation: tooltip-in 120ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
+@keyframes slide-up {
+  from { transform: translateY(100%); }
+  to   { transform: translateY(0); }
+}
+
+.animate-slide-up {
+  animation: slide-up 280ms cubic-bezier(0.32, 0.72, 0, 1) forwards;
+}
+
 /* Toggle animations */
 @keyframes toggle-enable {
   0%   { transform: scale(1);    opacity: 1; }

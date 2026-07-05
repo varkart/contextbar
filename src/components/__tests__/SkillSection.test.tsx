@@ -35,9 +35,9 @@ describe('SkillSection', () => {
     expect(screen.getByText('graphify')).toBeInTheDocument()
   })
 
-  it('shows "None detected" when skills list is empty', () => {
+  it('shows empty state card when skills list is empty', () => {
     render(<SkillSection skills={[]} />)
-    expect(screen.getByText(/none detected/i)).toBeInTheDocument()
+    expect(screen.getByText(/no skills yet/i)).toBeInTheDocument()
   })
 
   it('truncates to 5 skills when no query', () => {
