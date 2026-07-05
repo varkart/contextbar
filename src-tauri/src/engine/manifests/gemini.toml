@@ -3,6 +3,10 @@ id = "gemini"
 name = "Gemini CLI"
 
 [[detection]]
+type = "dir"
+path = "~/.gemini"
+
+[[detection]]
 type = "binary"
 name = "gemini"
 
