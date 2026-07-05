@@ -25,6 +25,7 @@ fn all_manifest_strs() -> &'static [(&'static str, &'static str)] {
         ("windsurf", manifest_toml!("windsurf")),
         ("kiro", manifest_toml!("kiro")),
         ("codex", manifest_toml!("codex")),
+        ("agy", manifest_toml!("agy")),
     ]
 }
 

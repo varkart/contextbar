@@ -6,4 +6,5 @@ export const AGENT_COLORS: Record<string, { bg: string; text: string }> = {
   copilot:  { bg: 'bg-zinc-500/15',     text: 'text-zinc-500'    },
   windsurf: { bg: 'bg-teal-500/10',     text: 'text-teal-500'    },
   kiro:     { bg: 'bg-amber-500/10',    text: 'text-amber-500'   },
+  agy:      { bg: 'bg-violet-500/10',   text: 'text-violet-500'  },
 };

@@ -30,11 +30,11 @@ pub fn collect(
             mcp.source_id = source_id.clone();
         }
 
-        // ClaudeMcpList is a "fill-in-the-gaps" source: skip any name already
-        // collected from a file-based source so we don't get duplicates.
+        // Deduplicate by server name across all sources (first source wins).
+        // ClaudeMcpList additionally deduplicates by URL.
+        let existing_names: std::collections::HashSet<String> =
+            all.iter().map(|m: &McpServer| m.name.clone()).collect();
         if matches!(entry.spec, McpSourceSpec::ClaudeMcpList { .. }) {
-            let existing_names: std::collections::HashSet<String> =
-                all.iter().map(|m: &McpServer| m.name.clone()).collect();
             let existing_urls: std::collections::HashSet<String> = all
                 .iter()
                 .filter_map(|m: &McpServer| m.url.clone())
@@ -47,7 +47,11 @@ pub fn collect(
                 }
             }
         } else {
-            all.extend(mcps);
+            for mcp in mcps {
+                if !existing_names.contains(&mcp.name) {
+                    all.push(mcp);
+                }
+            }
         }
 
         if first_error.is_none() {
@@ -115,7 +119,11 @@ fn parse_json(path: &std::path::Path, jsonc: bool) -> Result<serde_json::Value, 
     let raw = std::fs::read_to_string(path)
         .map_err(|e| format!("cannot read {}: {}", path.display(), e))?;
     let content = if jsonc { strip_comments(&raw) } else { raw };
-    serde_json::from_str(&content).map_err(|e| format!("cannot parse {}: {}", path.display(), e))
+    let trimmed = content.trim();
+    if trimmed.is_empty() {
+        return Ok(serde_json::Value::Object(serde_json::Map::new()));
+    }
+    serde_json::from_str(trimmed).map_err(|e| format!("cannot parse {}: {}", path.display(), e))
 }
 
 fn read_json_key_pair(
@@ -277,6 +285,36 @@ fn read_extension_dir(
 
         let ext_path_str = ext_dir.to_string_lossy();
 
+        // Load per-server disabled overrides from mcp_config.json (sibling to manifest).
+        // Allows toggling individual servers even when manifest_file is gemini-extension.json.
+        let disabled_overrides: std::collections::HashSet<String> = {
+            let override_path = ext_dir.join("mcp_config.json");
+            if override_path.exists() && override_path != manifest_path {
+                std::fs::read_to_string(&override_path)
+                    .ok()
+                    .and_then(|raw| {
+                        let t = raw.trim().to_string();
+                        if t.is_empty() {
+                            return None;
+                        }
+                        serde_json::from_str::<serde_json::Value>(&t).ok()
+                    })
+                    .and_then(|v| v.get("mcpServers").cloned())
+                    .and_then(|s| s.as_object().cloned())
+                    .map(|m| {
+                        m.into_iter()
+                            .filter(|(_, v)| {
+                                v.get("disabled").and_then(|d| d.as_bool()).unwrap_or(false)
+                            })
+                            .map(|(k, _)| k)
+                            .collect()
+                    })
+                    .unwrap_or_default()
+            } else {
+                std::collections::HashSet::new()
+            }
+        };
+
         // Resolve headers secrets and httpUrl for each server
         let obj = match servers_val.as_object() {
             Some(o) => o,
@@ -337,7 +375,7 @@ fn read_extension_dir(
                 args,
                 url,
                 description,
-                active,
+                active: active && !disabled_overrides.contains(name),
                 has_secrets,
                 secret_key_names,
                 extension_name: Some(ext_name.clone()),
@@ -805,6 +843,22 @@ mod tests {
     }
 
     #[test]
+    fn json_key_pair_empty_file_returns_empty() {
+        let tmp = TempDir::new().unwrap();
+        let path = tmp.path().join("empty.json");
+        std::fs::write(&path, "").unwrap();
+        let source = McpSourceSpec::JsonKeyPair {
+            file: path.to_string_lossy().to_string(),
+            active_key: "mcpServers".to_string(),
+            disabled_key: None,
+            jsonc: false,
+        };
+        let (mcps, err) = collect(&[wrap(source)], None, tmp.path());
+        assert!(mcps.is_empty());
+        assert!(err.is_none());
+    }
+
+    #[test]
     fn json_key_pair_jsonc_strips_comments() {
         let tmp = TempDir::new().unwrap();
         let jsonc = r#"{
@@ -1153,6 +1207,40 @@ mod tests {
         assert_eq!(mcps.len(), 2);
         assert!(mcps.iter().any(|m| m.name == "alpha"));
         assert!(mcps.iter().any(|m| m.name == "beta"));
+    }
+
+    #[test]
+    fn collect_deduplicates_same_name_across_sources() {
+        let tmp = TempDir::new().unwrap();
+        // Same server name "postman" in two different sources
+        write_json(
+            tmp.path(),
+            "a.json",
+            serde_json::json!({"mcpServers": {"postman": {"command": "npx", "args": ["@a"]}}}),
+        );
+        write_json(
+            tmp.path(),
+            "b.json",
+            serde_json::json!({"mcpServers": {"postman": {"command": "npx", "args": ["@b"]}}}),
+        );
+        let sources = vec![
+            wrap(McpSourceSpec::JsonKeyPair {
+                file: tmp.path().join("a.json").to_string_lossy().to_string(),
+                active_key: "mcpServers".to_string(),
+                disabled_key: None,
+                jsonc: false,
+            }),
+            wrap(McpSourceSpec::JsonKeyPair {
+                file: tmp.path().join("b.json").to_string_lossy().to_string(),
+                active_key: "mcpServers".to_string(),
+                disabled_key: None,
+                jsonc: false,
+            }),
+        ];
+        let (mcps, _) = collect(&sources, None, tmp.path());
+        // Only one entry — first source wins
+        assert_eq!(mcps.len(), 1);
+        assert_eq!(mcps[0].args, vec!["@a"]);
     }
 
     #[test]
