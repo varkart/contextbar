@@ -5,6 +5,7 @@ import McpsListPanel from '../McpsListPanel'
 import SkillDetailPanel from '../SkillDetailPanel'
 import McpDetailPanel from '../McpDetailPanel'
 import AgentDetailPage from '../AgentDetailPage'
+import PermissionsDetailPanel from '../PermissionsDetailPanel'
 import Settings from '../Settings'
 import MainView from './MainView'
 import AgentsListView from './AgentsListView'
@@ -170,6 +171,15 @@ export default function ViewManager({
         agent={selectedAgent}
         onBack={() => goTo('agent-detail')}
         onRestored={handleFetchTools}
+      />
+    )
+  }
+  if (view === 'permissions-detail' && selectedAgent) {
+    return (
+      <PermissionsDetailPanel
+        toolId={selectedAgent.id}
+        toolName={selectedAgent.name}
+        onBack={() => escape()}
       />
     )
   }

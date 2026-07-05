@@ -3,6 +3,10 @@ id = "gemini"
 name = "Gemini CLI"
 
 [[detection]]
+type = "dir"
+path = "~/.gemini"
+
+[[detection]]
 type = "binary"
 name = "gemini"
 
@@ -45,3 +49,9 @@ id = "skills_dir"
 type = "directory"
 path = "~/.gemini/skills"
 disabled_subdir = ".disabled"
+
+[permissions]
+file = "~/.gemini/settings.json"
+key = "tools"
+allow_key = "allowed"
+deny_key = "exclude"

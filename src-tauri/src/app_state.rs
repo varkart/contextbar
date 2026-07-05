@@ -180,6 +180,8 @@ pub fn update_permissions_file(
     config_path: &str,
     mutate: impl FnOnce(&mut crate::permissions::AgentPermissions),
     permissions_key: &str,
+    allow_key: &str,
+    deny_key: &str,
 ) -> Result<(), String> {
     let lock = config_lock(config_path);
     let _guard = lock.lock().unwrap_or_else(|e| e.into_inner());
@@ -199,7 +201,7 @@ pub fn update_permissions_file(
     let perms_val = obj.get(permissions_key).cloned().unwrap_or_default();
     let mut perms = crate::permissions::AgentPermissions {
         allow: perms_val
-            .get("allow")
+            .get(allow_key)
             .and_then(|v| v.as_array())
             .map(|a| {
                 a.iter()
@@ -208,7 +210,7 @@ pub fn update_permissions_file(
             })
             .unwrap_or_default(),
         deny: perms_val
-            .get("deny")
+            .get(deny_key)
             .and_then(|v| v.as_array())
             .map(|a| {
                 a.iter()
@@ -220,11 +222,11 @@ pub fn update_permissions_file(
 
     mutate(&mut perms);
 
-    // Write back
-    obj.insert(
-        permissions_key.to_string(),
-        serde_json::json!({ "allow": perms.allow, "deny": perms.deny }),
-    );
+    // Write back — use Map to support dynamic key names (e.g. "allowed"/"exclude" for Gemini)
+    let mut perms_obj = serde_json::Map::new();
+    perms_obj.insert(allow_key.to_string(), serde_json::json!(perms.allow));
+    perms_obj.insert(deny_key.to_string(), serde_json::json!(perms.deny));
+    obj.insert(permissions_key.to_string(), serde_json::Value::Object(perms_obj));
 
     let updated =
         serde_json::to_string_pretty(&json).map_err(|e| format!("serialization error: {e}"))?;

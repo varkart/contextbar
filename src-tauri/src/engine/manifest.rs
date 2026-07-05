@@ -24,14 +24,28 @@ pub struct Manifest {
 #[derive(Debug, Deserialize)]
 pub struct PermissionsSpec {
     pub file: String,
-    /// Key inside the JSON object that holds `{allow: [...], deny: [...]}`.
+    /// Key inside the JSON object that holds the allow/deny sub-object.
     /// Defaults to "permissions".
     #[serde(default = "default_permissions_key")]
     pub key: String,
+    /// Name of the allow-list field inside the sub-object. Defaults to "allow".
+    /// Override for tools that use different names (e.g. Gemini uses "allowed").
+    #[serde(default = "default_allow_key")]
+    pub allow_key: String,
+    /// Name of the deny-list field inside the sub-object. Defaults to "deny".
+    /// Override for tools that use different names (e.g. Gemini uses "exclude").
+    #[serde(default = "default_deny_key")]
+    pub deny_key: String,
 }
 
 fn default_permissions_key() -> String {
     "permissions".to_string()
+}
+fn default_allow_key() -> String {
+    "allow".to_string()
+}
+fn default_deny_key() -> String {
+    "deny".to_string()
 }
 
 /// Wrapper that pairs an MCP source spec with optional version bounds.

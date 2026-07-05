@@ -76,6 +76,7 @@ export default function AgentDetails({ agent, query, matchedSkills, matchedMcps,
         onOpenPage={onOpenMcpsPage}
         onAddMcp={onAddMcp}
       />
+      {/* PermissionsSection hidden until UX is redesigned — see GitHub issues #33/#107 */}
     </div>
   );
 }

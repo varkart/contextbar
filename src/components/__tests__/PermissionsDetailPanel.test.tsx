@@ -46,7 +46,7 @@ describe('PermissionsDetailPanel', () => {
 
   it('calls get_permissions on mount', async () => {
     render(<PermissionsDetailPanel toolId="claude" onBack={vi.fn()} />)
-    await waitFor(() => expect(mockInvoke).toHaveBeenCalledWith('get_permissions', { toolId: 'claude' }))
+    await waitFor(() => expect(mockInvoke).toHaveBeenCalledWith('get_permissions', { agentId: 'claude' }))
   })
 
   it('shows allow rules after load', async () => {
@@ -89,7 +89,7 @@ describe('PermissionsDetailPanel', () => {
     fireEvent.click(screen.getByLabelText('Remove Bash(npm:*)'))
     await waitFor(() =>
       expect(mockInvoke).toHaveBeenCalledWith('remove_permission_rule', {
-        toolId: 'claude', rule: 'Bash(npm:*)', section: 'allow',
+        agentId: 'claude', rule: 'Bash(npm:*)', section: 'allow',
       })
     )
   })
@@ -101,7 +101,7 @@ describe('PermissionsDetailPanel', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Add' }))
     await waitFor(() =>
       expect(mockInvoke).toHaveBeenCalledWith('add_permission_rule', {
-        toolId: 'claude', rule: 'WebFetch(*)', section: 'allow',
+        agentId: 'claude', rule: 'WebFetch(*)', section: 'allow',
       })
     )
   })

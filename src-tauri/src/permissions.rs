@@ -23,8 +23,8 @@ pub fn read(spec: &PermissionsSpec, home: &std::path::Path) -> Result<AgentPermi
     let perms = json.get(&spec.key).cloned().unwrap_or_default();
 
     Ok(AgentPermissions {
-        allow: extract_string_list(&perms, "allow"),
-        deny: extract_string_list(&perms, "deny"),
+        allow: extract_string_list(&perms, &spec.allow_key),
+        deny: extract_string_list(&perms, &spec.deny_key),
     })
 }
 
@@ -63,6 +63,8 @@ pub fn add_rule(
             }
         },
         &spec.key,
+        &spec.allow_key,
+        &spec.deny_key,
     )
 }
 
@@ -86,6 +88,8 @@ pub fn remove_rule(
             list.retain(|r| r != rule);
         },
         &spec.key,
+        &spec.allow_key,
+        &spec.deny_key,
     )
 }
 
@@ -106,6 +110,17 @@ mod tests {
         PermissionsSpec {
             file: file.to_string(),
             key: "permissions".to_string(),
+            allow_key: "allow".to_string(),
+            deny_key: "deny".to_string(),
+        }
+    }
+
+    fn make_gemini_spec(file: &str) -> PermissionsSpec {
+        PermissionsSpec {
+            file: file.to_string(),
+            key: "tools".to_string(),
+            allow_key: "allowed".to_string(),
+            deny_key: "exclude".to_string(),
         }
     }
 
@@ -226,6 +241,45 @@ mod tests {
         let perms = read(&spec, tmp.path()).unwrap();
         assert!(!perms.deny.contains(&"Bash(rm -rf:*)".to_string()));
         assert!(perms.deny.contains(&"Bash(sudo:*)".to_string()));
+    }
+
+    #[test]
+    fn gemini_custom_key_names_read() {
+        let tmp = TempDir::new().unwrap();
+        write_settings(
+            tmp.path(),
+            "settings.json",
+            serde_json::json!({
+                "tools": {
+                    "allowed": ["run_shell_command"],
+                    "exclude": ["some_tool"]
+                }
+            }),
+        );
+        let spec = make_gemini_spec(&tmp.path().join("settings.json").to_string_lossy());
+        let perms = read(&spec, tmp.path()).unwrap();
+        assert_eq!(perms.allow, vec!["run_shell_command"]);
+        assert_eq!(perms.deny, vec!["some_tool"]);
+    }
+
+    #[test]
+    fn gemini_custom_key_names_write() {
+        let tmp = TempDir::new().unwrap();
+        write_settings(
+            tmp.path(),
+            "settings.json",
+            serde_json::json!({ "tools": { "allowed": [] } }),
+        );
+        let spec = make_gemini_spec(&tmp.path().join("settings.json").to_string_lossy());
+        add_rule(&spec, tmp.path(), "run_shell_command", PermissionSection::Allow).unwrap();
+        let perms = read(&spec, tmp.path()).unwrap();
+        assert_eq!(perms.allow, vec!["run_shell_command"]);
+        // Confirm the file uses "allowed" not "allow"
+        let raw: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(tmp.path().join("settings.json")).unwrap())
+                .unwrap();
+        assert!(raw["tools"]["allowed"].is_array(), "key should be 'allowed'");
+        assert!(raw["tools"].get("allow").is_none(), "'allow' key must not appear");
     }
 
     #[test]
