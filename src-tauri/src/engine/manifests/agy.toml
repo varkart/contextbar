@@ -25,6 +25,13 @@ file = "~/.gemini/antigravity-cli/settings.json"
 active_key = "mcpServers"
 disabled_key = "disabledMcpServers"
 
+# Global agy MCP config (~/.gemini/config/mcp_config.json) — used by tools like Postman
+[[mcp_sources]]
+id = "global_mcp_config"
+type = "json_key_pair"
+file = "~/.gemini/config/mcp_config.json"
+active_key = "mcpServers"
+
 # MCPs from plugins in ~/.gemini/antigravity-cli/plugins (all plugins have gemini-extension.json)
 [[mcp_sources]]
 id = "plugins"
