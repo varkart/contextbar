@@ -30,11 +30,11 @@ pub fn collect(
             mcp.source_id = source_id.clone();
         }
 
-        // ClaudeMcpList is a "fill-in-the-gaps" source: skip any name already
-        // collected from a file-based source so we don't get duplicates.
+        // Deduplicate by server name across all sources (first source wins).
+        // ClaudeMcpList additionally deduplicates by URL.
+        let existing_names: std::collections::HashSet<String> =
+            all.iter().map(|m: &McpServer| m.name.clone()).collect();
         if matches!(entry.spec, McpSourceSpec::ClaudeMcpList { .. }) {
-            let existing_names: std::collections::HashSet<String> =
-                all.iter().map(|m: &McpServer| m.name.clone()).collect();
             let existing_urls: std::collections::HashSet<String> = all
                 .iter()
                 .filter_map(|m: &McpServer| m.url.clone())
@@ -47,7 +47,11 @@ pub fn collect(
                 }
             }
         } else {
-            all.extend(mcps);
+            for mcp in mcps {
+                if !existing_names.contains(&mcp.name) {
+                    all.push(mcp);
+                }
+            }
         }
 
         if first_error.is_none() {
@@ -1201,6 +1205,40 @@ mod tests {
         assert_eq!(mcps.len(), 2);
         assert!(mcps.iter().any(|m| m.name == "alpha"));
         assert!(mcps.iter().any(|m| m.name == "beta"));
+    }
+
+    #[test]
+    fn collect_deduplicates_same_name_across_sources() {
+        let tmp = TempDir::new().unwrap();
+        // Same server name "postman" in two different sources
+        write_json(
+            tmp.path(),
+            "a.json",
+            serde_json::json!({"mcpServers": {"postman": {"command": "npx", "args": ["@a"]}}}),
+        );
+        write_json(
+            tmp.path(),
+            "b.json",
+            serde_json::json!({"mcpServers": {"postman": {"command": "npx", "args": ["@b"]}}}),
+        );
+        let sources = vec![
+            wrap(McpSourceSpec::JsonKeyPair {
+                file: tmp.path().join("a.json").to_string_lossy().to_string(),
+                active_key: "mcpServers".to_string(),
+                disabled_key: None,
+                jsonc: false,
+            }),
+            wrap(McpSourceSpec::JsonKeyPair {
+                file: tmp.path().join("b.json").to_string_lossy().to_string(),
+                active_key: "mcpServers".to_string(),
+                disabled_key: None,
+                jsonc: false,
+            }),
+        ];
+        let (mcps, _) = collect(&sources, None, tmp.path());
+        // Only one entry — first source wins
+        assert_eq!(mcps.len(), 1);
+        assert_eq!(mcps[0].args, vec!["@a"]);
     }
 
     #[test]
