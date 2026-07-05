@@ -115,7 +115,11 @@ fn parse_json(path: &std::path::Path, jsonc: bool) -> Result<serde_json::Value, 
     let raw = std::fs::read_to_string(path)
         .map_err(|e| format!("cannot read {}: {}", path.display(), e))?;
     let content = if jsonc { strip_comments(&raw) } else { raw };
-    serde_json::from_str(&content).map_err(|e| format!("cannot parse {}: {}", path.display(), e))
+    let trimmed = content.trim();
+    if trimmed.is_empty() {
+        return Ok(serde_json::Value::Object(serde_json::Map::new()));
+    }
+    serde_json::from_str(trimmed).map_err(|e| format!("cannot parse {}: {}", path.display(), e))
 }
 
 fn read_json_key_pair(
@@ -795,6 +799,22 @@ mod tests {
                 .join("missing.json")
                 .to_string_lossy()
                 .to_string(),
+            active_key: "mcpServers".to_string(),
+            disabled_key: None,
+            jsonc: false,
+        };
+        let (mcps, err) = collect(&[wrap(source)], None, tmp.path());
+        assert!(mcps.is_empty());
+        assert!(err.is_none());
+    }
+
+    #[test]
+    fn json_key_pair_empty_file_returns_empty() {
+        let tmp = TempDir::new().unwrap();
+        let path = tmp.path().join("empty.json");
+        std::fs::write(&path, "").unwrap();
+        let source = McpSourceSpec::JsonKeyPair {
+            file: path.to_string_lossy().to_string(),
             active_key: "mcpServers".to_string(),
             disabled_key: None,
             jsonc: false,
