@@ -1565,4 +1565,89 @@ mod tests {
         assert_eq!(added.len(), 1);
         assert_eq!(added[0].name, "sentry");
     }
+
+    // ── toml_key_pair (Codex) ────────────────────────────────────────────────
+
+    fn write_toml(dir: &std::path::Path, name: &str, content: &str) -> std::path::PathBuf {
+        let p = dir.join(name);
+        fs::write(&p, content).unwrap();
+        p
+    }
+
+    #[test]
+    fn toml_key_pair_reads_enabled_and_disabled_mcps() {
+        let tmp = TempDir::new().unwrap();
+        write_toml(
+            tmp.path(),
+            "config.toml",
+            r#"
+[mcp_servers.playwright]
+command = "npx"
+args = ["-y", "@playwright/mcp"]
+
+[mcp_servers.api-to-mcp-tyk]
+command = "npx"
+args = ["-y", "@tyk-technologies/api-to-mcp@latest"]
+enabled = false
+"#,
+        );
+        let source = McpSourceSpec::TomlKeyPair {
+            file: tmp.path().join("config.toml").to_string_lossy().to_string(),
+            active_key: "mcp_servers".to_string(),
+            disabled_key: None,
+            inline_toggle_field: Some("enabled".to_string()),
+        };
+        let (mcps, err) = collect(&[wrap(source)], None, tmp.path());
+        assert!(err.is_none());
+        assert_eq!(mcps.len(), 2);
+        let playwright = mcps.iter().find(|m| m.name == "playwright").unwrap();
+        assert!(
+            playwright.active,
+            "no enabled field should default to active"
+        );
+        let tyk = mcps.iter().find(|m| m.name == "api-to-mcp-tyk").unwrap();
+        assert!(!tyk.active, "enabled=false should be inactive");
+    }
+
+    #[test]
+    fn toml_key_pair_no_enabled_field_defaults_active() {
+        let tmp = TempDir::new().unwrap();
+        write_toml(
+            tmp.path(),
+            "config.toml",
+            r#"
+[mcp_servers.voice-mode]
+command = "uvx"
+args = ["voice-mode"]
+"#,
+        );
+        let source = McpSourceSpec::TomlKeyPair {
+            file: tmp.path().join("config.toml").to_string_lossy().to_string(),
+            active_key: "mcp_servers".to_string(),
+            disabled_key: None,
+            inline_toggle_field: Some("enabled".to_string()),
+        };
+        let (mcps, _) = collect(&[wrap(source)], None, tmp.path());
+        assert_eq!(mcps.len(), 1);
+        assert!(mcps[0].active);
+        assert_eq!(mcps[0].command, "uvx");
+    }
+
+    #[test]
+    fn toml_key_pair_missing_file_returns_empty() {
+        let tmp = TempDir::new().unwrap();
+        let source = McpSourceSpec::TomlKeyPair {
+            file: tmp
+                .path()
+                .join("nonexistent.toml")
+                .to_string_lossy()
+                .to_string(),
+            active_key: "mcp_servers".to_string(),
+            disabled_key: None,
+            inline_toggle_field: Some("enabled".to_string()),
+        };
+        let (mcps, err) = collect(&[wrap(source)], None, tmp.path());
+        assert!(mcps.is_empty());
+        assert!(err.is_none());
+    }
 }

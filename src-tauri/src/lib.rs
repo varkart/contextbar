@@ -967,6 +967,7 @@ fn skills_agent_name(agent_id: &str) -> Option<&'static str> {
         "cursor" => Some("cursor"),
         "windsurf" => Some("windsurf"),
         "copilot" => Some("github-copilot"),
+        "codex" => Some("codex"),
         _ => None,
     }
 }
