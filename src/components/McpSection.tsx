@@ -2,6 +2,8 @@ import { useState, useRef, useEffect } from 'react';
 import McpRow from './McpRow';
 import type { McpServer } from '../types';
 
+const INITIAL_LIMIT = 5;
+
 interface McpSectionProps {
   mcps: McpServer[];
   query?: string;
@@ -23,6 +25,7 @@ function ChevronIcon({ open }: { open: boolean }) {
 
 export default function McpSection({ mcps, query, matchedNames, onSelectMcp, onOpenPage, onAddMcp }: McpSectionProps) {
   const [sectionOpen, setSectionOpen] = useState(true);
+  const [listExpanded, setListExpanded] = useState(false);
   const [tooltipOpen, setTooltipOpen] = useState(false);
   const tooltipRef = useRef<HTMLDivElement>(null);
 
@@ -40,6 +43,9 @@ export default function McpSection({ mcps, query, matchedNames, onSelectMcp, onO
   const filtered = matchedNames && matchedNames.size > 0
     ? mcps.filter(m => matchedNames.has(m.name))
     : mcps;
+
+  const visible = (query || listExpanded) ? filtered : filtered.slice(0, INITIAL_LIMIT);
+  const hiddenCount = filtered.length - INITIAL_LIMIT;
 
   return (
     <div>
@@ -125,14 +131,24 @@ export default function McpSection({ mcps, query, matchedNames, onSelectMcp, onO
             </div>
           </div>
         ) : (
-          filtered.map((mcp) => (
-            <McpRow
-              key={mcp.name}
-              mcp={mcp}
-              query={query}
-              onSelect={onSelectMcp ? () => onSelectMcp(mcp) : undefined}
-            />
-          ))
+          <>
+            {visible.map((mcp) => (
+              <McpRow
+                key={mcp.name}
+                mcp={mcp}
+                query={query}
+                onSelect={onSelectMcp ? () => onSelectMcp(mcp) : undefined}
+              />
+            ))}
+            {!query && hiddenCount > 0 && (
+              <button
+                onClick={() => setListExpanded(v => !v)}
+                className="w-full text-left px-3 py-1 text-[12px] text-violet-400/60 hover:text-violet-400 transition-colors"
+              >
+                {listExpanded ? 'Show less' : `+${hiddenCount} more`}
+              </button>
+            )}
+          </>
         )
       )}
     </div>

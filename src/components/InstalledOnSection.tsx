@@ -157,8 +157,7 @@ export function SkillInstalledOn({ skill, currentAgentId, allAgents, onInstalled
         </svg>
       </button>
 
-      {!collapsed && <>
-      {/* Modal: no-cache last-provider disable warning */}
+      {/* Modal: no-cache last-provider disable warning — rendered outside collapse so it stays visible */}
       {pendingDisable && (
         <div className="mb-3 p-3 rounded-lg bg-amber-500/8 border border-amber-500/20 space-y-2">
           <p className="text-[12px] text-amber-400 leading-relaxed">
@@ -193,6 +192,7 @@ export function SkillInstalledOn({ skill, currentAgentId, allAgents, onInstalled
         </div>
       )}
 
+      {!collapsed && <>
       <div className="flex flex-col gap-1.5">
         {installedAgents.map(tool => {
           const noSupport = !tool.supportsSkills
@@ -424,7 +424,7 @@ export function McpInstalledOn({ mcp, currentAgentId, allAgents, onInstalled, on
             <div key={tool.id}>
               <div className={`flex items-center gap-2.5 px-2.5 py-1.5 rounded-md border border-[var(--c-border)] transition-colors ${noSupport ? 'opacity-30 cursor-not-allowed' : ''}`}>
                 <AgentAvatar tool={tool} />
-                <span className={`text-[13px] flex-1 truncate ${noSupport ? 'text-[var(--c-text-3)]' : 'text-[var(--c-text-2)]'}`}>{tool.name}</span>
+                <span className={`text-[13px] flex-1 truncate cursor-default select-none ${noSupport ? 'text-[var(--c-text-3)]' : 'text-[var(--c-text-2)]'}`}>{tool.name}</span>
 
                 {noSupport && (
                   <span className="text-[11px] text-[var(--c-text-3)]">No MCP support</span>
