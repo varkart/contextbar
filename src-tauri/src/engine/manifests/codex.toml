@@ -12,10 +12,18 @@ path = "~/.codex/config.toml"
 
 [version]
 type = "command"
+binary = "codex"
 args = ["--version"]
 timeout_ms = 800
-parse = "first_token"
+parse = "last_token"
 
+# Skills installed via codex marketplace / codex skills install (codex-native dir)
+[[skill_sources]]
+id = "codex_skills_dir"
+type = "directory"
+path = "~/.codex/skills"
+
+# Skills shared across AI tools (Claude, Gemini, Codex) — active/inactive via [[skills.config]]
 [[skill_sources]]
 id = "agents_skills_dir"
 type = "toml_config_directory"
@@ -25,7 +33,7 @@ config_key_path = ["skills", "config"]
 path_field = "path"
 enabled_field = "enabled"
 
-# MCP servers defined in [mcp_servers] TOML table
+# MCP servers defined in [mcp_servers] TOML table; toggle via inline enabled field
 [[mcp_sources]]
 id = "config_toml"
 type = "toml_key_pair"
