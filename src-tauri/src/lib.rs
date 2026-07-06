@@ -497,7 +497,7 @@ fn skill_dir_for(agent_id: &str) -> Result<SkillWriteTarget, String> {
     let home = dirs::home_dir().ok_or("cannot find home dir")?;
     let manifest = crate::engine::load_manifest(agent_id)
         .ok_or_else(|| format!("no manifest for '{agent_id}'"))?;
-    if let Some(source) = manifest.skill_sources.first() {
+    for source in &manifest.skill_sources {
         match &source.spec {
             SkillSourceSpec::Directory {
                 path, flat_files, ..
@@ -512,6 +512,9 @@ fn skill_dir_for(agent_id: &str) -> Result<SkillWriteTarget, String> {
                     dir: expand_home(path, &home),
                     flat_files: false,
                 });
+            }
+            SkillSourceSpec::ExtensionDirSkills { .. } => {
+                // plugin dirs are read-only — try next source
             }
         }
     }
@@ -1130,7 +1133,9 @@ fn set_skill_active(
                 .enumerate()
                 .find(|(idx, s)| s.id.as_deref().unwrap_or(&format!("source_{idx}")) == sid);
             if let Some((_, source)) = matched {
-                if let SkillSourceSpec::TomlConfigDirectory {
+                if let SkillSourceSpec::ExtensionDirSkills { .. } = &source.spec {
+                    return Err("Plugin skills cannot be toggled individually — disable the plugin instead".to_string());
+                } else if let SkillSourceSpec::TomlConfigDirectory {
                     config_file,
                     config_key_path,
                     path_field,

@@ -41,6 +41,9 @@ fn read_source(source: &SkillSourceSpec, home: &std::path::Path) -> Vec<Skill> {
             disabled_subdir,
             ..
         } => read_directory(&expand_home(path, home), disabled_subdir.as_deref()),
+        SkillSourceSpec::ExtensionDirSkills { dir, manifest_file } => {
+            read_extension_dir_skills(&expand_home(dir, home), manifest_file)
+        }
         SkillSourceSpec::TomlConfigDirectory {
             path,
             config_file,
@@ -245,6 +248,57 @@ fn read_directory(dir: &std::path::Path, disabled_subdir: Option<&str>) -> Vec<S
         }
     }
 
+    skills
+}
+
+/// For each plugin subdirectory that contains `manifest_file`, read skills
+/// from `plugin_dir/skills/<skill_name>/SKILL.md`. Plugin skills are always active.
+fn read_extension_dir_skills(dir: &std::path::Path, manifest_file: &str) -> Vec<Skill> {
+    let mut skills = Vec::new();
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return skills;
+    };
+    for entry in entries.flatten() {
+        let plugin_dir = entry.path();
+        if !plugin_dir.is_dir() {
+            continue;
+        }
+        if !plugin_dir.join(manifest_file).exists() {
+            continue;
+        }
+        let skills_dir = plugin_dir.join("skills");
+        let Ok(skill_entries) = std::fs::read_dir(&skills_dir) else {
+            continue;
+        };
+        for skill_entry in skill_entries.flatten() {
+            let skill_path = skill_entry.path();
+            if !skill_path.is_dir() {
+                continue;
+            }
+            let raw_name = skill_entry.file_name().to_string_lossy().to_string();
+            if raw_name.starts_with('.') {
+                continue;
+            }
+            let skill_md = skill_path.join("SKILL.md");
+            if !skill_md.exists() {
+                continue;
+            }
+            let description = parse_skill_description(&skill_path);
+            let has_full_description = skill_md_exists(&skill_path);
+            let source_url = parse_skill_source_url(&skill_path);
+            let content_hash = parse_skill_content_hash(&skill_path);
+            skills.push(Skill {
+                name: raw_name,
+                path: skill_path.to_string_lossy().to_string(),
+                description,
+                has_full_description,
+                active: true,
+                source_id: String::new(),
+                source_url,
+                content_hash,
+            });
+        }
+    }
     skills
 }
 

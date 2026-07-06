@@ -46,6 +46,20 @@ type = "extension_dir"
 dir = "~/.gemini/config/plugins"
 manifest_file = "gemini-extension.json"
 
+# Skills bundled inside plugins (~/.gemini/antigravity-cli/plugins/<plugin>/skills/<name>/SKILL.md)
+[[skill_sources]]
+id = "plugin_skills"
+type = "extension_dir_skills"
+dir = "~/.gemini/antigravity-cli/plugins"
+manifest_file = "gemini-extension.json"
+
+# Skills from plugins installed via `agy plugin install` (~/.gemini/config/plugins)
+[[skill_sources]]
+id = "installed_plugin_skills"
+type = "extension_dir_skills"
+dir = "~/.gemini/config/plugins"
+manifest_file = "gemini-extension.json"
+
 # User skills (global)
 [[skill_sources]]
 id = "skills_dir"
