@@ -1245,6 +1245,7 @@ mod tests {
             Some("npx"),
             &["mcp-pkg".to_string()],
             None,
+            None,
         )
         .unwrap();
 
@@ -1272,6 +1273,7 @@ mod tests {
             None,
             &[],
             Some("https://mcp.example.com/sse"),
+            None,
         )
         .unwrap();
 
@@ -1294,7 +1296,7 @@ mod tests {
         );
 
         let result =
-            add_mcp_to_toml_config(&path, "mcpServers", "existing", Some("node"), &[], None);
+            add_mcp_to_toml_config(&path, "mcpServers", "existing", Some("node"), &[], None, None);
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("already exists"));
     }
@@ -1310,6 +1312,7 @@ mod tests {
             "new-server",
             Some("uvx"),
             &["tool".to_string()],
+            None,
             None,
         )
         .unwrap();

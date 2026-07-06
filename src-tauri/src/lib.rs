@@ -1407,6 +1407,7 @@ fn validate_mcp(
 }
 
 #[tauri::command]
+#[allow(clippy::too_many_arguments)]
 fn add_mcp(
     app: tauri::AppHandle,
     db: tauri::State<'_, db::DbState>,
