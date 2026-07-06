@@ -960,16 +960,9 @@ fn clean_skills_output(raw: &str) -> String {
 }
 
 /// Map our tool ID to the agent name expected by the `skills` CLI (vercel-labs/skills).
-fn skills_agent_name(agent_id: &str) -> Option<&'static str> {
-    match agent_id {
-        "claude" => Some("claude-code"),
-        "gemini" => Some("gemini-cli"),
-        "cursor" => Some("cursor"),
-        "windsurf" => Some("windsurf"),
-        "copilot" => Some("github-copilot"),
-        "codex" => Some("codex"),
-        _ => None,
-    }
+fn skills_agent_name(agent_id: &str) -> Option<String> {
+    crate::engine::load_manifest(agent_id)
+        .and_then(|m| m.skills_agent_name)
 }
 
 #[tauri::command]
@@ -994,7 +987,7 @@ async fn install_skill_from_github(
             "add",
             source.trim(),
             "--agent",
-            agent,
+            &agent,
             "--global",
             "--copy",
             "-y",

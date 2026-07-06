@@ -5,7 +5,7 @@ import remarkGfm from 'remark-gfm'
 import type { Skill, FileEntry, Agent } from '../types'
 import { capture, captureException } from '../analytics'
 import { SkillInstalledOn } from './InstalledOnSection'
-import { AGENT_COLORS } from '../constants/agentColors'
+import { agentColor } from '../constants/agentColors'
 
 interface SkillDetailPanelProps {
   skill: Skill
@@ -211,7 +211,7 @@ export default function SkillDetailPanel({ skill: initialSkill, agentId, onToggl
         <div className="flex items-center gap-1.5 px-4 py-2 border-b border-[var(--c-border)] bg-[var(--c-surface)]/40 flex-shrink-0 flex-wrap">
           <span className="text-[11px] text-[var(--c-text-3)] flex-shrink-0">Variant:</span>
           {variants.map(v => {
-            const colors = AGENT_COLORS[v.agentId ?? ''] ?? { bg: 'bg-zinc-500/15', text: 'text-zinc-400' }
+            const colors = agentColor(v.agentId ?? '')
             const selected = v.path === activeVariant.path
             return (
               <button

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { capture, captureException } from '../../analytics';
-import { AGENT_COLORS } from '../../constants/agentColors';
+import { agentColor } from '../../constants/agentColors';
 import { parsePasteJson, detectNameFromPaste, buildMcpPayload, prefillTypeAndFields } from '../../utils/mcpPayload';
 import type { McpType } from '../../utils/mcpPayload';
 import type { Agent, CachedMcp } from '../../types';
@@ -63,7 +63,7 @@ function AgentMultiSelect({
       </label>
       <div className="flex flex-wrap gap-2">
         {tools.map(tool => {
-          const colors = AGENT_COLORS[tool.id] ?? { bg: 'bg-zinc-500/10', text: 'text-zinc-500' };
+          const colors = agentColor(tool.id);
           const active = selected.has(tool.id);
           return (
             <button

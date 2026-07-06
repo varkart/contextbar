@@ -1,6 +1,7 @@
 schema_version = 1
 id = "windsurf"
 name = "Windsurf"
+skills_agent_name = "windsurf"
 
 [[detection]]
 type = "file"

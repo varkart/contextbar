@@ -1,10 +1,10 @@
 import type React from 'react';
 import StatusDot from './StatusDot';
 import type { Agent } from '../types';
-import { AGENT_COLORS } from '../constants/agentColors';
+import { agentColor } from '../constants/agentColors';
 
 function AgentIcon({ tool }: { tool: Agent }) {
-  const colors = AGENT_COLORS[tool.id] ?? { bg: 'bg-zinc-500/10', text: 'text-zinc-500' };
+  const colors = agentColor(tool.id);
   return (
     <span
       className={`inline-flex items-center justify-center w-[20px] h-[20px] rounded text-[12px] font-bold flex-shrink-0 select-none ${colors.bg} ${colors.text}`}

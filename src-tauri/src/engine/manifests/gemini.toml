@@ -1,6 +1,7 @@
 schema_version = 1
 id = "gemini"
 name = "Gemini CLI"
+skills_agent_name = "gemini-cli"
 
 [[detection]]
 type = "dir"

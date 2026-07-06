@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { flushSync } from 'react-dom'
 import { invoke } from '@tauri-apps/api/core'
 import type { Agent, Skill, McpServer } from '../types'
-import { AGENT_COLORS } from '../constants/agentColors'
+import { agentColor } from '../constants/agentColors'
 import { capture, captureException } from '../analytics'
 
 
@@ -10,7 +10,7 @@ const MIN_SPINNER_MS = 1000
 const sleep = (ms: number) => new Promise<void>(r => setTimeout(r, ms))
 
 function AgentAvatar({ tool }: { tool: Agent }) {
-  const colors = AGENT_COLORS[tool.id] ?? { bg: 'bg-zinc-500/15', text: 'text-zinc-400' }
+  const colors = agentColor(tool.id)
   return (
     <span className={`inline-flex items-center justify-center w-[22px] h-[22px] rounded text-[12px] font-bold flex-shrink-0 select-none ${colors.bg} ${colors.text}`}>
       {tool.name[0].toUpperCase()}

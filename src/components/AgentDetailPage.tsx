@@ -1,7 +1,7 @@
 
 import type { Agent, Skill, McpServer } from '../types';
 import AgentDetails from './AgentDetails';
-import { AGENT_COLORS } from '../constants/agentColors';
+import { agentColor } from '../constants/agentColors';
 
 interface AgentDetailPageProps {
   agent: Agent;
@@ -20,7 +20,7 @@ interface AgentDetailPageProps {
 }
 
 export default function AgentDetailPage({ agent, onSelectSkill, onSelectMcp, onOpenSkillsPage, onOpenMcpsPage, onOpenBackups, onAddSkill, onAddMcp, query, matchedSkills, matchedMcps }: AgentDetailPageProps) {
-  const colors = AGENT_COLORS[agent.id] ?? { bg: 'bg-zinc-500/10', text: 'text-zinc-500' };
+  const colors = agentColor(agent.id);
 
   return (
     <div className="flex flex-col h-full bg-[var(--c-bg)] animate-slide-in-right">

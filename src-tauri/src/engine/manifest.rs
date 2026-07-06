@@ -6,6 +6,9 @@ pub struct Manifest {
     pub schema_version: u32,
     pub id: String,
     pub name: String,
+    /// Agent name used by the `npx skills` CLI (e.g. "claude-code", "codex").
+    /// When set, enables cross-tool skill install from GitHub for this agent.
+    pub skills_agent_name: Option<String>,
     #[serde(default)]
     pub detection: Vec<DetectionSpec>,
     pub version: Option<VersionSpec>,

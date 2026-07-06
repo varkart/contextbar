@@ -1,5 +1,5 @@
 import type { Agent } from '../types'
-import { AGENT_COLORS } from '../constants/agentColors'
+import { agentColor } from '../constants/agentColors'
 
 interface Props {
   installedAgents: Agent[]
@@ -12,7 +12,7 @@ export default function AgentChips({ installedAgents, selectedTools, onToggle }:
   return (
     <div className="px-3 py-1.5 border-b border-[var(--c-border)] flex gap-1.5 flex-wrap flex-shrink-0">
       {installedAgents.map(tool => {
-        const colors = AGENT_COLORS[tool.id] ?? { bg: 'bg-zinc-500/15', text: 'text-zinc-400' }
+        const colors = agentColor(tool.id)
         const selected = selectedTools.has(tool.id)
         return (
           <button
