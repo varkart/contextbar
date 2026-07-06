@@ -1,6 +1,7 @@
 schema_version = 1
 id = "codex"
 name = "Codex CLI"
+skills_agent_name = "codex"
 
 [[detection]]
 type = "binary"

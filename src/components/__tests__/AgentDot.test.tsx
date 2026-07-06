@@ -44,7 +44,8 @@ describe('AgentDot', () => {
   it('uses fallback colors for unknown toolId', () => {
     render(<AgentDot toolId="unknown-tool" toolName="Unknown" />)
     const dot = screen.getByText('U')
-    expect(dot.className).toContain('zinc')
+    const fallbackColors = ['pink', 'cyan', 'lime', 'fuchsia', 'rose', 'indigo']
+    expect(fallbackColors.some(c => dot.className.includes(c))).toBe(true)
   })
 
   it('size=md applies larger size classes', () => {

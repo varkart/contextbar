@@ -1,7 +1,9 @@
 
+import { useState } from 'react';
 import type { Agent, Skill, McpServer } from '../types';
 import AgentDetails from './AgentDetails';
-import { AGENT_COLORS } from '../constants/agentColors';
+import ExplainerOverlay from './ExplainerOverlay';
+import { agentColor } from '../constants/agentColors';
 
 interface AgentDetailPageProps {
   agent: Agent;
@@ -20,10 +22,11 @@ interface AgentDetailPageProps {
 }
 
 export default function AgentDetailPage({ agent, onSelectSkill, onSelectMcp, onOpenSkillsPage, onOpenMcpsPage, onOpenBackups, onAddSkill, onAddMcp, query, matchedSkills, matchedMcps }: AgentDetailPageProps) {
-  const colors = AGENT_COLORS[agent.id] ?? { bg: 'bg-zinc-500/10', text: 'text-zinc-500' };
+  const colors = agentColor(agent.id);
+  const [explainerTopic, setExplainerTopic] = useState<'skills' | 'mcps' | null>(null);
 
   return (
-    <div className="flex flex-col h-full bg-[var(--c-bg)] animate-slide-in-right">
+    <div className="relative flex flex-col h-full bg-[var(--c-bg)] animate-slide-in-right">
       <div className="flex items-center gap-2 px-4 py-2 border-b border-[var(--c-border)] flex-shrink-0">
         <span className={`inline-flex items-center justify-center w-[18px] h-[18px] rounded text-[11px] font-bold flex-shrink-0 ${colors.bg} ${colors.text}`}>
           {agent.name[0].toUpperCase()}
@@ -68,8 +71,17 @@ export default function AgentDetailPage({ agent, onSelectSkill, onSelectMcp, onO
           onOpenBackups={onOpenBackups}
           onAddSkill={onAddSkill}
           onAddMcp={onAddMcp}
+          onOpenSkillsExplainer={() => setExplainerTopic('skills')}
+          onOpenMcpsExplainer={() => setExplainerTopic('mcps')}
         />
       </div>
+
+      {explainerTopic && (
+        <ExplainerOverlay
+          topic={explainerTopic}
+          onClose={() => setExplainerTopic(null)}
+        />
+      )}
     </div>
   );
 }

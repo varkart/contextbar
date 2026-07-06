@@ -1,5 +1,5 @@
 import { useState, useRef, type CSSProperties } from 'react'
-import { AGENT_COLORS } from '../constants/agentColors'
+import { agentColor } from '../constants/agentColors'
 
 interface Props {
   toolId: string
@@ -16,7 +16,7 @@ const SIZE_CLASSES = {
 }
 
 export default function AgentDot({ toolId, toolName, size = 'sm' }: Props) {
-  const colors = AGENT_COLORS[toolId] ?? { bg: 'bg-zinc-500/15', text: 'text-zinc-400' }
+  const colors = agentColor(toolId)
   const [visible, setVisible] = useState(false)
   const [style, setStyle] = useState<CSSProperties>({})
   const ref = useRef<HTMLSpanElement>(null)

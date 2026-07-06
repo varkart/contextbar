@@ -1,6 +1,7 @@
 schema_version = 1
 id = "copilot"
 name = "GitHub Copilot"
+skills_agent_name = "github-copilot"
 
 [[detection]]
 type = "vscode_extension"

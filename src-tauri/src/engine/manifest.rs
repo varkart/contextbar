@@ -6,6 +6,9 @@ pub struct Manifest {
     pub schema_version: u32,
     pub id: String,
     pub name: String,
+    /// Agent name used by the `npx skills` CLI (e.g. "claude-code", "codex").
+    /// When set, enables cross-tool skill install from GitHub for this agent.
+    pub skills_agent_name: Option<String>,
     #[serde(default)]
     pub detection: Vec<DetectionSpec>,
     pub version: Option<VersionSpec>,
@@ -241,6 +244,10 @@ pub enum SkillSourceSpec {
         #[serde(default)]
         flat_files: bool,
     },
+    /// Walk a plugins directory: for each subdirectory containing `manifest_file`,
+    /// read skills from `plugin_dir/skills/<name>/SKILL.md`.
+    /// Used by agy: plugins at `~/.gemini/antigravity-cli/plugins/<plugin>/skills/`.
+    ExtensionDirSkills { dir: String, manifest_file: String },
     /// Skills live in a directory but active/inactive state is controlled by a
     /// TOML config file that contains an array of `{path_field, enabled_field}` entries.
     /// Used by Codex: `[[skills.config]]` in `~/.codex/config.toml`.

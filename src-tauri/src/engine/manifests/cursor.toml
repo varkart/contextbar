@@ -1,6 +1,7 @@
 schema_version = 1
 id = "cursor"
 name = "Cursor"
+skills_agent_name = "cursor"
 
 [[detection]]
 type = "dir"

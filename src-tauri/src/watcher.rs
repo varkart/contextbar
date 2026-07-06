@@ -143,20 +143,12 @@ pub fn start(app: AppHandle) {
             }
         }
 
-        // Tool id → display name map
-        let agent_names: HashMap<String, String> = [
-            ("claude", "Claude Code"),
-            ("cursor", "Cursor"),
-            ("gemini", "Gemini CLI"),
-            ("copilot", "GitHub Copilot"),
-            ("windsurf", "Windsurf"),
-        ]
-        .iter()
-        .map(|(k, v)| (k.to_string(), v.to_string()))
-        .collect();
-
-        // Take initial snapshot
-        let (_, mut last_skills, mut last_mcps) = take_snapshot(&app);
+        // Take initial snapshot; derive display names from it (manifest name field).
+        let (initial_agents, mut last_skills, mut last_mcps) = take_snapshot(&app);
+        let agent_names: HashMap<String, String> = initial_agents
+            .iter()
+            .map(|a| (a.id.clone(), a.name.clone()))
+            .collect();
 
         while let Ok(Ok(events)) = rx.recv() {
             let relevant = events

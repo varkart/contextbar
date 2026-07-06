@@ -497,7 +497,7 @@ fn skill_dir_for(agent_id: &str) -> Result<SkillWriteTarget, String> {
     let home = dirs::home_dir().ok_or("cannot find home dir")?;
     let manifest = crate::engine::load_manifest(agent_id)
         .ok_or_else(|| format!("no manifest for '{agent_id}'"))?;
-    if let Some(source) = manifest.skill_sources.first() {
+    for source in &manifest.skill_sources {
         match &source.spec {
             SkillSourceSpec::Directory {
                 path, flat_files, ..
@@ -512,6 +512,9 @@ fn skill_dir_for(agent_id: &str) -> Result<SkillWriteTarget, String> {
                     dir: expand_home(path, &home),
                     flat_files: false,
                 });
+            }
+            SkillSourceSpec::ExtensionDirSkills { .. } => {
+                // plugin dirs are read-only — try next source
             }
         }
     }
@@ -960,16 +963,8 @@ fn clean_skills_output(raw: &str) -> String {
 }
 
 /// Map our tool ID to the agent name expected by the `skills` CLI (vercel-labs/skills).
-fn skills_agent_name(agent_id: &str) -> Option<&'static str> {
-    match agent_id {
-        "claude" => Some("claude-code"),
-        "gemini" => Some("gemini-cli"),
-        "cursor" => Some("cursor"),
-        "windsurf" => Some("windsurf"),
-        "copilot" => Some("github-copilot"),
-        "codex" => Some("codex"),
-        _ => None,
-    }
+fn skills_agent_name(agent_id: &str) -> Option<String> {
+    crate::engine::load_manifest(agent_id).and_then(|m| m.skills_agent_name)
 }
 
 #[tauri::command]
@@ -994,7 +989,7 @@ async fn install_skill_from_github(
             "add",
             source.trim(),
             "--agent",
-            agent,
+            &agent,
             "--global",
             "--copy",
             "-y",
@@ -1137,7 +1132,12 @@ fn set_skill_active(
                 .enumerate()
                 .find(|(idx, s)| s.id.as_deref().unwrap_or(&format!("source_{idx}")) == sid);
             if let Some((_, source)) = matched {
-                if let SkillSourceSpec::TomlConfigDirectory {
+                if let SkillSourceSpec::ExtensionDirSkills { .. } = &source.spec {
+                    return Err(
+                        "Plugin skills cannot be toggled individually — disable the plugin instead"
+                            .to_string(),
+                    );
+                } else if let SkillSourceSpec::TomlConfigDirectory {
                     config_file,
                     config_key_path,
                     path_field,
@@ -1407,6 +1407,7 @@ fn validate_mcp(
 }
 
 #[tauri::command]
+#[allow(clippy::too_many_arguments)]
 fn add_mcp(
     app: tauri::AppHandle,
     db: tauri::State<'_, db::DbState>,
@@ -1415,6 +1416,7 @@ fn add_mcp(
     command: Option<String>,
     args: Option<Vec<String>>,
     url: Option<String>,
+    env: Option<std::collections::HashMap<String, String>>,
 ) -> Result<(), String> {
     use crate::engine::manifest::McpSourceSpec;
     use crate::engine::resolve::expand_home;
@@ -1429,7 +1431,7 @@ fn add_mcp(
                 file, active_key, ..
             } => {
                 let path = expand_home(file, &home);
-                let entry = if let Some(u) = &url {
+                let mut entry = if let Some(u) = &url {
                     serde_json::json!({ "url": u })
                 } else {
                     serde_json::json!({
@@ -1437,6 +1439,12 @@ fn add_mcp(
                         "args": args.as_deref().unwrap_or(&[]),
                     })
                 };
+                if let (Some(env_map), serde_json::Value::Object(ref mut obj)) = (&env, &mut entry)
+                {
+                    if !env_map.is_empty() {
+                        obj.insert("env".to_string(), serde_json::json!(env_map));
+                    }
+                }
                 Some(app_state::add_mcp_to_config(
                     &path.to_string_lossy(),
                     active_key,
@@ -1455,6 +1463,7 @@ fn add_mcp(
                     command.as_deref(),
                     args.as_deref().unwrap_or(&[]),
                     url.as_deref(),
+                    env.as_ref(),
                 ))
             }
             _ => None,
