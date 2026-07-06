@@ -247,10 +247,7 @@ pub enum SkillSourceSpec {
     /// Walk a plugins directory: for each subdirectory containing `manifest_file`,
     /// read skills from `plugin_dir/skills/<name>/SKILL.md`.
     /// Used by agy: plugins at `~/.gemini/antigravity-cli/plugins/<plugin>/skills/`.
-    ExtensionDirSkills {
-        dir: String,
-        manifest_file: String,
-    },
+    ExtensionDirSkills { dir: String, manifest_file: String },
     /// Skills live in a directory but active/inactive state is controlled by a
     /// TOML config file that contains an array of `{path_field, enabled_field}` entries.
     /// Used by Codex: `[[skills.config]]` in `~/.codex/config.toml`.

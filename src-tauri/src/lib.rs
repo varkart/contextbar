@@ -964,8 +964,7 @@ fn clean_skills_output(raw: &str) -> String {
 
 /// Map our tool ID to the agent name expected by the `skills` CLI (vercel-labs/skills).
 fn skills_agent_name(agent_id: &str) -> Option<String> {
-    crate::engine::load_manifest(agent_id)
-        .and_then(|m| m.skills_agent_name)
+    crate::engine::load_manifest(agent_id).and_then(|m| m.skills_agent_name)
 }
 
 #[tauri::command]
@@ -1134,7 +1133,10 @@ fn set_skill_active(
                 .find(|(idx, s)| s.id.as_deref().unwrap_or(&format!("source_{idx}")) == sid);
             if let Some((_, source)) = matched {
                 if let SkillSourceSpec::ExtensionDirSkills { .. } = &source.spec {
-                    return Err("Plugin skills cannot be toggled individually — disable the plugin instead".to_string());
+                    return Err(
+                        "Plugin skills cannot be toggled individually — disable the plugin instead"
+                            .to_string(),
+                    );
                 } else if let SkillSourceSpec::TomlConfigDirectory {
                     config_file,
                     config_key_path,
@@ -1436,7 +1438,8 @@ fn add_mcp(
                         "args": args.as_deref().unwrap_or(&[]),
                     })
                 };
-                if let (Some(env_map), serde_json::Value::Object(ref mut obj)) = (&env, &mut entry) {
+                if let (Some(env_map), serde_json::Value::Object(ref mut obj)) = (&env, &mut entry)
+                {
                     if !env_map.is_empty() {
                         obj.insert("env".to_string(), serde_json::json!(env_map));
                     }
