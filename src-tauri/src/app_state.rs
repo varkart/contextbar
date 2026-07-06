@@ -1295,8 +1295,15 @@ mod tests {
             "[mcpServers]\n[mcpServers.existing]\ncommand = \"npx\"\n",
         );
 
-        let result =
-            add_mcp_to_toml_config(&path, "mcpServers", "existing", Some("node"), &[], None, None);
+        let result = add_mcp_to_toml_config(
+            &path,
+            "mcpServers",
+            "existing",
+            Some("node"),
+            &[],
+            None,
+            None,
+        );
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("already exists"));
     }
