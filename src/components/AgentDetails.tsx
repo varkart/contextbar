@@ -14,9 +14,11 @@ interface AgentDetailsProps {
   onOpenBackups?: () => void;
   onAddSkill?: () => void;
   onAddMcp?: () => void;
+  onOpenSkillsExplainer?: () => void;
+  onOpenMcpsExplainer?: () => void;
 }
 
-export default function AgentDetails({ agent, query, matchedSkills, matchedMcps, onSelectSkill, onSelectMcp, onOpenSkillsPage, onOpenMcpsPage, onOpenBackups, onAddSkill, onAddMcp }: AgentDetailsProps) {
+export default function AgentDetails({ agent, query, matchedSkills, matchedMcps, onSelectSkill, onSelectMcp, onOpenSkillsPage, onOpenMcpsPage, onOpenBackups, onAddSkill, onAddMcp, onOpenSkillsExplainer, onOpenMcpsExplainer }: AgentDetailsProps) {
   const hasConfigErrors = (agent.configErrors ?? []).length > 0
   return (
     <div className="px-2 pt-1 pb-3 space-y-3">
@@ -67,6 +69,7 @@ export default function AgentDetails({ agent, query, matchedSkills, matchedMcps,
         onSelectSkill={onSelectSkill}
         onOpenPage={onOpenSkillsPage}
         onAddSkill={onAddSkill}
+        onOpenExplainer={onOpenSkillsExplainer}
       />
       <McpSection
         mcps={agent.mcps}
@@ -75,6 +78,7 @@ export default function AgentDetails({ agent, query, matchedSkills, matchedMcps,
         onSelectMcp={onSelectMcp}
         onOpenPage={onOpenMcpsPage}
         onAddMcp={onAddMcp}
+        onOpenExplainer={onOpenMcpsExplainer}
       />
       {/* PermissionsSection hidden until UX is redesigned — see GitHub issues #33/#107 */}
     </div>

@@ -9,6 +9,7 @@ interface McpSectionProps {
   onSelectMcp?: (mcp: McpServer) => void;
   onOpenPage?: () => void;
   onAddMcp?: () => void;
+  onOpenExplainer?: () => void;
 }
 
 function ChevronIcon({ open }: { open: boolean }) {
@@ -21,7 +22,7 @@ function ChevronIcon({ open }: { open: boolean }) {
   );
 }
 
-export default function McpSection({ mcps, query, matchedNames, onSelectMcp, onOpenPage, onAddMcp }: McpSectionProps) {
+export default function McpSection({ mcps, query, matchedNames, onSelectMcp, onOpenPage, onAddMcp, onOpenExplainer }: McpSectionProps) {
   const [sectionOpen, setSectionOpen] = useState(true);
   const [tooltipOpen, setTooltipOpen] = useState(false);
   const tooltipRef = useRef<HTMLDivElement>(null);
@@ -56,7 +57,7 @@ export default function McpSection({ mcps, query, matchedNames, onSelectMcp, onO
         {/* ? tooltip */}
         <div className="relative mr-1" ref={tooltipRef}>
           <button
-            onClick={() => setTooltipOpen(v => !v)}
+            onClick={() => onOpenExplainer ? onOpenExplainer() : setTooltipOpen(v => !v)}
             aria-label="What are MCP servers?"
             className={`w-[14px] h-[14px] rounded-full border text-[9px] font-bold flex items-center justify-center transition-colors ${tooltipOpen ? 'bg-violet-500/15 border-violet-500/40 text-violet-400' : 'border-[var(--c-border)] text-[var(--c-text-3)] hover:border-violet-500/30 hover:text-violet-400'}`}
           >

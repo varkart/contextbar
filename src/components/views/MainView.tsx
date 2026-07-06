@@ -2,6 +2,8 @@ import { useState } from 'react';
 import React from 'react';
 import type { Agent, Notification } from '../../types';
 import AgentDot from '../AgentDot';
+import HintBanner from '../HintBanner';
+import { useHints } from '../../hooks/useHints';
 
 interface MainViewProps {
   loading: boolean;
@@ -297,6 +299,12 @@ export default function MainView({
   onOpenSkillsPage,
   onOpenMcpsPage,
 }: MainViewProps) {
+  const { shouldShow, markShown, dismiss } = useHints();
+  const [bannerVisible, setBannerVisible] = useState(() => {
+    if (shouldShow) { markShown(); return true; }
+    return false;
+  });
+
   return (
     <div className="flex flex-col h-full">
       <div className="flex-1 overflow-y-auto flex flex-col gap-2.5 p-3">
@@ -333,6 +341,13 @@ export default function MainView({
           ))}
         </div>
       </div>
+
+      {bannerVisible && (
+        <HintBanner
+          onDismiss={() => setBannerVisible(false)}
+          onDontShowAgain={() => { dismiss(); setBannerVisible(false); }}
+        />
+      )}
     </div>
   );
 }

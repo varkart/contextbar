@@ -11,6 +11,7 @@ interface SkillSectionProps {
   onSelectSkill?: (skill: Skill) => void;
   onOpenPage?: () => void;
   onAddSkill?: () => void;
+  onOpenExplainer?: () => void;
 }
 
 function ChevronIcon({ open }: { open: boolean }) {
@@ -23,7 +24,7 @@ function ChevronIcon({ open }: { open: boolean }) {
   );
 }
 
-export default function SkillSection({ skills, query, matchedPaths, onSelectSkill, onOpenPage, onAddSkill }: SkillSectionProps) {
+export default function SkillSection({ skills, query, matchedPaths, onSelectSkill, onOpenPage, onAddSkill, onOpenExplainer }: SkillSectionProps) {
   const [sectionOpen, setSectionOpen] = useState(true);
   const [listExpanded, setListExpanded] = useState(false);
   const [tooltipOpen, setTooltipOpen] = useState(false);
@@ -62,7 +63,7 @@ export default function SkillSection({ skills, query, matchedPaths, onSelectSkil
         {/* ? tooltip */}
         <div className="relative mr-1" ref={tooltipRef}>
           <button
-            onClick={() => setTooltipOpen(v => !v)}
+            onClick={() => onOpenExplainer ? onOpenExplainer() : setTooltipOpen(v => !v)}
             aria-label="What are skills?"
             className={`w-[14px] h-[14px] rounded-full border text-[9px] font-bold flex items-center justify-center transition-colors ${tooltipOpen ? 'bg-indigo-500/15 border-indigo-500/40 text-indigo-400' : 'border-[var(--c-border)] text-[var(--c-text-3)] hover:border-indigo-500/30 hover:text-indigo-400'}`}
           >
