@@ -1413,6 +1413,7 @@ fn add_mcp(
     command: Option<String>,
     args: Option<Vec<String>>,
     url: Option<String>,
+    env: Option<std::collections::HashMap<String, String>>,
 ) -> Result<(), String> {
     use crate::engine::manifest::McpSourceSpec;
     use crate::engine::resolve::expand_home;
@@ -1427,7 +1428,7 @@ fn add_mcp(
                 file, active_key, ..
             } => {
                 let path = expand_home(file, &home);
-                let entry = if let Some(u) = &url {
+                let mut entry = if let Some(u) = &url {
                     serde_json::json!({ "url": u })
                 } else {
                     serde_json::json!({
@@ -1435,6 +1436,11 @@ fn add_mcp(
                         "args": args.as_deref().unwrap_or(&[]),
                     })
                 };
+                if let (Some(env_map), serde_json::Value::Object(ref mut obj)) = (&env, &mut entry) {
+                    if !env_map.is_empty() {
+                        obj.insert("env".to_string(), serde_json::json!(env_map));
+                    }
+                }
                 Some(app_state::add_mcp_to_config(
                     &path.to_string_lossy(),
                     active_key,
@@ -1453,6 +1459,7 @@ fn add_mcp(
                     command.as_deref(),
                     args.as_deref().unwrap_or(&[]),
                     url.as_deref(),
+                    env.as_ref(),
                 ))
             }
             _ => None,

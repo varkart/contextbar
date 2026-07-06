@@ -423,6 +423,7 @@ pub fn add_mcp_to_toml_config(
     command: Option<&str>,
     args: &[String],
     url: Option<&str>,
+    env: Option<&std::collections::HashMap<String, String>>,
 ) -> Result<(), String> {
     let lock = config_lock(config_path);
     let _guard = lock.lock().unwrap_or_else(|e| e.into_inner());
@@ -465,6 +466,15 @@ pub fn add_mcp_to_toml_config(
                     .collect(),
             ),
         );
+    }
+    if let Some(env_map) = env {
+        if !env_map.is_empty() {
+            let mut env_table = toml::map::Map::new();
+            for (k, v) in env_map {
+                env_table.insert(k.clone(), toml::Value::String(v.clone()));
+            }
+            entry.insert("env".into(), toml::Value::Table(env_table));
+        }
     }
     map.insert(name.to_string(), toml::Value::Table(entry));
 
