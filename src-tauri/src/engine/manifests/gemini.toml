@@ -4,6 +4,10 @@ name = "Gemini CLI"
 skills_agent_name = "gemini-cli"
 
 [[detection]]
+type = "dir"
+path = "~/.gemini"
+
+[[detection]]
 type = "binary"
 name = "gemini"
 
