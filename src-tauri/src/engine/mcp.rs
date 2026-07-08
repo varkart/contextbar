@@ -112,6 +112,10 @@ fn read_source(source: &McpSourceSpec, home: &std::path::Path) -> (Vec<McpServer
         McpSourceSpec::ClaudeMcpList { binary, timeout_ms } => {
             read_claude_mcp_list(binary, *timeout_ms, home)
         }
+        McpSourceSpec::MarketplacePlugins {
+            marketplaces_dir,
+            mcp_filename,
+        } => read_marketplace_plugins(&expand_home(marketplaces_dir, home), mcp_filename),
     }
 }
 
@@ -506,6 +510,76 @@ fn read_toml_key_pair(
     (mcps, None)
 }
 
+fn read_marketplace_plugins(
+    marketplaces_dir: &std::path::Path,
+    mcp_filename: &str,
+) -> (Vec<McpServer>, Option<String>) {
+    if !marketplaces_dir.is_dir() {
+        return (vec![], None);
+    }
+
+    let mut all = Vec::new();
+
+    let marketplace_entries = match std::fs::read_dir(marketplaces_dir) {
+        Ok(d) => d,
+        Err(_) => return (vec![], None),
+    };
+
+    for marketplace_entry in marketplace_entries.flatten() {
+        let marketplace_path = marketplace_entry.path();
+        if !marketplace_path.is_dir() {
+            continue;
+        }
+
+        let plugins_dir = marketplace_path.join("plugins");
+        if !plugins_dir.is_dir() {
+            continue;
+        }
+
+        let plugin_entries = match std::fs::read_dir(&plugins_dir) {
+            Ok(d) => d,
+            Err(_) => continue,
+        };
+
+        for plugin_entry in plugin_entries.flatten() {
+            let plugin_path = plugin_entry.path();
+            if !plugin_path.is_dir() {
+                continue;
+            }
+
+            let mcp_path = plugin_path.join(mcp_filename);
+            if !mcp_path.exists() {
+                continue;
+            }
+
+            let mcp_raw = match std::fs::read_to_string(&mcp_path) {
+                Ok(s) => s,
+                Err(_) => continue,
+            };
+            let mcp_json: serde_json::Value = match serde_json::from_str(&mcp_raw) {
+                Ok(v) => v,
+                Err(_) => continue,
+            };
+
+            let servers = if let Some(obj) =
+                mcp_json.get("mcpServers").and_then(|v| v.as_object())
+            {
+                obj.clone()
+            } else if let Some(obj) = mcp_json.as_object() {
+                obj.clone()
+            } else {
+                continue;
+            };
+
+            let mcps =
+                crate::detectors::parse_mcp_servers(&serde_json::Value::Object(servers), true);
+            all.extend(mcps);
+        }
+    }
+
+    (all, None)
+}
+
 type ClaudeCacheType = Option<(Vec<McpServer>, std::time::Instant)>;
 static CLAUDE_MCP_CACHE: std::sync::OnceLock<std::sync::Mutex<ClaudeCacheType>> =
     std::sync::OnceLock::new();
@@ -517,15 +591,17 @@ fn claude_mcp_cache() -> &'static std::sync::Mutex<Option<(Vec<McpServer>, std::
     CLAUDE_MCP_CACHE.get_or_init(|| std::sync::Mutex::new(None))
 }
 
+const CLAUDE_MCP_CACHE_TTL: std::time::Duration = std::time::Duration::from_secs(300);
+const CLAUDE_MCP_LIST_TIMEOUT_MS: u64 = 30_000;
+
 /// Returns true when the cache has no valid entry and no warmup is in progress.
 pub fn is_claude_mcp_cache_cold() -> bool {
-    const TTL: std::time::Duration = std::time::Duration::from_secs(60);
     if CLAUDE_MCP_WARMING.load(std::sync::atomic::Ordering::Acquire) {
         return false; // warmup already running
     }
     if let Ok(guard) = claude_mcp_cache().lock() {
         if let Some((_, ts)) = *guard {
-            return ts.elapsed() >= TTL;
+            return ts.elapsed() >= CLAUDE_MCP_CACHE_TTL;
         }
     }
     true
@@ -541,7 +617,7 @@ pub fn warm_claude_mcp_list(home: &std::path::Path) {
     {
         return; // another thread is already warming
     }
-    run_claude_mcp_list("claude", 6000, home);
+    run_claude_mcp_list("claude", CLAUDE_MCP_LIST_TIMEOUT_MS, home);
     CLAUDE_MCP_WARMING.store(false, Ordering::Release);
 }
 
@@ -550,11 +626,10 @@ fn read_claude_mcp_list(
     _timeout_ms: u64,
     _home: &std::path::Path,
 ) -> (Vec<McpServer>, Option<String>) {
-    const TTL: std::time::Duration = std::time::Duration::from_secs(60);
     // Return cached result if still fresh.
     if let Ok(guard) = claude_mcp_cache().lock() {
         if let Some((ref cached, ts)) = *guard {
-            if ts.elapsed() < TTL {
+            if ts.elapsed() < CLAUDE_MCP_CACHE_TTL {
                 return (cached.clone(), None);
             }
         }
