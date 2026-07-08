@@ -561,8 +561,7 @@ fn read_marketplace_plugins(
                 Err(_) => continue,
             };
 
-            let servers = if let Some(obj) =
-                mcp_json.get("mcpServers").and_then(|v| v.as_object())
+            let servers = if let Some(obj) = mcp_json.get("mcpServers").and_then(|v| v.as_object())
             {
                 obj.clone()
             } else if let Some(obj) = mcp_json.as_object() {
