@@ -4,10 +4,6 @@ name = "Gemini CLI"
 skills_agent_name = "gemini-cli"
 
 [[detection]]
-type = "dir"
-path = "~/.gemini"
-
-[[detection]]
 type = "binary"
 name = "gemini"
 
@@ -35,16 +31,6 @@ type = "extension_dir"
 dir = "~/.gemini/extensions"
 manifest_file = "gemini-extension.json"
 enablement_file = "~/.gemini/extensions/extension-enablement.json"
-extension_path_var = "${extensionPath}"
-
-# Locally-installed plugins via antigravity-cli (gemini plugin add).
-# Same structure as extensions/ but no central enablement file;
-# active/inactive state is tracked per-server in each plugin's mcp_config.json.
-[[mcp_sources]]
-id = "antigravity_plugins"
-type = "extension_dir"
-dir = "~/.gemini/antigravity-cli/plugins"
-manifest_file = "gemini-extension.json"
 extension_path_var = "${extensionPath}"
 
 # User skills — ~/.agents/skills/ (higher precedence alias)

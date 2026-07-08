@@ -9,10 +9,11 @@ const SOURCE_CATEGORY: Record<string, string> = {
   enterprise_managed_user: 'Enterprise',
   plugins: 'Plugin',
   marketplace_plugins: 'Marketplace',
+  plugins_native: 'Plugin',
   extensions: 'Plugin',
-  antigravity_plugins: 'Plugin',
   settings_json: 'User',
   dotfile: 'Project',
+  global_mcp_config: 'User',
   mcp_list: 'Cloud',
 };
 
