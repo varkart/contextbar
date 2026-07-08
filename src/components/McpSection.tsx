@@ -4,6 +4,25 @@ import type { McpServer } from '../types';
 
 const INITIAL_LIMIT = 5;
 
+const SOURCE_CATEGORY: Record<string, string> = {
+  enterprise_managed: 'Enterprise',
+  enterprise_managed_user: 'Enterprise',
+  plugins: 'Plugin',
+  marketplace_plugins: 'Marketplace',
+  plugins_native: 'Plugin',
+  extensions: 'Plugin',
+  settings_json: 'User',
+  dotfile: 'Project',
+  global_mcp_config: 'User',
+  mcp_list: 'Cloud',
+};
+
+const CATEGORY_ORDER = ['Enterprise', 'Plugin', 'Marketplace', 'User', 'Project', 'Cloud', 'Other'];
+
+function getCategory(sourceId: string): string {
+  return SOURCE_CATEGORY[sourceId] ?? 'Other';
+}
+
 interface McpSectionProps {
   mcps: McpServer[];
   query?: string;
@@ -21,6 +40,39 @@ function ChevronIcon({ open }: { open: boolean }) {
       className={`w-2.5 h-2.5 transition-transform duration-150 ${open ? 'rotate-90' : 'rotate-0'}`}>
       <polyline points="9 18 15 12 9 6" />
     </svg>
+  );
+}
+
+interface McpCategoryGroupProps {
+  label: string;
+  mcps: McpServer[];
+  query?: string;
+  onSelectMcp?: (mcp: McpServer) => void;
+}
+
+function McpCategoryGroup({ label, mcps, query, onSelectMcp }: McpCategoryGroupProps) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <div>
+      <button
+        onClick={() => setOpen(v => !v)}
+        className="flex items-center gap-1.5 w-full text-left px-3 py-1 hover:opacity-80 transition-opacity"
+        aria-expanded={open}
+      >
+        <span className="text-violet-400/50"><ChevronIcon open={open} /></span>
+        <span className="text-[11px] font-semibold text-violet-400/70 uppercase tracking-wide">{label}</span>
+        <span className="text-[11px] text-violet-400/40">{mcps.length}</span>
+      </button>
+      {open && mcps.map((mcp) => (
+        <McpRow
+          key={mcp.name}
+          mcp={mcp}
+          query={query}
+          onSelect={onSelectMcp ? () => onSelectMcp(mcp) : undefined}
+        />
+      ))}
+    </div>
   );
 }
 
@@ -45,8 +97,23 @@ export default function McpSection({ mcps, query, matchedNames, onSelectMcp, onO
     ? mcps.filter(m => matchedNames.has(m.name))
     : mcps;
 
+  // Group by category — only used when no active search query
+  const categoryGroups = (() => {
+    const groups = new Map<string, McpServer[]>();
+    for (const mcp of filtered) {
+      const cat = getCategory(mcp.sourceId);
+      if (!groups.has(cat)) groups.set(cat, []);
+      groups.get(cat)!.push(mcp);
+    }
+    return groups;
+  })();
+
+  const useGrouped = !query && categoryGroups.size > 1;
+
   const visible = (query || listExpanded) ? filtered : filtered.slice(0, INITIAL_LIMIT);
   const hiddenCount = filtered.length - INITIAL_LIMIT;
+
+  const orderedCategories = CATEGORY_ORDER.filter(c => categoryGroups.has(c));
 
   return (
     <div>
@@ -131,6 +198,18 @@ export default function McpSection({ mcps, query, matchedNames, onSelectMcp, onO
               )}
             </div>
           </div>
+        ) : useGrouped ? (
+          <>
+            {orderedCategories.map(cat => (
+              <McpCategoryGroup
+                key={cat}
+                label={cat}
+                mcps={categoryGroups.get(cat)!}
+                query={query}
+                onSelectMcp={onSelectMcp}
+              />
+            ))}
+          </>
         ) : (
           <>
             {visible.map((mcp) => (

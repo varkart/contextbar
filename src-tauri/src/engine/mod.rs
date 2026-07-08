@@ -163,7 +163,8 @@ fn extract_config_files(m: &Manifest, home: &std::path::Path) -> Vec<String> {
             | McpSourceSpec::ClaudeDotfile { file } => push(file),
             McpSourceSpec::ExtensionDir { .. }
             | McpSourceSpec::ClaudePlugins { .. }
-            | McpSourceSpec::ClaudeMcpList { .. } => {}
+            | McpSourceSpec::ClaudeMcpList { .. }
+            | McpSourceSpec::MarketplacePlugins { .. } => {}
         }
     }
 

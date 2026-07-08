@@ -220,6 +220,13 @@ pub enum McpSourceSpec {
         #[serde(default = "default_mcp_list_timeout_ms")]
         timeout_ms: u64,
     },
+    /// Scan `{marketplaces_dir}/*/plugins/*/` for `.mcp.json` files.
+    /// Used to discover individual marketplace plugin MCPs separate from the
+    /// installed plugin bundle (e.g. bdc-forge figma, playwright, skylab plugins).
+    MarketplacePlugins {
+        marketplaces_dir: String,
+        mcp_filename: String,
+    },
 }
 
 fn default_claude_binary() -> String {

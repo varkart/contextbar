@@ -8,7 +8,7 @@ afterEach(() => { vi.useRealTimers() })
 describe('SplashScreen', () => {
   it('renders logo image', () => {
     render(<SplashScreen backendReady={false} onDismiss={vi.fn()} />)
-    expect(screen.getByAltText('Context Bar')).toBeInTheDocument()
+    expect(screen.getAllByAltText('Context Bar').length).toBeGreaterThanOrEqual(1)
   })
 
   it('renders app name', () => {

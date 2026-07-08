@@ -33,10 +33,28 @@ type = "claude_dotfile"
 file = "~/.claude.json"
 
 [[mcp_sources]]
+id = "enterprise_managed"
+type = "json_key_pair"
+file = "/Library/Application Support/ClaudeCode/managed-mcp.json"
+active_key = "mcpServers"
+
+[[mcp_sources]]
+id = "enterprise_managed_user"
+type = "json_key_pair"
+file = "~/Library/Application Support/ClaudeCode/managed-mcp.json"
+active_key = "mcpServers"
+
+[[mcp_sources]]
+id = "marketplace_plugins"
+type = "marketplace_plugins"
+marketplaces_dir = "~/.claude/plugins/marketplaces"
+mcp_filename = ".mcp.json"
+
+[[mcp_sources]]
 id = "mcp_list"
 type = "claude_mcp_list"
 binary = "claude"
-timeout_ms = 6000
+timeout_ms = 30000
 
 [[skill_sources]]
 id = "skills_dir"
