@@ -9,6 +9,8 @@ const SOURCE_CATEGORY: Record<string, string> = {
   enterprise_managed_user: 'Enterprise',
   plugins: 'Plugin',
   marketplace_plugins: 'Marketplace',
+  extensions: 'Plugin',
+  antigravity_plugins: 'Plugin',
   settings_json: 'User',
   dotfile: 'Project',
   mcp_list: 'Cloud',
