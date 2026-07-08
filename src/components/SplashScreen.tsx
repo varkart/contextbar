@@ -56,7 +56,13 @@ export default function SplashScreen({ backendReady, onDismiss }: SplashScreenPr
       <img
         src="/sloth.png"
         alt="Context Bar"
-        className="splash-float w-32 h-32 object-contain dark:brightness-0 dark:invert"
+        className="splash-float w-32 h-32 object-contain dark:hidden"
+        draggable={false}
+      />
+      <img
+        src="/sloth-dark.png"
+        alt="Context Bar"
+        className="splash-float w-32 h-32 object-contain hidden dark:block"
         draggable={false}
       />
 
