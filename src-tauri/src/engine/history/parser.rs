@@ -67,8 +67,8 @@ pub fn get_session(home: &Path, session_id: &str, project: &str, timestamp: u64)
                     None => continue,
                 };
                 let ts = parse_timestamp(&entry.timestamp);
-                first_ts.get_or_insert(ts.unwrap_or(0));
                 if let Some(t) = ts {
+                    first_ts.get_or_insert(t);
                     last_ts = Some(t);
                 }
                 let content = parse_content_blocks(msg.content.as_ref(), &mut error_count);
@@ -94,8 +94,8 @@ pub fn get_session(home: &Path, session_id: &str, project: &str, timestamp: u64)
                 }
 
                 let ts = parse_timestamp(&entry.timestamp);
-                first_ts.get_or_insert(ts.unwrap_or(0));
                 if let Some(t) = ts {
+                    first_ts.get_or_insert(t);
                     last_ts = Some(t);
                 }
 
@@ -227,58 +227,14 @@ fn parse_single_block(item: &Value, error_count: &mut u32) -> Option<ContentBloc
             })
         }
         "tool_result" => {
+            // Count errors for badge; don't surface result content (lives in user protocol turn)
             let is_error = item.get("is_error").and_then(|v| v.as_bool()).unwrap_or(false);
             if is_error {
                 *error_count += 1;
             }
-            let result_text = extract_tool_result_text(item);
-            Some(ContentBlock {
-                block_type: "tool_result".to_string(),
-                text: None,
-                tool_name: None,
-                tool_input: None,
-                tool_result: result_text,
-                is_error,
-            })
+            None
         }
-        "thinking" => {
-            let text = item
-                .get("thinking")
-                .and_then(|v| v.as_str())
-                .map(|s| truncate_str(s, 300));
-            Some(ContentBlock {
-                block_type: "thinking".to_string(),
-                text,
-                tool_name: None,
-                tool_input: None,
-                tool_result: None,
-                is_error: false,
-            })
-        }
-        _ => None,
-    }
-}
-
-fn extract_tool_result_text(item: &Value) -> Option<String> {
-    match item.get("content") {
-        Some(Value::String(s)) => Some(truncate_str(s, 500)),
-        Some(Value::Array(arr)) => {
-            let text: Vec<&str> = arr
-                .iter()
-                .filter_map(|b| {
-                    if b.get("type")?.as_str()? == "text" {
-                        b.get("text")?.as_str()
-                    } else {
-                        None
-                    }
-                })
-                .collect();
-            if text.is_empty() {
-                None
-            } else {
-                Some(truncate_str(&text.join("\n"), 500))
-            }
-        }
+        // Skip thinking blocks — internal model cognition, not user-facing content
         _ => None,
     }
 }

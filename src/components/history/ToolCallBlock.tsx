@@ -60,26 +60,3 @@ export default function ToolCallBlock({ block, resultBlock }: ToolCallBlockProps
   )
 }
 
-interface ThinkingBlockProps {
-  block: ContentBlock
-}
-
-export function ThinkingBlock({ block }: ThinkingBlockProps) {
-  const [expanded, setExpanded] = useState(false)
-  return (
-    <div className="my-1">
-      <button
-        onClick={() => setExpanded(e => !e)}
-        className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full border border-amber-500/20 bg-amber-500/10 text-amber-400 text-[11px] font-medium cursor-pointer hover:opacity-80 transition-opacity"
-      >
-        <span>💭 Thinking</span>
-        <span className="text-[9px] opacity-60">{expanded ? '▲' : '▼'}</span>
-      </button>
-      {expanded && block.text && (
-        <div className="mt-1.5 rounded-lg border border-amber-500/20 bg-amber-500/5 px-2.5 py-2 text-[11px] text-[var(--c-text-2)] whitespace-pre-wrap break-words">
-          {block.text}
-        </div>
-      )}
-    </div>
-  )
-}

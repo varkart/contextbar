@@ -1,40 +1,28 @@
+import React from 'react'
 import ReactMarkdown from 'react-markdown'
 import type { HistoryMessage, ContentBlock } from '../../types'
-import ToolCallBlock, { ThinkingBlock } from './ToolCallBlock'
+import ToolCallBlock from './ToolCallBlock'
 
 interface MessageBubbleProps {
   message: HistoryMessage
 }
 
 function renderAssistantContent(blocks: ContentBlock[]) {
-  const elements: React.ReactNode[] = []
-  let i = 0
+  const elements: React.ReactElement[] = []
 
-  while (i < blocks.length) {
+  for (let i = 0; i < blocks.length; i++) {
     const block = blocks[i]
 
-    if (block.blockType === 'thinking') {
-      elements.push(<ThinkingBlock key={i} block={block} />)
-      i++
-      continue
-    }
+    // thinking blocks are stripped in Rust parser; skip any that slip through
+    if (block.blockType === 'thinking') continue
 
     if (block.blockType === 'tool_use') {
-      const nextSame = blocks[i + 1]?.blockType === 'tool_result' ? blocks[i + 1] : undefined
-      elements.push(
-        <ToolCallBlock key={i} block={block} resultBlock={nextSame} />
-      )
-      if (nextSame) i++ // skip the paired result
-      i++
+      elements.push(<ToolCallBlock key={i} block={block} />)
       continue
     }
 
-    if (block.blockType === 'tool_result') {
-      // Already consumed by preceding tool_use; skip standalone results
-      elements.push(<ToolCallBlock key={i} block={{ blockType: 'tool_use', toolName: 'result', isError: block.isError }} resultBlock={block} />)
-      i++
-      continue
-    }
+    // tool_result lives in user protocol turns; skip in assistant render
+    if (block.blockType === 'tool_result') continue
 
     if (block.blockType === 'text' && block.text) {
       elements.push(
@@ -42,11 +30,7 @@ function renderAssistantContent(blocks: ContentBlock[]) {
           <ReactMarkdown>{block.text}</ReactMarkdown>
         </div>
       )
-      i++
-      continue
     }
-
-    i++
   }
 
   return elements
@@ -85,7 +69,7 @@ export default function MessageBubble({ message }: MessageBubbleProps) {
           {message.model ?? 'Claude'}
         </span>
       </div>
-      <div className="pl-5.5">
+      <div className="pl-5">
         {elements}
       </div>
     </div>

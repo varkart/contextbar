@@ -75,7 +75,10 @@ function SessionRow({ session, onSelect }: SessionRowProps) {
 
           {/* Meta row */}
           <div className="flex items-center gap-2 mt-1">
-            <span className="text-[10px] text-[var(--c-text-3)] truncate max-w-[100px]">
+            <span
+              className="text-[10px] text-[var(--c-text-3)] truncate max-w-[120px]"
+              title={session.project}
+            >
               {session.projectName}
             </span>
             <span className="text-[10px] text-[var(--c-text-3)] opacity-40">·</span>
@@ -128,17 +131,27 @@ export default function SessionList({ sessions, onSelect, loading }: SessionList
 
   const groups = useMemo(() => groupByTime(filtered), [filtered])
 
-  // Unique projects for filter pills
+  // Unique projects for filter pills — disambiguate same-name dirs with parent
   const projects = useMemo(() => {
     const seen = new Set<string>()
-    const out: { project: string; name: string }[] = []
+    const out: { project: string; name: string; label: string }[] = []
     for (const s of sessions) {
       if (!seen.has(s.project)) {
         seen.add(s.project)
-        out.push({ project: s.project, name: s.projectName })
+        out.push({ project: s.project, name: s.projectName, label: s.projectName })
       }
     }
-    return out.slice(0, 8)
+    // If two entries share the same projectName, add parent dir to label
+    const nameCounts: Record<string, number> = {}
+    for (const p of out) nameCounts[p.name] = (nameCounts[p.name] ?? 0) + 1
+    for (const p of out) {
+      if (nameCounts[p.name] > 1) {
+        const parts = p.project.split('/')
+        const parent = parts[parts.length - 2] ?? ''
+        p.label = parent ? `${parent}/${p.name}` : p.name
+      }
+    }
+    return out.slice(0, 10)
   }, [sessions])
 
   return (
@@ -168,9 +181,10 @@ export default function SessionList({ sessions, onSelect, loading }: SessionList
               <button
                 key={p.project}
                 onClick={() => setProjectFilter(projectFilter === p.project ? null : p.project)}
+                title={p.project}
                 className={`flex-shrink-0 text-[10px] px-2 py-0.5 rounded-full border transition-colors ${projectFilter === p.project ? 'border-[var(--c-accent)]/50 bg-[var(--c-accent)]/10 text-[var(--c-accent)]' : 'border-[var(--c-border)] text-[var(--c-text-3)] hover:text-[var(--c-text-2)]'}`}
               >
-                {p.name}
+                {p.label}
               </button>
             ))}
           </div>
