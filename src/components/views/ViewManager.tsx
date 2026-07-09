@@ -15,6 +15,7 @@ import AddSkillView from './AddSkillView'
 import AddMcpView from './AddMcpView'
 import DoctorView from './DoctorView'
 import ConfigBackupView from './ConfigBackupView'
+import HistoryPanel from '../history/HistoryPanel'
 
 import type { ThemePreference } from '../../useTheme'
 import type { Agent, Skill } from '../../types'
@@ -48,6 +49,14 @@ export default function ViewManager({
   setTheme,
   fetchNotifications,
 }: any) {
+  if (view === 'history' || view === 'history-detail') {
+    return (
+      <HistoryPanel
+        view={view}
+        onNavigateDetail={() => goTo('history-detail')}
+      />
+    )
+  }
   if (view === 'doctor') {
     return <DoctorView onBack={() => goTo('settings')} />
   }

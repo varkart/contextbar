@@ -88,6 +88,12 @@ function buildBreadcrumbs(
     case 'permissions-detail':
       return [toolCrumb(), { label: 'Permissions' }]
 
+    case 'history':
+      return [{ label: 'History' }]
+
+    case 'history-detail':
+      return [{ label: 'History', onClick: () => goTo('history') }, { label: 'Session' }]
+
     default:
       return []
   }
@@ -100,6 +106,17 @@ function BellIcon() {
       className="w-3.5 h-3.5">
       <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
       <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+    </svg>
+  )
+}
+
+function ClockIcon() {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+      stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+      className="w-3.5 h-3.5">
+      <circle cx="12" cy="12" r="10" />
+      <polyline points="12 6 12 12 16 14" />
     </svg>
   )
 }
@@ -130,6 +147,8 @@ export interface HeaderProps {
   notificationCount?: number
   onSettingsClick: () => void
   onNotificationsClick: () => void
+  onHistoryClick?: () => void
+  hasLiveSession?: boolean
 }
 
 export default function Header({
@@ -147,6 +166,8 @@ export default function Header({
   notificationCount,
   onSettingsClick,
   onNotificationsClick,
+  onHistoryClick,
+  hasLiveSession,
 }: HeaderProps) {
   const crumbs = buildBreadcrumbs(
     view, selectedAgent, selectedSkill, selectedMcp,
@@ -206,6 +227,19 @@ export default function Header({
 
       {/* Right actions */}
       <div className="flex items-center gap-0.5 flex-shrink-0 ml-2">
+        {onHistoryClick && (
+          <button
+            onClick={onHistoryClick}
+            title="Session History"
+            className="relative text-[var(--c-text-3)] hover:text-[var(--c-text-2)] transition-colors p-1 rounded"
+            aria-label="Session History"
+          >
+            <ClockIcon />
+            {hasLiveSession && (
+              <span className="absolute top-1 right-1 w-[5px] h-[5px] rounded-full bg-emerald-400 animate-pulse" aria-hidden="true" />
+            )}
+          </button>
+        )}
         <button
           onClick={onNotificationsClick}
           title="Notifications"

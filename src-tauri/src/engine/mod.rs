@@ -1,3 +1,4 @@
+pub mod history;
 pub mod jsonc;
 pub mod manifest;
 pub mod mcp;

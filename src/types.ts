@@ -95,3 +95,59 @@ export interface FileEntry {
   children: FileEntry[]
   extension?: string
 }
+
+// ── Session History ──────────────────────────────────────────────────────────
+
+export interface SessionEntry {
+  sessionId: string
+  display: string
+  timestamp: number
+  project: string
+  projectName: string
+  totalTokens: number
+  model?: string
+  durationMinutes?: number
+  isLive: boolean
+  errorCount: number
+}
+
+export interface ContentBlock {
+  blockType: string
+  text?: string
+  toolName?: string
+  toolInput?: string
+  toolResult?: string
+  isError: boolean
+}
+
+export interface HistoryMessage {
+  role: string
+  content: ContentBlock[]
+  timestamp?: number
+  model?: string
+  usage?: TokenUsage
+}
+
+export interface TokenUsage {
+  inputTokens: number
+  outputTokens: number
+  cacheReadTokens: number
+  cacheCreationTokens: number
+}
+
+export interface SessionDetail {
+  sessionId: string
+  messages: HistoryMessage[]
+  totalTokens: TokenUsage
+  model?: string
+  durationMs?: number
+  project: string
+  projectName: string
+  timestamp: number
+}
+
+export interface HistoryStats {
+  totalSessions: number
+  totalTokens: number
+  liveSessionId?: string
+}

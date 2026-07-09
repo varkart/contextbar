@@ -286,6 +286,46 @@ fn reveal_in_finder(path: String) -> Result<(), String> {
 }
 
 // ---------------------------------------------------------------------------
+// History commands
+// ---------------------------------------------------------------------------
+
+#[tauri::command]
+async fn list_sessions(
+    limit: Option<usize>,
+    offset: Option<usize>,
+    project_filter: Option<String>,
+    search: Option<String>,
+) -> Vec<engine::history::SessionEntry> {
+    tokio::task::spawn_blocking(move || {
+        engine::history::list_sessions(
+            limit.unwrap_or(200),
+            offset.unwrap_or(0),
+            project_filter,
+            search,
+        )
+    })
+    .await
+    .unwrap_or_default()
+}
+
+#[tauri::command]
+async fn get_session(session_id: String) -> Result<engine::history::SessionDetail, String> {
+    tokio::task::spawn_blocking(move || engine::history::get_session(&session_id))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+fn list_session_projects() -> Vec<String> {
+    engine::history::list_session_projects()
+}
+
+#[tauri::command]
+fn get_history_stats() -> engine::history::HistoryStats {
+    engine::history::get_history_stats()
+}
+
+// ---------------------------------------------------------------------------
 // Skill cache commands
 // ---------------------------------------------------------------------------
 
@@ -2012,6 +2052,10 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             get_agents,
+            list_sessions,
+            get_session,
+            list_session_projects,
+            get_history_stats,
             get_skill_full_description,
             hide_window,
             get_version,
