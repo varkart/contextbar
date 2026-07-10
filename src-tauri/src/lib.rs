@@ -97,6 +97,11 @@ fn hide_window(window: tauri::WebviewWindow) {
 }
 
 #[tauri::command]
+fn open_expanded_window(app: tauri::AppHandle, section: Option<String>) {
+    show_expanded_window(&app, section.as_deref());
+}
+
+#[tauri::command]
 fn get_skill_full_description(path: String) -> Option<String> {
     let canonical = validate_tool_path(&path).ok()?;
     detectors::read_skill_file_content(&canonical)
@@ -2058,6 +2063,7 @@ pub fn run() {
             get_history_stats,
             get_skill_full_description,
             hide_window,
+            open_expanded_window,
             get_version,
             get_autostart,
             set_autostart,
@@ -2170,6 +2176,37 @@ fn open_main_window(app: &tauri::AppHandle, hash: Option<&str>) {
     let _ = window.show();
     let _ = window.move_window(Position::TrayCenter);
     let _ = window.set_focus();
+}
+
+/// Show (or create) the large "expanded" app window. Unlike the tray popover
+/// it is a normal decorated, resizable window that survives losing focus.
+/// `section` deep-links via URL hash (e.g. "sessions"), mirroring the
+/// `#settings` convention used by `open_main_window`.
+fn show_expanded_window(app: &tauri::AppHandle, section: Option<&str>) {
+    if let Some(window) = app.get_webview_window("expanded") {
+        if let Some(s) = section {
+            // JSON-encode to prevent JS injection via hash value
+            let hash_json = serde_json::to_string(s).unwrap_or_default();
+            let _ = window.eval(format!("window.location.hash = {hash_json}"));
+        }
+        let _ = window.unminimize();
+        let _ = window.show();
+        let _ = window.set_focus();
+        return;
+    }
+    let url = match section {
+        Some(s) => WebviewUrl::App(format!("/#{}", s).into()),
+        None => WebviewUrl::default(),
+    };
+    if let Ok(window) = WebviewWindowBuilder::new(app, "expanded", url)
+        .title("Context Bar")
+        .inner_size(1000.0, 700.0)
+        .min_inner_size(800.0, 560.0)
+        .resizable(true)
+        .build()
+    {
+        let _ = window.set_focus();
+    }
 }
 
 #[cfg(test)]
