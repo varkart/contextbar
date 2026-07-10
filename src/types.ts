@@ -151,3 +151,26 @@ export interface HistoryStats {
   totalTokens: number
   liveSessionId?: string
 }
+
+// ── Worktrees ─────────────────────────────────────────────────────────────────
+
+export interface WorktreeInfo {
+  path: string
+  branch?: string
+  isPrimary: boolean
+  isDetached: boolean
+  isDirty: boolean
+  ahead: number
+  behind: number
+  isMerged: boolean
+  /** Unix seconds of the last commit in this worktree. */
+  lastCommitTs?: number
+  lastCommitSubject?: string
+}
+
+export interface RepoWorktrees {
+  repoName: string
+  repoPath: string
+  baseBranch: string
+  worktrees: WorktreeInfo[]
+}

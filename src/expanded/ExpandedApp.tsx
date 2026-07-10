@@ -1,21 +1,23 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow'
 import { useTheme } from '../useTheme'
 import { useAgents } from '../useAgents'
-import type { Agent, SessionEntry } from '../types'
+import type { Agent, RepoWorktrees, SessionEntry } from '../types'
 import SessionList from '../components/history/SessionList'
 import SessionDetail from '../components/history/SessionDetail'
+import WorktreesSection from './WorktreesSection'
+import MyWorkSection from './MyWorkSection'
 
 export type Section = 'home' | 'agents' | 'skills' | 'mcps' | 'sessions' | 'worktrees' | 'work'
 
 const SECTIONS: { id: Exclude<Section, 'home'>; label: string; icon: string; soon?: boolean }[] = [
+  { id: 'work', label: 'My Work', icon: '▤' },
+  { id: 'sessions', label: 'Sessions', icon: '◷' },
+  { id: 'worktrees', label: 'Worktrees', icon: '⑂' },
   { id: 'agents', label: 'Agents', icon: '◆' },
   { id: 'skills', label: 'Skills', icon: '✦' },
   { id: 'mcps', label: 'MCPs', icon: '⬡' },
-  { id: 'sessions', label: 'Sessions', icon: '◷' },
-  { id: 'worktrees', label: 'Worktrees', icon: '⑂', soon: true },
-  { id: 'work', label: 'My Work', icon: '▤', soon: true },
 ]
 
 function sectionFromHash(hash: string): Section {
@@ -30,6 +32,8 @@ export default function ExpandedApp() {
   const [sessions, setSessions] = useState<SessionEntry[]>([])
   const [sessionsLoading, setSessionsLoading] = useState(true)
   const [selectedSession, setSelectedSession] = useState<SessionEntry | null>(null)
+  const [repos, setRepos] = useState<RepoWorktrees[]>([])
+  const [reposLoading, setReposLoading] = useState(true)
 
   // The static #splash overlay in index.html renders in every window;
   // this window has no SplashScreen flow, so clear it immediately.
@@ -42,6 +46,14 @@ export default function ExpandedApp() {
       .then(s => { setSessions(s); setSessionsLoading(false) })
       .catch(() => setSessionsLoading(false))
   }, [])
+
+  const fetchWorktrees = useCallback(() => {
+    invoke<RepoWorktrees[]>('list_worktrees')
+      .then(r => { setRepos(r); setReposLoading(false) })
+      .catch(() => setReposLoading(false))
+  }, [])
+
+  useEffect(() => { fetchWorktrees() }, [fetchWorktrees])
 
   // Keep hash in sync both ways — Rust deep-links by setting the hash.
   useEffect(() => {
@@ -66,7 +78,6 @@ export default function ExpandedApp() {
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [section])
 
   const installedAgents = useMemo(() => agents.filter(a => a.installed), [agents])
@@ -75,7 +86,8 @@ export default function ExpandedApp() {
     skills: installedAgents.reduce((n, a) => n + a.skills.length, 0),
     mcps: installedAgents.reduce((n, a) => n + a.mcps.length, 0),
     sessions: sessions.length,
-  }), [installedAgents, sessions])
+    worktrees: repos.reduce((n, r) => n + r.worktrees.length, 0),
+  }), [installedAgents, sessions, repos])
 
   return (
     <div className="w-screen h-screen bg-[var(--c-bg)] text-[var(--c-text)] flex overflow-hidden">
@@ -95,8 +107,21 @@ export default function ExpandedApp() {
         {section === 'agents' && <AgentsSection agents={installedAgents} loading={loading} />}
         {section === 'skills' && <SkillsSection agents={installedAgents} loading={loading} />}
         {section === 'mcps' && <McpsSection agents={installedAgents} loading={loading} />}
-        {(section === 'worktrees' || section === 'work') && (
-          <ComingSoon label={section === 'worktrees' ? 'Worktrees' : 'My Work'} />
+        {section === 'worktrees' && (
+          <WorktreesSection
+            repos={repos}
+            loading={reposLoading}
+            sessions={sessions}
+            onRemoved={fetchWorktrees}
+          />
+        )}
+        {section === 'work' && (
+          <MyWorkSection
+            sessions={sessions}
+            repos={repos}
+            loading={sessionsLoading || reposLoading}
+            goTo={goTo}
+          />
         )}
       </div>
     </div>
@@ -105,9 +130,17 @@ export default function ExpandedApp() {
 
 // ── Landing ──────────────────────────────────────────────────────────────────
 
+interface SectionCounts {
+  agents: number
+  skills: number
+  mcps: number
+  sessions: number
+  worktrees: number
+}
+
 function Landing({ goTo, counts, loading }: {
   goTo: (s: Section) => void
-  counts: { agents: number; skills: number; mcps: number; sessions: number }
+  counts: SectionCounts
   loading: boolean
 }) {
   const countFor = (id: Section): string => {
@@ -116,6 +149,7 @@ function Landing({ goTo, counts, loading }: {
     if (id === 'skills') return String(counts.skills)
     if (id === 'mcps') return String(counts.mcps)
     if (id === 'sessions') return String(counts.sessions)
+    if (id === 'worktrees') return String(counts.worktrees)
     return ''
   }
 
@@ -167,7 +201,7 @@ function Landing({ goTo, counts, loading }: {
 function Sidebar({ section, goTo, counts }: {
   section: Section
   goTo: (s: Section) => void
-  counts: { agents: number; skills: number; mcps: number; sessions: number }
+  counts: SectionCounts
 }) {
   return (
     <div className="w-52 shrink-0 border-r border-[var(--c-border)] flex flex-col bg-[var(--c-surface-2)]/30">
@@ -186,7 +220,8 @@ function Sidebar({ section, goTo, counts }: {
             s.id === 'agents' ? counts.agents :
             s.id === 'skills' ? counts.skills :
             s.id === 'mcps' ? counts.mcps :
-            s.id === 'sessions' ? counts.sessions : null
+            s.id === 'sessions' ? counts.sessions :
+            s.id === 'worktrees' ? counts.worktrees : null
           return (
             <button
               key={s.id}
@@ -344,12 +379,3 @@ function McpsSection({ agents, loading }: { agents: Agent[]; loading: boolean })
   )
 }
 
-function ComingSoon({ label }: { label: string }) {
-  return (
-    <div className="flex-1 flex flex-col items-center justify-center gap-2">
-      <span className="text-[24px] opacity-30" aria-hidden="true">⚒</span>
-      <p className="text-[14px] font-semibold">{label}</p>
-      <p className="text-[12px] text-[var(--c-text-3)]">Coming soon</p>
-    </div>
-  )
-}
