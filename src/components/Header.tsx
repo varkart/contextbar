@@ -88,12 +88,6 @@ function buildBreadcrumbs(
     case 'permissions-detail':
       return [toolCrumb(), { label: 'Permissions' }]
 
-    case 'history':
-      return [{ label: 'History' }]
-
-    case 'history-detail':
-      return [{ label: 'History', onClick: () => goTo('history') }, { label: 'Session' }]
-
     default:
       return []
   }
@@ -117,6 +111,19 @@ function ClockIcon() {
       className="w-3.5 h-3.5">
       <circle cx="12" cy="12" r="10" />
       <polyline points="12 6 12 12 16 14" />
+    </svg>
+  )
+}
+
+function ExpandIcon() {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+      stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+      className="w-3.5 h-3.5">
+      <polyline points="15 3 21 3 21 9" />
+      <polyline points="9 21 3 21 3 15" />
+      <line x1="21" y1="3" x2="14" y2="10" />
+      <line x1="3" y1="21" x2="10" y2="14" />
     </svg>
   )
 }
@@ -148,6 +155,7 @@ export interface HeaderProps {
   onSettingsClick: () => void
   onNotificationsClick: () => void
   onHistoryClick?: () => void
+  onExpandClick?: () => void
   hasLiveSession?: boolean
 }
 
@@ -167,6 +175,7 @@ export default function Header({
   onSettingsClick,
   onNotificationsClick,
   onHistoryClick,
+  onExpandClick,
   hasLiveSession,
 }: HeaderProps) {
   const crumbs = buildBreadcrumbs(
@@ -227,6 +236,16 @@ export default function Header({
 
       {/* Right actions */}
       <div className="flex items-center gap-0.5 flex-shrink-0 ml-2">
+        {onExpandClick && (
+          <button
+            onClick={onExpandClick}
+            title="Open Expanded View"
+            className="text-[var(--c-text-3)] hover:text-[var(--c-text-2)] transition-colors p-1 rounded"
+            aria-label="Open Expanded View"
+          >
+            <ExpandIcon />
+          </button>
+        )}
         {onHistoryClick && (
           <button
             onClick={onHistoryClick}
