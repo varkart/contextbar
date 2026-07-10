@@ -186,3 +186,24 @@ describe('routerReducer — REFRESH_SELECTED', () => {
     expect(next.selectedMcp).toBeNull()
   })
 })
+
+describe('routerReducer — RESET_TO', () => {
+  it('roots a fresh stack at the given view', () => {
+    const dirty: RouterState = {
+      ...base,
+      view: 'skill-detail',
+      selectedAgent: tool,
+      selectedSkill: skill,
+      selectedMcp: mcp,
+      allSkillsBackView: 'agent-detail',
+    }
+    const next = routerReducer(dirty, { type: 'RESET_TO', view: 'all-skills-list' })
+    expect(next.view).toBe('all-skills-list')
+    expect(next.selectedAgent).toBeNull()
+    expect(next.selectedSkill).toBeNull()
+    expect(next.selectedMcp).toBeNull()
+    // Embedded routers must escape to main, not a stale back-view
+    expect(next.allSkillsBackView).toBe('main')
+    expect(next.allMcpsBackView).toBe('main')
+  })
+})

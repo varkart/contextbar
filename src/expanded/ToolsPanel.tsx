@@ -54,7 +54,7 @@ export default function ToolsPanel({
     onExit: goHome,
     initialView: ROOT_VIEW[section],
   })
-  const { view, goTo, escape, refreshSelected, openAgentsList, openSkillsPage, openMcpsPage } = routerProps
+  const { view, goTo, resetTo, escape, refreshSelected, openAgentsList } = routerProps
 
   const { notifications, fetchNotifications } = useNotifications()
   const [version, setVersion] = useState('')
@@ -72,19 +72,15 @@ export default function ToolsPanel({
 
   const searchResults = useMemo(() => searchAgents(installedAgents, query), [installedAgents, query])
 
-  // Sidebar section changed while mounted → jump to that section's root view.
+  // Sidebar section changed while mounted → fresh stack at that section's root.
   const mountedRef = useRef(false)
   useEffect(() => {
     if (!mountedRef.current) {
       mountedRef.current = true
       return
     }
-    if (section === 'agents') openAgentsList()
-    else if (section === 'skills') openSkillsPage()
-    else if (section === 'mcps') openMcpsPage()
-    else goTo(section)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [section])
+    resetTo(ROOT_VIEW[section])
+  }, [section, resetTo])
 
   // The popover's escape chain bottoms out at its 'main' home view, which has
   // no place in the expanded window — treat it as leaving the panel.

@@ -25,6 +25,7 @@ export interface UseViewRouterResult extends RouterState {
   openAddSkill: () => void
   openAddMcp: () => void
   goTo: (view: View) => void
+  resetTo: (view: View) => void
   escape: () => void
   refreshSelected: (tools: Agent[]) => void
 }
@@ -45,7 +46,10 @@ export function useViewRouter(options: UseViewRouterOptions = {}): UseViewRouter
     undefined,
     () => {
       const s = initialRouterState(window.location.hash)
-      return initialView ? { ...s, view: initialView } : s
+      // Embedded routers escape to 'main', never to a stale back-view.
+      return initialView
+        ? { ...s, view: initialView, allSkillsBackView: 'main' as View, allMcpsBackView: 'main' as View }
+        : s
     },
   )
 
@@ -94,6 +98,8 @@ export function useViewRouter(options: UseViewRouterOptions = {}): UseViewRouter
 
   const goTo = useCallback((view: View) => dispatch({ type: 'GO_TO', view }), [])
 
+  const resetTo = useCallback((view: View) => dispatch({ type: 'RESET_TO', view }), [])
+
   const escape = useCallback(() => {
     const result = escapeTransition(
       state.view, state.skillBackView, state.mcpBackView, state.selectedAgent,
@@ -122,6 +128,7 @@ export function useViewRouter(options: UseViewRouterOptions = {}): UseViewRouter
     openAddSkill,
     openAddMcp,
     goTo,
+    resetTo,
     escape,
     refreshSelected,
   }

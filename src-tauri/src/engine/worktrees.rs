@@ -207,7 +207,7 @@ pub fn list_worktrees() -> Vec<RepoWorktrees> {
         });
     }
 
-    result.sort_by(|a, b| a.repo_name.to_lowercase().cmp(&b.repo_name.to_lowercase()));
+    result.sort_by_key(|r| r.repo_name.to_lowercase());
     result
 }
 

@@ -147,7 +147,7 @@ pub fn list_sessions(
     };
 
     // Newest first
-    entries.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
+    entries.sort_by_key(|e| std::cmp::Reverse(e.timestamp));
 
     entries.into_iter().skip(offset).take(limit).collect()
 }

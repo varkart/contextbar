@@ -74,7 +74,7 @@ export default function MyWorkSection({ sessions, repos, loading, goTo }: MyWork
   const [copiedStandup, setCopiedStandup] = useState(false)
   const [copiedResume, setCopiedResume] = useState<string | null>(null)
 
-  const [start, end] = windowFor(tab)
+  const [start, end] = useMemo(() => windowFor(tab), [tab])
   const windowed = useMemo(
     () => sessions.filter(s => s.timestamp >= start && s.timestamp < end),
     [sessions, start, end]
