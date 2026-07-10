@@ -14,7 +14,13 @@ pub fn list_sessions(
         Some(h) => h,
         None => return vec![],
     };
-    index::list_sessions(&home, limit, offset, project_filter.as_deref(), search.as_deref())
+    index::list_sessions(
+        &home,
+        limit,
+        offset,
+        project_filter.as_deref(),
+        search.as_deref(),
+    )
 }
 
 pub fn get_session(session_id: &str) -> Result<SessionDetail, String> {

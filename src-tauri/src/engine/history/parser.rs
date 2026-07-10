@@ -31,7 +31,12 @@ struct RawUsage {
     cache_creation_input_tokens: Option<u64>,
 }
 
-pub fn get_session(home: &Path, session_id: &str, project: &str, timestamp: u64) -> Option<SessionDetail> {
+pub fn get_session(
+    home: &Path,
+    session_id: &str,
+    project: &str,
+    timestamp: u64,
+) -> Option<SessionDetail> {
     let session_file = session_file_path(home, project, session_id);
     let file = std::fs::File::open(&session_file).ok()?;
     let reader = BufReader::new(file);
@@ -228,7 +233,10 @@ fn parse_single_block(item: &Value, error_count: &mut u32) -> Option<ContentBloc
         }
         "tool_result" => {
             // Count errors for badge; don't surface result content (lives in user protocol turn)
-            let is_error = item.get("is_error").and_then(|v| v.as_bool()).unwrap_or(false);
+            let is_error = item
+                .get("is_error")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false);
             if is_error {
                 *error_count += 1;
             }

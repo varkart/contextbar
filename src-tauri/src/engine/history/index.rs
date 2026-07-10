@@ -124,8 +124,8 @@ pub fn list_sessions(
 
 pub fn find_session_project(home: &Path, session_id: &str) -> Result<(String, u64), String> {
     let path = history_jsonl_path(home);
-    let content = std::fs::read_to_string(&path)
-        .map_err(|e| format!("cannot read history.jsonl: {e}"))?;
+    let content =
+        std::fs::read_to_string(&path).map_err(|e| format!("cannot read history.jsonl: {e}"))?;
 
     for line in content.lines() {
         let line = line.trim();

@@ -331,6 +331,26 @@ fn get_history_stats() -> engine::history::HistoryStats {
 }
 
 // ---------------------------------------------------------------------------
+// Worktree commands
+// ---------------------------------------------------------------------------
+
+#[tauri::command]
+async fn list_worktrees() -> Vec<engine::worktrees::RepoWorktrees> {
+    tokio::task::spawn_blocking(engine::worktrees::list_worktrees)
+        .await
+        .unwrap_or_default()
+}
+
+#[tauri::command]
+async fn remove_worktree(repo_path: String, worktree_path: String) -> Result<(), String> {
+    tokio::task::spawn_blocking(move || {
+        engine::worktrees::remove_worktree(&repo_path, &worktree_path)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+// ---------------------------------------------------------------------------
 // Skill cache commands
 // ---------------------------------------------------------------------------
 
@@ -2061,6 +2081,8 @@ pub fn run() {
             get_session,
             list_session_projects,
             get_history_stats,
+            list_worktrees,
+            remove_worktree,
             get_skill_full_description,
             hide_window,
             open_expanded_window,
