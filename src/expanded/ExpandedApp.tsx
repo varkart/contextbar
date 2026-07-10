@@ -286,7 +286,7 @@ function ActiveDot({ active }: { active: boolean }) {
 
 function SkillsSection({ agents, loading }: { agents: Agent[]; loading: boolean }) {
   const rows = useMemo(() =>
-    agents.flatMap(a => a.skills.map(s => ({ ...s, agentName: a.name, key: `${a.id}:${s.name}` }))),
+    agents.flatMap(a => a.skills.map(s => ({ ...s, agentName: a.name, key: `${a.id}:${s.sourceId}:${s.path}` }))),
     [agents]
   )
   return (
@@ -315,7 +315,7 @@ function SkillsSection({ agents, loading }: { agents: Agent[]; loading: boolean 
 
 function McpsSection({ agents, loading }: { agents: Agent[]; loading: boolean }) {
   const rows = useMemo(() =>
-    agents.flatMap(a => a.mcps.map(m => ({ ...m, agentName: a.name, key: `${a.id}:${m.name}` }))),
+    agents.flatMap(a => a.mcps.map(m => ({ ...m, agentName: a.name, key: `${a.id}:${m.sourceId}:${m.name}` }))),
     [agents]
   )
   return (

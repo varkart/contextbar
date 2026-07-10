@@ -1,5 +1,6 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
+import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow'
 import App from './App'
 import ExpandedApp from './expanded/ExpandedApp'
 import './index.css'
@@ -8,11 +9,9 @@ import './index.css'
 // large app window ("expanded"). Branch on the Tauri window label.
 function windowLabel(): string {
   try {
-    const internals = (window as unknown as Record<string, unknown>).__TAURI_INTERNALS__ as
-      | { metadata?: { currentWebviewWindow?: { label?: string } } }
-      | undefined
-    return internals?.metadata?.currentWebviewWindow?.label ?? 'main'
+    return getCurrentWebviewWindow().label
   } catch {
+    // Not running inside Tauri (browser dev, tests) — treat as popover.
     return 'main'
   }
 }
