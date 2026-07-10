@@ -3,15 +3,31 @@ import { invoke } from '@tauri-apps/api/core'
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow'
 import { useTheme } from '../useTheme'
 import { useAgents } from '../useAgents'
-import type { Agent, RepoWorktrees, SessionEntry } from '../types'
+import type { RepoWorktrees, SessionEntry } from '../types'
 import SessionList from '../components/history/SessionList'
 import SessionDetail from '../components/history/SessionDetail'
 import WorktreesSection from './WorktreesSection'
 import MyWorkSection from './MyWorkSection'
+import ToolsPanel, { type ToolsSection } from './ToolsPanel'
 
-export type Section = 'home' | 'agents' | 'skills' | 'mcps' | 'sessions' | 'worktrees' | 'work'
+export type Section =
+  | 'home'
+  | 'agents'
+  | 'skills'
+  | 'mcps'
+  | 'sessions'
+  | 'worktrees'
+  | 'work'
+  | 'settings'
+  | 'notifications'
 
-const SECTIONS: { id: Exclude<Section, 'home'>; label: string; icon: string; soon?: boolean }[] = [
+const TOOLS_SECTIONS: ToolsSection[] = ['agents', 'skills', 'mcps', 'settings', 'notifications']
+
+function isToolsSection(s: Section): s is ToolsSection {
+  return (TOOLS_SECTIONS as string[]).includes(s)
+}
+
+const SECTIONS: { id: Exclude<Section, 'home' | 'settings' | 'notifications'>; label: string; icon: string }[] = [
   { id: 'work', label: 'My Work', icon: '▤' },
   { id: 'sessions', label: 'Sessions', icon: '◷' },
   { id: 'worktrees', label: 'Worktrees', icon: '⑂' },
@@ -20,15 +36,17 @@ const SECTIONS: { id: Exclude<Section, 'home'>; label: string; icon: string; soo
   { id: 'mcps', label: 'MCPs', icon: '⬡' },
 ]
 
+const ALL_SECTION_IDS: Section[] = [...SECTIONS.map(s => s.id as Section), 'settings', 'notifications']
+
 function sectionFromHash(hash: string): Section {
   const h = hash.replace(/^#\/?/, '')
-  return SECTIONS.some(s => s.id === h) ? (h as Section) : 'home'
+  return ALL_SECTION_IDS.includes(h as Section) ? (h as Section) : 'home'
 }
 
 export default function ExpandedApp() {
-  useTheme()
+  const { theme, setTheme } = useTheme()
   const [section, setSection] = useState<Section>(() => sectionFromHash(window.location.hash))
-  const { agents, loading } = useAgents()
+  const { agents, loading, cloudSyncing, lastUpdated, fetchAgents } = useAgents()
   const [sessions, setSessions] = useState<SessionEntry[]>([])
   const [sessionsLoading, setSessionsLoading] = useState(true)
   const [selectedSession, setSelectedSession] = useState<SessionEntry | null>(null)
@@ -62,12 +80,17 @@ export default function ExpandedApp() {
     return () => window.removeEventListener('hashchange', onHash)
   }, [])
 
-  const goTo = (s: Section) => {
+  const goTo = useCallback((s: Section) => {
     setSection(s)
     window.location.hash = s === 'home' ? '' : s
-  }
+  }, [])
 
+  const goHome = useCallback(() => goTo('home'), [goTo])
+
+  // Escape inside tools sections is owned by ToolsPanel (it unwinds the
+  // embedded view stack first); here we only handle the custom sections.
   useEffect(() => {
+    if (isToolsSection(section)) return
     const handler = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return
       if (section === 'home') {
@@ -78,7 +101,7 @@ export default function ExpandedApp() {
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [section])
+  }, [section, goTo])
 
   const installedAgents = useMemo(() => agents.filter(a => a.installed), [agents])
   const counts = useMemo(() => ({
@@ -104,9 +127,6 @@ export default function ExpandedApp() {
             onSelect={setSelectedSession}
           />
         )}
-        {section === 'agents' && <AgentsSection agents={installedAgents} loading={loading} />}
-        {section === 'skills' && <SkillsSection agents={installedAgents} loading={loading} />}
-        {section === 'mcps' && <McpsSection agents={installedAgents} loading={loading} />}
         {section === 'worktrees' && (
           <WorktreesSection
             repos={repos}
@@ -121,6 +141,20 @@ export default function ExpandedApp() {
             repos={repos}
             loading={sessionsLoading || reposLoading}
             goTo={goTo}
+          />
+        )}
+        {isToolsSection(section) && (
+          <ToolsPanel
+            section={section}
+            goHome={goHome}
+            agents={agents}
+            installedAgents={installedAgents}
+            loading={loading}
+            cloudSyncing={cloudSyncing}
+            lastUpdated={lastUpdated}
+            fetchAgents={fetchAgents}
+            theme={theme}
+            setTheme={setTheme}
           />
         )}
       </div>
@@ -173,11 +207,7 @@ function Landing({ goTo, counts, loading }: {
             >
               <div className="flex items-center justify-between mb-3">
                 <span className="text-[18px] text-[var(--c-accent)] opacity-80" aria-hidden="true">{s.icon}</span>
-                {s.soon ? (
-                  <span className="text-[10px] px-1.5 py-0.5 rounded-full border border-[var(--c-border)] text-[var(--c-text-3)]">soon</span>
-                ) : (
-                  <span className="text-[15px] font-semibold tabular-nums text-[var(--c-text-2)]">{countFor(s.id)}</span>
-                )}
+                <span className="text-[15px] font-semibold tabular-nums text-[var(--c-text-2)]">{countFor(s.id)}</span>
               </div>
               <div className="text-[14px] font-semibold group-hover:text-[var(--c-text)]">{s.label}</div>
               <div className="text-[11px] text-[var(--c-text-3)] mt-0.5">
@@ -190,6 +220,21 @@ function Landing({ goTo, counts, loading }: {
               </div>
             </button>
           ))}
+        </div>
+
+        <div className="flex gap-4 mt-8">
+          <button
+            onClick={() => goTo('notifications')}
+            className="text-[12px] text-[var(--c-text-3)] hover:text-[var(--c-text-2)] transition-colors"
+          >
+            Notifications
+          </button>
+          <button
+            onClick={() => goTo('settings')}
+            className="text-[12px] text-[var(--c-text-3)] hover:text-[var(--c-text-2)] transition-colors"
+          >
+            Settings
+          </button>
         </div>
       </div>
     </div>
@@ -230,37 +275,28 @@ function Sidebar({ section, goTo, counts }: {
             >
               <span className="text-[13px] w-4 text-center opacity-70" aria-hidden="true">{s.icon}</span>
               <span className="text-[12.5px] font-medium flex-1">{s.label}</span>
-              {s.soon ? (
-                <span className="text-[9px] px-1 py-px rounded-full border border-[var(--c-border)] text-[var(--c-text-3)]">soon</span>
-              ) : (
-                count !== null && <span className="text-[11px] tabular-nums text-[var(--c-text-3)]">{count}</span>
-              )}
+              {count !== null && <span className="text-[11px] tabular-nums text-[var(--c-text-3)]">{count}</span>}
             </button>
           )
         })}
       </nav>
+      <div className="border-t border-[var(--c-border)] py-2">
+        {([['notifications', '◎', 'Notifications'], ['settings', '⚙', 'Settings']] as const).map(([id, icon, label]) => (
+          <button
+            key={id}
+            onClick={() => goTo(id)}
+            className={`w-full flex items-center gap-2.5 px-4 py-2 text-left transition-colors ${section === id ? 'bg-[var(--c-accent)]/10 text-[var(--c-accent)]' : 'text-[var(--c-text-3)] hover:bg-[var(--c-surface-2)] hover:text-[var(--c-text-2)]'}`}
+          >
+            <span className="text-[13px] w-4 text-center opacity-70" aria-hidden="true">{icon}</span>
+            <span className="text-[12.5px] font-medium">{label}</span>
+          </button>
+        ))}
+      </div>
     </div>
   )
 }
 
-// ── Sections ─────────────────────────────────────────────────────────────────
-
-function SectionHeader({ title, subtitle }: { title: string; subtitle?: string }) {
-  return (
-    <div className="px-6 pt-5 pb-3 flex-shrink-0">
-      <h2 className="text-[16px] font-semibold tracking-tight">{title}</h2>
-      {subtitle && <p className="text-[12px] text-[var(--c-text-3)] mt-0.5">{subtitle}</p>}
-    </div>
-  )
-}
-
-function Spinner() {
-  return (
-    <div className="flex items-center justify-center h-32">
-      <div className="w-4 h-4 border-2 border-[var(--c-accent)]/40 border-t-[var(--c-accent)] rounded-full animate-spin" />
-    </div>
-  )
-}
+// ── Sessions ─────────────────────────────────────────────────────────────────
 
 function SessionsSection({ sessions, loading, selected, onSelect }: {
   sessions: SessionEntry[]
@@ -285,97 +321,3 @@ function SessionsSection({ sessions, loading, selected, onSelect }: {
     </div>
   )
 }
-
-function AgentsSection({ agents, loading }: { agents: Agent[]; loading: boolean }) {
-  return (
-    <div className="flex-1 flex flex-col overflow-hidden">
-      <SectionHeader title="Agents" subtitle={`${agents.length} installed`} />
-      <div className="flex-1 overflow-y-auto px-6 pb-6">
-        {loading ? <Spinner /> : (
-          <div className="grid grid-cols-2 xl:grid-cols-3 gap-3">
-            {agents.map(a => (
-              <div key={a.id} className="rounded-xl border border-[var(--c-border)] bg-[var(--c-surface-2)]/40 p-4">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-[13.5px] font-semibold">{a.name}</span>
-                  {a.version && <span className="text-[10px] text-[var(--c-text-3)] font-mono">{a.version}</span>}
-                </div>
-                <div className="flex items-center gap-3 text-[11px] text-[var(--c-text-3)]">
-                  {a.supportsSkills && <span>{a.skills.filter(s => s.active).length}/{a.skills.length} skills</span>}
-                  {a.supportsMcps && <span>{a.mcps.filter(m => m.active).length}/{a.mcps.length} MCPs</span>}
-                </div>
-                {a.error && <p className="text-[10px] text-rose-400 mt-2 truncate" title={a.error}>{a.error}</p>}
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-    </div>
-  )
-}
-
-function ActiveDot({ active }: { active: boolean }) {
-  return (
-    <span className={`block w-1.5 h-1.5 rounded-full shrink-0 ${active ? 'bg-emerald-400' : 'bg-[var(--c-border)]'}`} />
-  )
-}
-
-function SkillsSection({ agents, loading }: { agents: Agent[]; loading: boolean }) {
-  const rows = useMemo(() =>
-    agents.flatMap(a => a.skills.map(s => ({ ...s, agentName: a.name, key: `${a.id}:${s.sourceId}:${s.path}` }))),
-    [agents]
-  )
-  return (
-    <div className="flex-1 flex flex-col overflow-hidden">
-      <SectionHeader title="Skills" subtitle={`${rows.length} across ${agents.length} agents`} />
-      <div className="flex-1 overflow-y-auto px-6 pb-6">
-        {loading ? <Spinner /> : (
-          <div className="rounded-xl border border-[var(--c-border)] overflow-hidden">
-            {rows.map(s => (
-              <div key={s.key} className="flex items-center gap-3 px-4 py-2.5 border-b border-[var(--c-border)]/50 last:border-0 hover:bg-[var(--c-surface-2)]/60 transition-colors">
-                <ActiveDot active={s.active} />
-                <span className="text-[12.5px] font-medium w-56 truncate" title={s.name}>{s.name}</span>
-                <span className="text-[11px] text-[var(--c-text-3)] w-28 shrink-0 truncate">{s.agentName}</span>
-                <span className="text-[11px] text-[var(--c-text-3)] flex-1 min-w-0 truncate">{s.description ?? ''}</span>
-              </div>
-            ))}
-            {rows.length === 0 && (
-              <p className="text-[12px] text-[var(--c-text-3)] text-center py-8">No skills found</p>
-            )}
-          </div>
-        )}
-      </div>
-    </div>
-  )
-}
-
-function McpsSection({ agents, loading }: { agents: Agent[]; loading: boolean }) {
-  const rows = useMemo(() =>
-    agents.flatMap(a => a.mcps.map(m => ({ ...m, agentName: a.name, key: `${a.id}:${m.sourceId}:${m.name}` }))),
-    [agents]
-  )
-  return (
-    <div className="flex-1 flex flex-col overflow-hidden">
-      <SectionHeader title="MCP Servers" subtitle={`${rows.length} across ${agents.length} agents`} />
-      <div className="flex-1 overflow-y-auto px-6 pb-6">
-        {loading ? <Spinner /> : (
-          <div className="rounded-xl border border-[var(--c-border)] overflow-hidden">
-            {rows.map(m => (
-              <div key={m.key} className="flex items-center gap-3 px-4 py-2.5 border-b border-[var(--c-border)]/50 last:border-0 hover:bg-[var(--c-surface-2)]/60 transition-colors">
-                <ActiveDot active={m.active} />
-                <span className="text-[12.5px] font-medium w-56 truncate" title={m.name}>{m.name}</span>
-                <span className="text-[11px] text-[var(--c-text-3)] w-28 shrink-0 truncate">{m.agentName}</span>
-                <span className="text-[11px] text-[var(--c-text-3)] font-mono flex-1 min-w-0 truncate">
-                  {m.url ?? [m.command, ...m.args].filter(Boolean).join(' ')}
-                </span>
-              </div>
-            ))}
-            {rows.length === 0 && (
-              <p className="text-[12px] text-[var(--c-text-3)] text-center py-8">No MCP servers found</p>
-            )}
-          </div>
-        )}
-      </div>
-    </div>
-  )
-}
-
