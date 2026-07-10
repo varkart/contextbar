@@ -13,6 +13,8 @@ pub struct SessionEntry {
     pub duration_minutes: Option<u64>,
     pub is_live: bool,
     pub error_count: u32,
+    /// Number of prompts submitted in this session (lines in history.jsonl).
+    pub prompt_count: u32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

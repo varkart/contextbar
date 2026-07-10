@@ -72,49 +72,79 @@ pub fn list_sessions(
 
     let search_lower = search.map(|s| s.to_lowercase());
 
-    let mut entries: Vec<SessionEntry> = content
-        .lines()
-        .filter_map(|line| {
-            let line = line.trim();
-            if line.is_empty() {
-                return None;
+    // history.jsonl holds one line per submitted prompt, not per session —
+    // group by sessionId: display = first prompt, timestamp = last activity.
+    let mut sessions: std::collections::HashMap<String, SessionEntry> =
+        std::collections::HashMap::new();
+    // A search matches a session if ANY of its prompts matches.
+    let mut search_matched: std::collections::HashSet<String> = std::collections::HashSet::new();
+
+    for line in content.lines() {
+        let line = line.trim();
+        if line.is_empty() {
+            continue;
+        }
+        let Ok(h) = serde_json::from_str::<HistoryLine>(line) else {
+            continue;
+        };
+        let Some(session_id) = h.session_id.filter(|s| !s.is_empty()) else {
+            continue;
+        };
+        let timestamp = h.timestamp.unwrap_or(0);
+        let project = h.project.unwrap_or_default();
+        let display = h.display.unwrap_or_else(|| "(no prompt)".to_string());
+
+        if let Some(filter) = project_filter {
+            if !project.contains(filter) {
+                continue;
             }
-            let h: HistoryLine = serde_json::from_str(line).ok()?;
-            let session_id = h.session_id.filter(|s| !s.is_empty())?;
-            let timestamp = h.timestamp.unwrap_or(0);
-            let project = h.project.unwrap_or_default();
-            let display = h.display.unwrap_or_else(|| "(no prompt)".to_string());
+        }
 
-            if let Some(filter) = project_filter {
-                if !project.contains(filter) {
-                    return None;
-                }
+        if let Some(ref q) = search_lower {
+            if display.to_lowercase().contains(q.as_str()) {
+                search_matched.insert(session_id.clone());
             }
+        }
 
-            if let Some(ref q) = search_lower {
-                if !display.to_lowercase().contains(q.as_str()) {
-                    return None;
-                }
+        match sessions.get_mut(&session_id) {
+            Some(entry) => {
+                // Lines are appended chronologically, so the first line seen is
+                // the session's opening prompt; later lines only bump activity.
+                entry.timestamp = entry.timestamp.max(timestamp);
+                entry.prompt_count += 1;
             }
+            None => {
+                let project_name = project_name(&project);
+                let session_file = session_file_path(home, &project, &session_id);
+                let is_live = is_file_live(&session_file);
+                sessions.insert(
+                    session_id.clone(),
+                    SessionEntry {
+                        session_id,
+                        display,
+                        timestamp,
+                        project,
+                        project_name,
+                        total_tokens: 0,
+                        model: None,
+                        duration_minutes: None,
+                        is_live,
+                        error_count: 0,
+                        prompt_count: 1,
+                    },
+                );
+            }
+        }
+    }
 
-            let project_name = project_name(&project);
-            let session_file = session_file_path(home, &project, &session_id);
-            let is_live = is_file_live(&session_file);
-
-            Some(SessionEntry {
-                session_id,
-                display,
-                timestamp,
-                project,
-                project_name,
-                total_tokens: 0,
-                model: None,
-                duration_minutes: None,
-                is_live,
-                error_count: 0,
-            })
-        })
-        .collect();
+    let mut entries: Vec<SessionEntry> = if search_lower.is_some() {
+        sessions
+            .into_values()
+            .filter(|e| search_matched.contains(&e.session_id))
+            .collect()
+    } else {
+        sessions.into_values().collect()
+    };
 
     // Newest first
     entries.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
@@ -193,6 +223,7 @@ pub fn get_history_stats(home: &Path) -> HistoryStats {
     };
 
     let mut total = 0usize;
+    let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
     let mut live_session_id: Option<String> = None;
 
     for line in content.lines() {
@@ -202,7 +233,9 @@ pub fn get_history_stats(home: &Path) -> HistoryStats {
         }
         if let Ok(h) = serde_json::from_str::<HistoryLine>(line) {
             if let Some(sid) = h.session_id.filter(|s| !s.is_empty()) {
-                total += 1;
+                if seen.insert(sid.clone()) {
+                    total += 1;
+                }
                 if live_session_id.is_none() {
                     if let Some(ref project) = h.project {
                         let session_file = session_file_path(home, project, &sid);
@@ -228,5 +261,61 @@ fn decode_project_path(encoded: &str) -> String {
         format!("/{}", &encoded[1..].replace('-', "/"))
     } else {
         encoded.replace('-', "/")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{get_history_stats, list_sessions};
+
+    fn write_history(lines: &[&str]) -> tempfile::TempDir {
+        let dir = tempfile::tempdir().unwrap();
+        let claude = dir.path().join(".claude");
+        std::fs::create_dir_all(&claude).unwrap();
+        std::fs::write(claude.join("history.jsonl"), lines.join("\n")).unwrap();
+        dir
+    }
+
+    #[test]
+    fn groups_prompts_into_one_session() {
+        let dir = write_history(&[
+            r#"{"display":"first prompt","timestamp":1000,"project":"/p/a","sessionId":"s1"}"#,
+            r#"{"display":"second prompt","timestamp":2000,"project":"/p/a","sessionId":"s1"}"#,
+            r#"{"display":"other session","timestamp":1500,"project":"/p/b","sessionId":"s2"}"#,
+        ]);
+        let entries = list_sessions(dir.path(), 100, 0, None, None);
+        assert_eq!(entries.len(), 2);
+        // Newest activity first: s1 last prompt at 2000
+        assert_eq!(entries[0].session_id, "s1");
+        assert_eq!(entries[0].display, "first prompt");
+        assert_eq!(entries[0].timestamp, 2000);
+        assert_eq!(entries[0].prompt_count, 2);
+        assert_eq!(entries[1].session_id, "s2");
+        assert_eq!(entries[1].prompt_count, 1);
+    }
+
+    #[test]
+    fn search_matches_any_prompt_in_session() {
+        let dir = write_history(&[
+            r#"{"display":"first prompt","timestamp":1000,"project":"/p/a","sessionId":"s1"}"#,
+            r#"{"display":"needle here","timestamp":2000,"project":"/p/a","sessionId":"s1"}"#,
+            r#"{"display":"other","timestamp":1500,"project":"/p/b","sessionId":"s2"}"#,
+        ]);
+        let entries = list_sessions(dir.path(), 100, 0, None, Some("needle"));
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].session_id, "s1");
+        // Display stays the session's first prompt, not the matching one
+        assert_eq!(entries[0].display, "first prompt");
+    }
+
+    #[test]
+    fn stats_count_unique_sessions() {
+        let dir = write_history(&[
+            r#"{"display":"a","timestamp":1000,"project":"/p/a","sessionId":"s1"}"#,
+            r#"{"display":"b","timestamp":2000,"project":"/p/a","sessionId":"s1"}"#,
+            r#"{"display":"c","timestamp":1500,"project":"/p/b","sessionId":"s2"}"#,
+        ]);
+        let stats = get_history_stats(dir.path());
+        assert_eq!(stats.total_sessions, 2);
     }
 }

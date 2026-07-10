@@ -85,6 +85,14 @@ function SessionRow({ session, onSelect }: SessionRowProps) {
             <span className="text-[10px] text-[var(--c-text-3)] flex-shrink-0">
               {relativeTime(session.timestamp)}
             </span>
+            {session.promptCount > 1 && (
+              <>
+                <span className="text-[10px] text-[var(--c-text-3)] opacity-40">·</span>
+                <span className="text-[10px] text-[var(--c-text-3)] flex-shrink-0">
+                  {session.promptCount} prompts
+                </span>
+              </>
+            )}
             {session.errorCount > 0 && (
               <>
                 <span className="text-[10px] text-[var(--c-text-3)] opacity-40">·</span>

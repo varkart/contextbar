@@ -109,6 +109,8 @@ export interface SessionEntry {
   durationMinutes?: number
   isLive: boolean
   errorCount: number
+  /** Number of prompts submitted in this session. */
+  promptCount: number
 }
 
 export interface ContentBlock {
