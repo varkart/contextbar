@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import type { RepoWorktrees, WorktreeInfo, SessionEntry } from '../types'
+import { Tile, TileRow } from './InsightTiles'
 
 export type WorktreeStatus = 'active' | 'stale' | 'abandoned' | 'primary'
 
@@ -57,11 +58,13 @@ export default function WorktreesSection({ repos, loading, sessions, onRemoved }
 
   const allWts = useMemo(() => repos.flatMap(r => r.worktrees), [repos])
   const counts = useMemo(() => ({
+    repos: repos.length,
     active: allWts.filter(w => worktreeStatus(w) === 'active').length,
     stale: allWts.filter(w => worktreeStatus(w) === 'stale').length,
     abandoned: allWts.filter(w => worktreeStatus(w) === 'abandoned').length,
+    dirty: allWts.filter(w => w.isDirty).length,
     safe: allWts.filter(isSafeToDelete).length,
-  }), [allWts])
+  }), [repos, allWts])
 
   const matches = (wt: WorktreeInfo, repo: RepoWorktrees): boolean => {
     const st = worktreeStatus(wt)
@@ -137,15 +140,15 @@ export default function WorktreesSection({ repos, loading, sessions, onRemoved }
           ))}
         </div>
 
-        {/* Stats */}
-        <div className="grid grid-cols-3 gap-2.5 mb-3">
-          {([['Active', counts.active, 'text-emerald-400'], ['Stale', counts.stale, 'text-amber-400'], ['Abandoned', counts.abandoned, 'text-rose-400']] as const).map(([lbl, n, color]) => (
-            <div key={lbl} className="rounded-xl border border-[var(--c-border)] bg-[var(--c-surface-2)]/40 px-4 py-3 text-center">
-              <div className={`text-[18px] font-semibold tabular-nums ${color}`}>{n}</div>
-              <div className="text-[10px] text-[var(--c-text-3)] uppercase tracking-wider mt-0.5">{lbl}</div>
-            </div>
-          ))}
-        </div>
+        {/* Insights */}
+        <TileRow className="mb-3">
+          <Tile value={counts.repos} label="Repos" />
+          <Tile value={counts.active} label="Active" color="text-emerald-400" hint="Commits in the last 7 days" />
+          <Tile value={counts.stale} label="Stale" color="text-amber-400" hint="No commits for 7–30 days" />
+          <Tile value={counts.abandoned} label="Abandoned" color="text-rose-400" hint="No commits for 30+ days" />
+          <Tile value={counts.dirty} label="Uncommitted" color={counts.dirty > 0 ? 'text-amber-400' : 'text-[var(--c-text-3)]'} hint="Worktrees with uncommitted changes" />
+          <Tile value={counts.safe} label="Safe to delete" color={counts.safe > 0 ? 'text-emerald-400' : 'text-[var(--c-text-3)]'} hint="Merged into base and clean" />
+        </TileRow>
 
         {/* Cleanup banner */}
         {counts.safe > 0 && (

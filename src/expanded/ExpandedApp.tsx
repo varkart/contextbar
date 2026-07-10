@@ -6,6 +6,7 @@ import { useAgents } from '../useAgents'
 import type { RepoWorktrees, SessionEntry } from '../types'
 import SessionList from '../components/history/SessionList'
 import SessionDetail from '../components/history/SessionDetail'
+import { Tile, TileRow } from './InsightTiles'
 import WorktreesSection from './WorktreesSection'
 import MyWorkSection from './MyWorkSection'
 import ToolsPanel, { type ToolsSection } from './ToolsPanel'
@@ -304,19 +305,47 @@ function SessionsSection({ sessions, loading, selected, onSelect }: {
   selected: SessionEntry | null
   onSelect: (s: SessionEntry) => void
 }) {
+  const insights = useMemo(() => {
+    const now = Date.now()
+    const dayAgo = now - 86_400_000
+    const weekAgo = now - 7 * 86_400_000
+    return {
+      total: sessions.length,
+      today: sessions.filter(s => s.timestamp >= dayAgo).length,
+      week: sessions.filter(s => s.timestamp >= weekAgo).length,
+      live: sessions.filter(s => s.isLive).length,
+      projects: new Set(sessions.map(s => s.project)).size,
+      prompts: sessions.reduce((n, s) => n + s.promptCount, 0),
+    }
+  }, [sessions])
+
   return (
-    <div className="flex-1 flex overflow-hidden">
-      <div className="w-80 shrink-0 border-r border-[var(--c-border)] flex flex-col overflow-hidden">
-        <SessionList sessions={sessions} onSelect={onSelect} loading={loading} />
-      </div>
-      <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
-        {selected ? (
-          <SessionDetail key={selected.sessionId} session={selected} />
-        ) : (
-          <div className="flex-1 flex items-center justify-center">
-            <p className="text-[12px] text-[var(--c-text-3)]">Select a session to view its transcript</p>
-          </div>
-        )}
+    <div className="flex-1 flex flex-col overflow-hidden">
+      {!loading && sessions.length > 0 && (
+        <div className="px-4 pt-3 pb-1 flex-shrink-0">
+          <TileRow>
+            <Tile value={insights.total} label="Sessions" />
+            <Tile value={insights.today} label="Today" color="text-[var(--c-accent)]" />
+            <Tile value={insights.week} label="This week" />
+            <Tile value={insights.live} label="Live" color={insights.live > 0 ? 'text-emerald-400' : 'text-[var(--c-text-3)]'} />
+            <Tile value={insights.projects} label="Projects" />
+            <Tile value={insights.prompts} label="Prompts" color="text-amber-400" />
+          </TileRow>
+        </div>
+      )}
+      <div className="flex-1 flex overflow-hidden">
+        <div className="w-80 shrink-0 border-r border-[var(--c-border)] flex flex-col overflow-hidden">
+          <SessionList sessions={sessions} onSelect={onSelect} loading={loading} />
+        </div>
+        <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
+          {selected ? (
+            <SessionDetail key={selected.sessionId} session={selected} />
+          ) : (
+            <div className="flex-1 flex items-center justify-center">
+              <p className="text-[12px] text-[var(--c-text-3)]">Select a session to view its transcript</p>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   )

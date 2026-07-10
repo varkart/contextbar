@@ -8,6 +8,7 @@ import type { ThemePreference } from '../useTheme'
 import type { Agent } from '../types'
 import Header from '../components/Header'
 import ViewManager from '../components/views/ViewManager'
+import { Tile, TileRow } from './InsightTiles'
 
 export type ToolsSection = 'agents' | 'skills' | 'mcps' | 'settings' | 'notifications'
 
@@ -72,6 +73,20 @@ export default function ToolsPanel({
 
   const searchResults = useMemo(() => searchAgents(installedAgents, query), [installedAgents, query])
 
+  const agentInsights = useMemo(() => {
+    const skills = installedAgents.flatMap(a => a.skills)
+    const mcps = installedAgents.flatMap(a => a.mcps)
+    return {
+      installed: installedAgents.length,
+      detected: agents.length,
+      skillsActive: skills.filter(s => s.active).length,
+      skillsTotal: skills.length,
+      mcpsActive: mcps.filter(m => m.active).length,
+      mcpsTotal: mcps.length,
+      configErrors: installedAgents.filter(a => a.error || (a.configErrors?.length ?? 0) > 0).length,
+    }
+  }, [agents, installedAgents])
+
   // Sidebar section changed while mounted → fresh stack at that section's root.
   const mountedRef = useRef(false)
   useEffect(() => {
@@ -115,6 +130,28 @@ export default function ToolsPanel({
           onSettingsClick={() => goTo('settings')}
           onNotificationsClick={() => goTo('notifications')}
         />
+        {view === 'agents-list' && !loading && (
+          <div className="px-3 pt-3 flex-shrink-0">
+            <TileRow>
+              <Tile value={`${agentInsights.installed}/${agentInsights.detected}`} label="Installed" hint="Installed of detected agents" />
+              <Tile
+                value={`${agentInsights.skillsActive}/${agentInsights.skillsTotal}`}
+                label="Skills active"
+                color="text-emerald-400"
+              />
+              <Tile
+                value={`${agentInsights.mcpsActive}/${agentInsights.mcpsTotal}`}
+                label="MCPs active"
+                color="text-[var(--c-accent)]"
+              />
+              <Tile
+                value={agentInsights.configErrors}
+                label="Config errors"
+                color={agentInsights.configErrors > 0 ? 'text-rose-400' : 'text-[var(--c-text-3)]'}
+              />
+            </TileRow>
+          </div>
+        )}
         <div className="flex-1 overflow-hidden flex flex-col min-h-0">
           <ViewManager
             {...routerProps}

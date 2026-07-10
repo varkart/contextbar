@@ -1,7 +1,6 @@
 import { useState, useMemo } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import type { RepoWorktrees, SessionEntry } from '../types'
-import { formatTokens } from '../components/history/SessionStats'
 import type { Section } from './ExpandedApp'
 
 const DAY = 86_400_000
@@ -43,7 +42,7 @@ interface ProjectAgg {
   project: string
   name: string
   sessions: SessionEntry[]
-  tokens: number
+  prompts: number
   lastTs: number
 }
 
@@ -52,11 +51,11 @@ function groupByProject(sessions: SessionEntry[]): ProjectAgg[] {
   for (const s of sessions) {
     let agg = map.get(s.project)
     if (!agg) {
-      agg = { project: s.project, name: s.projectName, sessions: [], tokens: 0, lastTs: 0 }
+      agg = { project: s.project, name: s.projectName, sessions: [], prompts: 0, lastTs: 0 }
       map.set(s.project, agg)
     }
     agg.sessions.push(s)
-    agg.tokens += s.totalTokens
+    agg.prompts += s.promptCount
     agg.lastTs = Math.max(agg.lastTs, s.timestamp)
   }
   return [...map.values()].sort((a, b) => b.lastTs - a.lastTs)
@@ -83,8 +82,8 @@ export default function MyWorkSection({ sessions, repos, loading, goTo }: MyWork
 
   const stats = useMemo(() => ({
     sessions: windowed.length,
-    tokens: windowed.reduce((n, s) => n + s.totalTokens, 0),
-    minutes: windowed.reduce((n, s) => n + (s.durationMinutes ?? 0), 0),
+    prompts: windowed.reduce((n, s) => n + s.promptCount, 0),
+    live: windowed.filter(s => s.isLive).length,
     projects: projects.length,
   }), [windowed, projects])
 
@@ -204,20 +203,20 @@ export default function MyWorkSection({ sessions, repos, loading, goTo }: MyWork
             {/* Stats */}
             <div className="grid grid-cols-4 gap-2.5 mb-5">
               <Stat n={String(stats.sessions)} lbl="Sessions" />
-              <Stat n={formatTokens(stats.tokens)} lbl="Tokens" color="text-emerald-400" />
-              <Stat n={stats.minutes >= 60 ? `${(stats.minutes / 60).toFixed(1)}h` : `${stats.minutes}m`} lbl="Time" color="text-amber-400" />
+              <Stat n={String(stats.prompts)} lbl="Prompts" color="text-amber-400" />
+              <Stat n={String(stats.live)} lbl="Live" color={stats.live > 0 ? 'text-emerald-400' : ''} />
               <Stat n={String(stats.projects)} lbl="Projects" color="text-[var(--c-accent)]" />
             </div>
 
-            {/* Focus bar */}
-            {projects.length > 0 && stats.tokens > 0 && (
+            {/* Focus bar — share of prompts per project in the window */}
+            {projects.length > 0 && stats.prompts > 0 && (
               <div className="mb-5">
                 <SectionLabel>Focus</SectionLabel>
                 <div className="flex h-2.5 rounded-full overflow-hidden mb-2">
                   {projects.slice(0, PALETTE.length).map((p, i) => (
                     <div
                       key={p.project}
-                      style={{ width: `${Math.max(2, (p.tokens / stats.tokens) * 100)}%`, background: PALETTE[i] }}
+                      style={{ width: `${Math.max(2, (p.prompts / stats.prompts) * 100)}%`, background: PALETTE[i] }}
                     />
                   ))}
                 </div>
@@ -225,7 +224,7 @@ export default function MyWorkSection({ sessions, repos, loading, goTo }: MyWork
                   {projects.slice(0, PALETTE.length).map((p, i) => (
                     <span key={p.project} className="text-[11px] text-[var(--c-text-3)] flex items-center gap-1.5">
                       <span className="w-2 h-2 rounded-sm inline-block" style={{ background: PALETTE[i] }} />
-                      {p.name} {stats.tokens > 0 ? Math.round((p.tokens / stats.tokens) * 100) : 0}%
+                      {p.name} {Math.round((p.prompts / stats.prompts) * 100)}%
                     </span>
                   ))}
                 </div>
@@ -309,7 +308,7 @@ export default function MyWorkSection({ sessions, repos, loading, goTo }: MyWork
                           </div>
                         </div>
                         <p className="text-[11px] text-[var(--c-text-3)] mb-2">
-                          {relativeTime(p.lastTs)} · {p.sessions.length} session{p.sessions.length > 1 ? 's' : ''} · {formatTokens(p.tokens)} tokens
+                          {relativeTime(p.lastTs)} · {p.sessions.length} session{p.sessions.length > 1 ? 's' : ''} · {p.prompts} prompt{p.prompts === 1 ? '' : 's'}
                         </p>
                         <div className="flex gap-2">
                           <button
