@@ -1,9 +1,10 @@
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
 import type { SessionInsights } from '../types'
 import { formatTokens } from '../components/history/SessionStats'
 import { Tile, TileRow } from './InsightTiles'
+import { Card, HBar } from './InsightWidgets'
 
 const DAY = 86_400_000
 const RANGES = [
@@ -12,19 +13,18 @@ const RANGES = [
   { days: 90, label: '90 days' },
 ]
 const BAR_COLORS = ['#6366f1', '#e8a94a', '#d98fd9', '#2dd4bf', '#fb7185', '#8fbf6b']
-const DAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+
+export function shortModel(model: string): string {
+  return model.replace(/^claude-/, '').replace(/-\d{8}$/, '')
+}
 
 export default function InsightsSection() {
   const [days, setDays] = useState(30)
   const [insights, setInsights] = useState<SessionInsights | null>(null)
-  const [promptTs, setPromptTs] = useState<number[]>([])
-  const [commitTs, setCommitTs] = useState<number[]>([])
 
   const fetchAll = useCallback((d: number) => {
     const sinceMs = Date.now() - d * DAY
     invoke<SessionInsights>('get_session_insights', { sinceMs }).then(setInsights).catch(() => {})
-    invoke<number[]>('get_prompt_timestamps', { sinceMs }).then(setPromptTs).catch(() => {})
-    invoke<number[]>('get_commit_activity', { sinceDays: 14 }).then(setCommitTs).catch(() => {})
   }, [])
 
   useEffect(() => {
@@ -36,32 +36,6 @@ export default function InsightsSection() {
     const unlisten = listen('session-insights-updated', () => fetchAll(days))
     return () => { unlisten.then(fn => fn()) }
   }, [fetchAll, days])
-
-  // Heatmap: weekday × hour prompt density in local time.
-  const heatmap = useMemo(() => {
-    const grid: number[][] = Array.from({ length: 7 }, () => Array(24).fill(0))
-    let max = 0
-    for (const ts of promptTs) {
-      const d = new Date(ts)
-      const day = (d.getDay() + 6) % 7 // Monday = 0
-      const cell = ++grid[day][d.getHours()]
-      if (cell > max) max = cell
-    }
-    return { grid, max }
-  }, [promptTs])
-
-  // Commits per local day, last 14 days.
-  const commitDays = useMemo(() => {
-    const midnight = new Date()
-    midnight.setHours(0, 0, 0, 0)
-    const start = midnight.getTime() - 13 * DAY
-    const buckets = Array(14).fill(0)
-    for (const sec of commitTs) {
-      const idx = Math.floor((sec * 1000 - start) / DAY)
-      if (idx >= 0 && idx < 14) buckets[idx]++
-    }
-    return { buckets, max: Math.max(1, ...buckets), total: buckets.reduce((a, b) => a + b, 0) }
-  }, [commitTs])
 
   const totalSessions = insights?.perModel.reduce((n, m) => n + m.sessions, 0) ?? 0
   const totalTokens = (insights?.inputTokens ?? 0) + (insights?.outputTokens ?? 0)
@@ -77,7 +51,7 @@ export default function InsightsSection() {
         <div>
           <h2 className="text-[16px] font-semibold tracking-tight">Insights</h2>
           <p className="text-[12px] text-[var(--c-text-3)] mt-0.5">
-            Tokens, cost, tools and activity across your sessions
+            Tokens, cost and tool usage — activity lives in My Work
           </p>
         </div>
         <div className="flex gap-1.5">
@@ -105,7 +79,6 @@ export default function InsightsSection() {
 
         {!analyzing && insights && (
           <>
-            {/* Headline tiles */}
             <TileRow className="mb-4">
               <Tile value={insights.sessionsAnalyzed} label="Sessions analyzed" />
               <Tile value={formatTokens(totalTokens)} label="Tokens (in+out)" color="text-[var(--c-accent)]" />
@@ -116,66 +89,6 @@ export default function InsightsSection() {
             </TileRow>
 
             <div className="grid grid-cols-2 gap-3 mb-3">
-              {/* Heatmap */}
-              <Card title="Activity heatmap" sub="Prompts by weekday × hour (local time)">
-                <div className="grid gap-[3px]" style={{ gridTemplateColumns: '30px repeat(24, 1fr)' }}>
-                  {DAY_LABELS.map((label, di) => (
-                    <div key={label} className="contents">
-                      <span className="text-[9px] font-mono text-[var(--c-text-3)] self-center">{label}</span>
-                      {heatmap.grid[di].map((v, h) => {
-                        const alpha = v === 0 ? 0 : 0.2 + 0.8 * (v / heatmap.max)
-                        return (
-                          <span
-                            key={h}
-                            title={`${label} ${h}:00 — ${v} prompt${v === 1 ? '' : 's'}`}
-                            className="aspect-square rounded-[2px]"
-                            style={{ background: v === 0 ? 'var(--c-surface-2)' : `rgba(129,140,248,${alpha.toFixed(2)})` }}
-                          />
-                        )
-                      })}
-                    </div>
-                  ))}
-                </div>
-                <div className="flex justify-between text-[9px] font-mono text-[var(--c-text-3)] mt-1.5 pl-[33px]">
-                  <span>0</span><span>6</span><span>12</span><span>18</span><span>23</span>
-                </div>
-              </Card>
-
-              {/* Model mix */}
-              <Card title="Model mix" sub={`${totalSessions} sessions by model`}>
-                <div className="flex h-3.5 rounded-md overflow-hidden mb-2">
-                  {insights.perModel.map((m, i) => (
-                    <div
-                      key={m.model}
-                      title={`${m.model}: ${m.sessions} sessions`}
-                      style={{ width: `${Math.max(2, (m.sessions / Math.max(1, totalSessions)) * 100)}%`, background: BAR_COLORS[i % BAR_COLORS.length] }}
-                    />
-                  ))}
-                </div>
-                <div className="flex gap-3 flex-wrap mb-4">
-                  {insights.perModel.map((m, i) => (
-                    <span key={m.model} className="text-[11px] text-[var(--c-text-3)] flex items-center gap-1.5">
-                      <span className="w-2 h-2 rounded-sm" style={{ background: BAR_COLORS[i % BAR_COLORS.length] }} />
-                      {shortModel(m.model)} {Math.round((m.sessions / Math.max(1, totalSessions)) * 100)}%
-                    </span>
-                  ))}
-                </div>
-                <p className="text-[10px] font-mono text-[var(--c-text-3)] uppercase tracking-wider mb-1.5">Cost by model</p>
-                <div>
-                  {insights.perModel.map(m => (
-                    <div key={m.model} className="flex justify-between text-[11px] py-1 border-b border-[var(--c-border)]/50 last:border-0">
-                      <span className="text-[var(--c-text-2)]">{shortModel(m.model)}</span>
-                      <span className="font-mono text-[var(--c-text-3)]">
-                        {formatTokens(m.inputTokens)} in · {formatTokens(m.outputTokens)} out · {m.estCostUsd != null ? `$${m.estCostUsd.toFixed(2)}` : '—'}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </Card>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3 mb-3">
-              {/* Tokens by project */}
               <Card title="Tokens by project" sub="Input + output, cache excluded">
                 {insights.perProject.map((p, i) => (
                   <HBar
@@ -189,26 +102,19 @@ export default function InsightsSection() {
                 ))}
               </Card>
 
-              {/* Commits */}
-              <Card title="Commits per day" sub={`All branches, all repos — last 14 days · total ${commitDays.total}`}>
-                <div className="flex items-end gap-1 h-24 mt-2">
-                  {commitDays.buckets.map((v, i) => (
-                    <div
-                      key={i}
-                      title={`${v} commit${v === 1 ? '' : 's'}`}
-                      className="flex-1 rounded-t-sm bg-[var(--c-accent)]/20 border-t-2 border-[var(--c-accent)]"
-                      style={{ height: `${Math.max(4, (v / commitDays.max) * 100)}%`, opacity: v === 0 ? 0.25 : 1 }}
-                    />
-                  ))}
-                </div>
-                <div className="flex justify-between text-[9px] font-mono text-[var(--c-text-3)] mt-1">
-                  <span>13d ago</span><span>today</span>
-                </div>
+              <Card title="Cost by model" sub={`${totalSessions} sessions analyzed`}>
+                {insights.perModel.map(m => (
+                  <div key={m.model} className="flex justify-between text-[11px] py-1.5 border-b border-[var(--c-border)]/50 last:border-0">
+                    <span className="text-[var(--c-text-2)]">{shortModel(m.model)} <span className="text-[var(--c-text-3)]">· {m.sessions} sessions</span></span>
+                    <span className="font-mono text-[var(--c-text-3)]">
+                      {formatTokens(m.inputTokens)} in · {formatTokens(m.outputTokens)} out · {m.estCostUsd != null ? `$${m.estCostUsd.toFixed(2)}` : '—'}
+                    </span>
+                  </div>
+                ))}
               </Card>
             </div>
 
             <div className="grid grid-cols-2 gap-3">
-              {/* Top tools */}
               <Card title="Top tools" sub="What Claude does in your sessions">
                 {insights.toolCounts.length === 0 && <Empty />}
                 {insights.toolCounts.map(t => (
@@ -216,7 +122,6 @@ export default function InsightsSection() {
                 ))}
               </Card>
 
-              {/* MCP tools */}
               <Card title="MCP servers called" sub="Grouped by server — unused configured servers are cleanup candidates">
                 {insights.mcpToolCounts.length === 0 && <Empty label="No MCP tool calls in this range" />}
                 {insights.mcpToolCounts.map(t => (
@@ -227,32 +132,6 @@ export default function InsightsSection() {
           </>
         )}
       </div>
-    </div>
-  )
-}
-
-function shortModel(model: string): string {
-  return model.replace(/^claude-/, '').replace(/-\d{8}$/, '')
-}
-
-function Card({ title, sub, children }: { title: string; sub?: string; children: React.ReactNode }) {
-  return (
-    <div className="rounded-xl border border-[var(--c-border)] bg-[var(--c-surface-2)]/40 p-4">
-      <h3 className="text-[13px] font-semibold mb-0.5">{title}</h3>
-      {sub && <p className="text-[11px] text-[var(--c-text-3)] mb-3">{sub}</p>}
-      {children}
-    </div>
-  )
-}
-
-function HBar({ name, value, pct, color, hint }: { name: string; value: string; pct: number; color: string; hint?: string }) {
-  return (
-    <div className="flex items-center gap-2.5 mb-1.5 text-[11px]" title={hint}>
-      <span className="w-24 shrink-0 text-right font-mono text-[var(--c-text-3)] truncate">{name}</span>
-      <div className="flex-1 h-3.5 rounded bg-[var(--c-surface-2)] overflow-hidden">
-        <div className="h-full rounded" style={{ width: `${Math.max(1, pct)}%`, background: color }} />
-      </div>
-      <span className="w-14 shrink-0 font-mono text-[var(--c-text-3)]">{value}</span>
     </div>
   )
 }

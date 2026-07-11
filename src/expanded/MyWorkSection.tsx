@@ -1,7 +1,8 @@
-import { useState, useMemo } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import type { RepoWorktrees, SessionEntry } from '../types'
 import type { Section } from './ExpandedApp'
+import { Card, ActivityHeatmap, CommitBars } from './InsightWidgets'
 
 const DAY = 86_400_000
 const PALETTE = ['#6366f1', '#e8a94a', '#d98fd9', '#5fc9b8', '#7aa2e8', '#8fbf6b']
@@ -72,6 +73,14 @@ export default function MyWorkSection({ sessions, repos, loading, goTo }: MyWork
   const [tab, setTab] = useState<Tab>('today')
   const [copiedStandup, setCopiedStandup] = useState(false)
   const [copiedResume, setCopiedResume] = useState<string | null>(null)
+  const [promptTs, setPromptTs] = useState<number[]>([])
+  const [commitTs, setCommitTs] = useState<number[]>([])
+
+  useEffect(() => {
+    const sinceMs = Date.now() - 30 * DAY
+    invoke<number[]>('get_prompt_timestamps', { sinceMs }).then(setPromptTs).catch(() => {})
+    invoke<number[]>('get_commit_activity', { sinceDays: 14 }).then(setCommitTs).catch(() => {})
+  }, [])
 
   const [start, end] = useMemo(() => windowFor(tab), [tab])
   const windowed = useMemo(
@@ -230,6 +239,16 @@ export default function MyWorkSection({ sessions, repos, loading, goTo }: MyWork
                 </div>
               </div>
             )}
+
+            {/* Activity: when you work + what lands */}
+            <div className="grid grid-cols-2 gap-3 mb-5">
+              <Card title="Activity heatmap" sub="Prompts by weekday × hour — last 30 days, local time">
+                <ActivityHeatmap timestamps={promptTs} />
+              </Card>
+              <Card title="Commits per day" sub="All branches, all repos — last 14 days">
+                <CommitBars commitSecs={commitTs} />
+              </Card>
+            </div>
 
             {/* Momentum */}
             {momentum.length > 0 && (

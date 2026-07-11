@@ -59,7 +59,24 @@ pub struct SessionInsights {
     pub per_project: Vec<ProjectTokens>,
     pub tool_counts: Vec<ToolCount>,
     pub mcp_tool_counts: Vec<ToolCount>,
+    pub skill_counts: Vec<ToolCount>,
     pub heaviest: Option<HeaviestSession>,
+}
+
+/// Extract the invoked skill name from a Skill tool_use input.
+/// `tool_input` is a possibly-truncated JSON string like {"skill":"graphify",…}.
+fn skill_name_from_input(input: &str) -> Option<String> {
+    if let Ok(v) = serde_json::from_str::<serde_json::Value>(input) {
+        if let Some(s) = v.get("skill").and_then(|s| s.as_str()) {
+            return Some(s.to_string());
+        }
+    }
+    // Truncated JSON fallback: find "skill":"…"
+    let idx = input.find("\"skill\"")?;
+    let rest = &input[idx + 7..];
+    let start = rest.find('"')? + 1;
+    let end = rest[start..].find('"')? + start;
+    Some(rest[start..end].to_string())
 }
 
 /// Approximate public API list prices in USD per MTok (input, output).
@@ -139,16 +156,25 @@ pub fn warm(db: &DbState) -> usize {
         };
 
         let mut tool_calls: HashMap<String, u64> = HashMap::new();
+        let mut skill_calls: HashMap<String, u64> = HashMap::new();
         for msg in &detail.messages {
             for block in &msg.content {
                 if block.block_type == "tool_use" {
                     if let Some(name) = &block.tool_name {
                         *tool_calls.entry(name.clone()).or_insert(0) += 1;
+                        if name == "Skill" {
+                            if let Some(skill) =
+                                block.tool_input.as_deref().and_then(skill_name_from_input)
+                            {
+                                *skill_calls.entry(skill).or_insert(0) += 1;
+                            }
+                        }
                     }
                 }
             }
         }
         let tool_calls_json = serde_json::to_string(&tool_calls).unwrap_or_else(|_| "{}".into());
+        let skill_calls_json = serde_json::to_string(&skill_calls).unwrap_or_else(|_| "{}".into());
         let t = &detail.total_tokens;
 
         let conn = db.0.lock().unwrap();
@@ -156,14 +182,14 @@ pub fn warm(db: &DbState) -> usize {
             "INSERT INTO session_stats
                (session_id, project, project_name, display, ts, model,
                 input_tokens, output_tokens, cache_read, cache_creation,
-                msg_count, tool_calls, mtime, size)
-             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14)
+                msg_count, tool_calls, skill_calls, mtime, size)
+             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15)
              ON CONFLICT(session_id) DO UPDATE SET
                ts=excluded.ts, model=excluded.model,
                input_tokens=excluded.input_tokens, output_tokens=excluded.output_tokens,
                cache_read=excluded.cache_read, cache_creation=excluded.cache_creation,
                msg_count=excluded.msg_count, tool_calls=excluded.tool_calls,
-               mtime=excluded.mtime, size=excluded.size",
+               skill_calls=excluded.skill_calls, mtime=excluded.mtime, size=excluded.size",
             rusqlite::params![
                 entry.session_id,
                 entry.project,
@@ -177,6 +203,7 @@ pub fn warm(db: &DbState) -> usize {
                 t.cache_creation_tokens as i64,
                 detail.messages.len() as i64,
                 tool_calls_json,
+                skill_calls_json,
                 mtime,
                 size,
             ],
@@ -199,13 +226,15 @@ pub fn aggregate(db: &DbState, since_ms: u64) -> SessionInsights {
         cache_read: u64,
         cache_creation: u64,
         tool_calls: HashMap<String, u64>,
+        skill_calls: HashMap<String, u64>,
     }
 
     let rows: Vec<Row> = {
         let conn = db.0.lock().unwrap();
         let mut stmt = match conn.prepare(
             "SELECT session_id, project, project_name, display, model,
-                    input_tokens, output_tokens, cache_read, cache_creation, tool_calls
+                    input_tokens, output_tokens, cache_read, cache_creation, tool_calls,
+                    skill_calls
              FROM session_stats WHERE ts >= ?1",
         ) {
             Ok(s) => s,
@@ -223,6 +252,7 @@ pub fn aggregate(db: &DbState, since_ms: u64) -> SessionInsights {
                 cache_read: r.get::<_, i64>(7)? as u64,
                 cache_creation: r.get::<_, i64>(8)? as u64,
                 tool_calls: serde_json::from_str(&r.get::<_, String>(9)?).unwrap_or_default(),
+                skill_calls: serde_json::from_str(&r.get::<_, String>(10)?).unwrap_or_default(),
             })
         })
         .map(|it| it.flatten().collect())
@@ -240,6 +270,7 @@ pub fn aggregate(db: &DbState, since_ms: u64) -> SessionInsights {
     let mut per_model: HashMap<String, ModelStat> = HashMap::new();
     let mut per_project: HashMap<String, ProjectTokens> = HashMap::new();
     let mut tools: HashMap<String, u64> = HashMap::new();
+    let mut skills: HashMap<String, u64> = HashMap::new();
     let mut total_tool_calls = 0u64;
     let mut heaviest: Option<HeaviestSession> = None;
 
@@ -284,6 +315,9 @@ pub fn aggregate(db: &DbState, since_ms: u64) -> SessionInsights {
         for (name, count) in &row.tool_calls {
             *tools.entry(name.clone()).or_insert(0) += count;
             total_tool_calls += count;
+        }
+        for (name, count) in &row.skill_calls {
+            *skills.entry(name.clone()).or_insert(0) += count;
         }
 
         if heaviest
@@ -356,8 +390,35 @@ pub fn aggregate(db: &DbState, since_ms: u64) -> SessionInsights {
     mcp_counts.truncate(8);
     out.mcp_tool_counts = mcp_counts;
 
+    let mut skill_counts: Vec<ToolCount> = skills
+        .into_iter()
+        .map(|(name, count)| ToolCount { name, count })
+        .collect();
+    skill_counts.sort_by_key(|t| std::cmp::Reverse(t.count));
+    skill_counts.truncate(12);
+    out.skill_counts = skill_counts;
+
     out.heaviest = heaviest;
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::skill_name_from_input;
+
+    #[test]
+    fn extracts_skill_name_from_json_and_truncated_input() {
+        assert_eq!(
+            skill_name_from_input(r#"{"skill":"graphify","args":"x"}"#),
+            Some("graphify".to_string())
+        );
+        // Truncated JSON (parse fails) still yields the name
+        assert_eq!(
+            skill_name_from_input(r#"{"skill": "caveman", "args": "very long trunc"#),
+            Some("caveman".to_string())
+        );
+        assert_eq!(skill_name_from_input(r#"{"args":"no skill"}"#), None);
+    }
 }
 
 /// All prompt timestamps (ms) from history.jsonl newer than `since_ms` —

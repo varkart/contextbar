@@ -134,6 +134,33 @@ fn migrate(conn: &mut Connection) -> Result<(), AppError> {
         conn.pragma_update(None, "user_version", 6)?;
     }
 
+    if version < 7 {
+        // session_stats is a rebuildable cache — recreate to add skill_calls
+        // so the next warm pass re-parses with skill extraction.
+        conn.execute_batch(
+            "DROP TABLE IF EXISTS session_stats;
+            CREATE TABLE session_stats (
+                session_id     TEXT PRIMARY KEY,
+                project        TEXT NOT NULL,
+                project_name   TEXT NOT NULL,
+                display        TEXT NOT NULL DEFAULT '',
+                ts             INTEGER NOT NULL,
+                model          TEXT NOT NULL DEFAULT '',
+                input_tokens   INTEGER NOT NULL DEFAULT 0,
+                output_tokens  INTEGER NOT NULL DEFAULT 0,
+                cache_read     INTEGER NOT NULL DEFAULT 0,
+                cache_creation INTEGER NOT NULL DEFAULT 0,
+                msg_count      INTEGER NOT NULL DEFAULT 0,
+                tool_calls     TEXT NOT NULL DEFAULT '{}',
+                skill_calls    TEXT NOT NULL DEFAULT '{}',
+                mtime          INTEGER NOT NULL DEFAULT 0,
+                size           INTEGER NOT NULL DEFAULT 0
+            );
+            CREATE INDEX IF NOT EXISTS idx_session_stats_ts ON session_stats(ts);",
+        )?;
+        conn.pragma_update(None, "user_version", 7)?;
+    }
+
     Ok(())
 }
 

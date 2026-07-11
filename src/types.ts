@@ -196,6 +196,7 @@ export interface SessionInsights {
   perProject: ProjectTokens[]
   toolCounts: ToolCount[]
   mcpToolCounts: ToolCount[]
+  skillCounts: ToolCount[]
   heaviest?: HeaviestSession | null
 }
 

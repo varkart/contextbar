@@ -1,14 +1,19 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { invoke } from '@tauri-apps/api/core'
+import { listen } from '@tauri-apps/api/event'
 import { useViewRouter, type View } from '../useViewRouter'
 import { useNotifications } from '../useNotifications'
 import { useUpdateCheck } from '../useUpdateCheck'
 import { searchAgents } from '../search'
 import type { ThemePreference } from '../useTheme'
-import type { Agent } from '../types'
+import type { Agent, SessionInsights } from '../types'
 import Header from '../components/Header'
 import ViewManager from '../components/views/ViewManager'
 import { Tile, TileRow } from './InsightTiles'
+import { HBar } from './InsightWidgets'
+import { shortModel } from './InsightsSection'
+
+const MODEL_COLORS = ['#6366f1', '#e8a94a', '#d98fd9', '#2dd4bf', '#fb7185', '#8fbf6b']
 
 export type ToolsSection = 'agents' | 'skills' | 'mcps' | 'settings' | 'notifications'
 
@@ -65,6 +70,20 @@ export default function ToolsPanel({
     invoke<string>('get_version').then(setVersion).catch(() => {})
   }, [])
   const updateInfo = useUpdateCheck(version)
+
+  // Usage insights (30d) for the contextual strips on section roots.
+  const [usage, setUsage] = useState<SessionInsights | null>(null)
+  const fetchUsage = useCallback(() => {
+    invoke<SessionInsights>('get_session_insights', { sinceMs: Date.now() - 30 * 86_400_000 })
+      .then(setUsage)
+      .catch(() => {})
+  }, [])
+  useEffect(() => {
+    invoke('warm_session_stats').catch(() => {})
+    fetchUsage()
+    const unlisten = listen('session-insights-updated', fetchUsage)
+    return () => { unlisten.then(fn => fn()) }
+  }, [fetchUsage])
 
   const handleFetchTools = useCallback(async () => {
     const fresh = await fetchAgents()
@@ -150,6 +169,87 @@ export default function ToolsPanel({
                 color={agentInsights.configErrors > 0 ? 'text-rose-400' : 'text-[var(--c-text-3)]'}
               />
             </TileRow>
+            {usage && usage.perModel.length > 0 && (
+              <div className="mt-2 rounded-xl border border-[var(--c-border)] bg-[var(--c-surface-2)]/40 px-3.5 py-2.5">
+                <div className="flex h-2.5 rounded-md overflow-hidden mb-1.5">
+                  {usage.perModel.map((m, i) => (
+                    <div
+                      key={m.model}
+                      title={`${shortModel(m.model)}: ${m.sessions} sessions`}
+                      style={{ width: `${Math.max(2, (m.sessions / Math.max(1, usage.perModel.reduce((n, x) => n + x.sessions, 0))) * 100)}%`, background: MODEL_COLORS[i % MODEL_COLORS.length] }}
+                    />
+                  ))}
+                </div>
+                <div className="flex gap-3 flex-wrap text-[10.5px] text-[var(--c-text-3)]">
+                  <span className="uppercase tracking-wider font-mono text-[9.5px] self-center">Model mix 30d</span>
+                  {usage.perModel.map((m, i) => (
+                    <span key={m.model} className="flex items-center gap-1">
+                      <span className="w-2 h-2 rounded-sm" style={{ background: MODEL_COLORS[i % MODEL_COLORS.length] }} />
+                      {shortModel(m.model)} {m.sessions}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+        {view === 'all-skills-list' && usage && (
+          <div className="px-3 pt-3 flex-shrink-0">
+            <TileRow>
+              <Tile
+                value={usage.skillCounts.reduce((n, s) => n + s.count, 0)}
+                label="Skill runs 30d"
+                color="text-[var(--c-accent)]"
+                hint="Skill tool invocations in Claude Code sessions"
+              />
+              <Tile value={usage.skillCounts.length} label="Skills used" />
+              <Tile value={agentInsights.skillsTotal} label="Installed" />
+              <Tile
+                value={Math.max(0, new Set(installedAgents.flatMap(a => a.skills.map(s => s.name.toLowerCase()))).size - usage.skillCounts.length)}
+                label="Unused 30d"
+                color="text-amber-400"
+                hint="Installed skills with no invocations in the last 30 days"
+              />
+            </TileRow>
+            {usage.skillCounts.length > 0 && (
+              <div className="mt-2 rounded-xl border border-[var(--c-border)] bg-[var(--c-surface-2)]/40 px-3.5 pt-2.5 pb-1.5">
+                {usage.skillCounts.slice(0, 5).map(s => (
+                  <HBar
+                    key={s.name}
+                    name={s.name}
+                    value={String(s.count)}
+                    pct={(s.count / Math.max(1, usage.skillCounts[0].count)) * 100}
+                    color="var(--c-accent)"
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+        {view === 'all-mcps-list' && usage && (
+          <div className="px-3 pt-3 flex-shrink-0">
+            <TileRow>
+              <Tile value={agentInsights.mcpsTotal} label="Configured" />
+              <Tile value={usage.mcpToolCounts.length} label="Servers called 30d" color="text-[var(--c-accent)]" />
+              <Tile
+                value={usage.mcpToolCounts.reduce((n, m) => n + m.count, 0)}
+                label="MCP calls 30d"
+                color="text-emerald-400"
+              />
+            </TileRow>
+            {usage.mcpToolCounts.length > 0 && (
+              <div className="mt-2 rounded-xl border border-[var(--c-border)] bg-[var(--c-surface-2)]/40 px-3.5 pt-2.5 pb-1.5">
+                {usage.mcpToolCounts.slice(0, 5).map(m => (
+                  <HBar
+                    key={m.name}
+                    name={m.name}
+                    value={String(m.count)}
+                    pct={(m.count / Math.max(1, usage.mcpToolCounts[0].count)) * 100}
+                    color="#2dd4bf"
+                  />
+                ))}
+              </div>
+            )}
           </div>
         )}
         <div className="flex-1 overflow-hidden flex flex-col min-h-0">
