@@ -214,7 +214,9 @@ pub fn warm(db: &DbState) -> usize {
 }
 
 /// Aggregate cached rows with `ts >= since_ms` into one insights payload.
-pub fn aggregate(db: &DbState, since_ms: u64) -> SessionInsights {
+/// When `projects` is set, only sessions whose cwd is one of those paths
+/// count (used for per-repo insights; a repo passes all its worktree paths).
+pub fn aggregate(db: &DbState, since_ms: u64, projects: Option<&[String]>) -> SessionInsights {
     struct Row {
         session_id: String,
         project: String,
@@ -257,6 +259,15 @@ pub fn aggregate(db: &DbState, since_ms: u64) -> SessionInsights {
         })
         .map(|it| it.flatten().collect())
         .unwrap_or_default()
+    };
+
+    // Rust-side filter keeps the SQL static; row counts are small (hundreds).
+    let rows: Vec<Row> = match projects {
+        Some(paths) => rows
+            .into_iter()
+            .filter(|r| paths.contains(&r.project))
+            .collect(),
+        None => rows,
     };
 
     let mut out = SessionInsights {
@@ -419,6 +430,36 @@ mod tests {
         );
         assert_eq!(skill_name_from_input(r#"{"args":"no skill"}"#), None);
     }
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TokenPoint {
+    pub ts_ms: u64,
+    pub tokens: u64,
+}
+
+/// One (timestamp, input+output tokens) point per cached session — the
+/// frontend buckets these into day/week/month series in local time.
+pub fn token_activity(db: &DbState, since_ms: u64, projects: Option<&[String]>) -> Vec<TokenPoint> {
+    let conn = db.0.lock().unwrap();
+    let Ok(mut stmt) = conn.prepare(
+        "SELECT ts, project, input_tokens + output_tokens FROM session_stats WHERE ts >= ?1",
+    ) else {
+        return vec![];
+    };
+    let points: Vec<(i64, String, i64)> = stmt
+        .query_map([since_ms as i64], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))
+        .map(|it| it.flatten().collect())
+        .unwrap_or_default();
+    points
+        .into_iter()
+        .filter(|(_, project, _)| projects.map(|p| p.contains(project)).unwrap_or(true))
+        .map(|(ts, _, tokens)| TokenPoint {
+            ts_ms: ts as u64,
+            tokens: tokens.max(0) as u64,
+        })
+        .collect()
 }
 
 /// All prompt timestamps (ms) from history.jsonl newer than `since_ms` —

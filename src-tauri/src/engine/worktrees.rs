@@ -35,6 +35,42 @@ pub struct RepoWorktrees {
     pub repo_path: String,
     pub base_branch: String,
     pub worktrees: Vec<WorktreeInfo>,
+    /// Agent instruction/config files present at the primary checkout root.
+    pub agent_files: Vec<String>,
+    /// Skill names under <root>/.claude/skills/.
+    pub repo_skills: Vec<String>,
+}
+
+/// Known agent instruction/config files to surface per repo.
+const AGENT_FILES: &[&str] = &[
+    "CLAUDE.md",
+    "AGENTS.md",
+    "GEMINI.md",
+    ".cursorrules",
+    ".cursor/rules",
+    ".mcp.json",
+];
+
+fn scan_agent_files(root: &Path) -> Vec<String> {
+    AGENT_FILES
+        .iter()
+        .filter(|f| root.join(f).exists())
+        .map(|f| f.to_string())
+        .collect()
+}
+
+fn scan_repo_skills(root: &Path) -> Vec<String> {
+    let mut out: Vec<String> = std::fs::read_dir(root.join(".claude").join("skills"))
+        .map(|entries| {
+            entries
+                .flatten()
+                .filter(|e| e.path().is_dir())
+                .map(|e| e.file_name().to_string_lossy().to_string())
+                .collect()
+        })
+        .unwrap_or_default();
+    out.sort();
+    out
 }
 
 fn git(dir: &Path, args: &[&str]) -> Option<String> {
@@ -232,6 +268,8 @@ pub fn list_worktrees() -> Vec<RepoWorktrees> {
             repo_path: primary_root.to_string_lossy().to_string(),
             base_branch: base,
             worktrees,
+            agent_files: scan_agent_files(&primary_root),
+            repo_skills: scan_repo_skills(&primary_root),
         });
     }
 
@@ -287,7 +325,25 @@ pub fn remove_worktree(repo_path: &str, worktree_path: &str) -> Result<(), Strin
 
 #[cfg(test)]
 mod tests {
-    use super::parse_worktree_list;
+    use super::{parse_worktree_list, scan_agent_files, scan_repo_skills};
+
+    #[test]
+    fn scans_agent_files_and_repo_skills() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        std::fs::write(root.join("CLAUDE.md"), "x").unwrap();
+        std::fs::write(root.join(".cursorrules"), "x").unwrap();
+        std::fs::create_dir_all(root.join(".claude/skills/graphify")).unwrap();
+        std::fs::create_dir_all(root.join(".claude/skills/deploy")).unwrap();
+        std::fs::write(root.join(".claude/skills/notes.txt"), "x").unwrap();
+
+        assert_eq!(scan_agent_files(root), vec!["CLAUDE.md", ".cursorrules"]);
+        assert_eq!(scan_repo_skills(root), vec!["deploy", "graphify"]);
+
+        let empty = tempfile::tempdir().unwrap();
+        assert!(scan_agent_files(empty.path()).is_empty());
+        assert!(scan_repo_skills(empty.path()).is_empty());
+    }
 
     #[test]
     fn parses_porcelain_worktree_list() {

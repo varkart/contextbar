@@ -351,8 +351,18 @@ fn warm_session_stats(app: tauri::AppHandle) {
 fn get_session_insights(
     db: tauri::State<'_, db::DbState>,
     since_ms: u64,
+    projects: Option<Vec<String>>,
 ) -> engine::history::stats::SessionInsights {
-    engine::history::stats::aggregate(&db, since_ms)
+    engine::history::stats::aggregate(&db, since_ms, projects.as_deref())
+}
+
+#[tauri::command]
+fn get_token_activity(
+    db: tauri::State<'_, db::DbState>,
+    since_ms: u64,
+    projects: Option<Vec<String>>,
+) -> Vec<engine::history::stats::TokenPoint> {
+    engine::history::stats::token_activity(&db, since_ms, projects.as_deref())
 }
 
 #[tauri::command]
@@ -2122,6 +2132,7 @@ pub fn run() {
             remove_worktree,
             warm_session_stats,
             get_session_insights,
+            get_token_activity,
             get_prompt_timestamps,
             get_commit_activity,
             get_skill_full_description,
