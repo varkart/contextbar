@@ -9,6 +9,7 @@ import SessionDetail from '../components/history/SessionDetail'
 import { Tile, TileRow } from './InsightTiles'
 import WorktreesSection from './WorktreesSection'
 import MyWorkSection from './MyWorkSection'
+import InsightsSection from './InsightsSection'
 import ToolsPanel, { type ToolsSection } from './ToolsPanel'
 
 export type Section =
@@ -19,6 +20,7 @@ export type Section =
   | 'sessions'
   | 'worktrees'
   | 'work'
+  | 'insights'
   | 'settings'
   | 'notifications'
 
@@ -30,6 +32,7 @@ function isToolsSection(s: Section): s is ToolsSection {
 
 const SECTIONS: { id: Exclude<Section, 'home' | 'settings' | 'notifications'>; label: string; icon: string }[] = [
   { id: 'work', label: 'My Work', icon: '▤' },
+  { id: 'insights', label: 'Insights', icon: '◈' },
   { id: 'sessions', label: 'Sessions', icon: '◷' },
   { id: 'worktrees', label: 'Worktrees', icon: '⑂' },
   { id: 'agents', label: 'Agents', icon: '◆' },
@@ -136,6 +139,7 @@ export default function ExpandedApp() {
             onRemoved={fetchWorktrees}
           />
         )}
+        {section === 'insights' && <InsightsSection />}
         {section === 'work' && (
           <MyWorkSection
             sessions={sessions}
@@ -218,6 +222,7 @@ function Landing({ goTo, counts, loading }: {
                 {s.id === 'sessions' && 'Claude Code session history'}
                 {s.id === 'worktrees' && 'Git worktrees across projects'}
                 {s.id === 'work' && 'Your recent activity and tasks'}
+                {s.id === 'insights' && 'Tokens, cost, tools and activity'}
               </div>
             </button>
           ))}

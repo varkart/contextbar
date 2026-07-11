@@ -154,6 +154,51 @@ export interface HistoryStats {
   liveSessionId?: string
 }
 
+// ── Insights ──────────────────────────────────────────────────────────────────
+
+export interface ToolCount {
+  name: string
+  count: number
+}
+
+export interface ModelStat {
+  model: string
+  sessions: number
+  inputTokens: number
+  outputTokens: number
+  cacheReadTokens: number
+  cacheCreationTokens: number
+  estCostUsd?: number | null
+}
+
+export interface ProjectTokens {
+  project: string
+  projectName: string
+  tokens: number
+}
+
+export interface HeaviestSession {
+  sessionId: string
+  display: string
+  tokens: number
+}
+
+export interface SessionInsights {
+  sessionsAnalyzed: number
+  inputTokens: number
+  outputTokens: number
+  cacheReadTokens: number
+  cacheCreationTokens: number
+  estCostUsd: number
+  cacheReadRatio: number
+  avgToolCalls: number
+  perModel: ModelStat[]
+  perProject: ProjectTokens[]
+  toolCounts: ToolCount[]
+  mcpToolCounts: ToolCount[]
+  heaviest?: HeaviestSession | null
+}
+
 // ── Worktrees ─────────────────────────────────────────────────────────────────
 
 export interface WorktreeInfo {

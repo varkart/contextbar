@@ -331,6 +331,43 @@ fn get_history_stats() -> engine::history::HistoryStats {
 }
 
 // ---------------------------------------------------------------------------
+// Insights commands
+// ---------------------------------------------------------------------------
+
+/// Kick off a background parse of any new/changed session files into the
+/// session_stats cache. Emits `session-insights-updated` when new data landed.
+#[tauri::command]
+fn warm_session_stats(app: tauri::AppHandle) {
+    std::thread::spawn(move || {
+        let db = app.state::<db::DbState>();
+        let parsed = engine::history::stats::warm(&db);
+        if parsed > 0 {
+            let _ = app.emit("session-insights-updated", ());
+        }
+    });
+}
+
+#[tauri::command]
+fn get_session_insights(
+    db: tauri::State<'_, db::DbState>,
+    since_ms: u64,
+) -> engine::history::stats::SessionInsights {
+    engine::history::stats::aggregate(&db, since_ms)
+}
+
+#[tauri::command]
+fn get_prompt_timestamps(since_ms: u64) -> Vec<u64> {
+    engine::history::stats::prompt_timestamps(since_ms)
+}
+
+#[tauri::command]
+async fn get_commit_activity(since_days: u32) -> Vec<u64> {
+    tokio::task::spawn_blocking(move || engine::worktrees::commit_timestamps(since_days))
+        .await
+        .unwrap_or_default()
+}
+
+// ---------------------------------------------------------------------------
 // Worktree commands
 // ---------------------------------------------------------------------------
 
@@ -2083,6 +2120,10 @@ pub fn run() {
             get_history_stats,
             list_worktrees,
             remove_worktree,
+            warm_session_stats,
+            get_session_insights,
+            get_prompt_timestamps,
+            get_commit_activity,
             get_skill_full_description,
             hide_window,
             open_expanded_window,

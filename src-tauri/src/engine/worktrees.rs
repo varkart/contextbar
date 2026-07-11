@@ -152,11 +152,13 @@ fn inspect_worktree(
     }
 }
 
-/// Scan all repos referenced by session history and list their worktrees.
-pub fn list_worktrees() -> Vec<RepoWorktrees> {
+/// Primary checkout root for every distinct repo referenced by session
+/// history. Worktrees of one repo share a common git dir, which dedupes them;
+/// the primary checkout is that dir's parent.
+fn discover_primary_roots() -> Vec<PathBuf> {
     let projects = super::history::list_session_projects();
     let mut seen_repos: HashSet<PathBuf> = HashSet::new();
-    let mut result = Vec::new();
+    let mut roots = Vec::new();
 
     for project in projects {
         let dir = PathBuf::from(&project);
@@ -166,7 +168,6 @@ pub fn list_worktrees() -> Vec<RepoWorktrees> {
         let Some(root) = git(&dir, &["rev-parse", "--show-toplevel"]).map(PathBuf::from) else {
             continue;
         };
-        // Dedupe worktrees of the same repo: they share one common git dir.
         let common = git(
             &root,
             &["rev-parse", "--path-format=absolute", "--git-common-dir"],
@@ -176,10 +177,37 @@ pub fn list_worktrees() -> Vec<RepoWorktrees> {
         if !seen_repos.insert(common.clone()) {
             continue;
         }
-        // Anchor listing at the primary checkout (common dir's parent) so the
-        // primary worktree is first regardless of which checkout we found.
-        let primary_root = common.parent().map(Path::to_path_buf).unwrap_or(root);
+        roots.push(common.parent().map(Path::to_path_buf).unwrap_or(root));
+    }
+    roots
+}
 
+/// Commit timestamps (unix seconds) across all branches of every known repo
+/// in the last `since_days` days. Day bucketing happens frontend-side in the
+/// user's local timezone.
+pub fn commit_timestamps(since_days: u32) -> Vec<u64> {
+    let mut out = Vec::new();
+    for root in discover_primary_roots() {
+        if let Some(log) = git(
+            &root,
+            &[
+                "log",
+                "--all",
+                &format!("--since={since_days} days ago"),
+                "--format=%ct",
+            ],
+        ) {
+            out.extend(log.lines().filter_map(|l| l.trim().parse::<u64>().ok()));
+        }
+    }
+    out
+}
+
+/// Scan all repos referenced by session history and list their worktrees.
+pub fn list_worktrees() -> Vec<RepoWorktrees> {
+    let mut result = Vec::new();
+
+    for primary_root in discover_primary_roots() {
         let Some(listing) = git(&primary_root, &["worktree", "list", "--porcelain"]) else {
             continue;
         };

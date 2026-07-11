@@ -1,5 +1,6 @@
 mod index;
 mod parser;
+pub mod stats;
 pub mod types;
 
 pub use types::{HistoryStats, SessionDetail, SessionEntry};
