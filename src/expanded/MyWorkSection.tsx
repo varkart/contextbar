@@ -68,9 +68,10 @@ interface MyWorkSectionProps {
   loading: boolean
   goTo: (s: Section) => void
   onRefresh: () => void
+  onOpenSession: (s: SessionEntry) => void
 }
 
-export default function MyWorkSection({ sessions, repos, loading, goTo, onRefresh }: MyWorkSectionProps) {
+export default function MyWorkSection({ sessions, repos, loading, goTo, onRefresh, onOpenSession }: MyWorkSectionProps) {
   const [tab, setTab] = useState<Tab>('today')
   const [copiedResume, setCopiedResume] = useState<string | null>(null)
   const [promptTs, setPromptTs] = useState<number[]>([])
@@ -302,7 +303,11 @@ export default function MyWorkSection({ sessions, repos, loading, goTo, onRefres
                     const live = p.sessions.some(s => s.isLive)
                     return (
                       <div key={p.project} className="rounded-xl border border-[var(--c-border)] bg-[var(--c-surface-2)]/40 p-3.5">
-                        <div className="flex items-center gap-2.5 mb-2">
+                        <button
+                          onClick={() => onOpenSession(p.sessions[0])}
+                          title="Open latest transcript in Sessions"
+                          className="w-full flex items-center gap-2.5 mb-2 text-left group/card"
+                        >
                           <span
                             className="w-7 h-7 rounded-lg flex items-center justify-center font-mono font-bold text-[12px] text-black/80 shrink-0"
                             style={{ background: PALETTE[i % PALETTE.length] }}
@@ -310,15 +315,16 @@ export default function MyWorkSection({ sessions, repos, loading, goTo, onRefres
                             {p.name.charAt(0).toUpperCase()}
                           </span>
                           <div className="min-w-0">
-                            <div className="text-[13px] font-semibold truncate">{p.name}</div>
+                            <div className="text-[13px] font-semibold truncate group-hover/card:text-[var(--c-accent)] transition-colors">{p.name}</div>
                             {branch && <div className="text-[11px] font-mono text-[var(--c-text-3)] truncate">⌥ {branch}</div>}
                           </div>
                           <div className="ml-auto flex items-center gap-1.5 shrink-0">
                             {live && (
                               <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400">live</span>
                             )}
+                            <span className="text-[10px] text-[var(--c-text-3)] opacity-0 group-hover/card:opacity-100 transition-opacity">transcript →</span>
                           </div>
-                        </div>
+                        </button>
                         <p className="text-[11px] text-[var(--c-text-3)] mb-2">
                           {relativeTime(p.lastTs)} · {p.sessions.length} session{p.sessions.length > 1 ? 's' : ''} · {p.prompts} prompt{p.prompts === 1 ? '' : 's'}
                         </p>

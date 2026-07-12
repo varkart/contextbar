@@ -128,6 +128,34 @@ export default function ExpandedApp() {
 
   const goHome = useCallback(() => goTo('work'), [goTo])
 
+  // Jump to the Sessions section with a transcript open — used by
+  // worktree rows, My Work cards and the Claude usage strip.
+  const openSession = useCallback((entry: SessionEntry) => {
+    setSelectedSession(entry)
+    goTo('sessions')
+  }, [goTo])
+
+  const openSessionById = useCallback((sessionId: string) => {
+    const entry = sessions.find(s => s.sessionId === sessionId)
+    if (entry) setSelectedSession(entry)
+    goTo('sessions')
+  }, [sessions, goTo])
+
+  // ⌘1–⌘6 jump directly to a section, from anywhere in the window.
+  useEffect(() => {
+    const order: Section[] = ['work', 'sessions', 'worktrees', 'agents', 'skills', 'mcps']
+    const handler = (e: KeyboardEvent) => {
+      if (!e.metaKey || e.shiftKey || e.altKey || e.ctrlKey) return
+      const n = Number(e.key)
+      if (n >= 1 && n <= order.length) {
+        e.preventDefault()
+        goTo(order[n - 1])
+      }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [goTo])
+
   // Escape inside tools sections is owned by ToolsPanel (it unwinds the
   // embedded view stack first); here we only handle the custom sections.
   useEffect(() => {
@@ -164,6 +192,7 @@ export default function ExpandedApp() {
             loading={sessionsLoading || reposLoading}
             goTo={goTo}
             onRefresh={refreshAll}
+            onOpenSession={openSession}
           />
         )}
         {section === 'sessions' && (
@@ -184,6 +213,7 @@ export default function ExpandedApp() {
             sessions={sessions}
             onRemoved={fetchWorktrees}
             onRefresh={refreshAll}
+            onOpenSession={openSession}
           />
         )}
         {isToolsSection(section) && (
@@ -198,6 +228,7 @@ export default function ExpandedApp() {
             fetchAgents={fetchAgents}
             theme={theme}
             setTheme={setTheme}
+            onOpenSession={openSessionById}
           />
         )}
       </div>
@@ -229,23 +260,24 @@ function Sidebar({ section, goTo, counts }: {
   goTo: (s: Section) => void
   counts: SectionCounts
 }) {
-  const group = (label: string, items: { id: Section; label: string; icon: string }[]) => (
+  const group = (label: string, items: { id: Section; label: string; icon: string }[], startIndex: number) => (
     <div className="mb-1">
       <div className="px-4 pt-3 pb-1 text-[9.5px] font-mono uppercase tracking-wider text-[var(--c-text-3)]">
         {label}
       </div>
-      {items.map(s => {
+      {items.map((s, i) => {
         const active = section === s.id
         const count = countFor(s.id, counts)
         return (
           <button
             key={s.id}
             onClick={() => goTo(s.id)}
-            className={`w-full flex items-center gap-2.5 px-4 py-2 text-left transition-colors ${active ? 'bg-[var(--c-accent)]/10 text-[var(--c-accent)] border-r-2 border-[var(--c-accent)]' : 'text-[var(--c-text-2)] hover:bg-[var(--c-surface-2)] hover:text-[var(--c-text)]'}`}
+            className={`group w-full flex items-center gap-2.5 px-4 py-2 text-left transition-colors ${active ? 'bg-[var(--c-accent)]/10 text-[var(--c-accent)] border-r-2 border-[var(--c-accent)]' : 'text-[var(--c-text-2)] hover:bg-[var(--c-surface-2)] hover:text-[var(--c-text)]'}`}
           >
             <span className="text-[13px] w-4 text-center opacity-70" aria-hidden="true">{s.icon}</span>
             <span className="text-[12.5px] font-medium flex-1">{s.label}</span>
-            {count !== null && <span className="text-[11px] tabular-nums text-[var(--c-text-3)]">{count}</span>}
+            {count !== null && <span className="text-[11px] tabular-nums text-[var(--c-text-3)] group-hover:hidden">{count}</span>}
+            <span className={`text-[9px] font-mono text-[var(--c-text-3)] opacity-60 ${count !== null ? 'hidden group-hover:inline' : ''}`}>⌘{startIndex + i}</span>
           </button>
         )
       })}
@@ -263,8 +295,8 @@ function Sidebar({ section, goTo, counts }: {
         <span className="text-[13px] font-bold tracking-tight">Context Bar</span>
       </button>
       <nav className="flex-1 overflow-y-auto pb-2">
-        {group('Work', WORK_SECTIONS)}
-        {group('Configure', CONFIGURE_SECTIONS)}
+        {group('Work', WORK_SECTIONS, 1)}
+        {group('Configure', CONFIGURE_SECTIONS, 4)}
       </nav>
       <div className="border-t border-[var(--c-border)] py-2">
         {([['notifications', '◎', 'Notifications'], ['settings', '⚙', 'Settings']] as const).map(([id, icon, label]) => (

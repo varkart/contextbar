@@ -48,9 +48,10 @@ interface WorktreesSectionProps {
   sessions: SessionEntry[]
   onRemoved: () => void
   onRefresh: () => void
+  onOpenSession: (s: SessionEntry) => void
 }
 
-export default function WorktreesSection({ repos, loading, sessions, onRemoved, onRefresh }: WorktreesSectionProps) {
+export default function WorktreesSection({ repos, loading, sessions, onRemoved, onRefresh, onOpenSession }: WorktreesSectionProps) {
   const [filter, setFilter] = useState<Filter>('all')
   const [search, setSearch] = useState('')
   const [expanded, setExpanded] = useState<string | null>(null)
@@ -342,12 +343,17 @@ export default function WorktreesSection({ repos, loading, sessions, onRemoved, 
                         {linked.length > 0 && (
                           <div className="space-y-1.5">
                             {linked.map(s => (
-                              <div key={s.sessionId} className="text-[11px] border-b border-[var(--c-border)]/50 last:border-0 pb-1.5 last:pb-0">
-                                <span className="text-[var(--c-text)] font-medium line-clamp-1">{s.display}</span>
+                              <button
+                                key={s.sessionId}
+                                onClick={() => onOpenSession(s)}
+                                title="Open transcript in Sessions"
+                                className="block w-full text-left text-[11px] border-b border-[var(--c-border)]/50 last:border-0 pb-1.5 last:pb-0 hover:text-[var(--c-accent)] transition-colors group/session"
+                              >
+                                <span className="text-[var(--c-text)] font-medium line-clamp-1 group-hover/session:text-[var(--c-accent)]">{s.display}</span>
                                 <span className="text-[var(--c-text-3)]">
-                                  {relativeTime(Math.floor(s.timestamp / 1000))}{s.model ? ` · ${s.model}` : ''}
+                                  {relativeTime(Math.floor(s.timestamp / 1000))}{s.model ? ` · ${s.model}` : ''} · view transcript →
                                 </span>
-                              </div>
+                              </button>
                             ))}
                           </div>
                         )}

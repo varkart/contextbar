@@ -37,6 +37,7 @@ interface ToolsPanelProps {
   fetchAgents: () => Promise<Agent[]>
   theme: ThemePreference
   setTheme: (t: ThemePreference) => void
+  onOpenSession?: (sessionId: string) => void
 }
 
 /**
@@ -55,6 +56,7 @@ export default function ToolsPanel({
   fetchAgents,
   theme,
   setTheme,
+  onOpenSession,
 }: ToolsPanelProps) {
   const routerProps = useViewRouter({
     syncHash: false,
@@ -273,7 +275,12 @@ export default function ToolsPanel({
                 <Tile value={usage.perModel[0] ? shortModel(usage.perModel[0].model) : '—'} label="Top model" />
                 <Tile value={usage.perProject.length} label="Projects" />
                 <Tile value={usage.mcpToolCounts.reduce((n, m) => n + m.count, 0)} label="MCP calls" color="text-emerald-400" />
-                <Tile value={usage.avgToolCalls.toFixed(0)} label="Avg tool calls" />
+                <Tile
+                  value={usage.heaviest ? formatTokens(usage.heaviest.tokens) : '—'}
+                  label="Heaviest session"
+                  hint={usage.heaviest ? `${usage.heaviest.display} — click to open transcript` : undefined}
+                  onClick={usage.heaviest && onOpenSession ? () => onOpenSession(usage.heaviest!.sessionId) : undefined}
+                />
               </TileRow>
               <div className="grid grid-cols-2 gap-3">
                 <div className="min-w-0">
