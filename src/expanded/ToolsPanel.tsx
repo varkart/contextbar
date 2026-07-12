@@ -6,11 +6,12 @@ import { useNotifications } from '../useNotifications'
 import { useUpdateCheck } from '../useUpdateCheck'
 import { searchAgents } from '../search'
 import type { ThemePreference } from '../useTheme'
-import type { Agent, SessionInsights } from '../types'
+import type { Agent, SessionInsights, TokenPoint } from '../types'
+import { formatTokens } from '../components/history/SessionStats'
 import Header from '../components/Header'
 import ViewManager from '../components/views/ViewManager'
 import { Tile, TileRow } from './InsightTiles'
-import { HBar, shortModel } from './InsightWidgets'
+import { HBar, TokenTrend, shortModel } from './InsightWidgets'
 
 const MODEL_COLORS = ['#6366f1', '#e8a94a', '#d98fd9', '#2dd4bf', '#fb7185', '#8fbf6b']
 
@@ -70,11 +71,16 @@ export default function ToolsPanel({
   }, [])
   const updateInfo = useUpdateCheck(version)
 
-  // Usage insights (30d) for the contextual strips on section roots.
+  // Usage insights (30d) for the contextual strips on section roots, plus a
+  // longer token series (6 months) for the agent-page trend chart.
   const [usage, setUsage] = useState<SessionInsights | null>(null)
+  const [tokenPoints, setTokenPoints] = useState<TokenPoint[]>([])
   const fetchUsage = useCallback(() => {
     invoke<SessionInsights>('get_session_insights', { sinceMs: Date.now() - 30 * 86_400_000 })
       .then(setUsage)
+      .catch(() => {})
+    invoke<TokenPoint[]>('get_token_activity', { sinceMs: Date.now() - 183 * 86_400_000 })
+      .then(setTokenPoints)
       .catch(() => {})
   }, [])
   useEffect(() => {
@@ -223,6 +229,43 @@ export default function ToolsPanel({
                 ))}
               </div>
             )}
+          </div>
+        )}
+        {view === 'agent-detail' && routerProps.selectedAgent?.id === 'claude' && usage && usage.sessionsAnalyzed > 0 && (
+          <div className="px-3 pt-3 flex-shrink-0 space-y-2">
+            <TileRow>
+              <Tile value={formatTokens(usage.inputTokens + usage.outputTokens)} label="Tokens 30d" color="text-[var(--c-accent)]" />
+              <Tile value={`$${usage.estCostUsd.toFixed(2)}`} label="Est. cost 30d" color="text-amber-400" hint="Approximate — public API list prices; cache reads discounted" />
+              <Tile value={usage.perModel[0] ? shortModel(usage.perModel[0].model) : '—'} label="Top model" />
+              <Tile value={usage.perProject.length} label="Projects" />
+              <Tile value={usage.mcpToolCounts.reduce((n, m) => n + m.count, 0)} label="MCP calls" color="text-emerald-400" />
+              <Tile value={usage.avgToolCalls.toFixed(0)} label="Avg tool calls" />
+            </TileRow>
+            <div className="grid grid-cols-2 gap-2">
+              <div className="rounded-xl border border-[var(--c-border)] bg-[var(--c-surface-2)]/40 px-3.5 py-2.5">
+                <p className="text-[10px] font-mono text-[var(--c-text-3)] uppercase tracking-wider mb-1.5">Token trend</p>
+                <TokenTrend points={tokenPoints} />
+              </div>
+              <div className="rounded-xl border border-[var(--c-border)] bg-[var(--c-surface-2)]/40 px-3.5 py-2.5 overflow-hidden">
+                <p className="text-[10px] font-mono text-[var(--c-text-3)] uppercase tracking-wider mb-1.5">Top tools 30d</p>
+                {usage.toolCounts.slice(0, 4).map(t => (
+                  <HBar
+                    key={t.name}
+                    name={t.name}
+                    value={String(t.count)}
+                    pct={(t.count / Math.max(1, usage.toolCounts[0].count)) * 100}
+                    color="var(--c-accent)"
+                  />
+                ))}
+                <p className="text-[10px] font-mono text-[var(--c-text-3)] uppercase tracking-wider mt-2 mb-1">Cost by model</p>
+                {usage.perModel.slice(0, 3).map(m => (
+                  <div key={m.model} className="flex justify-between text-[10.5px] py-0.5">
+                    <span className="text-[var(--c-text-2)]">{shortModel(m.model)} · {m.sessions} sessions</span>
+                    <span className="font-mono text-[var(--c-text-3)]">{m.estCostUsd != null ? `$${m.estCostUsd.toFixed(2)}` : '—'}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
         )}
         {view === 'all-mcps-list' && usage && (

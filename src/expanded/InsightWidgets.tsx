@@ -1,4 +1,6 @@
-import { useMemo } from 'react'
+import { useState, useMemo } from 'react'
+import type { TokenPoint } from '../types'
+import { formatTokens } from '../components/history/SessionStats'
 
 const DAY = 86_400_000
 const DAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
@@ -71,6 +73,85 @@ export function ActivityHeatmap({ timestamps }: { timestamps: number[] }) {
       </div>
       <div className="flex justify-between text-[9px] font-mono text-[var(--c-text-3)] mt-1.5 pl-[33px]">
         <span>0</span><span>6</span><span>12</span><span>18</span><span>23</span>
+      </div>
+    </div>
+  )
+}
+
+type TrendBucket = 'day' | 'week' | 'month'
+
+const TREND_CONFIG: Record<TrendBucket, { count: number; label: string }> = {
+  day: { count: 14, label: 'Last 14 days' },
+  week: { count: 12, label: 'Last 12 weeks' },
+  month: { count: 6, label: 'Last 6 months' },
+}
+
+function bucketStart(bucket: TrendBucket, index: number, count: number): Date {
+  const d = new Date()
+  d.setHours(0, 0, 0, 0)
+  if (bucket === 'day') {
+    d.setDate(d.getDate() - (count - 1 - index))
+  } else if (bucket === 'week') {
+    d.setDate(d.getDate() - ((d.getDay() + 6) % 7)) // Monday of this week
+    d.setDate(d.getDate() - (count - 1 - index) * 7)
+  } else {
+    d.setDate(1)
+    d.setMonth(d.getMonth() - (count - 1 - index))
+  }
+  return d
+}
+
+/** Token usage bars with a day/week/month bucket toggle, local time. */
+export function TokenTrend({ points }: { points: TokenPoint[] }) {
+  const [bucket, setBucket] = useState<TrendBucket>('day')
+  const { count } = TREND_CONFIG[bucket]
+
+  const { buckets, max } = useMemo(() => {
+    const starts = Array.from({ length: count }, (_, i) => bucketStart(bucket, i, count).getTime())
+    const ends = [...starts.slice(1), Number.MAX_SAFE_INTEGER]
+    const buckets = starts.map(() => 0)
+    for (const p of points) {
+      for (let i = count - 1; i >= 0; i--) {
+        if (p.tsMs >= starts[i] && p.tsMs < ends[i]) {
+          buckets[i] += p.tokens
+          break
+        }
+      }
+    }
+    return { buckets, max: Math.max(1, ...buckets) }
+  }, [points, bucket, count])
+
+  const fmtLabel = (i: number) => {
+    const d = bucketStart(bucket, i, count)
+    if (bucket === 'month') return d.toLocaleDateString(undefined, { month: 'short' })
+    return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+  }
+
+  return (
+    <div>
+      <div className="flex gap-1 mb-2">
+        {(Object.keys(TREND_CONFIG) as TrendBucket[]).map(b => (
+          <button
+            key={b}
+            onClick={() => setBucket(b)}
+            className={`text-[10px] px-2 py-0.5 rounded-full border capitalize transition-colors ${bucket === b ? 'border-[var(--c-accent)]/50 bg-[var(--c-accent)]/10 text-[var(--c-accent)]' : 'border-[var(--c-border)] text-[var(--c-text-3)] hover:text-[var(--c-text-2)]'}`}
+          >
+            {b}
+          </button>
+        ))}
+      </div>
+      <div className="flex items-end gap-1 h-24">
+        {buckets.map((v, i) => (
+          <div
+            key={i}
+            title={`${fmtLabel(i)} — ${formatTokens(v)} tokens`}
+            className="flex-1 rounded-t-sm bg-[var(--c-accent)]/20 border-t-2 border-[var(--c-accent)]"
+            style={{ height: `${Math.max(4, (v / max) * 100)}%`, opacity: v === 0 ? 0.25 : 1 }}
+          />
+        ))}
+      </div>
+      <div className="flex justify-between text-[9px] font-mono text-[var(--c-text-3)] mt-1">
+        <span>{fmtLabel(0)}</span><span>{fmtLabel(count - 1)}</span>
       </div>
     </div>
   )
