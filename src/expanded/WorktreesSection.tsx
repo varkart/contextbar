@@ -1,7 +1,9 @@
 import { useState, useMemo } from 'react'
 import { invoke } from '@tauri-apps/api/core'
-import type { RepoWorktrees, WorktreeInfo, SessionEntry } from '../types'
+import type { RepoWorktrees, WorktreeInfo, SessionEntry, SessionInsights } from '../types'
+import { formatTokens } from '../components/history/SessionStats'
 import { Tile, TileRow } from './InsightTiles'
+import { HBar, shortModel } from './InsightWidgets'
 
 export type WorktreeStatus = 'active' | 'stale' | 'abandoned' | 'primary'
 
@@ -55,6 +57,28 @@ export default function WorktreesSection({ repos, loading, sessions, onRemoved }
   const [removing, setRemoving] = useState(false)
   const [removeError, setRemoveError] = useState<string | null>(null)
   const [copied, setCopied] = useState<string | null>(null)
+  // Per-repo usage insights, fetched lazily on first toggle. 'loading' while in flight.
+  const [repoInsights, setRepoInsights] = useState<Record<string, SessionInsights | 'loading'>>({})
+  const [insightsOpen, setInsightsOpen] = useState<Record<string, boolean>>({})
+
+  const toggleRepoInsights = (repo: RepoWorktrees) => {
+    const key = repo.repoPath
+    const opening = !insightsOpen[key]
+    setInsightsOpen(prev => ({ ...prev, [key]: opening }))
+    if (opening && repoInsights[key] === undefined) {
+      setRepoInsights(prev => ({ ...prev, [key]: 'loading' }))
+      invoke<SessionInsights>('get_session_insights', {
+        sinceMs: Date.now() - 30 * 86_400_000,
+        projects: repo.worktrees.map(w => w.path),
+      })
+        .then(ins => setRepoInsights(prev => ({ ...prev, [key]: ins })))
+        .catch(() => setRepoInsights(prev => {
+          const next = { ...prev }
+          delete next[key]
+          return next
+        }))
+    }
+  }
 
   const allWts = useMemo(() => repos.flatMap(r => r.worktrees), [repos])
   const counts = useMemo(() => ({
@@ -183,9 +207,31 @@ export default function WorktreesSection({ repos, loading, sessions, onRemoved }
         {/* Repo groups */}
         {visibleRepos.map(({ repo, items }) => (
           <div key={repo.repoPath} className="mb-5">
-            <div className="text-[10px] font-mono text-[var(--c-text-3)] uppercase tracking-wider mb-2">
-              {repo.repoName} <span className="opacity-60">· {items.length} · base {repo.baseBranch}</span>
+            <div className="flex items-center gap-2 mb-2 flex-wrap">
+              <span className="text-[10px] font-mono text-[var(--c-text-3)] uppercase tracking-wider">
+                {repo.repoName} <span className="opacity-60">· {items.length} · base {repo.baseBranch}</span>
+              </span>
+              {repo.agentFiles.map(f => (
+                <span key={f} className="text-[9px] font-mono px-1.5 py-px rounded-full border border-[var(--c-border)] text-[var(--c-text-3)]">{f}</span>
+              ))}
+              {repo.repoSkills.length > 0 && (
+                <span
+                  className="text-[9px] font-mono px-1.5 py-px rounded-full border border-[var(--c-accent)]/40 text-[var(--c-accent)]"
+                  title={repo.repoSkills.join(', ')}
+                >
+                  {repo.repoSkills.length} skill{repo.repoSkills.length > 1 ? 's' : ''}
+                </span>
+              )}
+              <button
+                onClick={() => toggleRepoInsights(repo)}
+                className={`text-[9.5px] px-2 py-px rounded-full border transition-colors ${insightsOpen[repo.repoPath] ? 'border-[var(--c-accent)]/50 bg-[var(--c-accent)]/10 text-[var(--c-accent)]' : 'border-[var(--c-border)] text-[var(--c-text-3)] hover:text-[var(--c-text-2)]'}`}
+              >
+                Insights
+              </button>
             </div>
+            {insightsOpen[repo.repoPath] && (
+              <RepoInsights data={repoInsights[repo.repoPath]} />
+            )}
             <div className="space-y-1.5">
               {items.map(wt => {
                 const st = worktreeStatus(wt)
@@ -298,6 +344,40 @@ export default function WorktreesSection({ repos, loading, sessions, onRemoved }
           </div>
         ))}
       </div>
+    </div>
+  )
+}
+
+function RepoInsights({ data }: { data: SessionInsights | 'loading' | undefined }) {
+  if (data === undefined) return null
+  if (data === 'loading') {
+    return (
+      <div className="flex items-center gap-2 mb-2 px-1">
+        <div className="w-3 h-3 border-2 border-[var(--c-accent)]/40 border-t-[var(--c-accent)] rounded-full animate-spin" />
+        <span className="text-[11px] text-[var(--c-text-3)]">Loading repo insights…</span>
+      </div>
+    )
+  }
+  if (data.sessionsAnalyzed === 0) {
+    return <p className="text-[11px] text-[var(--c-text-3)] mb-2 px-1">No analyzed sessions in the last 30 days</p>
+  }
+  return (
+    <div className="rounded-xl border border-[var(--c-border)] bg-[var(--c-surface-2)]/40 px-3.5 py-2.5 mb-2">
+      <TileRow className="mb-2">
+        <Tile value={data.sessionsAnalyzed} label="Sessions 30d" />
+        <Tile value={formatTokens(data.inputTokens + data.outputTokens)} label="Tokens" color="text-[var(--c-accent)]" />
+        <Tile value={data.perModel[0] ? shortModel(data.perModel[0].model) : '—'} label="Top model" />
+        <Tile value={`$${data.estCostUsd.toFixed(2)}`} label="Est. cost" color="text-amber-400" />
+      </TileRow>
+      {data.toolCounts.slice(0, 5).map(t => (
+        <HBar
+          key={t.name}
+          name={t.name}
+          value={String(t.count)}
+          pct={(t.count / Math.max(1, data.toolCounts[0].count)) * 100}
+          color="var(--c-accent)"
+        />
+      ))}
     </div>
   )
 }
