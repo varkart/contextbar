@@ -10,6 +10,7 @@ import WorktreesSection from './WorktreesSection'
 import MyWorkSection from './MyWorkSection'
 import ToolsPanel, { type ToolsSection } from './ToolsPanel'
 import { Tile, TileRow } from './InsightTiles'
+import { RefreshButton } from './InsightWidgets'
 
 export type Section =
   | 'work'
@@ -67,11 +68,23 @@ export default function ExpandedApp() {
     document.getElementById('splash')?.remove()
   }, [])
 
-  useEffect(() => {
-    invoke<SessionEntry[]>('list_sessions', { limit: 300, offset: 0 })
+  const [sessionLimit, setSessionLimit] = useState(300)
+
+  const fetchSessions = useCallback((limit: number) => {
+    invoke<SessionEntry[]>('list_sessions', { limit, offset: 0 })
       .then(s => { setSessions(s); setSessionsLoading(false) })
       .catch(() => setSessionsLoading(false))
   }, [])
+
+  useEffect(() => { fetchSessions(300) }, [fetchSessions])
+
+  const loadMoreSessions = useCallback(() => {
+    setSessionLimit(prev => {
+      const next = prev + 300
+      fetchSessions(next)
+      return next
+    })
+  }, [fetchSessions])
 
   const fetchWorktrees = useCallback(() => {
     invoke<RepoWorktrees[]>('list_worktrees')
@@ -80,6 +93,26 @@ export default function ExpandedApp() {
   }, [])
 
   useEffect(() => { fetchWorktrees() }, [fetchWorktrees])
+
+  const refreshAll = useCallback(() => {
+    fetchSessions(sessionLimit)
+    fetchWorktrees()
+    invoke('warm_session_stats').catch(() => {})
+  }, [fetchSessions, fetchWorktrees, sessionLimit])
+
+  // Long-lived window: refetch when it regains focus, and poll the cheap
+  // session index every 30s while visible so live dots stay truthful.
+  useEffect(() => {
+    const onFocus = () => refreshAll()
+    window.addEventListener('focus', onFocus)
+    const interval = setInterval(() => {
+      if (document.visibilityState === 'visible') fetchSessions(sessionLimit)
+    }, 30_000)
+    return () => {
+      window.removeEventListener('focus', onFocus)
+      clearInterval(interval)
+    }
+  }, [refreshAll, fetchSessions, sessionLimit])
 
   // Keep hash in sync both ways — Rust deep-links by setting the hash.
   useEffect(() => {
@@ -130,6 +163,7 @@ export default function ExpandedApp() {
             repos={repos}
             loading={sessionsLoading || reposLoading}
             goTo={goTo}
+            onRefresh={refreshAll}
           />
         )}
         {section === 'sessions' && (
@@ -138,6 +172,9 @@ export default function ExpandedApp() {
             loading={sessionsLoading}
             selected={selectedSession}
             onSelect={setSelectedSession}
+            onRefresh={refreshAll}
+            onLoadMore={loadMoreSessions}
+            hasMore={sessions.length >= sessionLimit}
           />
         )}
         {section === 'worktrees' && (
@@ -146,6 +183,7 @@ export default function ExpandedApp() {
             loading={reposLoading}
             sessions={sessions}
             onRemoved={fetchWorktrees}
+            onRefresh={refreshAll}
           />
         )}
         {isToolsSection(section) && (
@@ -246,11 +284,14 @@ function Sidebar({ section, goTo, counts }: {
 
 // ── Sessions ─────────────────────────────────────────────────────────────────
 
-function SessionsSection({ sessions, loading, selected, onSelect }: {
+function SessionsSection({ sessions, loading, selected, onSelect, onRefresh, onLoadMore, hasMore }: {
   sessions: SessionEntry[]
   loading: boolean
   selected: SessionEntry | null
   onSelect: (s: SessionEntry) => void
+  onRefresh: () => void
+  onLoadMore: () => void
+  hasMore: boolean
 }) {
   const insights = useMemo(() => {
     const now = Date.now()
@@ -269,20 +310,23 @@ function SessionsSection({ sessions, loading, selected, onSelect }: {
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
       {!loading && sessions.length > 0 && (
-        <div className="px-4 pt-3 pb-1 flex-shrink-0">
-          <TileRow>
-            <Tile value={insights.total} label="Sessions" />
-            <Tile value={insights.today} label="Today" color="text-[var(--c-accent)]" />
-            <Tile value={insights.week} label="This week" />
-            <Tile value={insights.live} label="Live" color={insights.live > 0 ? 'text-emerald-400' : 'text-[var(--c-text-3)]'} />
-            <Tile value={insights.projects} label="Projects" />
-            <Tile value={insights.prompts} label="Prompts" color="text-amber-400" />
-          </TileRow>
+        <div className="px-4 pt-3 pb-1 flex-shrink-0 flex items-start gap-2">
+          <div className="flex-1 min-w-0">
+            <TileRow>
+              <Tile value={insights.total} label="Sessions" />
+              <Tile value={insights.today} label="Today" color="text-[var(--c-accent)]" />
+              <Tile value={insights.week} label="This week" />
+              <Tile value={insights.live} label="Live" color={insights.live > 0 ? 'text-emerald-400' : 'text-[var(--c-text-3)]'} />
+              <Tile value={insights.projects} label="Projects" />
+              <Tile value={insights.prompts} label="Prompts" color="text-amber-400" />
+            </TileRow>
+          </div>
+          <RefreshButton onClick={onRefresh} busy={loading} />
         </div>
       )}
       <div className="flex-1 flex overflow-hidden">
         <div className="w-80 shrink-0 border-r border-[var(--c-border)] flex flex-col overflow-hidden">
-          <SessionList sessions={sessions} onSelect={onSelect} loading={loading} />
+          <SessionList sessions={sessions} onSelect={onSelect} loading={loading} onLoadMore={onLoadMore} hasMore={hasMore} />
         </div>
         <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
           {selected ? (

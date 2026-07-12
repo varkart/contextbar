@@ -41,6 +41,27 @@ export function HBar({ name, value, pct, color, hint }: {
   )
 }
 
+/** Small refresh icon button; spins while `busy`. */
+export function RefreshButton({ onClick, busy }: { onClick: () => void; busy?: boolean }) {
+  return (
+    <button
+      onClick={onClick}
+      title="Refresh"
+      aria-label="Refresh"
+      className="p-1.5 rounded-md border border-[var(--c-border)] text-[var(--c-text-3)] hover:text-[var(--c-text-2)] hover:border-[var(--c-text-3)]/50 transition-colors flex-shrink-0"
+    >
+      <svg
+        xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+        stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+        className={`w-3.5 h-3.5 ${busy ? 'animate-spin' : ''}`}
+      >
+        <path d="M21 12a9 9 0 1 1-2.64-6.36" />
+        <polyline points="21 3 21 9 15 9" />
+      </svg>
+    </button>
+  )
+}
+
 /** Collapsible insights strip — collapsed by default, remembers state. */
 export function Collapsible({ id, label, children }: {
   id: string

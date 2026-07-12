@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import type { RepoWorktrees, SessionEntry } from '../types'
 import type { Section } from './ExpandedApp'
-import { Card, ActivityHeatmap, CommitBars } from './InsightWidgets'
+import { Card, ActivityHeatmap, CommitBars, RefreshButton } from './InsightWidgets'
 
 const DAY = 86_400_000
 const PALETTE = ['#6366f1', '#e8a94a', '#d98fd9', '#5fc9b8', '#7aa2e8', '#8fbf6b']
@@ -67,9 +67,10 @@ interface MyWorkSectionProps {
   repos: RepoWorktrees[]
   loading: boolean
   goTo: (s: Section) => void
+  onRefresh: () => void
 }
 
-export default function MyWorkSection({ sessions, repos, loading, goTo }: MyWorkSectionProps) {
+export default function MyWorkSection({ sessions, repos, loading, goTo, onRefresh }: MyWorkSectionProps) {
   const [tab, setTab] = useState<Tab>('today')
   const [copiedResume, setCopiedResume] = useState<string | null>(null)
   const [promptTs, setPromptTs] = useState<number[]>([])
@@ -157,11 +158,14 @@ export default function MyWorkSection({ sessions, repos, loading, goTo }: MyWork
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
-      <div className="px-6 pt-5 pb-3 flex-shrink-0">
-        <h2 className="text-[16px] font-semibold tracking-tight">My Work</h2>
-        <p className="text-[12px] text-[var(--c-text-3)] mt-0.5">
-          Everything happening across your projects
-        </p>
+      <div className="px-6 pt-5 pb-3 flex-shrink-0 flex items-start justify-between gap-3">
+        <div>
+          <h2 className="text-[16px] font-semibold tracking-tight">My Work</h2>
+          <p className="text-[12px] text-[var(--c-text-3)] mt-0.5">
+            Everything happening across your projects
+          </p>
+        </div>
+        <RefreshButton onClick={onRefresh} busy={loading} />
       </div>
 
       <div className="flex-1 overflow-y-auto px-6 pb-6">

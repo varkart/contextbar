@@ -3,7 +3,7 @@ import { invoke } from '@tauri-apps/api/core'
 import type { RepoWorktrees, WorktreeInfo, SessionEntry, SessionInsights } from '../types'
 import { formatTokens } from '../components/history/SessionStats'
 import { Tile, TileRow } from './InsightTiles'
-import { HBar, shortModel } from './InsightWidgets'
+import { HBar, RefreshButton, shortModel } from './InsightWidgets'
 
 export type WorktreeStatus = 'active' | 'stale' | 'abandoned' | 'primary'
 
@@ -47,9 +47,10 @@ interface WorktreesSectionProps {
   loading: boolean
   sessions: SessionEntry[]
   onRemoved: () => void
+  onRefresh: () => void
 }
 
-export default function WorktreesSection({ repos, loading, sessions, onRemoved }: WorktreesSectionProps) {
+export default function WorktreesSection({ repos, loading, sessions, onRemoved, onRefresh }: WorktreesSectionProps) {
   const [filter, setFilter] = useState<Filter>('all')
   const [search, setSearch] = useState('')
   const [expanded, setExpanded] = useState<string | null>(null)
@@ -136,11 +137,14 @@ export default function WorktreesSection({ repos, loading, sessions, onRemoved }
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
-      <div className="px-6 pt-5 pb-3 flex-shrink-0">
-        <h2 className="text-[16px] font-semibold tracking-tight">Worktrees</h2>
-        <p className="text-[12px] text-[var(--c-text-3)] mt-0.5">
-          Every checkout across your repos, in one place
-        </p>
+      <div className="px-6 pt-5 pb-3 flex-shrink-0 flex items-start justify-between gap-3">
+        <div>
+          <h2 className="text-[16px] font-semibold tracking-tight">Repos</h2>
+          <p className="text-[12px] text-[var(--c-text-3)] mt-0.5">
+            Every checkout across your repos, in one place
+          </p>
+        </div>
+        <RefreshButton onClick={onRefresh} busy={loading} />
       </div>
 
       <div className="flex-1 overflow-y-auto px-6 pb-6">

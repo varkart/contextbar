@@ -119,9 +119,12 @@ interface SessionListProps {
   sessions: SessionEntry[]
   onSelect: (s: SessionEntry) => void
   loading: boolean
+  /** When set and hasMore, a "Load more" button appears after the last group. */
+  onLoadMore?: () => void
+  hasMore?: boolean
 }
 
-export default function SessionList({ sessions, onSelect, loading }: SessionListProps) {
+export default function SessionList({ sessions, onSelect, loading, onLoadMore, hasMore }: SessionListProps) {
   const [search, setSearch] = useState('')
   const [projectFilter, setProjectFilter] = useState<string | null>(null)
 
@@ -230,6 +233,16 @@ export default function SessionList({ sessions, onSelect, loading }: SessionList
             ))}
           </div>
         ))}
+        {!loading && onLoadMore && hasMore && !search && !projectFilter && (
+          <div className="p-3">
+            <button
+              onClick={onLoadMore}
+              className="w-full text-[11px] py-1.5 rounded-lg border border-[var(--c-border)] text-[var(--c-text-3)] hover:text-[var(--c-text-2)] hover:border-[var(--c-text-3)]/50 transition-colors"
+            >
+              Load 300 more
+            </button>
+          </div>
+        )}
       </div>
     </div>
   )
