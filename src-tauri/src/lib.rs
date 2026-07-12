@@ -330,6 +330,33 @@ fn get_history_stats() -> engine::history::HistoryStats {
     engine::history::get_history_stats()
 }
 
+/// Open Terminal.app and run `claude` (optionally `--resume <id>`) in the
+/// given project directory. macOS only; the path must live under $HOME.
+#[tauri::command]
+fn resume_in_terminal(project: String, session_id: Option<String>) -> Result<(), String> {
+    let canonical = validate_tool_path(&project)?;
+    if let Some(id) = &session_id {
+        if id.is_empty() || !id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-') {
+            return Err("invalid session id".into());
+        }
+    }
+    // Shell layer: single-quote the path; escape embedded single quotes.
+    let path_str = canonical.to_string_lossy().replace('\'', r"'\''");
+    let shell_cmd = match &session_id {
+        Some(id) => format!("cd '{path_str}' && claude --resume {id}"),
+        None => format!("cd '{path_str}' && claude"),
+    };
+    // AppleScript layer: escape backslashes and double quotes.
+    let osa = shell_cmd.replace('\\', "\\\\").replace('"', "\\\"");
+    let script = format!("tell application \"Terminal\"\nactivate\ndo script \"{osa}\"\nend tell");
+    std::process::Command::new("osascript")
+        .arg("-e")
+        .arg(script)
+        .spawn()
+        .map_err(|e| format!("failed to launch Terminal: {e}"))?;
+    Ok(())
+}
+
 // ---------------------------------------------------------------------------
 // Insights commands
 // ---------------------------------------------------------------------------
@@ -2130,6 +2157,7 @@ pub fn run() {
             get_history_stats,
             list_worktrees,
             remove_worktree,
+            resume_in_terminal,
             warm_session_stats,
             get_session_insights,
             get_token_activity,

@@ -107,14 +107,23 @@ export default function WorktreesSection({ repos, loading, sessions, onRemoved, 
 
   const handleResume = async (wt: WorktreeInfo) => {
     const linked = sessions.filter(s => s.project === wt.path)
-    const cmd = linked.length
-      ? `cd "${wt.path}" && claude --resume ${linked[0].sessionId}`
-      : `cd "${wt.path}" && claude`
     try {
-      await navigator.clipboard.writeText(cmd)
+      await invoke('resume_in_terminal', {
+        project: wt.path,
+        sessionId: linked.length ? linked[0].sessionId : null,
+      })
       setCopied(wt.path)
       setTimeout(() => setCopied(null), 1500)
-    } catch { /* clipboard requires focus */ }
+    } catch {
+      const cmd = linked.length
+        ? `cd "${wt.path}" && claude --resume ${linked[0].sessionId}`
+        : `cd "${wt.path}" && claude`
+      try {
+        await navigator.clipboard.writeText(cmd)
+        setCopied(wt.path)
+        setTimeout(() => setCopied(null), 1500)
+      } catch { /* clipboard requires focus */ }
+    }
   }
 
   const handleRemove = async (repo: RepoWorktrees, wt: WorktreeInfo) => {
@@ -289,9 +298,10 @@ export default function WorktreesSection({ repos, loading, sessions, onRemoved, 
                         <div className="flex gap-2 mb-3">
                           <button
                             onClick={() => handleResume(wt)}
+                            title="Resume in Terminal"
                             className={`text-[11px] px-3 py-1.5 rounded-md font-medium transition-colors ${copied === wt.path ? 'bg-emerald-500/20 text-emerald-400' : 'bg-[var(--c-accent)]/15 text-[var(--c-accent)] hover:bg-[var(--c-accent)]/25'}`}
                           >
-                            {copied === wt.path ? '✓ Copied' : '⏎ Resume'}
+                            {copied === wt.path ? '✓ Opened' : '▶ Resume'}
                           </button>
                           <button
                             onClick={() => invoke('reveal_in_finder', { path: wt.path }).catch(() => {})}

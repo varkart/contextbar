@@ -148,12 +148,18 @@ export default function MyWorkSection({ sessions, repos, loading, goTo, onRefres
 
   const handleResume = async (p: ProjectAgg) => {
     const latest = p.sessions[0]
-    const cmd = `cd "${p.project}" && claude --resume ${latest.sessionId}`
     try {
-      await navigator.clipboard.writeText(cmd)
+      await invoke('resume_in_terminal', { project: p.project, sessionId: latest.sessionId })
       setCopiedResume(p.project)
       setTimeout(() => setCopiedResume(null), 1500)
-    } catch { /* clipboard requires focus */ }
+    } catch {
+      const cmd = `cd "${p.project}" && claude --resume ${latest.sessionId}`
+      try {
+        await navigator.clipboard.writeText(cmd)
+        setCopiedResume(p.project)
+        setTimeout(() => setCopiedResume(null), 1500)
+      } catch { /* clipboard requires focus */ }
+    }
   }
 
   return (
@@ -321,7 +327,7 @@ export default function MyWorkSection({ sessions, repos, loading, goTo, onRefres
                             onClick={() => handleResume(p)}
                             className={`text-[11px] px-3 py-1.5 rounded-md font-medium transition-colors ${copiedResume === p.project ? 'bg-emerald-500/20 text-emerald-400' : 'bg-[var(--c-accent)]/15 text-[var(--c-accent)] hover:bg-[var(--c-accent)]/25'}`}
                           >
-                            {copiedResume === p.project ? '✓ Copied' : '⏎ Resume'}
+                            {copiedResume === p.project ? '✓ Opened' : '▶ Resume'}
                           </button>
                           <button
                             onClick={() => invoke('reveal_in_finder', { path: p.project }).catch(() => {})}

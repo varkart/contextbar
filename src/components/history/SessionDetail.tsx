@@ -29,7 +29,20 @@ export default function SessionDetail({ session }: SessionDetailProps) {
       })
   }, [session.sessionId])
 
+  const [opened, setOpened] = useState(false)
+
   const handleResume = async () => {
+    try {
+      await invoke('resume_in_terminal', { project: session.project, sessionId: session.sessionId })
+      setOpened(true)
+      setTimeout(() => setOpened(false), 1500)
+    } catch {
+      // Terminal launch failed — fall back to copying the command
+      handleCopy()
+    }
+  }
+
+  const handleCopy = async () => {
     const cmd = `cd "${session.project}" && claude --resume ${session.sessionId}`
     try {
       await navigator.clipboard.writeText(cmd)
@@ -64,12 +77,22 @@ export default function SessionDetail({ session }: SessionDetailProps) {
             <span className="text-[10px] text-[var(--c-text-3)] opacity-50 flex-shrink-0">·</span>
             <span className="text-[10px] text-[var(--c-text-3)] flex-shrink-0">{dateStr} {timeStr}</span>
           </div>
-          <button
-            onClick={handleResume}
-            className={`flex-shrink-0 text-[10px] px-2 py-0.5 rounded-md border transition-colors ${copied ? 'border-emerald-500/40 bg-emerald-500/15 text-emerald-400' : 'border-[var(--c-border)] text-[var(--c-text-3)] hover:text-[var(--c-text-2)] hover:border-[var(--c-accent)]/40'}`}
-          >
-            {copied ? '✓ Copied' : '⏎ Resume'}
-          </button>
+          <div className="flex items-center gap-1 flex-shrink-0">
+            <button
+              onClick={handleResume}
+              title="Resume this session in Terminal"
+              className={`text-[10px] px-2 py-0.5 rounded-md border transition-colors ${opened ? 'border-emerald-500/40 bg-emerald-500/15 text-emerald-400' : 'border-[var(--c-border)] text-[var(--c-text-3)] hover:text-[var(--c-text-2)] hover:border-[var(--c-accent)]/40'}`}
+            >
+              {opened ? '✓ Opened' : '▶ Resume'}
+            </button>
+            <button
+              onClick={handleCopy}
+              title="Copy resume command"
+              className={`text-[10px] px-2 py-0.5 rounded-md border transition-colors ${copied ? 'border-emerald-500/40 bg-emerald-500/15 text-emerald-400' : 'border-[var(--c-border)] text-[var(--c-text-3)] hover:text-[var(--c-text-2)] hover:border-[var(--c-accent)]/40'}`}
+            >
+              {copied ? '✓' : '⧉'}
+            </button>
+          </div>
         </div>
 
         {detail && (
