@@ -2075,6 +2075,13 @@ pub fn run() {
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
+        // Persist size/position of the expanded window only — the popover is
+        // always re-anchored to the tray and must stay out of state restore.
+        .plugin(
+            tauri_plugin_window_state::Builder::default()
+                .with_denylist(&["main"])
+                .build(),
+        )
         .setup(|app| {
             app.manage(db::open());
 
@@ -2285,6 +2292,11 @@ fn open_main_window(app: &tauri::AppHandle, hash: Option<&str>) {
 /// `section` deep-links via URL hash (e.g. "sessions"), mirroring the
 /// `#settings` convention used by `open_main_window`.
 fn show_expanded_window(app: &tauri::AppHandle, section: Option<&str>) {
+    // While the expanded window is open the app behaves like a regular app
+    // (dock icon, Cmd-Tab); it reverts to a tray-only accessory on close.
+    #[cfg(target_os = "macos")]
+    let _ = app.set_activation_policy(tauri::ActivationPolicy::Regular);
+
     if let Some(window) = app.get_webview_window("expanded") {
         if let Some(s) = section {
             // JSON-encode to prevent JS injection via hash value
@@ -2307,6 +2319,15 @@ fn show_expanded_window(app: &tauri::AppHandle, section: Option<&str>) {
         .resizable(true)
         .build()
     {
+        #[cfg(target_os = "macos")]
+        {
+            let app_handle = app.clone();
+            window.on_window_event(move |event| {
+                if let tauri::WindowEvent::Destroyed = event {
+                    let _ = app_handle.set_activation_policy(tauri::ActivationPolicy::Accessory);
+                }
+            });
+        }
         let _ = window.set_focus();
     }
 }

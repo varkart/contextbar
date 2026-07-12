@@ -52,9 +52,24 @@ function sectionFromHash(hash: string): Section {
   return ALL_SECTION_IDS.includes(h as Section) ? (h as Section) : 'work'
 }
 
+const SECTION_STORAGE_KEY = 'contextbar:expanded:section'
+
+/** Deep-link hash wins; otherwise restore the last visited section. */
+function initialSection(): Section {
+  const h = window.location.hash.replace(/^#\/?/, '')
+  if (ALL_SECTION_IDS.includes(h as Section)) return h as Section
+  const saved = localStorage.getItem(SECTION_STORAGE_KEY)
+  if (saved && ALL_SECTION_IDS.includes(saved as Section)) return saved as Section
+  return 'work'
+}
+
 export default function ExpandedApp() {
   const { theme, setTheme } = useTheme()
-  const [section, setSection] = useState<Section>(() => sectionFromHash(window.location.hash))
+  const [section, setSection] = useState<Section>(initialSection)
+
+  useEffect(() => {
+    localStorage.setItem(SECTION_STORAGE_KEY, section)
+  }, [section])
   const { agents, loading, cloudSyncing, lastUpdated, fetchAgents } = useAgents()
   const [sessions, setSessions] = useState<SessionEntry[]>([])
   const [sessionsLoading, setSessionsLoading] = useState(true)

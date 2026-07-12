@@ -15,10 +15,23 @@ export function initAnalytics() {
   })
 }
 
+// Both windows share this bundle; tag every event with its window so
+// double-fired events (e.g. tools_loaded) stay distinguishable.
+function windowLabel(): string {
+  try {
+    const internals = (window as unknown as Record<string, unknown>).__TAURI_INTERNALS__ as
+      | { metadata?: { currentWebview?: { label?: string } } }
+      | undefined
+    return internals?.metadata?.currentWebview?.label ?? 'main'
+  } catch {
+    return 'main'
+  }
+}
+
 export function capture(event: string, properties?: Record<string, unknown>) {
   if (!TELEMETRY_ENABLED) return
   try {
-    posthog.capture(event, properties)
+    posthog.capture(event, { app_window: windowLabel(), ...properties })
   } catch { /* non-critical */ }
 }
 
