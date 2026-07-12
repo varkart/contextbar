@@ -224,9 +224,11 @@ export default function WorktreesSection({ repos, loading, sessions, onRemoved }
               )}
               <button
                 onClick={() => toggleRepoInsights(repo)}
-                className={`text-[9.5px] px-2 py-px rounded-full border transition-colors ${insightsOpen[repo.repoPath] ? 'border-[var(--c-accent)]/50 bg-[var(--c-accent)]/10 text-[var(--c-accent)]' : 'border-[var(--c-border)] text-[var(--c-text-3)] hover:text-[var(--c-text-2)]'}`}
+                aria-expanded={!!insightsOpen[repo.repoPath]}
+                className={`flex items-center gap-1 text-[10px] px-2.5 py-0.5 rounded-md border transition-colors ${insightsOpen[repo.repoPath] ? 'border-[var(--c-accent)]/50 bg-[var(--c-accent)]/10 text-[var(--c-accent)]' : 'border-[var(--c-border)] text-[var(--c-text-3)] hover:text-[var(--c-text-2)] hover:border-[var(--c-text-3)]/50'}`}
               >
-                Insights
+                <span className={`text-[8px] transition-transform ${insightsOpen[repo.repoPath] ? 'rotate-90' : ''}`} aria-hidden="true">▶</span>
+                Usage insights
               </button>
             </div>
             {insightsOpen[repo.repoPath] && (
@@ -369,11 +371,14 @@ function RepoInsights({ data }: { data: SessionInsights | 'loading' | undefined 
         <Tile value={data.perModel[0] ? shortModel(data.perModel[0].model) : '—'} label="Top model" />
         <Tile value={`$${data.estCostUsd.toFixed(2)}`} label="Est. cost" color="text-amber-400" />
       </TileRow>
+      {data.toolCounts.length > 0 && (
+        <p className="text-[10px] font-mono text-[var(--c-text-3)] uppercase tracking-wider mb-1.5">Top tools in this repo</p>
+      )}
       {data.toolCounts.slice(0, 5).map(t => (
         <HBar
           key={t.name}
           name={t.name}
-          value={String(t.count)}
+          value={`${t.count.toLocaleString()} calls`}
           pct={(t.count / Math.max(1, data.toolCounts[0].count)) * 100}
           color="var(--c-accent)"
         />

@@ -11,7 +11,7 @@ import { formatTokens } from '../components/history/SessionStats'
 import Header from '../components/Header'
 import ViewManager from '../components/views/ViewManager'
 import { Tile, TileRow } from './InsightTiles'
-import { HBar, TokenTrend, shortModel } from './InsightWidgets'
+import { Collapsible, HBar, TokenTrend, shortModel } from './InsightWidgets'
 
 const MODEL_COLORS = ['#6366f1', '#e8a94a', '#d98fd9', '#2dd4bf', '#fb7185', '#8fbf6b']
 
@@ -175,123 +175,132 @@ export default function ToolsPanel({
               />
             </TileRow>
             {usage && usage.perModel.length > 0 && (
-              <div className="mt-2 rounded-xl border border-[var(--c-border)] bg-[var(--c-surface-2)]/40 px-3.5 py-2.5">
-                <div className="flex h-2.5 rounded-md overflow-hidden mb-1.5">
-                  {usage.perModel.map((m, i) => (
-                    <div
-                      key={m.model}
-                      title={`${shortModel(m.model)}: ${m.sessions} sessions`}
-                      style={{ width: `${Math.max(2, (m.sessions / Math.max(1, usage.perModel.reduce((n, x) => n + x.sessions, 0))) * 100)}%`, background: MODEL_COLORS[i % MODEL_COLORS.length] }}
-                    />
-                  ))}
-                </div>
-                <div className="flex gap-3 flex-wrap text-[10.5px] text-[var(--c-text-3)]">
-                  <span className="uppercase tracking-wider font-mono text-[9.5px] self-center">Model mix 30d</span>
-                  {usage.perModel.map((m, i) => (
-                    <span key={m.model} className="flex items-center gap-1">
-                      <span className="w-2 h-2 rounded-sm" style={{ background: MODEL_COLORS[i % MODEL_COLORS.length] }} />
-                      {shortModel(m.model)} {m.sessions}
-                    </span>
-                  ))}
-                </div>
+              <div className="mt-2">
+                <Collapsible id="agents-usage" label="Usage insights — model mix, last 30 days">
+                  <div className="flex h-2.5 rounded-md overflow-hidden mb-1.5">
+                    {usage.perModel.map((m, i) => (
+                      <div
+                        key={m.model}
+                        title={`${shortModel(m.model)}: ${m.sessions} sessions`}
+                        style={{ width: `${Math.max(2, (m.sessions / Math.max(1, usage.perModel.reduce((n, x) => n + x.sessions, 0))) * 100)}%`, background: MODEL_COLORS[i % MODEL_COLORS.length] }}
+                      />
+                    ))}
+                  </div>
+                  <div className="flex gap-3 flex-wrap text-[10.5px] text-[var(--c-text-3)]">
+                    {usage.perModel.map((m, i) => (
+                      <span key={m.model} className="flex items-center gap-1">
+                        <span className="w-2 h-2 rounded-sm" style={{ background: MODEL_COLORS[i % MODEL_COLORS.length] }} />
+                        {shortModel(m.model)} · {m.sessions} sessions
+                      </span>
+                    ))}
+                  </div>
+                </Collapsible>
               </div>
             )}
           </div>
         )}
         {view === 'all-skills-list' && usage && (
           <div className="px-3 pt-3 flex-shrink-0">
-            <TileRow>
-              <Tile
-                value={usage.skillCounts.reduce((n, s) => n + s.count, 0)}
-                label="Skill runs 30d"
-                color="text-[var(--c-accent)]"
-                hint="Skill tool invocations in Claude Code sessions"
-              />
-              <Tile value={usage.skillCounts.length} label="Skills used" />
-              <Tile value={agentInsights.skillsTotal} label="Installed" />
-              <Tile
-                value={Math.max(0, new Set(installedAgents.flatMap(a => a.skills.map(s => s.name.toLowerCase()))).size - usage.skillCounts.length)}
-                label="Unused 30d"
-                color="text-amber-400"
-                hint="Installed skills with no invocations in the last 30 days"
-              />
-            </TileRow>
-            {usage.skillCounts.length > 0 && (
-              <div className="mt-2 rounded-xl border border-[var(--c-border)] bg-[var(--c-surface-2)]/40 px-3.5 pt-2.5 pb-1.5">
-                {usage.skillCounts.slice(0, 5).map(s => (
-                  <HBar
-                    key={s.name}
-                    name={s.name}
-                    value={String(s.count)}
-                    pct={(s.count / Math.max(1, usage.skillCounts[0].count)) * 100}
-                    color="var(--c-accent)"
-                  />
-                ))}
-              </div>
-            )}
+            <Collapsible id="skills-usage" label="Usage insights — how often skills run, last 30 days">
+              <TileRow className="mb-2">
+                <Tile
+                  value={usage.skillCounts.reduce((n, s) => n + s.count, 0)}
+                  label="Skill runs"
+                  color="text-[var(--c-accent)]"
+                  hint="Skill tool invocations in Claude Code sessions"
+                />
+                <Tile value={usage.skillCounts.length} label="Skills used" />
+                <Tile value={agentInsights.skillsTotal} label="Installed" />
+                <Tile
+                  value={Math.max(0, new Set(installedAgents.flatMap(a => a.skills.map(s => s.name.toLowerCase()))).size - usage.skillCounts.length)}
+                  label="Never ran"
+                  color="text-amber-400"
+                  hint="Installed skills with no invocations in the last 30 days"
+                />
+              </TileRow>
+              {usage.skillCounts.length > 0 && (
+                <>
+                  <p className="text-[10px] font-mono text-[var(--c-text-3)] uppercase tracking-wider mb-1.5">Most used skills</p>
+                  {usage.skillCounts.slice(0, 5).map(s => (
+                    <HBar
+                      key={s.name}
+                      name={s.name}
+                      value={`${s.count} run${s.count === 1 ? '' : 's'}`}
+                      pct={(s.count / Math.max(1, usage.skillCounts[0].count)) * 100}
+                      color="var(--c-accent)"
+                    />
+                  ))}
+                </>
+              )}
+            </Collapsible>
           </div>
         )}
         {view === 'agent-detail' && routerProps.selectedAgent?.id === 'claude' && usage && usage.sessionsAnalyzed > 0 && (
-          <div className="px-3 pt-3 flex-shrink-0 space-y-2">
-            <TileRow>
-              <Tile value={formatTokens(usage.inputTokens + usage.outputTokens)} label="Tokens 30d" color="text-[var(--c-accent)]" />
-              <Tile value={`$${usage.estCostUsd.toFixed(2)}`} label="Est. cost 30d" color="text-amber-400" hint="Approximate — public API list prices; cache reads discounted" />
-              <Tile value={usage.perModel[0] ? shortModel(usage.perModel[0].model) : '—'} label="Top model" />
-              <Tile value={usage.perProject.length} label="Projects" />
-              <Tile value={usage.mcpToolCounts.reduce((n, m) => n + m.count, 0)} label="MCP calls" color="text-emerald-400" />
-              <Tile value={usage.avgToolCalls.toFixed(0)} label="Avg tool calls" />
-            </TileRow>
-            <div className="grid grid-cols-2 gap-2">
-              <div className="rounded-xl border border-[var(--c-border)] bg-[var(--c-surface-2)]/40 px-3.5 py-2.5">
-                <p className="text-[10px] font-mono text-[var(--c-text-3)] uppercase tracking-wider mb-1.5">Token trend</p>
-                <TokenTrend points={tokenPoints} />
+          <div className="px-3 pt-3 flex-shrink-0">
+            <Collapsible id="agent-claude-usage" label="Usage insights — tokens, cost and tools, last 30 days">
+              <TileRow className="mb-2">
+                <Tile value={formatTokens(usage.inputTokens + usage.outputTokens)} label="Tokens" color="text-[var(--c-accent)]" />
+                <Tile value={`$${usage.estCostUsd.toFixed(2)}`} label="Est. cost" color="text-amber-400" hint="Approximate — public API list prices; cache reads discounted" />
+                <Tile value={usage.perModel[0] ? shortModel(usage.perModel[0].model) : '—'} label="Top model" />
+                <Tile value={usage.perProject.length} label="Projects" />
+                <Tile value={usage.mcpToolCounts.reduce((n, m) => n + m.count, 0)} label="MCP calls" color="text-emerald-400" />
+                <Tile value={usage.avgToolCalls.toFixed(0)} label="Avg tool calls" />
+              </TileRow>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="min-w-0">
+                  <p className="text-[10px] font-mono text-[var(--c-text-3)] uppercase tracking-wider mb-1.5">Token trend</p>
+                  <TokenTrend points={tokenPoints} />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-[10px] font-mono text-[var(--c-text-3)] uppercase tracking-wider mb-1.5">Top tools</p>
+                  {usage.toolCounts.slice(0, 4).map(t => (
+                    <HBar
+                      key={t.name}
+                      name={t.name}
+                      value={`${t.count.toLocaleString()} calls`}
+                      pct={(t.count / Math.max(1, usage.toolCounts[0].count)) * 100}
+                      color="var(--c-accent)"
+                    />
+                  ))}
+                  <p className="text-[10px] font-mono text-[var(--c-text-3)] uppercase tracking-wider mt-2 mb-1">Cost by model</p>
+                  {usage.perModel.slice(0, 3).map(m => (
+                    <div key={m.model} className="flex justify-between text-[10.5px] py-0.5">
+                      <span className="text-[var(--c-text-2)]">{shortModel(m.model)} · {m.sessions} sessions</span>
+                      <span className="font-mono text-[var(--c-text-3)]">{m.estCostUsd != null ? `$${m.estCostUsd.toFixed(2)}` : '—'}</span>
+                    </div>
+                  ))}
+                </div>
               </div>
-              <div className="rounded-xl border border-[var(--c-border)] bg-[var(--c-surface-2)]/40 px-3.5 py-2.5 overflow-hidden">
-                <p className="text-[10px] font-mono text-[var(--c-text-3)] uppercase tracking-wider mb-1.5">Top tools 30d</p>
-                {usage.toolCounts.slice(0, 4).map(t => (
-                  <HBar
-                    key={t.name}
-                    name={t.name}
-                    value={String(t.count)}
-                    pct={(t.count / Math.max(1, usage.toolCounts[0].count)) * 100}
-                    color="var(--c-accent)"
-                  />
-                ))}
-                <p className="text-[10px] font-mono text-[var(--c-text-3)] uppercase tracking-wider mt-2 mb-1">Cost by model</p>
-                {usage.perModel.slice(0, 3).map(m => (
-                  <div key={m.model} className="flex justify-between text-[10.5px] py-0.5">
-                    <span className="text-[var(--c-text-2)]">{shortModel(m.model)} · {m.sessions} sessions</span>
-                    <span className="font-mono text-[var(--c-text-3)]">{m.estCostUsd != null ? `$${m.estCostUsd.toFixed(2)}` : '—'}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
+            </Collapsible>
           </div>
         )}
         {view === 'all-mcps-list' && usage && (
           <div className="px-3 pt-3 flex-shrink-0">
-            <TileRow>
-              <Tile value={agentInsights.mcpsTotal} label="Configured" />
-              <Tile value={usage.mcpToolCounts.length} label="Servers called 30d" color="text-[var(--c-accent)]" />
-              <Tile
-                value={usage.mcpToolCounts.reduce((n, m) => n + m.count, 0)}
-                label="MCP calls 30d"
-                color="text-emerald-400"
-              />
-            </TileRow>
-            {usage.mcpToolCounts.length > 0 && (
-              <div className="mt-2 rounded-xl border border-[var(--c-border)] bg-[var(--c-surface-2)]/40 px-3.5 pt-2.5 pb-1.5">
-                {usage.mcpToolCounts.slice(0, 5).map(m => (
-                  <HBar
-                    key={m.name}
-                    name={m.name}
-                    value={String(m.count)}
-                    pct={(m.count / Math.max(1, usage.mcpToolCounts[0].count)) * 100}
-                    color="#2dd4bf"
-                  />
-                ))}
-              </div>
-            )}
+            <Collapsible id="mcps-usage" label="Usage insights — which servers get called, last 30 days">
+              <TileRow className="mb-2">
+                <Tile value={agentInsights.mcpsTotal} label="Configured" />
+                <Tile value={usage.mcpToolCounts.length} label="Servers called" color="text-[var(--c-accent)]" />
+                <Tile
+                  value={usage.mcpToolCounts.reduce((n, m) => n + m.count, 0)}
+                  label="Total calls"
+                  color="text-emerald-400"
+                />
+              </TileRow>
+              {usage.mcpToolCounts.length > 0 && (
+                <>
+                  <p className="text-[10px] font-mono text-[var(--c-text-3)] uppercase tracking-wider mb-1.5">Most called servers</p>
+                  {usage.mcpToolCounts.slice(0, 5).map(m => (
+                    <HBar
+                      key={m.name}
+                      name={m.name}
+                      value={`${m.count} call${m.count === 1 ? '' : 's'}`}
+                      pct={(m.count / Math.max(1, usage.mcpToolCounts[0].count)) * 100}
+                      color="#2dd4bf"
+                    />
+                  ))}
+                </>
+              )}
+            </Collapsible>
           </div>
         )}
         <div className="flex-1 overflow-hidden flex flex-col min-h-0">

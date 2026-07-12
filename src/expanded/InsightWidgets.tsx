@@ -19,6 +19,8 @@ export function Card({ title, sub, children }: { title: string; sub?: string; ch
   )
 }
 
+/** Labeled horizontal bar: name + value sit directly above their bar so the
+ *  association is unambiguous even at full width. */
 export function HBar({ name, value, pct, color, hint }: {
   name: string
   value: string
@@ -27,12 +29,43 @@ export function HBar({ name, value, pct, color, hint }: {
   hint?: string
 }) {
   return (
-    <div className="flex items-center gap-2.5 mb-1.5 text-[11px]" title={hint}>
-      <span className="w-24 shrink-0 text-right font-mono text-[var(--c-text-3)] truncate">{name}</span>
-      <div className="flex-1 h-3.5 rounded bg-[var(--c-surface-2)] overflow-hidden">
-        <div className="h-full rounded" style={{ width: `${Math.max(1, pct)}%`, background: color }} />
+    <div className="mb-2 min-w-0" title={hint}>
+      <div className="flex items-baseline justify-between gap-2 text-[11px] mb-0.5">
+        <span className="font-medium text-[var(--c-text-2)] truncate">{name}</span>
+        <span className="font-mono text-[var(--c-text-3)] shrink-0">{value}</span>
       </div>
-      <span className="w-14 shrink-0 font-mono text-[var(--c-text-3)]">{value}</span>
+      <div className="h-2 rounded-full bg-[var(--c-surface-2)] overflow-hidden">
+        <div className="h-full rounded-full" style={{ width: `${Math.max(1.5, pct)}%`, background: color }} />
+      </div>
+    </div>
+  )
+}
+
+/** Collapsible insights strip — collapsed by default, remembers state. */
+export function Collapsible({ id, label, children }: {
+  id: string
+  label: string
+  children: React.ReactNode
+}) {
+  const key = `contextbar:insights:${id}`
+  const [open, setOpen] = useState(() => localStorage.getItem(key) === '1')
+  const toggle = () => {
+    const next = !open
+    setOpen(next)
+    localStorage.setItem(key, next ? '1' : '0')
+  }
+  return (
+    <div className="rounded-xl border border-[var(--c-border)] bg-[var(--c-surface-2)]/40 overflow-hidden">
+      <button
+        onClick={toggle}
+        className="w-full flex items-center gap-2 px-3.5 py-2 text-left hover:bg-[var(--c-surface-2)]/80 transition-colors"
+        aria-expanded={open}
+      >
+        <span className={`text-[10px] text-[var(--c-text-3)] transition-transform ${open ? 'rotate-90' : ''}`} aria-hidden="true">▶</span>
+        <span className="text-[11.5px] font-semibold text-[var(--c-text-2)]">{label}</span>
+        {!open && <span className="text-[10px] text-[var(--c-text-3)] ml-auto">click to expand</span>}
+      </button>
+      {open && <div className="px-3.5 pb-3">{children}</div>}
     </div>
   )
 }
@@ -52,18 +85,18 @@ export function ActivityHeatmap({ timestamps }: { timestamps: number[] }) {
   }, [timestamps])
 
   return (
-    <div>
-      <div className="grid gap-[3px]" style={{ gridTemplateColumns: '30px repeat(24, 1fr)' }}>
+    <div className="min-w-0 overflow-hidden">
+      <div className="grid gap-[3px]" style={{ gridTemplateColumns: '30px repeat(24, minmax(0, 1fr))' }}>
         {DAY_LABELS.map((label, di) => (
           <div key={label} className="contents">
             <span className="text-[9px] font-mono text-[var(--c-text-3)] self-center">{label}</span>
             {grid[di].map((v, h) => {
-              const alpha = v === 0 ? 0 : 0.2 + 0.8 * (v / Math.max(1, max))
+              const alpha = v === 0 ? 0 : 0.25 + 0.75 * (v / Math.max(1, max))
               return (
                 <span
                   key={h}
                   title={`${label} ${h}:00 — ${v} prompt${v === 1 ? '' : 's'}`}
-                  className="aspect-square rounded-[2px]"
+                  className="h-2.5 w-full rounded-[2px]"
                   style={{ background: v === 0 ? 'var(--c-surface-2)' : `rgba(129,140,248,${alpha.toFixed(2)})` }}
                 />
               )
@@ -145,8 +178,11 @@ export function TokenTrend({ points }: { points: TokenPoint[] }) {
           <div
             key={i}
             title={`${fmtLabel(i)} — ${formatTokens(v)} tokens`}
-            className="flex-1 rounded-t-sm bg-[var(--c-accent)]/20 border-t-2 border-[var(--c-accent)]"
-            style={{ height: `${Math.max(4, (v / max) * 100)}%`, opacity: v === 0 ? 0.25 : 1 }}
+            className="flex-1 rounded-sm min-w-[3px]"
+            style={{
+              height: v === 0 ? '3px' : `${Math.max(8, (v / max) * 100)}%`,
+              background: v === 0 ? 'var(--c-surface-2)' : 'linear-gradient(to top, #6366f1, #a5b4fc)',
+            }}
           />
         ))}
       </div>
@@ -178,8 +214,11 @@ export function CommitBars({ commitSecs, daysBack = 14 }: { commitSecs: number[]
           <div
             key={i}
             title={`${v} commit${v === 1 ? '' : 's'}`}
-            className="flex-1 rounded-t-sm bg-[var(--c-accent)]/20 border-t-2 border-[var(--c-accent)]"
-            style={{ height: `${Math.max(4, (v / max) * 100)}%`, opacity: v === 0 ? 0.25 : 1 }}
+            className="flex-1 rounded-sm min-w-[3px]"
+            style={{
+              height: v === 0 ? '3px' : `${Math.max(8, (v / max) * 100)}%`,
+              background: v === 0 ? 'var(--c-surface-2)' : 'linear-gradient(to top, #059669, #34d399)',
+            }}
           />
         ))}
       </div>
