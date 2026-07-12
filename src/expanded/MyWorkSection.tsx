@@ -71,7 +71,6 @@ interface MyWorkSectionProps {
 
 export default function MyWorkSection({ sessions, repos, loading, goTo }: MyWorkSectionProps) {
   const [tab, setTab] = useState<Tab>('today')
-  const [copiedStandup, setCopiedStandup] = useState(false)
   const [copiedResume, setCopiedResume] = useState<string | null>(null)
   const [promptTs, setPromptTs] = useState<number[]>([])
   const [commitTs, setCommitTs] = useState<number[]>([])
@@ -153,22 +152,6 @@ export default function MyWorkSection({ sessions, repos, loading, goTo }: MyWork
       await navigator.clipboard.writeText(cmd)
       setCopiedResume(p.project)
       setTimeout(() => setCopiedResume(null), 1500)
-    } catch { /* clipboard requires focus */ }
-  }
-
-  const standupItems = useMemo(() => {
-    const midnight = new Date()
-    midnight.setHours(0, 0, 0, 0)
-    const since = midnight.getTime() - DAY
-    return sessions.filter(s => s.timestamp >= since).slice(0, 6)
-  }, [sessions])
-
-  const handleCopyStandup = async () => {
-    const text = standupItems.map(s => `- ${s.display} (${s.projectName})`).join('\n')
-    try {
-      await navigator.clipboard.writeText(text)
-      setCopiedStandup(true)
-      setTimeout(() => setCopiedStandup(false), 1500)
     } catch { /* clipboard requires focus */ }
   }
 
@@ -350,25 +333,6 @@ export default function MyWorkSection({ sessions, repos, loading, goTo }: MyWork
               </div>
             )}
 
-            {/* Standup */}
-            {standupItems.length > 0 && (
-              <div className="rounded-xl border border-[var(--c-border)] bg-[var(--c-surface-2)]/40 p-4">
-                <SectionLabel>Standup — since yesterday</SectionLabel>
-                <ul className="list-disc pl-4 space-y-1 mb-3">
-                  {standupItems.map(s => (
-                    <li key={s.sessionId} className="text-[12px] leading-relaxed">
-                      <span className="line-clamp-1">{s.display} <span className="text-[var(--c-text-3)]">({s.projectName})</span></span>
-                    </li>
-                  ))}
-                </ul>
-                <button
-                  onClick={handleCopyStandup}
-                  className={`text-[11px] px-3 py-1.5 rounded-md font-medium transition-colors ${copiedStandup ? 'bg-emerald-500/20 text-emerald-400' : 'bg-[var(--c-accent)]/15 text-[var(--c-accent)] hover:bg-[var(--c-accent)]/25'}`}
-                >
-                  {copiedStandup ? '✓ Copied' : 'Copy standup'}
-                </button>
-              </div>
-            )}
           </>
         )}
       </div>

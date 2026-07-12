@@ -17,6 +17,7 @@ export type View =
   | 'notifications'
   | 'logs'
   | 'doctor'
+  | 'config-backup'
 
 export type AgentsListMode = 'default'
 
@@ -40,6 +41,7 @@ const _VIEW_REGISTRY: Record<View, true> = {
   'notifications': true,
   'logs': true,
   'doctor': true,
+  'config-backup': true,
 }
 
 /** Every registered view. Used by tests to assert Escape is handled for all of them. */
@@ -102,6 +104,8 @@ export function escapeTransition(
   if (view === 'agents-list') return { type: 'navigate', to: 'main' }
   if (view === 'settings' || view === 'notifications' || view === 'logs' || view === 'doctor')
     return { type: 'navigate', to: 'main' }
+  if (view === 'config-backup')
+    return { type: 'navigate', to: selectedAgent ? 'agent-detail' : 'main' }
   return { type: 'hide' }
 }
 

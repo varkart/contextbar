@@ -12,6 +12,7 @@ import Header from '../components/Header'
 import ViewManager from '../components/views/ViewManager'
 import { Tile, TileRow } from './InsightTiles'
 import { Collapsible, HBar, TokenTrend, shortModel } from './InsightWidgets'
+import { agentColor } from '../constants/agentColors'
 
 const MODEL_COLORS = ['#6366f1', '#e8a94a', '#d98fd9', '#2dd4bf', '#fb7185', '#8fbf6b']
 
@@ -135,9 +136,11 @@ export default function ToolsPanel({
     return () => window.removeEventListener('keydown', handler)
   }, [escape])
 
+  const detailAgent = view === 'agent-detail' ? routerProps.selectedAgent : null
+
   return (
-    <div className="flex-1 min-w-0 flex justify-center overflow-hidden">
-      <div className="w-full max-w-3xl h-full flex flex-col overflow-hidden border-x border-[var(--c-border)]">
+    <div className="flex-1 min-w-0 flex overflow-hidden">
+      <div className="w-full h-full flex flex-col overflow-hidden">
         <Header
           view={view}
           selectedAgent={routerProps.selectedAgent}
@@ -235,8 +238,34 @@ export default function ToolsPanel({
             </Collapsible>
           </div>
         )}
+        {detailAgent && (
+          <div className="flex items-center gap-3 px-4 pt-4 pb-1 flex-shrink-0">
+            <span className={`inline-flex items-center justify-center w-9 h-9 rounded-lg text-[16px] font-bold flex-shrink-0 ${agentColor(detailAgent.id).bg} ${agentColor(detailAgent.id).text}`}>
+              {detailAgent.name[0].toUpperCase()}
+            </span>
+            <div className="min-w-0">
+              <h1 className="text-[20px] font-bold tracking-tight leading-tight truncate">{detailAgent.name}</h1>
+              <p className="text-[11px] text-[var(--c-text-3)]">
+                {[
+                  detailAgent.version && `v${detailAgent.version.replace(/^v/, '')}`,
+                  detailAgent.skills.length > 0 && `${detailAgent.skills.length} skills`,
+                  detailAgent.mcps.length > 0 && `${detailAgent.mcps.length} MCPs`,
+                ].filter(Boolean).join(' · ')}
+              </p>
+            </div>
+            {(detailAgent.configFiles ?? []).length > 0 && (
+              <button
+                onClick={() => goTo('config-backup')}
+                title="Config backups"
+                className="ml-auto text-[11px] px-2.5 py-1 rounded-md border border-[var(--c-border)] text-[var(--c-text-3)] hover:text-[var(--c-text-2)] transition-colors flex-shrink-0"
+              >
+                Backups
+              </button>
+            )}
+          </div>
+        )}
         {view === 'agent-detail' && routerProps.selectedAgent?.id === 'claude' && usage && usage.sessionsAnalyzed > 0 && (
-          <div className="px-3 pt-3 flex-shrink-0">
+          <div className="px-3 pt-2 flex-shrink-0">
             <Collapsible id="agent-claude-usage" label="Usage insights — tokens, cost and tools, last 30 days">
               <TileRow className="mb-2">
                 <Tile value={formatTokens(usage.inputTokens + usage.outputTokens)} label="Tokens" color="text-[var(--c-accent)]" />
@@ -320,6 +349,7 @@ export default function ToolsPanel({
             theme={theme}
             setTheme={setTheme}
             fetchNotifications={fetchNotifications}
+            hideAgentHeader={true}
           />
         </div>
       </div>

@@ -47,6 +47,7 @@ export default function ViewManager({
   theme,
   setTheme,
   fetchNotifications,
+  hideAgentHeader,
 }: any) {
   if (view === 'doctor') {
     return <DoctorView onBack={() => goTo('settings')} />
@@ -199,6 +200,7 @@ export default function ViewManager({
         query={query || undefined}
         matchedSkills={searchResults.find((r: any) => r.agent.id === selectedAgent.id)?.matchedSkills}
         matchedMcps={searchResults.find((r: any) => r.agent.id === selectedAgent.id)?.matchedMcps}
+        hideHeader={hideAgentHeader}
       />
     )
   }
