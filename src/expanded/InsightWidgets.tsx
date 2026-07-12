@@ -3,6 +3,10 @@ import { useMemo } from 'react'
 const DAY = 86_400_000
 const DAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 
+export function shortModel(model: string): string {
+  return model.replace(/^claude-/, '').replace(/-\d{8}$/, '')
+}
+
 export function Card({ title, sub, children }: { title: string; sub?: string; children: React.ReactNode }) {
   return (
     <div className="rounded-xl border border-[var(--c-border)] bg-[var(--c-surface-2)]/40 p-4">

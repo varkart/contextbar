@@ -10,8 +10,7 @@ import type { Agent, SessionInsights } from '../types'
 import Header from '../components/Header'
 import ViewManager from '../components/views/ViewManager'
 import { Tile, TileRow } from './InsightTiles'
-import { HBar } from './InsightWidgets'
-import { shortModel } from './InsightsSection'
+import { HBar, shortModel } from './InsightWidgets'
 
 const MODEL_COLORS = ['#6366f1', '#e8a94a', '#d98fd9', '#2dd4bf', '#fb7185', '#8fbf6b']
 

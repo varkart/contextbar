@@ -6,21 +6,18 @@ import { useAgents } from '../useAgents'
 import type { RepoWorktrees, SessionEntry } from '../types'
 import SessionList from '../components/history/SessionList'
 import SessionDetail from '../components/history/SessionDetail'
-import { Tile, TileRow } from './InsightTiles'
 import WorktreesSection from './WorktreesSection'
 import MyWorkSection from './MyWorkSection'
-import InsightsSection from './InsightsSection'
 import ToolsPanel, { type ToolsSection } from './ToolsPanel'
+import { Tile, TileRow } from './InsightTiles'
 
 export type Section =
-  | 'home'
+  | 'work'
+  | 'sessions'
+  | 'worktrees'
   | 'agents'
   | 'skills'
   | 'mcps'
-  | 'sessions'
-  | 'worktrees'
-  | 'work'
-  | 'insights'
   | 'settings'
   | 'notifications'
 
@@ -30,21 +27,28 @@ function isToolsSection(s: Section): s is ToolsSection {
   return (TOOLS_SECTIONS as string[]).includes(s)
 }
 
-const SECTIONS: { id: Exclude<Section, 'home' | 'settings' | 'notifications'>; label: string; icon: string }[] = [
+const WORK_SECTIONS: { id: Section; label: string; icon: string }[] = [
   { id: 'work', label: 'My Work', icon: '▤' },
-  { id: 'insights', label: 'Insights', icon: '◈' },
   { id: 'sessions', label: 'Sessions', icon: '◷' },
-  { id: 'worktrees', label: 'Worktrees', icon: '⑂' },
+  { id: 'worktrees', label: 'Repos', icon: '⑂' },
+]
+
+const CONFIGURE_SECTIONS: { id: Section; label: string; icon: string }[] = [
   { id: 'agents', label: 'Agents', icon: '◆' },
   { id: 'skills', label: 'Skills', icon: '✦' },
   { id: 'mcps', label: 'MCPs', icon: '⬡' },
 ]
 
-const ALL_SECTION_IDS: Section[] = [...SECTIONS.map(s => s.id as Section), 'settings', 'notifications']
+const ALL_SECTION_IDS: Section[] = [
+  ...WORK_SECTIONS.map(s => s.id),
+  ...CONFIGURE_SECTIONS.map(s => s.id),
+  'settings',
+  'notifications',
+]
 
 function sectionFromHash(hash: string): Section {
   const h = hash.replace(/^#\/?/, '')
-  return ALL_SECTION_IDS.includes(h as Section) ? (h as Section) : 'home'
+  return ALL_SECTION_IDS.includes(h as Section) ? (h as Section) : 'work'
 }
 
 export default function ExpandedApp() {
@@ -86,10 +90,10 @@ export default function ExpandedApp() {
 
   const goTo = useCallback((s: Section) => {
     setSection(s)
-    window.location.hash = s === 'home' ? '' : s
+    window.location.hash = s === 'work' ? '' : s
   }, [])
 
-  const goHome = useCallback(() => goTo('home'), [goTo])
+  const goHome = useCallback(() => goTo('work'), [goTo])
 
   // Escape inside tools sections is owned by ToolsPanel (it unwinds the
   // embedded view stack first); here we only handle the custom sections.
@@ -97,10 +101,10 @@ export default function ExpandedApp() {
     if (isToolsSection(section)) return
     const handler = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return
-      if (section === 'home') {
+      if (section === 'work') {
         getCurrentWebviewWindow().close().catch(() => {})
       } else {
-        goTo('home')
+        goTo('work')
       }
     }
     window.addEventListener('keydown', handler)
@@ -118,11 +122,16 @@ export default function ExpandedApp() {
 
   return (
     <div className="w-screen h-screen bg-[var(--c-bg)] text-[var(--c-text)] flex overflow-hidden">
-      {section !== 'home' && (
-        <Sidebar section={section} goTo={goTo} counts={counts} />
-      )}
+      <Sidebar section={section} goTo={goTo} counts={counts} />
       <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
-        {section === 'home' && <Landing goTo={goTo} counts={counts} loading={loading || sessionsLoading} />}
+        {section === 'work' && (
+          <MyWorkSection
+            sessions={sessions}
+            repos={repos}
+            loading={sessionsLoading || reposLoading}
+            goTo={goTo}
+          />
+        )}
         {section === 'sessions' && (
           <SessionsSection
             sessions={sessions}
@@ -137,15 +146,6 @@ export default function ExpandedApp() {
             loading={reposLoading}
             sessions={sessions}
             onRemoved={fetchWorktrees}
-          />
-        )}
-        {section === 'insights' && <InsightsSection />}
-        {section === 'work' && (
-          <MyWorkSection
-            sessions={sessions}
-            repos={repos}
-            loading={sessionsLoading || reposLoading}
-            goTo={goTo}
           />
         )}
         {isToolsSection(section) && (
@@ -167,7 +167,7 @@ export default function ExpandedApp() {
   )
 }
 
-// ── Landing ──────────────────────────────────────────────────────────────────
+// ── Sidebar ──────────────────────────────────────────────────────────────────
 
 interface SectionCounts {
   agents: number
@@ -177,114 +177,56 @@ interface SectionCounts {
   worktrees: number
 }
 
-function Landing({ goTo, counts, loading }: {
-  goTo: (s: Section) => void
-  counts: SectionCounts
-  loading: boolean
-}) {
-  const countFor = (id: Section): string => {
-    if (loading) return '…'
-    if (id === 'agents') return String(counts.agents)
-    if (id === 'skills') return String(counts.skills)
-    if (id === 'mcps') return String(counts.mcps)
-    if (id === 'sessions') return String(counts.sessions)
-    if (id === 'worktrees') return String(counts.worktrees)
-    return ''
-  }
-
-  return (
-    <div className="flex-1 overflow-y-auto">
-      <div className="max-w-3xl mx-auto px-8 py-12">
-        <div className="flex items-center gap-2.5 mb-1">
-          <span className="w-5 h-5 rounded" style={{ background: 'linear-gradient(135deg, #a5b4fc, #6366f1)' }} />
-          <h1 className="text-[22px] font-bold tracking-tight">Context Bar</h1>
-        </div>
-        <p className="text-[13px] text-[var(--c-text-3)] mb-8">
-          Everything about your AI tools in one place
-        </p>
-
-        <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
-          {SECTIONS.map(s => (
-            <button
-              key={s.id}
-              onClick={() => goTo(s.id)}
-              className="text-left rounded-xl border border-[var(--c-border)] bg-[var(--c-surface-2)]/40 hover:bg-[var(--c-surface-2)] hover:border-[var(--c-accent)]/40 transition-colors p-4 group"
-            >
-              <div className="flex items-center justify-between mb-3">
-                <span className="text-[18px] text-[var(--c-accent)] opacity-80" aria-hidden="true">{s.icon}</span>
-                <span className="text-[15px] font-semibold tabular-nums text-[var(--c-text-2)]">{countFor(s.id)}</span>
-              </div>
-              <div className="text-[14px] font-semibold group-hover:text-[var(--c-text)]">{s.label}</div>
-              <div className="text-[11px] text-[var(--c-text-3)] mt-0.5">
-                {s.id === 'agents' && 'Installed AI tools and their status'}
-                {s.id === 'skills' && 'Skills across all your agents'}
-                {s.id === 'mcps' && 'MCP servers across all your agents'}
-                {s.id === 'sessions' && 'Claude Code session history'}
-                {s.id === 'worktrees' && 'Git worktrees across projects'}
-                {s.id === 'work' && 'Your recent activity and tasks'}
-                {s.id === 'insights' && 'Tokens, cost, tools and activity'}
-              </div>
-            </button>
-          ))}
-        </div>
-
-        <div className="flex gap-4 mt-8">
-          <button
-            onClick={() => goTo('notifications')}
-            className="text-[12px] text-[var(--c-text-3)] hover:text-[var(--c-text-2)] transition-colors"
-          >
-            Notifications
-          </button>
-          <button
-            onClick={() => goTo('settings')}
-            className="text-[12px] text-[var(--c-text-3)] hover:text-[var(--c-text-2)] transition-colors"
-          >
-            Settings
-          </button>
-        </div>
-      </div>
-    </div>
-  )
+function countFor(id: Section, counts: SectionCounts): number | null {
+  if (id === 'agents') return counts.agents
+  if (id === 'skills') return counts.skills
+  if (id === 'mcps') return counts.mcps
+  if (id === 'sessions') return counts.sessions
+  if (id === 'worktrees') return counts.worktrees
+  return null
 }
-
-// ── Sidebar ──────────────────────────────────────────────────────────────────
 
 function Sidebar({ section, goTo, counts }: {
   section: Section
   goTo: (s: Section) => void
   counts: SectionCounts
 }) {
+  const group = (label: string, items: { id: Section; label: string; icon: string }[]) => (
+    <div className="mb-1">
+      <div className="px-4 pt-3 pb-1 text-[9.5px] font-mono uppercase tracking-wider text-[var(--c-text-3)]">
+        {label}
+      </div>
+      {items.map(s => {
+        const active = section === s.id
+        const count = countFor(s.id, counts)
+        return (
+          <button
+            key={s.id}
+            onClick={() => goTo(s.id)}
+            className={`w-full flex items-center gap-2.5 px-4 py-2 text-left transition-colors ${active ? 'bg-[var(--c-accent)]/10 text-[var(--c-accent)] border-r-2 border-[var(--c-accent)]' : 'text-[var(--c-text-2)] hover:bg-[var(--c-surface-2)] hover:text-[var(--c-text)]'}`}
+          >
+            <span className="text-[13px] w-4 text-center opacity-70" aria-hidden="true">{s.icon}</span>
+            <span className="text-[12.5px] font-medium flex-1">{s.label}</span>
+            {count !== null && <span className="text-[11px] tabular-nums text-[var(--c-text-3)]">{count}</span>}
+          </button>
+        )
+      })}
+    </div>
+  )
+
   return (
     <div className="w-52 shrink-0 border-r border-[var(--c-border)] flex flex-col bg-[var(--c-surface-2)]/30">
       <button
-        onClick={() => goTo('home')}
+        onClick={() => goTo('work')}
         className="flex items-center gap-2 px-4 h-12 border-b border-[var(--c-border)] hover:opacity-80 transition-opacity"
-        title="Home"
+        title="My Work"
       >
         <span className="w-3.5 h-3.5 rounded" style={{ background: 'linear-gradient(135deg, #a5b4fc, #6366f1)' }} />
         <span className="text-[13px] font-bold tracking-tight">Context Bar</span>
       </button>
-      <nav className="flex-1 overflow-y-auto py-2">
-        {SECTIONS.map(s => {
-          const active = section === s.id
-          const count =
-            s.id === 'agents' ? counts.agents :
-            s.id === 'skills' ? counts.skills :
-            s.id === 'mcps' ? counts.mcps :
-            s.id === 'sessions' ? counts.sessions :
-            s.id === 'worktrees' ? counts.worktrees : null
-          return (
-            <button
-              key={s.id}
-              onClick={() => goTo(s.id)}
-              className={`w-full flex items-center gap-2.5 px-4 py-2 text-left transition-colors ${active ? 'bg-[var(--c-accent)]/10 text-[var(--c-accent)] border-r-2 border-[var(--c-accent)]' : 'text-[var(--c-text-2)] hover:bg-[var(--c-surface-2)] hover:text-[var(--c-text)]'}`}
-            >
-              <span className="text-[13px] w-4 text-center opacity-70" aria-hidden="true">{s.icon}</span>
-              <span className="text-[12.5px] font-medium flex-1">{s.label}</span>
-              {count !== null && <span className="text-[11px] tabular-nums text-[var(--c-text-3)]">{count}</span>}
-            </button>
-          )
-        })}
+      <nav className="flex-1 overflow-y-auto pb-2">
+        {group('Work', WORK_SECTIONS)}
+        {group('Configure', CONFIGURE_SECTIONS)}
       </nav>
       <div className="border-t border-[var(--c-border)] py-2">
         {([['notifications', '◎', 'Notifications'], ['settings', '⚙', 'Settings']] as const).map(([id, icon, label]) => (

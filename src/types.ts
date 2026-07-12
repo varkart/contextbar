@@ -183,6 +183,11 @@ export interface HeaviestSession {
   tokens: number
 }
 
+export interface TokenPoint {
+  tsMs: number
+  tokens: number
+}
+
 export interface SessionInsights {
   sessionsAnalyzed: number
   inputTokens: number
@@ -221,4 +226,8 @@ export interface RepoWorktrees {
   repoPath: string
   baseBranch: string
   worktrees: WorktreeInfo[]
+  /** Agent instruction/config files present at the repo root (CLAUDE.md, AGENTS.md, …). */
+  agentFiles: string[]
+  /** Skill names under <root>/.claude/skills/. */
+  repoSkills: string[]
 }
