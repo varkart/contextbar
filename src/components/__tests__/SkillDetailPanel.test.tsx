@@ -85,7 +85,7 @@ describe('SkillDetailPanel', () => {
     expect(mockInvoke).not.toHaveBeenCalledWith('open_path', expect.anything())
   })
 
-  it('clicking a non-markdown file invokes open_path', async () => {
+  it('non-markdown files are listed but cannot be opened', async () => {
     const treeWithScript: FileEntry = {
       ...fileTree,
       children: [
@@ -97,12 +97,11 @@ describe('SkillDetailPanel', () => {
     mockInvoke.mockResolvedValue(undefined)
     render(<SkillDetailPanel skill={skill} onBack={vi.fn()} />)
     await waitFor(() => expect(screen.getByText('run.sh')).toBeInTheDocument())
-    fireEvent.click(screen.getByText('run.sh'))
-    await waitFor(() =>
-      expect(mockInvoke).toHaveBeenCalledWith('open_path', {
-        path: '~/.claude/skills/impeccable/run.sh',
-      })
-    )
+    const row = screen.getByText('run.sh').closest('button')!
+    expect(row).toBeDisabled()
+    fireEvent.click(row)
+    expect(mockInvoke).not.toHaveBeenCalledWith('open_path', expect.anything())
+    expect(mockInvoke).not.toHaveBeenCalledWith('read_markdown_file', expect.anything())
   })
 
   it('invokes read_skill_dir with correct path', async () => {

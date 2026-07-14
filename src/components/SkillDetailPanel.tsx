@@ -3,7 +3,7 @@ import { invoke } from '@tauri-apps/api/core'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import type { Skill, FileEntry, Agent } from '../types'
-import { capture, captureException } from '../analytics'
+import { capture } from '../analytics'
 import { SkillInstalledOn } from './InstalledOnSection'
 import { agentColor } from '../constants/agentColors'
 
@@ -70,21 +70,17 @@ function FileTreeNode({ entry, depth, onOpenMarkdown }: {
 }) {
   const [open, setOpen] = useState(false)
 
-  const handleClick = async () => {
+  // Only markdown files are openable from the file browser; other files are
+  // listed for orientation but stay inert.
+  const openable = entry.isDir || isMarkdown(entry)
+
+  const handleClick = () => {
     if (entry.isDir) {
       setOpen(v => !v)
     } else if (isMarkdown(entry)) {
       // Markdown renders inline, same as the full-description view
       onOpenMarkdown(entry)
       capture('skill_file_opened', { extension: entry.extension ?? 'unknown', viewer: 'inline' })
-    } else {
-      try {
-        await invoke('open_path', { path: entry.path })
-        capture('skill_file_opened', { extension: entry.extension ?? 'unknown' })
-      } catch (e) {
-        console.error('open_path failed:', e)
-        captureException(e)
-      }
     }
   }
 
@@ -92,10 +88,13 @@ function FileTreeNode({ entry, depth, onOpenMarkdown }: {
     <div>
       <button
         onClick={handleClick}
+        disabled={!openable}
+        title={openable ? undefined : 'Only markdown files can be opened here'}
         className={`w-full flex items-center gap-2 py-[3px] pr-2 rounded-sm text-left
-          hover:bg-[var(--c-hover)] transition-all duration-150 ease-out
-          border-l-2 border-transparent hover:border-indigo-400/40 hover:translate-x-[1px]
-          group`}
+          border-l-2 border-transparent group transition-all duration-150 ease-out
+          ${openable
+            ? 'hover:bg-[var(--c-hover)] hover:border-indigo-400/40 hover:translate-x-[1px]'
+            : 'cursor-default opacity-60'}`}
         style={{ paddingLeft: `${(depth * 16) + 8}px` }}
       >
         <FileIcon extension={entry.extension} isDir={entry.isDir} />
@@ -106,22 +105,13 @@ function FileTreeNode({ entry, depth, onOpenMarkdown }: {
         }`}>
           {entry.name}
         </span>
-        {!entry.isDir && (
-          <span
-            role="button"
-            title={isMarkdown(entry) ? 'Open in external editor' : undefined}
-            onClick={isMarkdown(entry) ? (e) => {
-              e.stopPropagation()
-              invoke('open_path', { path: entry.path }).catch(() => {})
-            } : undefined}
-            className="opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0 text-[var(--c-text-3)] hover:text-[var(--c-text-2)]"
-          >
+        {isMarkdown(entry) && (
+          <span className="opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0 text-[var(--c-text-3)]">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
               stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
               className="w-3 h-3">
-              <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
-              <polyline points="15 3 21 3 21 9"/>
-              <line x1="10" y1="14" x2="21" y2="3"/>
+              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+              <circle cx="12" cy="12" r="3"/>
             </svg>
           </span>
         )}
