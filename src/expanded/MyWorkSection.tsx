@@ -76,12 +76,16 @@ export default function MyWorkSection({ sessions, repos, loading, goTo, onRefres
   const [copiedResume, setCopiedResume] = useState<string | null>(null)
   const [promptTs, setPromptTs] = useState<number[]>([])
   const [commitTs, setCommitTs] = useState<number[]>([])
+  const [vscodeAvailable, setVscodeAvailable] = useState(false)
 
   useEffect(() => {
     const sinceMs = Date.now() - 30 * DAY
     invoke<number[]>('get_prompt_timestamps', { sinceMs }).then(setPromptTs).catch(() => {})
     invoke<number[]>('get_commit_activity', { sinceDays: 14 }).then(setCommitTs).catch(() => {})
+    invoke<boolean>('is_vscode_installed').then(setVscodeAvailable).catch(() => {})
   }, [])
+
+  const tabLabel = TABS.find(t => t.id === tab)?.label ?? ''
 
   const [start, end] = useMemo(() => windowFor(tab), [tab])
   const windowed = useMemo(
@@ -114,7 +118,13 @@ export default function MyWorkSection({ sessions, repos, loading, goTo, onRefres
 
   // Needs attention — derived from the worktree scan; omitted entirely when empty.
   const attention = useMemo(() => {
-    const items: { key: string; icon: string; title: string; meta: string }[] = []
+    const items: {
+      key: string
+      kind: 'uncommitted' | 'unmerged'
+      title: string
+      why: string
+      meta: string
+    }[] = []
     for (const repo of repos) {
       for (const wt of repo.worktrees) {
         if (wt.isPrimary) continue
@@ -122,20 +132,24 @@ export default function MyWorkSection({ sessions, repos, loading, goTo, onRefres
         if (wt.isDirty) {
           items.push({
             key: `${wt.path}:dirty`,
-            icon: '⚠',
-            title: `${wt.branch ?? wt.path} has uncommitted changes`,
-            meta: `${repo.repoName}${idleDays !== null ? ` · ${idleDays}d since last commit` : ''}`,
+            kind: 'uncommitted',
+            title: `${wt.branch ?? wt.path}`,
+            why: `Has edited files that were never committed${idleDays !== null && idleDays > 7 ? ` — sitting for ${idleDays} days, risk of losing work` : ' — commit or stash them'}`,
+            meta: `${repo.repoName}${idleDays !== null ? ` · last commit ${idleDays}d ago` : ''}`,
           })
         } else if (!wt.isMerged && wt.ahead > 0) {
           items.push({
             key: `${wt.path}:ahead`,
-            icon: '⇄',
-            title: `${wt.branch ?? wt.path} — ${wt.ahead} commit${wt.ahead > 1 ? 's' : ''} ahead of ${repo.baseBranch}`,
-            meta: `${repo.repoName} · ready to merge?`,
+            kind: 'unmerged',
+            title: `${wt.branch ?? wt.path}`,
+            why: `${wt.ahead} finished commit${wt.ahead > 1 ? 's' : ''} not yet merged into ${repo.baseBranch} — merge or open a PR`,
+            meta: repo.repoName,
           })
         }
       }
     }
+    // Uncommitted work first — that's the data-loss risk.
+    items.sort((a, b) => (a.kind === 'uncommitted' ? 0 : 1) - (b.kind === 'uncommitted' ? 0 : 1))
     return items.slice(0, 5)
   }, [repos])
 
@@ -204,6 +218,7 @@ export default function MyWorkSection({ sessions, repos, loading, goTo, onRefres
         {!loading && sessions.length > 0 && (
           <>
             {/* Stats */}
+            <SectionLabel>Overview — {tabLabel}</SectionLabel>
             <div className="grid grid-cols-4 gap-2.5 mb-5">
               <Stat n={String(stats.sessions)} lbl="Sessions" />
               <Stat n={String(stats.prompts)} lbl="Prompts" color="text-amber-400" />
@@ -214,7 +229,7 @@ export default function MyWorkSection({ sessions, repos, loading, goTo, onRefres
             {/* Focus bar — share of prompts per project in the window */}
             {projects.length > 0 && stats.prompts > 0 && (
               <div className="mb-5">
-                <SectionLabel>Focus</SectionLabel>
+                <SectionLabel>Focus — {tabLabel}</SectionLabel>
                 <div className="flex h-2.5 rounded-full overflow-hidden mb-2">
                   {projects.slice(0, PALETTE.length).map((p, i) => (
                     <div
@@ -275,18 +290,26 @@ export default function MyWorkSection({ sessions, repos, loading, goTo, onRefres
                 <SectionLabel>Needs attention</SectionLabel>
                 <div className="space-y-1.5">
                   {attention.map(a => (
-                    <div key={a.key} className="flex items-start gap-2.5 rounded-xl border border-[var(--c-border)] border-l-2 border-l-amber-400 bg-[var(--c-surface-2)]/40 px-3.5 py-2.5">
-                      <span className="text-[13px] mt-px" aria-hidden="true">{a.icon}</span>
-                      <div className="min-w-0">
-                        <p className="text-[12.5px] font-medium truncate">{a.title}</p>
-                        <p className="text-[11px] text-[var(--c-text-3)]">{a.meta}</p>
-                        <button
-                          onClick={() => goTo('worktrees')}
-                          className="text-[11px] text-[var(--c-accent)] font-medium hover:underline mt-0.5"
-                        >
-                          View in Worktrees →
-                        </button>
+                    <div
+                      key={a.key}
+                      className={`flex items-start gap-2.5 rounded-xl border border-[var(--c-border)] border-l-2 bg-[var(--c-surface-2)]/40 px-3.5 py-2.5 ${a.kind === 'uncommitted' ? 'border-l-rose-400' : 'border-l-amber-400'}`}
+                    >
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-[12.5px] font-mono font-semibold truncate">{a.title}</span>
+                          <span className={`text-[9px] font-mono px-1.5 py-px rounded-full ${a.kind === 'uncommitted' ? 'bg-rose-500/15 text-rose-400' : 'bg-amber-500/15 text-amber-400'}`}>
+                            {a.kind === 'uncommitted' ? 'uncommitted changes' : 'not merged'}
+                          </span>
+                        </div>
+                        <p className="text-[11.5px] text-[var(--c-text-2)] mt-0.5">{a.why}</p>
+                        <p className="text-[10.5px] text-[var(--c-text-3)] mt-0.5">{a.meta}</p>
                       </div>
+                      <button
+                        onClick={() => goTo('worktrees')}
+                        className="text-[11px] text-[var(--c-accent)] font-medium hover:underline shrink-0 mt-0.5"
+                      >
+                        Open in Repos →
+                      </button>
                     </div>
                   ))}
                 </div>
@@ -296,7 +319,7 @@ export default function MyWorkSection({ sessions, repos, loading, goTo, onRefres
             {/* Active projects */}
             {projects.length > 0 && (
               <div className="mb-5">
-                <SectionLabel>Active projects</SectionLabel>
+                <SectionLabel>Active projects — {tabLabel}</SectionLabel>
                 <div className="space-y-2">
                   {projects.slice(0, 8).map((p, i) => {
                     const branch = branchFor(p.project)
@@ -335,6 +358,15 @@ export default function MyWorkSection({ sessions, repos, loading, goTo, onRefres
                           >
                             {copiedResume === p.project ? '✓ Opened' : '▶ Resume'}
                           </button>
+                          {vscodeAvailable && (
+                            <button
+                              onClick={() => invoke('open_in_vscode', { path: p.project }).catch(() => {})}
+                              title="Open project in Visual Studio Code"
+                              className="text-[11px] px-3 py-1.5 rounded-md border border-[var(--c-border)] text-[var(--c-text-3)] hover:text-[var(--c-text-2)] transition-colors"
+                            >
+                              VS Code
+                            </button>
+                          )}
                           <button
                             onClick={() => invoke('reveal_in_finder', { path: p.project }).catch(() => {})}
                             className="text-[11px] px-3 py-1.5 rounded-md border border-[var(--c-border)] text-[var(--c-text-3)] hover:text-[var(--c-text-2)] transition-colors"

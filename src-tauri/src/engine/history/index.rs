@@ -53,7 +53,10 @@ fn is_file_live(path: &Path) -> bool {
                 .duration_since(std::time::UNIX_EPOCH)
                 .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))
         })
-        .map(|mtime| now.saturating_sub(mtime.as_secs()) < 60)
+        // 5 min window: a session is "live" while its file keeps changing.
+        // Claude pauses between turns (user reading/typing), so a tight 60s
+        // threshold flagged genuinely open sessions as finished.
+        .map(|mtime| now.saturating_sub(mtime.as_secs()) < 300)
         .unwrap_or(false)
 }
 
