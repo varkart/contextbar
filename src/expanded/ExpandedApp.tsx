@@ -430,19 +430,25 @@ function SessionsSection({ sessions, loading, selected, onSelect, onRefresh, onL
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
+      <div className="px-6 pt-5 pb-3 flex-shrink-0 flex items-start justify-between gap-3">
+        <div>
+          <h2 className="text-[16px] font-semibold tracking-tight">Sessions</h2>
+          <p className="text-[12px] text-[var(--c-text-3)] mt-0.5">
+            Claude Code conversation history across your projects
+          </p>
+        </div>
+        <RefreshButton onClick={onRefresh} busy={loading} />
+      </div>
       {!loading && sessions.length > 0 && (
-        <div className="px-4 pt-3 pb-1 flex-shrink-0 flex items-start gap-2">
-          <div className="flex-1 min-w-0">
-            <TileRow>
-              <Tile value={insights.total} label="Sessions" />
-              <Tile value={insights.today} label="Today" color="text-[var(--c-accent)]" />
-              <Tile value={insights.week} label="This week" />
-              <Tile value={insights.live} label="Live" color={insights.live > 0 ? 'text-emerald-400' : 'text-[var(--c-text-3)]'} />
-              <Tile value={insights.projects} label="Projects" />
-              <Tile value={insights.prompts} label="Prompts" color="text-amber-400" />
-            </TileRow>
-          </div>
-          <RefreshButton onClick={onRefresh} busy={loading} />
+        <div className="px-4 pb-1 flex-shrink-0">
+          <TileRow>
+            <Tile value={insights.total} label="Sessions" />
+            <Tile value={insights.today} label="Today" color="text-[var(--c-accent)]" />
+            <Tile value={insights.week} label="This week" />
+            <Tile value={insights.live} label="Live" color={insights.live > 0 ? 'text-emerald-400' : 'text-[var(--c-text-3)]'} />
+            <Tile value={insights.projects} label="Projects" />
+            <Tile value={insights.prompts} label="Prompts" color="text-amber-400" />
+          </TileRow>
         </div>
       )}
       <div className="flex-1 flex overflow-hidden">
