@@ -331,6 +331,49 @@ fn get_history_stats() -> engine::history::HistoryStats {
 }
 
 /// Open Terminal.app and run `claude` (optionally `--resume <id>`) in the
+/// Last-modified times (ms) for a set of files under $HOME — used as a
+/// "last active" proxy for agents that don't write session logs.
+#[tauri::command]
+fn get_file_mtimes(paths: Vec<String>) -> std::collections::HashMap<String, u64> {
+    let mut out = std::collections::HashMap::new();
+    for p in paths {
+        let Ok(canonical) = validate_tool_path(&p) else {
+            continue;
+        };
+        if let Ok(meta) = std::fs::metadata(&canonical) {
+            if let Ok(modified) = meta.modified() {
+                if let Ok(d) = modified.duration_since(std::time::UNIX_EPOCH) {
+                    out.insert(p, d.as_millis() as u64);
+                }
+            }
+        }
+    }
+    out
+}
+
+#[tauri::command]
+fn is_vscode_installed() -> bool {
+    if std::path::Path::new("/Applications/Visual Studio Code.app").exists() {
+        return true;
+    }
+    dirs::home_dir()
+        .map(|h| h.join("Applications/Visual Studio Code.app").exists())
+        .unwrap_or(false)
+}
+
+/// Open a directory in Visual Studio Code. Path must live under $HOME.
+#[tauri::command]
+fn open_in_vscode(path: String) -> Result<(), String> {
+    let canonical = validate_tool_path(&path)?;
+    std::process::Command::new("open")
+        .arg("-a")
+        .arg("Visual Studio Code")
+        .arg(&canonical)
+        .spawn()
+        .map_err(|e| format!("failed to open VS Code: {e}"))?;
+    Ok(())
+}
+
 /// given project directory. macOS only; the path must live under $HOME.
 #[tauri::command]
 fn resume_in_terminal(project: String, session_id: Option<String>) -> Result<(), String> {
@@ -2165,6 +2208,9 @@ pub fn run() {
             list_worktrees,
             remove_worktree,
             resume_in_terminal,
+            get_file_mtimes,
+            is_vscode_installed,
+            open_in_vscode,
             warm_session_stats,
             get_session_insights,
             get_token_activity,

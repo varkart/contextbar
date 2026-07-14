@@ -16,6 +16,13 @@ import { agentColor } from '../constants/agentColors'
 
 const MODEL_COLORS = ['#6366f1', '#e8a94a', '#d98fd9', '#2dd4bf', '#fb7185', '#8fbf6b']
 
+function relativeDays(tsMs: number): string {
+  const days = Math.floor((Date.now() - tsMs) / 86_400_000)
+  if (days < 1) return 'today'
+  if (days === 1) return 'yesterday'
+  return `${days}d ago`
+}
+
 export type ToolsSection = 'agents' | 'skills' | 'mcps' | 'settings' | 'notifications'
 
 const ROOT_VIEW: Record<ToolsSection, View> = {
@@ -99,6 +106,26 @@ export default function ToolsPanel({
   }, [fetchAgents, refreshSelected])
 
   const searchResults = useMemo(() => searchAgents(installedAgents, query), [installedAgents, query])
+
+  // "Last active" proxy for agents without session logs: newest mtime of
+  // each agent's config files.
+  const [configMtimes, setConfigMtimes] = useState<Record<string, number>>({})
+  useEffect(() => {
+    const paths = installedAgents.flatMap(a => a.configFiles ?? [])
+    if (paths.length === 0) return
+    invoke<Record<string, number>>('get_file_mtimes', { paths })
+      .then(setConfigMtimes)
+      .catch(() => {})
+  }, [installedAgents])
+
+  const agentActivity = useMemo(() => {
+    return installedAgents
+      .map(a => {
+        const lastTouch = Math.max(0, ...(a.configFiles ?? []).map(p => configMtimes[p] ?? 0))
+        return { id: a.id, name: a.name, lastTouch }
+      })
+      .sort((x, y) => (y.id === 'claude' ? 1 : 0) - (x.id === 'claude' ? 1 : 0) || y.lastTouch - x.lastTouch)
+  }, [installedAgents, configMtimes])
 
   const agentInsights = useMemo(() => {
     const skills = installedAgents.flatMap(a => a.skills)
@@ -198,6 +225,31 @@ export default function ToolsPanel({
                         {shortModel(m.model)} · {m.sessions} sessions
                       </span>
                     ))}
+                  </div>
+                  <div className="mt-3 pt-2.5 border-t border-[var(--c-border)]/60">
+                    <p className="text-[10px] font-mono text-[var(--c-text-3)] uppercase tracking-wider mb-1.5">
+                      Agent activity
+                    </p>
+                    {agentActivity.map(a => {
+                      const isClaude = a.id === 'claude'
+                      const ageDays = a.lastTouch > 0 ? (Date.now() - a.lastTouch) / 86_400_000 : Infinity
+                      const dot = isClaude || ageDays < 2 ? 'bg-emerald-400' : ageDays < 14 ? 'bg-amber-400' : 'bg-[var(--c-border)]'
+                      const signal = isClaude
+                        ? `${usage.sessionsAnalyzed} sessions in 30d`
+                        : a.lastTouch > 0
+                          ? `config updated ${relativeDays(a.lastTouch)}`
+                          : 'no activity signal'
+                      return (
+                        <div key={a.id} className="flex items-center gap-2 py-1 text-[11px] max-w-md">
+                          <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${dot}`} />
+                          <span className="font-medium text-[var(--c-text-2)] w-28 truncate">{a.name}</span>
+                          <span className="text-[var(--c-text-3)] font-mono">{signal}</span>
+                        </div>
+                      )
+                    })}
+                    <p className="text-[9.5px] text-[var(--c-text-3)] opacity-60 mt-1">
+                      Only Claude Code records sessions — other agents show config file activity as best available signal
+                    </p>
                   </div>
                 </Collapsible>
               </div>

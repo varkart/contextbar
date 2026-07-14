@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import type { RepoWorktrees, WorktreeInfo, SessionEntry, SessionInsights } from '../types'
 import { formatTokens } from '../components/history/SessionStats'
@@ -33,6 +33,14 @@ function relativeTime(tsSec?: number): string {
   return `${days}d ago`
 }
 
+const REPO_COLORS = ['#6366f1', '#e8a94a', '#d98fd9', '#2dd4bf', '#fb7185', '#8fbf6b', '#7aa2e8']
+
+function repoColor(name: string): string {
+  let h = 0
+  for (const c of name) h = (h * 31 + c.charCodeAt(0)) >>> 0
+  return REPO_COLORS[h % REPO_COLORS.length]
+}
+
 const STATUS_DOT: Record<WorktreeStatus, string> = {
   active: 'bg-emerald-400',
   stale: 'bg-amber-400',
@@ -62,6 +70,16 @@ export default function WorktreesSection({ repos, loading, sessions, onRemoved, 
   // Per-repo usage insights, fetched lazily on first toggle. 'loading' while in flight.
   const [repoInsights, setRepoInsights] = useState<Record<string, SessionInsights | 'loading'>>({})
   const [insightsOpen, setInsightsOpen] = useState<Record<string, boolean>>({})
+  // Repo cards start collapsed; searching or filtering opens matches.
+  const [repoOpen, setRepoOpen] = useState<Record<string, boolean>>({})
+  const [vscodeAvailable, setVscodeAvailable] = useState(false)
+
+  useEffect(() => {
+    invoke<boolean>('is_vscode_installed').then(setVscodeAvailable).catch(() => {})
+  }, [])
+
+  const forceOpen = filter !== 'all' || !!search.trim()
+  const isRepoOpen = (repoPath: string) => forceOpen || !!repoOpen[repoPath]
 
   const toggleRepoInsights = (repo: RepoWorktrees) => {
     const key = repo.repoPath
@@ -219,35 +237,83 @@ export default function WorktreesSection({ repos, loading, sessions, onRemoved, 
         )}
 
         {/* Repo groups */}
-        {visibleRepos.map(({ repo, items }) => (
-          <div key={repo.repoPath} className="mb-5">
-            <div className="flex items-center gap-2 mb-2 flex-wrap">
-              <span className="text-[10px] font-mono text-[var(--c-text-3)] uppercase tracking-wider">
-                {repo.repoName} <span className="opacity-60">· {items.length} · base {repo.baseBranch}</span>
-              </span>
-              {repo.agentFiles.map(f => (
-                <span key={f} className="text-[9px] font-mono px-1.5 py-px rounded-full border border-[var(--c-border)] text-[var(--c-text-3)]">{f}</span>
-              ))}
-              {repo.repoSkills.length > 0 && (
-                <span
-                  className="text-[9px] font-mono px-1.5 py-px rounded-full border border-[var(--c-accent)]/40 text-[var(--c-accent)]"
-                  title={repo.repoSkills.join(', ')}
-                >
-                  {repo.repoSkills.length} skill{repo.repoSkills.length > 1 ? 's' : ''}
-                </span>
-              )}
+        {visibleRepos.map(({ repo, items }) => {
+          const open = isRepoOpen(repo.repoPath)
+          return (
+          <div key={repo.repoPath} className="mb-3 rounded-xl border border-[var(--c-border)] bg-[var(--c-surface-2)]/25 overflow-hidden">
+            {/* Repo header — name area toggles, actions live on the right */}
+            <div className="flex items-center gap-3 px-3.5 py-2.5">
               <button
-                onClick={() => toggleRepoInsights(repo)}
-                aria-expanded={!!insightsOpen[repo.repoPath]}
-                className={`flex items-center gap-1 text-[10px] px-2.5 py-0.5 rounded-md border transition-colors ${insightsOpen[repo.repoPath] ? 'border-[var(--c-accent)]/50 bg-[var(--c-accent)]/10 text-[var(--c-accent)]' : 'border-[var(--c-border)] text-[var(--c-text-3)] hover:text-[var(--c-text-2)] hover:border-[var(--c-text-3)]/50'}`}
+                onClick={() => setRepoOpen(prev => ({ ...prev, [repo.repoPath]: !open }))}
+                aria-expanded={open}
+                className="flex items-center gap-3 flex-1 min-w-0 text-left group/repo"
               >
-                <span className={`text-[8px] transition-transform ${insightsOpen[repo.repoPath] ? 'rotate-90' : ''}`} aria-hidden="true">▶</span>
-                Usage insights
+                <span
+                  className="w-7 h-7 rounded-lg flex items-center justify-center font-mono font-bold text-[12px] text-black/80 shrink-0"
+                  style={{ background: repoColor(repo.repoName) }}
+                >
+                  {repo.repoName.charAt(0).toUpperCase()}
+                </span>
+                <span className="min-w-0">
+                  <span className="block text-[13.5px] font-semibold truncate group-hover/repo:text-[var(--c-accent)] transition-colors">
+                    {repo.repoName}
+                  </span>
+                  <span className="block text-[10.5px] text-[var(--c-text-3)]">
+                    {items.length} worktree{items.length > 1 ? 's' : ''} · base {repo.baseBranch}
+                  </span>
+                </span>
               </button>
+              <div className="flex items-center gap-1.5 shrink-0">
+                <button
+                  onClick={() => toggleRepoInsights(repo)}
+                  aria-expanded={!!insightsOpen[repo.repoPath]}
+                  className={`flex items-center gap-1 text-[10px] px-2.5 py-1 rounded-md border transition-colors ${insightsOpen[repo.repoPath] ? 'border-[var(--c-accent)]/50 bg-[var(--c-accent)]/10 text-[var(--c-accent)]' : 'border-[var(--c-border)] text-[var(--c-text-3)] hover:text-[var(--c-text-2)] hover:border-[var(--c-text-3)]/50'}`}
+                >
+                  <span className={`text-[8px] transition-transform ${insightsOpen[repo.repoPath] ? 'rotate-90' : ''}`} aria-hidden="true">▶</span>
+                  Insights
+                </button>
+                {vscodeAvailable && (
+                  <button
+                    onClick={() => invoke('open_in_vscode', { path: repo.repoPath }).catch(() => {})}
+                    title="Open repo in Visual Studio Code"
+                    className="text-[10px] px-2.5 py-1 rounded-md border border-[var(--c-border)] text-[var(--c-text-3)] hover:text-[var(--c-text-2)] hover:border-[var(--c-text-3)]/50 transition-colors"
+                  >
+                    VS Code
+                  </button>
+                )}
+                <button
+                  onClick={() => setRepoOpen(prev => ({ ...prev, [repo.repoPath]: !open }))}
+                  aria-label={open ? 'Collapse repo' : 'Expand repo'}
+                  className={`text-[var(--c-text-3)] text-[12px] px-1 transition-transform ${open ? 'rotate-90' : ''}`}
+                >
+                  ›
+                </button>
+              </div>
             </div>
+
             {insightsOpen[repo.repoPath] && (
-              <RepoInsights data={repoInsights[repo.repoPath]} />
+              <div className="px-3.5">
+                <RepoInsights data={repoInsights[repo.repoPath]} />
+              </div>
             )}
+
+            {open && (
+            <div className="px-3.5 pb-3">
+              {(repo.agentFiles.length > 0 || repo.repoSkills.length > 0) && (
+                <div className="flex items-center gap-1.5 flex-wrap mb-2">
+                  {repo.agentFiles.map(f => (
+                    <span key={f} className="text-[9px] font-mono px-1.5 py-px rounded-full border border-[var(--c-border)] text-[var(--c-text-3)]">{f}</span>
+                  ))}
+                  {repo.repoSkills.length > 0 && (
+                    <span
+                      className="text-[9px] font-mono px-1.5 py-px rounded-full border border-[var(--c-accent)]/40 text-[var(--c-accent)]"
+                      title={repo.repoSkills.join(', ')}
+                    >
+                      {repo.repoSkills.length} skill{repo.repoSkills.length > 1 ? 's' : ''}
+                    </span>
+                  )}
+                </div>
+              )}
             <div className="space-y-1.5">
               {items.map(wt => {
                 const st = worktreeStatus(wt)
@@ -304,6 +370,15 @@ export default function WorktreesSection({ repos, loading, sessions, onRemoved, 
                           >
                             {copied === wt.path ? '✓ Opened' : '▶ Resume'}
                           </button>
+                          {vscodeAvailable && (
+                            <button
+                              onClick={() => invoke('open_in_vscode', { path: wt.path }).catch(() => {})}
+                              title="Open worktree in Visual Studio Code"
+                              className="text-[11px] px-3 py-1.5 rounded-md border border-[var(--c-border)] text-[var(--c-text-3)] hover:text-[var(--c-text-2)] transition-colors"
+                            >
+                              VS Code
+                            </button>
+                          )}
                           <button
                             onClick={() => invoke('reveal_in_finder', { path: wt.path }).catch(() => {})}
                             className="text-[11px] px-3 py-1.5 rounded-md border border-[var(--c-border)] text-[var(--c-text-3)] hover:text-[var(--c-text-2)] transition-colors"
@@ -363,8 +438,11 @@ export default function WorktreesSection({ repos, loading, sessions, onRemoved, 
                 )
               })}
             </div>
+            </div>
+            )}
           </div>
-        ))}
+          )
+        })}
       </div>
     </div>
   )
@@ -392,17 +470,19 @@ function RepoInsights({ data }: { data: SessionInsights | 'loading' | undefined 
         <Tile value={`$${data.estCostUsd.toFixed(2)}`} label="Est. cost" color="text-amber-400" />
       </TileRow>
       {data.toolCounts.length > 0 && (
-        <p className="text-[10px] font-mono text-[var(--c-text-3)] uppercase tracking-wider mb-1.5">Top tools in this repo</p>
+        <div className="mt-3 pt-2.5 border-t border-[var(--c-border)]/60">
+          <p className="text-[10px] font-mono text-[var(--c-text-3)] uppercase tracking-wider mb-2">Top tools in this repo</p>
+          {data.toolCounts.slice(0, 5).map(t => (
+            <HBar
+              key={t.name}
+              name={t.name}
+              value={`${t.count.toLocaleString()} calls`}
+              pct={(t.count / Math.max(1, data.toolCounts[0].count)) * 100}
+              color="var(--c-accent)"
+            />
+          ))}
+        </div>
       )}
-      {data.toolCounts.slice(0, 5).map(t => (
-        <HBar
-          key={t.name}
-          name={t.name}
-          value={`${t.count.toLocaleString()} calls`}
-          pct={(t.count / Math.max(1, data.toolCounts[0].count)) * 100}
-          color="var(--c-accent)"
-        />
-      ))}
     </div>
   )
 }
