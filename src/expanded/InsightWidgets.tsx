@@ -20,7 +20,8 @@ export function Card({ title, sub, children }: { title: string; sub?: string; ch
 }
 
 /** Labeled horizontal bar: name + value sit directly above their bar so the
- *  association is unambiguous even at full width. */
+ *  association is unambiguous. Width capped so bars stay readable in
+ *  full-width sections. */
 export function HBar({ name, value, pct, color, hint }: {
   name: string
   value: string
@@ -29,7 +30,7 @@ export function HBar({ name, value, pct, color, hint }: {
   hint?: string
 }) {
   return (
-    <div className="mb-2 min-w-0" title={hint}>
+    <div className="mb-2 min-w-0 max-w-md" title={hint}>
       <div className="flex items-baseline justify-between gap-2 text-[11px] mb-0.5">
         <span className="font-medium text-[var(--c-text-2)] truncate">{name}</span>
         <span className="font-mono text-[var(--c-text-3)] shrink-0">{value}</span>
@@ -91,8 +92,20 @@ export function Collapsible({ id, label, children }: {
   )
 }
 
+/** Right-aligned readout line that charts update on hover. */
+function HoverReadout({ text, placeholder }: { text: string | null; placeholder: string }) {
+  return (
+    <div className="h-4 mb-1 text-right">
+      <span className={`text-[10.5px] font-mono ${text ? 'text-[var(--c-text-2)]' : 'text-[var(--c-text-3)] opacity-50'}`}>
+        {text ?? placeholder}
+      </span>
+    </div>
+  )
+}
+
 /** Weekday × hour prompt-density grid from raw timestamps (ms), local time. */
 export function ActivityHeatmap({ timestamps }: { timestamps: number[] }) {
+  const [hover, setHover] = useState<string | null>(null)
   const { grid, max } = useMemo(() => {
     const grid: number[][] = Array.from({ length: 7 }, () => Array(24).fill(0))
     let max = 0
@@ -106,7 +119,8 @@ export function ActivityHeatmap({ timestamps }: { timestamps: number[] }) {
   }, [timestamps])
 
   return (
-    <div className="min-w-0 overflow-hidden">
+    <div className="min-w-0 overflow-hidden" onMouseLeave={() => setHover(null)}>
+      <HoverReadout text={hover} placeholder="hover a cell for details" />
       <div className="grid gap-[3px]" style={{ gridTemplateColumns: '30px repeat(24, minmax(0, 1fr))' }}>
         {DAY_LABELS.map((label, di) => (
           <div key={label} className="contents">
@@ -116,8 +130,8 @@ export function ActivityHeatmap({ timestamps }: { timestamps: number[] }) {
               return (
                 <span
                   key={h}
-                  title={`${label} ${h}:00 — ${v} prompt${v === 1 ? '' : 's'}`}
-                  className="h-2.5 w-full rounded-[2px]"
+                  onMouseEnter={() => setHover(`${label} ${h}:00–${h + 1}:00 · ${v} prompt${v === 1 ? '' : 's'}`)}
+                  className="h-2.5 w-full rounded-[2px] hover:ring-1 hover:ring-[var(--c-accent)]"
                   style={{ background: v === 0 ? 'var(--c-surface-2)' : `rgba(129,140,248,${alpha.toFixed(2)})` }}
                 />
               )
@@ -158,6 +172,7 @@ function bucketStart(bucket: TrendBucket, index: number, count: number): Date {
 /** Token usage bars with a day/week/month bucket toggle, local time. */
 export function TokenTrend({ points }: { points: TokenPoint[] }) {
   const [bucket, setBucket] = useState<TrendBucket>('day')
+  const [hover, setHover] = useState<string | null>(null)
   const { count } = TREND_CONFIG[bucket]
 
   const { buckets, max } = useMemo(() => {
@@ -182,8 +197,8 @@ export function TokenTrend({ points }: { points: TokenPoint[] }) {
   }
 
   return (
-    <div>
-      <div className="flex gap-1 mb-2">
+    <div onMouseLeave={() => setHover(null)}>
+      <div className="flex gap-1 mb-1 items-center">
         {(Object.keys(TREND_CONFIG) as TrendBucket[]).map(b => (
           <button
             key={b}
@@ -193,13 +208,16 @@ export function TokenTrend({ points }: { points: TokenPoint[] }) {
             {b}
           </button>
         ))}
+        <div className="flex-1">
+          <HoverReadout text={hover} placeholder="hover a bar" />
+        </div>
       </div>
       <div className="flex items-end gap-1 h-24">
         {buckets.map((v, i) => (
           <div
             key={i}
-            title={`${fmtLabel(i)} — ${formatTokens(v)} tokens`}
-            className="flex-1 rounded-sm min-w-[3px]"
+            onMouseEnter={() => setHover(`${fmtLabel(i)} · ${formatTokens(v)} tokens`)}
+            className="flex-1 rounded-sm min-w-[3px] hover:ring-1 hover:ring-[var(--c-accent)]"
             style={{
               height: v === 0 ? '3px' : `${Math.max(8, (v / max) * 100)}%`,
               background: v === 0 ? 'var(--c-surface-2)' : 'linear-gradient(to top, #6366f1, #a5b4fc)',
@@ -216,7 +234,8 @@ export function TokenTrend({ points }: { points: TokenPoint[] }) {
 
 /** Daily commit bars for the trailing `daysBack` days from raw unix-second timestamps. */
 export function CommitBars({ commitSecs, daysBack = 14 }: { commitSecs: number[]; daysBack?: number }) {
-  const { buckets, max, total } = useMemo(() => {
+  const [hover, setHover] = useState<string | null>(null)
+  const { buckets, max, total, start } = useMemo(() => {
     const midnight = new Date()
     midnight.setHours(0, 0, 0, 0)
     const start = midnight.getTime() - (daysBack - 1) * DAY
@@ -225,17 +244,21 @@ export function CommitBars({ commitSecs, daysBack = 14 }: { commitSecs: number[]
       const idx = Math.floor((sec * 1000 - start) / DAY)
       if (idx >= 0 && idx < daysBack) buckets[idx]++
     }
-    return { buckets, max: Math.max(1, ...buckets), total: buckets.reduce((a: number, b: number) => a + b, 0) }
+    return { buckets, max: Math.max(1, ...buckets), total: buckets.reduce((a: number, b: number) => a + b, 0), start }
   }, [commitSecs, daysBack])
 
+  const dayLabel = (i: number) =>
+    new Date(start + i * DAY).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })
+
   return (
-    <div>
-      <div className="flex items-end gap-1 h-24 mt-2">
+    <div onMouseLeave={() => setHover(null)}>
+      <HoverReadout text={hover} placeholder="hover a bar" />
+      <div className="flex items-end gap-1 h-24">
         {buckets.map((v, i) => (
           <div
             key={i}
-            title={`${v} commit${v === 1 ? '' : 's'}`}
-            className="flex-1 rounded-sm min-w-[3px]"
+            onMouseEnter={() => setHover(`${dayLabel(i)} · ${v} commit${v === 1 ? '' : 's'}`)}
+            className="flex-1 rounded-sm min-w-[3px] hover:ring-1 hover:ring-emerald-400"
             style={{
               height: v === 0 ? '3px' : `${Math.max(8, (v / max) * 100)}%`,
               background: v === 0 ? 'var(--c-surface-2)' : 'linear-gradient(to top, #059669, #34d399)',

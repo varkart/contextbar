@@ -28,17 +28,82 @@ function isToolsSection(s: Section): s is ToolsSection {
   return (TOOLS_SECTIONS as string[]).includes(s)
 }
 
-const WORK_SECTIONS: { id: Section; label: string; icon: string }[] = [
-  { id: 'work', label: 'My Work', icon: '▤' },
-  { id: 'sessions', label: 'Sessions', icon: '◷' },
-  { id: 'worktrees', label: 'Repos', icon: '⑂' },
+const WORK_SECTIONS: { id: Section; label: string }[] = [
+  { id: 'work', label: 'My Work' },
+  { id: 'sessions', label: 'Sessions' },
+  { id: 'worktrees', label: 'Repos' },
 ]
 
-const CONFIGURE_SECTIONS: { id: Section; label: string; icon: string }[] = [
-  { id: 'agents', label: 'Agents', icon: '◆' },
-  { id: 'skills', label: 'Skills', icon: '✦' },
-  { id: 'mcps', label: 'MCPs', icon: '⬡' },
+const CONFIGURE_SECTIONS: { id: Section; label: string }[] = [
+  { id: 'agents', label: 'Agents' },
+  { id: 'skills', label: 'Skills' },
+  { id: 'mcps', label: 'MCPs' },
 ]
+
+/** Uniform 16px stroke icons — mixed unicode glyphs rendered at odd sizes. */
+function NavIcon({ name }: { name: Section }) {
+  const paths: Record<Section, React.ReactNode> = {
+    work: (
+      <>
+        <rect x="3" y="3" width="7" height="9" rx="1" /><rect x="14" y="3" width="7" height="5" rx="1" />
+        <rect x="14" y="12" width="7" height="9" rx="1" /><rect x="3" y="16" width="7" height="5" rx="1" />
+      </>
+    ),
+    sessions: (
+      <>
+        <circle cx="12" cy="12" r="9" /><polyline points="12 7 12 12 15.5 14" />
+      </>
+    ),
+    worktrees: (
+      <>
+        <line x1="6" y1="3" x2="6" y2="15" /><circle cx="18" cy="6" r="3" />
+        <circle cx="6" cy="18" r="3" /><path d="M18 9a9 9 0 0 1-9 9" />
+      </>
+    ),
+    agents: (
+      <>
+        <rect x="5" y="5" width="14" height="14" rx="2" /><rect x="10" y="10" width="4" height="4" />
+        <line x1="9" y1="2" x2="9" y2="5" /><line x1="15" y1="2" x2="15" y2="5" />
+        <line x1="9" y1="19" x2="9" y2="22" /><line x1="15" y1="19" x2="15" y2="22" />
+        <line x1="19" y1="9" x2="22" y2="9" /><line x1="19" y1="15" x2="22" y2="15" />
+        <line x1="2" y1="9" x2="5" y2="9" /><line x1="2" y1="15" x2="5" y2="15" />
+      </>
+    ),
+    skills: (
+      <>
+        <path d="M12 3l2 5.6L20 10l-6 1.4L12 17l-2-5.6L4 10l6-1.4z" />
+        <path d="M19 15l.9 2.1L22 18l-2.1.9L19 21l-.9-2.1L16 18l2.1-.9z" />
+      </>
+    ),
+    mcps: (
+      <>
+        <path d="M9 7V2" /><path d="M15 7V2" />
+        <path d="M6 7h12v5a6 6 0 0 1-12 0z" /><path d="M12 18v4" />
+      </>
+    ),
+    notifications: (
+      <>
+        <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+        <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+      </>
+    ),
+    settings: (
+      <>
+        <circle cx="12" cy="12" r="3" />
+        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+      </>
+    ),
+  }
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+      stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"
+      className="w-4 h-4 flex-shrink-0"
+    >
+      {paths[name]}
+    </svg>
+  )
+}
 
 const ALL_SECTION_IDS: Section[] = [
   ...WORK_SECTIONS.map(s => s.id),
@@ -275,7 +340,7 @@ function Sidebar({ section, goTo, counts }: {
   goTo: (s: Section) => void
   counts: SectionCounts
 }) {
-  const group = (label: string, items: { id: Section; label: string; icon: string }[], startIndex: number) => (
+  const group = (label: string, items: { id: Section; label: string }[], startIndex: number) => (
     <div className="mb-1">
       <div className="px-4 pt-3 pb-1 text-[9.5px] font-mono uppercase tracking-wider text-[var(--c-text-3)]">
         {label}
@@ -287,11 +352,14 @@ function Sidebar({ section, goTo, counts }: {
           <button
             key={s.id}
             onClick={() => goTo(s.id)}
-            className={`group w-full flex items-center gap-2.5 px-4 py-2 text-left transition-colors ${active ? 'bg-[var(--c-accent)]/10 text-[var(--c-accent)] border-r-2 border-[var(--c-accent)]' : 'text-[var(--c-text-2)] hover:bg-[var(--c-surface-2)] hover:text-[var(--c-text)]'}`}
+            aria-current={active ? 'page' : undefined}
+            className={`group w-[calc(100%-16px)] mx-2 mb-0.5 flex items-center gap-2.5 px-2.5 py-2 text-left rounded-lg transition-colors ${active ? 'bg-[var(--c-accent)]/15 text-[var(--c-accent)] font-semibold shadow-[inset_2px_0_0_var(--c-accent)]' : 'text-[var(--c-text-2)] hover:bg-[var(--c-surface-2)] hover:text-[var(--c-text)]'}`}
           >
-            <span className="text-[13px] w-4 text-center opacity-70" aria-hidden="true">{s.icon}</span>
-            <span className="text-[12.5px] font-medium flex-1">{s.label}</span>
-            {count !== null && <span className="text-[11px] tabular-nums text-[var(--c-text-3)] group-hover:hidden">{count}</span>}
+            <span className={active ? 'text-[var(--c-accent)]' : 'text-[var(--c-text-3)] group-hover:text-[var(--c-text-2)]'}>
+              <NavIcon name={s.id} />
+            </span>
+            <span className="text-[12.5px] flex-1">{s.label}</span>
+            {count !== null && <span className={`text-[11px] tabular-nums group-hover:hidden ${active ? 'text-[var(--c-accent)]/80' : 'text-[var(--c-text-3)]'}`}>{count}</span>}
             <span className={`text-[9px] font-mono text-[var(--c-text-3)] opacity-60 ${count !== null ? 'hidden group-hover:inline' : ''}`}>⌘{startIndex + i}</span>
           </button>
         )
@@ -314,16 +382,22 @@ function Sidebar({ section, goTo, counts }: {
         {group('Configure', CONFIGURE_SECTIONS, 4)}
       </nav>
       <div className="border-t border-[var(--c-border)] py-2">
-        {([['notifications', '◎', 'Notifications'], ['settings', '⚙', 'Settings']] as const).map(([id, icon, label]) => (
-          <button
-            key={id}
-            onClick={() => goTo(id)}
-            className={`w-full flex items-center gap-2.5 px-4 py-2 text-left transition-colors ${section === id ? 'bg-[var(--c-accent)]/10 text-[var(--c-accent)]' : 'text-[var(--c-text-3)] hover:bg-[var(--c-surface-2)] hover:text-[var(--c-text-2)]'}`}
-          >
-            <span className="text-[13px] w-4 text-center opacity-70" aria-hidden="true">{icon}</span>
-            <span className="text-[12.5px] font-medium">{label}</span>
-          </button>
-        ))}
+        {([['notifications', 'Notifications'], ['settings', 'Settings']] as const).map(([id, label]) => {
+          const active = section === id
+          return (
+            <button
+              key={id}
+              onClick={() => goTo(id)}
+              aria-current={active ? 'page' : undefined}
+              className={`w-[calc(100%-16px)] mx-2 mb-0.5 flex items-center gap-2.5 px-2.5 py-2 text-left rounded-lg transition-colors ${active ? 'bg-[var(--c-accent)]/15 text-[var(--c-accent)] font-semibold shadow-[inset_2px_0_0_var(--c-accent)]' : 'text-[var(--c-text-3)] hover:bg-[var(--c-surface-2)] hover:text-[var(--c-text-2)]'}`}
+            >
+              <span className={active ? 'text-[var(--c-accent)]' : 'text-[var(--c-text-3)]'}>
+                <NavIcon name={id} />
+              </span>
+              <span className="text-[12.5px]">{label}</span>
+            </button>
+          )
+        })}
       </div>
     </div>
   )
