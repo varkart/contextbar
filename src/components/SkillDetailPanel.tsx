@@ -44,22 +44,39 @@ function FileIcon({ extension, isDir }: { extension?: string; isDir: boolean }) 
   )
 }
 
-function FileTree({ entries, depth = 0 }: { entries: FileEntry[]; depth?: number }) {
+function isMarkdown(entry: FileEntry): boolean {
+  const ext = (entry.extension ?? '').toLowerCase()
+  return ext === 'md' || ext === 'markdown'
+}
+
+function FileTree({ entries, depth = 0, onOpenMarkdown }: {
+  entries: FileEntry[]
+  depth?: number
+  onOpenMarkdown: (entry: FileEntry) => void
+}) {
   return (
     <>
       {entries.map(entry => (
-        <FileTreeNode key={entry.path} entry={entry} depth={depth} />
+        <FileTreeNode key={entry.path} entry={entry} depth={depth} onOpenMarkdown={onOpenMarkdown} />
       ))}
     </>
   )
 }
 
-function FileTreeNode({ entry, depth }: { entry: FileEntry; depth: number }) {
+function FileTreeNode({ entry, depth, onOpenMarkdown }: {
+  entry: FileEntry
+  depth: number
+  onOpenMarkdown: (entry: FileEntry) => void
+}) {
   const [open, setOpen] = useState(false)
 
   const handleClick = async () => {
     if (entry.isDir) {
       setOpen(v => !v)
+    } else if (isMarkdown(entry)) {
+      // Markdown renders inline, same as the full-description view
+      onOpenMarkdown(entry)
+      capture('skill_file_opened', { extension: entry.extension ?? 'unknown', viewer: 'inline' })
     } else {
       try {
         await invoke('open_path', { path: entry.path })
@@ -90,13 +107,23 @@ function FileTreeNode({ entry, depth }: { entry: FileEntry; depth: number }) {
           {entry.name}
         </span>
         {!entry.isDir && (
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
-            stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
-            className="w-3 h-3 text-[var(--c-text-3)] opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
-            <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
-            <polyline points="15 3 21 3 21 9"/>
-            <line x1="10" y1="14" x2="21" y2="3"/>
-          </svg>
+          <span
+            role="button"
+            title={isMarkdown(entry) ? 'Open in external editor' : undefined}
+            onClick={isMarkdown(entry) ? (e) => {
+              e.stopPropagation()
+              invoke('open_path', { path: entry.path }).catch(() => {})
+            } : undefined}
+            className="opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0 text-[var(--c-text-3)] hover:text-[var(--c-text-2)]"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+              className="w-3 h-3">
+              <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+              <polyline points="15 3 21 3 21 9"/>
+              <line x1="10" y1="14" x2="21" y2="3"/>
+            </svg>
+          </span>
         )}
         {entry.isDir && (
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
@@ -107,7 +134,7 @@ function FileTreeNode({ entry, depth }: { entry: FileEntry; depth: number }) {
         )}
       </button>
       {entry.isDir && open && entry.children.length > 0 && (
-        <FileTree entries={entry.children} depth={depth + 1} />
+        <FileTree entries={entry.children} depth={depth + 1} onOpenMarkdown={onOpenMarkdown} />
       )}
     </div>
   )
@@ -154,6 +181,23 @@ export default function SkillDetailPanel({ skill: initialSkill, agentId, onToggl
   const [loadingContent, setLoadingContent] = useState(false)
   const loadedForPath = useRef<string | null>(null)
 
+  // Inline markdown file viewer (same rendering as the full description)
+  const [mdFile, setMdFile] = useState<FileEntry | null>(null)
+  const [mdContent, setMdContent] = useState<string | null>(null)
+  const [mdError, setMdError] = useState<string | null>(null)
+  const [loadingMd, setLoadingMd] = useState(false)
+
+  const handleOpenMarkdown = (entry: FileEntry) => {
+    setMdFile(entry)
+    setMdContent(null)
+    setMdError(null)
+    setLoadingMd(true)
+    invoke<string>('read_markdown_file', { path: entry.path })
+      .then(setMdContent)
+      .catch(e => setMdError(String(e)))
+      .finally(() => setLoadingMd(false))
+  }
+
   useEffect(() => {
     setLoading(true)
     setError(null)
@@ -163,10 +207,24 @@ export default function SkillDetailPanel({ skill: initialSkill, agentId, onToggl
       .finally(() => setLoading(false))
   }, [skill.path])
 
-  // Close overlay and reset content when skill changes
+  // Close overlays and reset content when skill changes
   useEffect(() => {
     setDescOpen(false)
+    setMdFile(null)
   }, [skill.path])
+
+  // Capture-phase Escape closes the markdown viewer before global handlers
+  useEffect(() => {
+    if (!mdFile) return
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.stopImmediatePropagation()
+        setMdFile(null)
+      }
+    }
+    window.addEventListener('keydown', handler, { capture: true })
+    return () => window.removeEventListener('keydown', handler, { capture: true })
+  }, [mdFile])
 
   // Capture-phase Escape closes the overlay before App.tsx's global handler fires
   useEffect(() => {
@@ -276,8 +334,8 @@ export default function SkillDetailPanel({ skill: initialSkill, agentId, onToggl
           )}
           {fileTree && !loading && (
             fileTree.isDir
-              ? <FileTree entries={fileTree.children} depth={0} />
-              : <FileTreeNode entry={fileTree} depth={0} />
+              ? <FileTree entries={fileTree.children} depth={0} onOpenMarkdown={handleOpenMarkdown} />
+              : <FileTreeNode entry={fileTree} depth={0} onOpenMarkdown={handleOpenMarkdown} />
           )}
         </div>
 
@@ -305,6 +363,48 @@ export default function SkillDetailPanel({ skill: initialSkill, agentId, onToggl
           </p>
         </div>
       </div>
+
+      {/* Markdown file viewer — same rendering as the full description */}
+      {mdFile && (
+        <div className="absolute inset-0 z-10 flex flex-col bg-[var(--c-bg)] animate-slide-in-right">
+          <div className="flex items-center gap-2 px-4 py-2.5 border-b border-[var(--c-border)] flex-shrink-0">
+            <button
+              onClick={() => setMdFile(null)}
+              className="text-[var(--c-text-2)] hover:text-[var(--c-text)] transition-colors p-0.5 -ml-0.5 rounded"
+              aria-label="Back"
+            >
+              <ChevronLeft />
+            </button>
+            <span className="text-[15px] font-semibold text-indigo-400 tracking-[-0.01em] font-mono flex-1 truncate">
+              {mdFile.name}
+            </span>
+            <button
+              onClick={() => invoke('open_path', { path: mdFile.path }).catch(() => {})}
+              className="text-[12px] text-[var(--c-text-3)] hover:text-indigo-400 transition-colors flex-shrink-0"
+            >
+              Open in editor
+            </button>
+          </div>
+          <div className="flex-1 overflow-y-auto px-4 py-3">
+            {loadingMd && (
+              <div className="flex gap-1.5 py-4">
+                {[0, 1, 2].map(i => (
+                  <span key={i} className="w-1.5 h-1.5 rounded-full bg-[var(--c-text-3)] animate-pulse"
+                    style={{ animationDelay: `${i * 150}ms` }} />
+                ))}
+              </div>
+            )}
+            {mdError && !loadingMd && (
+              <p className="text-[12px] text-rose-400 bg-rose-500/10 rounded-lg px-3 py-2">{mdError}</p>
+            )}
+            {mdContent && !loadingMd && (
+              <div className="text-[13px] text-[var(--c-text-2)] leading-relaxed overflow-x-hidden skill-md">
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>{stripFrontmatter(mdContent)}</ReactMarkdown>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Full description overlay — slides in from right over the detail page */}
       {descOpen && (

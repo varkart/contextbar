@@ -230,6 +230,28 @@ fn read_skill_dir(path: String) -> Result<crate::models::FileEntry, String> {
     read_entry(&canonical, 0)
 }
 
+/// Read a markdown file for inline rendering in the skill file browser.
+/// Same trust model as `read_skill_dir` (any path under $HOME), but
+/// restricted to markdown and size-capped.
+#[tauri::command]
+fn read_markdown_file(path: String) -> Result<String, String> {
+    let canonical = validate_tool_path(&path)?;
+    let ext = canonical
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("")
+        .to_lowercase();
+    if ext != "md" && ext != "markdown" {
+        return Err("not a markdown file".to_string());
+    }
+    const MAX_BYTES: u64 = 1024 * 1024; // 1 MB
+    let meta = std::fs::metadata(&canonical).map_err(|e| e.to_string())?;
+    if meta.len() > MAX_BYTES {
+        return Err(format!("file too large ({} bytes)", meta.len()));
+    }
+    std::fs::read_to_string(&canonical).map_err(|e| e.to_string())
+}
+
 fn read_entry(path: &std::path::Path, depth: usize) -> Result<crate::models::FileEntry, String> {
     let name = path
         .file_name()
@@ -2227,6 +2249,7 @@ pub fn run() {
             get_vibrancy,
             set_vibrancy,
             read_skill_dir,
+            read_markdown_file,
             open_path,
             reveal_in_finder,
             open_url,
