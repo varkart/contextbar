@@ -79,20 +79,71 @@ fn skill_name_from_input(input: &str) -> Option<String> {
     Some(rest[start..end].to_string())
 }
 
-/// Approximate public API list prices in USD per MTok (input, output).
-/// Cache reads billed at 0.1× input, cache writes at 1.25× input.
-/// Estimates only — update when pricing changes.
+// ── Pricing (bundled data, refreshed weekly by CI) ───────────────────────────
+
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct PricingModel {
+    /// Substring matched against the lowercased model id.
+    #[serde(rename = "match")]
+    pattern: String,
+    input_per_mtok: f64,
+    output_per_mtok: f64,
+}
+
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct Pricing {
+    cache_read_multiplier: f64,
+    cache_write_multiplier: f64,
+    models: Vec<PricingModel>,
+}
+
+impl Default for Pricing {
+    fn default() -> Self {
+        // Safety net if the bundled JSON ever fails to parse.
+        Pricing {
+            cache_read_multiplier: 0.1,
+            cache_write_multiplier: 1.25,
+            models: vec![
+                PricingModel {
+                    pattern: "opus".into(),
+                    input_per_mtok: 15.0,
+                    output_per_mtok: 75.0,
+                },
+                PricingModel {
+                    pattern: "sonnet".into(),
+                    input_per_mtok: 3.0,
+                    output_per_mtok: 15.0,
+                },
+                PricingModel {
+                    pattern: "haiku".into(),
+                    input_per_mtok: 1.0,
+                    output_per_mtok: 5.0,
+                },
+            ],
+        }
+    }
+}
+
+fn pricing() -> &'static Pricing {
+    static PRICING: std::sync::OnceLock<Pricing> = std::sync::OnceLock::new();
+    PRICING.get_or_init(|| {
+        serde_json::from_str(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/resources/pricing.json"
+        )))
+        .unwrap_or_default()
+    })
+}
+
 fn rates(model: &str) -> Option<(f64, f64)> {
     let m = model.to_lowercase();
-    if m.contains("opus") {
-        Some((15.0, 75.0))
-    } else if m.contains("sonnet") {
-        Some((3.0, 15.0))
-    } else if m.contains("haiku") {
-        Some((1.0, 5.0))
-    } else {
-        None
-    }
+    pricing()
+        .models
+        .iter()
+        .find(|p| m.contains(&p.pattern))
+        .map(|p| (p.input_per_mtok, p.output_per_mtok))
 }
 
 fn est_cost(
@@ -103,12 +154,13 @@ fn est_cost(
     model: &str,
 ) -> Option<f64> {
     let (rin, rout) = rates(model)?;
+    let p = pricing();
     let mtok = 1_000_000.0;
     Some(
         input as f64 / mtok * rin
             + output as f64 / mtok * rout
-            + cache_read as f64 / mtok * rin * 0.1
-            + cache_creation as f64 / mtok * rin * 1.25,
+            + cache_read as f64 / mtok * rin * p.cache_read_multiplier
+            + cache_creation as f64 / mtok * rin * p.cache_write_multiplier,
     )
 }
 
@@ -416,7 +468,18 @@ pub fn aggregate(db: &DbState, since_ms: u64, projects: Option<&[String]>) -> Se
 
 #[cfg(test)]
 mod tests {
-    use super::skill_name_from_input;
+    use super::{est_cost, rates, skill_name_from_input};
+
+    #[test]
+    fn pricing_loads_from_bundled_json() {
+        let (rin, rout) = rates("claude-opus-4-1").unwrap();
+        assert!(rin > 0.0 && rout > rin);
+        assert!(rates("gpt-5-codex").is_none());
+        // 1M input + 1M output on sonnet ≈ input+output rates
+        let cost = est_cost(1_000_000, 1_000_000, 0, 0, "claude-sonnet-4-5").unwrap();
+        let (sin, sout) = rates("sonnet").unwrap();
+        assert!((cost - (sin + sout)).abs() < 1e-9);
+    }
 
     #[test]
     fn extracts_skill_name_from_json_and_truncated_input() {

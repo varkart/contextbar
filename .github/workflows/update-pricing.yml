@@ -1,0 +1,33 @@
+name: Update model pricing
+
+on:
+  schedule:
+    - cron: "0 6 * * 1" # Mondays 06:00 UTC
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  update-pricing:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Refresh pricing.json from LiteLLM
+        run: python3 scripts/update-pricing.py
+
+      - name: Open PR if pricing changed
+        uses: peter-evans/create-pull-request@v7
+        with:
+          branch: chore/update-pricing
+          title: "chore: update model pricing from LiteLLM"
+          commit-message: "chore: update model pricing from LiteLLM"
+          body: |
+            Weekly automated refresh of `src-tauri/resources/pricing.json` from
+            LiteLLM's `model_prices_and_context_window.json`.
+
+            Review the numbers before merging — cost tiles in the app are estimates
+            derived from this table.
+          delete-branch: true
