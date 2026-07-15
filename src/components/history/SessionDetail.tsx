@@ -3,6 +3,7 @@ import { invoke } from '@tauri-apps/api/core'
 import type { SessionEntry, SessionDetail as SessionDetailType } from '../../types'
 import SessionStats from './SessionStats'
 import MessageBubble from './MessageBubble'
+import AgentBadge from './AgentBadge'
 
 interface SessionDetailProps {
   session: SessionEntry
@@ -18,7 +19,7 @@ export default function SessionDetail({ session }: SessionDetailProps) {
   useEffect(() => {
     setLoading(true)
     setError(null)
-    invoke<SessionDetailType>('get_session', { sessionId: session.sessionId })
+    invoke<SessionDetailType>('get_session', { sessionId: session.sessionId, agent: session.agent })
       .then(d => {
         setDetail(d)
         setLoading(false)
@@ -33,7 +34,7 @@ export default function SessionDetail({ session }: SessionDetailProps) {
 
   const handleResume = async () => {
     try {
-      await invoke('resume_in_terminal', { project: session.project, sessionId: session.sessionId })
+      await invoke('resume_in_terminal', { project: session.project, sessionId: session.sessionId, agent: session.agent })
       setOpened(true)
       setTimeout(() => setOpened(false), 1500)
     } catch {
@@ -71,6 +72,7 @@ export default function SessionDetail({ session }: SessionDetailProps) {
             {session.isLive && (
               <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse flex-shrink-0" />
             )}
+            <AgentBadge agent={session.agent} className="flex-shrink-0" />
             <span className="text-[11px] text-[var(--c-text-3)] truncate">
               {session.projectName}
             </span>

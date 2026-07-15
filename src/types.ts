@@ -99,6 +99,8 @@ export interface FileEntry {
 // ── Session History ──────────────────────────────────────────────────────────
 
 export interface SessionEntry {
+  /** Which agent recorded this session: "claude" | "codex" | "gemini". */
+  agent: string
   sessionId: string
   display: string
   timestamp: number
@@ -138,6 +140,7 @@ export interface TokenUsage {
 }
 
 export interface SessionDetail {
+  agent: string
   sessionId: string
   messages: HistoryMessage[]
   totalTokens: TokenUsage

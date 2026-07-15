@@ -4,6 +4,7 @@ import type { RepoWorktrees, WorktreeInfo, SessionEntry, SessionInsights } from 
 import { formatTokens } from '../components/history/SessionStats'
 import { Tile, TileRow } from './InsightTiles'
 import { HBar, RefreshButton, shortModel } from './InsightWidgets'
+import AgentBadge from '../components/history/AgentBadge'
 
 export type WorktreeStatus = 'active' | 'stale' | 'abandoned' | 'primary'
 
@@ -130,6 +131,7 @@ export default function WorktreesSection({ repos, loading, sessions, onRemoved, 
       await invoke('resume_in_terminal', {
         project: wt.path,
         sessionId: linked.length ? linked[0].sessionId : null,
+        agent: linked.length ? linked[0].agent : null,
       })
       setCopied(wt.path)
       setTimeout(() => setCopied(null), 1500)
@@ -425,7 +427,8 @@ export default function WorktreesSection({ repos, loading, sessions, onRemoved, 
                                 className="block w-full text-left text-[11px] border-b border-[var(--c-border)]/50 last:border-0 pb-1.5 last:pb-0 hover:text-[var(--c-accent)] transition-colors group/session"
                               >
                                 <span className="text-[var(--c-text)] font-medium line-clamp-1 group-hover/session:text-[var(--c-accent)]">{s.display}</span>
-                                <span className="text-[var(--c-text-3)]">
+                                <span className="text-[var(--c-text-3)] flex items-center gap-1.5">
+                                  <AgentBadge agent={s.agent} />
                                   {relativeTime(Math.floor(s.timestamp / 1000))}{s.model ? ` · ${s.model}` : ''} · view transcript →
                                 </span>
                               </button>

@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react'
 import type { SessionEntry } from '../../types'
 import { formatTokens, tokenBadgeColor } from './SessionStats'
+import AgentBadge from './AgentBadge'
 
 function relativeTime(ts: number): string {
   const diff = Date.now() - ts
@@ -75,6 +76,7 @@ function SessionRow({ session, onSelect }: SessionRowProps) {
 
           {/* Meta row */}
           <div className="flex items-center gap-2 mt-1">
+            <AgentBadge agent={session.agent} />
             <span
               className="text-[10px] text-[var(--c-text-3)] truncate max-w-[120px]"
               title={session.project}

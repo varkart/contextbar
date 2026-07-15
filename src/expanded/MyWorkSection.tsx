@@ -3,6 +3,7 @@ import { invoke } from '@tauri-apps/api/core'
 import type { RepoWorktrees, SessionEntry } from '../types'
 import type { Section } from './ExpandedApp'
 import { Card, ActivityHeatmap, CommitBars, RefreshButton } from './InsightWidgets'
+import AgentBadge from '../components/history/AgentBadge'
 
 const DAY = 86_400_000
 const PALETTE = ['#6366f1', '#e8a94a', '#d98fd9', '#5fc9b8', '#7aa2e8', '#8fbf6b']
@@ -164,7 +165,7 @@ export default function MyWorkSection({ sessions, repos, loading, goTo, onRefres
   const handleResume = async (p: ProjectAgg) => {
     const latest = p.sessions[0]
     try {
-      await invoke('resume_in_terminal', { project: p.project, sessionId: latest.sessionId })
+      await invoke('resume_in_terminal', { project: p.project, sessionId: latest.sessionId, agent: latest.agent })
       setCopiedResume(p.project)
       setTimeout(() => setCopiedResume(null), 1500)
     } catch {
@@ -342,6 +343,9 @@ export default function MyWorkSection({ sessions, repos, loading, goTo, onRefres
                             {branch && <div className="text-[11px] font-mono text-[var(--c-text-3)] truncate">⌥ {branch}</div>}
                           </div>
                           <div className="ml-auto flex items-center gap-1.5 shrink-0">
+                            {[...new Set(p.sessions.map(s => s.agent))].map(a => (
+                              <AgentBadge key={a} agent={a} />
+                            ))}
                             {live && (
                               <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400">live</span>
                             )}

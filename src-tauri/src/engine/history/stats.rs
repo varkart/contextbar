@@ -180,10 +180,10 @@ pub fn warm(db: &DbState) -> usize {
         let conn = db.0.lock().unwrap();
         let _ = conn.execute(
             "INSERT INTO session_stats
-               (session_id, project, project_name, display, ts, model,
+               (session_id, agent, project, project_name, display, ts, model,
                 input_tokens, output_tokens, cache_read, cache_creation,
                 msg_count, tool_calls, skill_calls, mtime, size)
-             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15)
+             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16)
              ON CONFLICT(session_id) DO UPDATE SET
                ts=excluded.ts, model=excluded.model,
                input_tokens=excluded.input_tokens, output_tokens=excluded.output_tokens,
@@ -192,6 +192,7 @@ pub fn warm(db: &DbState) -> usize {
                skill_calls=excluded.skill_calls, mtime=excluded.mtime, size=excluded.size",
             rusqlite::params![
                 entry.session_id,
+                entry.agent,
                 entry.project,
                 entry.project_name,
                 entry.display,
