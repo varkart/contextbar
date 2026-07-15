@@ -119,10 +119,21 @@ export type MockOverrides = {
   notifications?:    Notification[]
 }
 
+export type ExpandedMockData = {
+  sessions?: unknown[]
+  sessionDetails?: Record<string, unknown>
+  repos?: unknown[]
+  insights?: unknown
+  tokenPoints?: unknown[]
+  promptTimestamps?: number[]
+  commitTimestamps?: number[]
+}
+
 export async function injectTauriMock(
   page: Page,
   overrides: MockOverrides = {},
   tools?: AiTool[],
+  options: { windowLabel?: string; expanded?: ExpandedMockData } = {},
 ) {
   const initData = {
     tools: JSON.parse(JSON.stringify(
@@ -132,18 +143,127 @@ export async function injectTauriMock(
     notifications: JSON.parse(JSON.stringify(
       overrides.notifications ?? []
     )) as Notification[],
+    windowLabel: options.windowLabel ?? 'main',
+    expanded: JSON.parse(JSON.stringify(options.expanded ?? {})) as ExpandedMockData,
   }
 
   await page.addInitScript((data: typeof initData) => {
-    const { tools, overrides, notifications: initNotifs } = data
+    const { tools, overrides, notifications: initNotifs, windowLabel, expanded } = data
     // skip the 5-second splash in E2E
     ;(globalThis as unknown as Record<string, unknown>).__skipSplash = true
     // mutable copy for dismiss operations
     let notifState: typeof initNotifs = [...initNotifs]
 
+    // ── event plumbing: lets tests fire backend events into the app ──────────
+    // Tauri v2 `listen()` goes through invoke('plugin:event|listen') with a
+    // callback id produced by transformCallback. We register callbacks and
+    // expose window.__emitMockEvent(name, payload) for specs.
+    const callbacks = new Map<number, (payload: unknown) => void>()
+    const eventHandlers = new Map<string, Set<number>>()
+    let nextCallbackId = 1
+    // Assertable log of side-effectful invokes: window.__invokeLog
+    const invokeLog: { cmd: string; args: unknown }[] = []
+    ;(globalThis as unknown as Record<string, unknown>).__invokeLog = invokeLog
+    ;(globalThis as unknown as Record<string, unknown>).__emitMockEvent = (
+      name: string,
+      payload: unknown,
+    ) => {
+      for (const id of eventHandlers.get(name) ?? []) {
+        const cb = callbacks.get(id)
+        if (cb) cb({ event: name, id, payload })
+      }
+    }
+
     ;(globalThis as unknown as Record<string, unknown>).__TAURI_INTERNALS__ = {
+      transformCallback: (cb: (payload: unknown) => void) => {
+        const id = nextCallbackId++
+        callbacks.set(id, cb)
+        return id
+      },
       invoke: (cmd: string, args?: Record<string, unknown>) => {
+        if (
+          cmd === 'resume_in_terminal' || cmd === 'open_in_vscode' ||
+          cmd === 'remove_worktree' || cmd === 'open_expanded_window' ||
+          cmd === 'set_terminal'
+        ) {
+          invokeLog.push({ cmd, args: args ?? {} })
+        }
         switch (cmd) {
+          // Tauri v2 event plugin
+          case 'plugin:event|listen': {
+            const { event, handler } = (args ?? {}) as { event: string; handler: number }
+            if (!eventHandlers.has(event)) eventHandlers.set(event, new Set())
+            eventHandlers.get(event)!.add(handler)
+            return Promise.resolve(handler)
+          }
+          case 'plugin:event|unlisten': {
+            const { eventId } = (args ?? {}) as { eventId: number }
+            for (const ids of eventHandlers.values()) ids.delete(eventId)
+            callbacks.delete(eventId)
+            return Promise.resolve(null)
+          }
+
+          // Current name for tool detection (get_tools kept for old specs)
+          case 'get_agents':
+            return Promise.resolve(JSON.parse(JSON.stringify(tools)))
+
+          // ── expanded window data ─────────────────────────────────────────
+          case 'list_sessions':
+            return Promise.resolve(JSON.parse(JSON.stringify(expanded.sessions ?? [])))
+          case 'get_session': {
+            const id = ((args ?? {}) as { sessionId?: string }).sessionId ?? ''
+            const detail = (expanded.sessionDetails ?? {})[id]
+            return detail
+              ? Promise.resolve(JSON.parse(JSON.stringify(detail)))
+              : Promise.reject(new Error(`session ${id} not found`))
+          }
+          case 'list_worktrees':
+            return Promise.resolve(JSON.parse(JSON.stringify(expanded.repos ?? [])))
+          case 'get_session_insights':
+            return Promise.resolve(JSON.parse(JSON.stringify(
+              expanded.insights ?? {
+                sessionsAnalyzed: 0, inputTokens: 0, outputTokens: 0,
+                cacheReadTokens: 0, cacheCreationTokens: 0, estCostUsd: 0,
+                cacheReadRatio: 0, avgToolCalls: 0, perModel: [], perProject: [],
+                toolCounts: [], mcpToolCounts: [], skillCounts: [], heaviest: null,
+              }
+            )))
+          case 'get_token_activity':
+            return Promise.resolve(JSON.parse(JSON.stringify(expanded.tokenPoints ?? [])))
+          case 'get_prompt_timestamps':
+            return Promise.resolve([...(expanded.promptTimestamps ?? [])])
+          case 'get_commit_activity':
+            return Promise.resolve([...(expanded.commitTimestamps ?? [])])
+          case 'warm_session_stats':
+          case 'warm_skill_cache':
+          case 'warm_mcp_cache':
+            return Promise.resolve(null)
+          case 'get_history_stats':
+            return Promise.resolve({ totalSessions: 0, totalTokens: 0 })
+          case 'list_session_projects':
+            return Promise.resolve([])
+          case 'get_file_mtimes':
+            return Promise.resolve({})
+          case 'list_terminals':
+            return Promise.resolve(['Terminal', 'iTerm2'])
+          case 'get_terminal':
+            return Promise.resolve('Terminal')
+          case 'set_terminal':
+            return Promise.resolve(null)
+          case 'is_vscode_installed':
+            return Promise.resolve(true)
+          case 'open_in_vscode':
+          case 'resume_in_terminal':
+          case 'open_expanded_window':
+            return Promise.resolve(null)
+          case 'remove_worktree':
+            return Promise.resolve(null)
+          case 'read_markdown_file':
+            return Promise.resolve('# Mock heading\n\nMock markdown body.')
+          case 'reveal_in_finder':
+          case 'open_path':
+          case 'open_url':
+            return Promise.resolve(null)
           case 'get_tools':
             return Promise.resolve(JSON.parse(JSON.stringify(tools)))
 
@@ -261,8 +381,9 @@ export async function injectTauriMock(
       },
 
       metadata: {
-        currentWindow: { label: 'main' },
-        windows: [{ label: 'main' }],
+        currentWindow: { label: windowLabel },
+        currentWebview: { label: windowLabel },
+        windows: [{ label: windowLabel }],
       },
 
       listen: (_event: string, _handler: unknown) => Promise.resolve(() => {}),
