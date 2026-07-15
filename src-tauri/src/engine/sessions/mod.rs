@@ -170,3 +170,65 @@ mod tests {
         assert!(rfc3339_to_ms("garbage").is_none());
     }
 }
+
+#[cfg(test)]
+mod smoke {
+    // Throwaway: runs against the real home dir. `cargo test -- --ignored`.
+    #[test]
+    #[ignore]
+    fn real_sources_smoke() {
+        let entries = super::list_all(30, 0, None, None);
+        let mut counts = std::collections::HashMap::new();
+        for e in &entries {
+            *counts.entry(e.agent.clone()).or_insert(0) += 1;
+        }
+        println!("agents in top 30: {counts:?}");
+        for e in entries.iter().take(8) {
+            println!(
+                "[{}] {} | {} | prompts:{} tokens:{}",
+                e.agent,
+                e.project_name,
+                e.display.chars().take(40).collect::<String>(),
+                e.prompt_count,
+                e.total_tokens
+            );
+        }
+        for agent in ["gemini", "codex"] {
+            if let Some(e) = entries.iter().find(|e| e.agent == agent) {
+                let d = super::get_any(Some(agent), &e.session_id);
+                println!("{agent} get -> messages: {:?}", d.map(|d| d.messages.len()));
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod smoke2 {
+    use super::SessionSource;
+    #[test]
+    #[ignore]
+    fn gemini_codex_direct() {
+        let t0 = std::time::Instant::now();
+        let g = super::gemini::GeminiSource.list(10);
+        println!("gemini list(10) -> {} in {:?}", g.len(), t0.elapsed());
+        for e in g.iter().take(5) {
+            println!(
+                "  [{}] {} | {}",
+                e.project_name,
+                e.display.chars().take(50).collect::<String>(),
+                e.prompt_count
+            );
+        }
+        let t1 = std::time::Instant::now();
+        let c = super::codex::CodexSource.list(10);
+        println!("codex list(10) -> {} in {:?}", c.len(), t1.elapsed());
+        for e in c.iter().take(3) {
+            println!(
+                "  [{}] {} | tokens:{}",
+                e.project_name,
+                e.display.chars().take(50).collect::<String>(),
+                e.total_tokens
+            );
+        }
+    }
+}

@@ -20,8 +20,6 @@ use serde_json::Value;
 use std::io::{BufRead, Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
 
-/// Bounded read when listing (.jsonl first snapshot lives at the top).
-const LIST_SCAN_BYTES: u64 = 512 * 1024;
 /// Full-parse cap; larger .jsonl files fall back to a tail read of this size.
 const GET_SCAN_BYTES: u64 = 25 * 1024 * 1024;
 
@@ -96,69 +94,6 @@ fn scan_messages(messages: &[Value]) -> (String, u32) {
         }
     }
     (display, prompts)
-}
-
-struct Summary {
-    session_id: String,
-    display: String,
-    prompt_count: u32,
-    start_ms: u64,
-}
-
-fn summarize(path: &Path) -> Option<Summary> {
-    let ext = path.extension().and_then(|e| e.to_str())?;
-    if ext == "json" {
-        if path.metadata().ok()?.len() > GET_SCAN_BYTES {
-            return None;
-        }
-        let v: Value = serde_json::from_str(&std::fs::read_to_string(path).ok()?).ok()?;
-        let (display, prompts) = scan_messages(v.get("messages")?.as_array()?);
-        return Some(Summary {
-            session_id: v.get("sessionId")?.as_str()?.to_string(),
-            display,
-            prompt_count: prompts,
-            start_ms: v
-                .get("startTime")
-                .and_then(|t| t.as_str())
-                .and_then(rfc3339_to_ms)
-                .unwrap_or(0),
-        });
-    }
-    // .jsonl: header line + first $set within the bounded read
-    let file = std::fs::File::open(path).ok()?;
-    let reader = std::io::BufReader::new(file.take(LIST_SCAN_BYTES));
-    let mut session_id = None;
-    let mut start_ms = 0u64;
-    let mut display = String::new();
-    let mut prompts = 0u32;
-    for line in reader.lines().map_while(Result::ok) {
-        let Ok(v) = serde_json::from_str::<Value>(&line) else {
-            continue;
-        };
-        if session_id.is_none() {
-            if let Some(id) = v.get("sessionId").and_then(|s| s.as_str()) {
-                session_id = Some(id.to_string());
-                start_ms = v
-                    .get("startTime")
-                    .and_then(|t| t.as_str())
-                    .and_then(rfc3339_to_ms)
-                    .unwrap_or(0);
-                continue;
-            }
-        }
-        if let Some(messages) = v.pointer("/$set/messages").and_then(|m| m.as_array()) {
-            let (d, p) = scan_messages(messages);
-            display = d;
-            prompts = p;
-            break; // first snapshot is enough for a summary
-        }
-    }
-    Some(Summary {
-        session_id: session_id?,
-        display,
-        prompt_count: prompts,
-        start_ms,
-    })
 }
 
 /// Latest full message array from a .jsonl session (last `$set` snapshot).
@@ -264,51 +199,115 @@ fn project_name(path: &str) -> String {
         .to_string()
 }
 
+/// Build the session index from each project's `logs.json` — a small
+/// append-only prompt log `[{sessionId, messageId, type, message, timestamp}]`,
+/// the direct analogue of Claude's history.jsonl. Chat files are only touched
+/// for the newest sessions' live check and for full transcripts in `get()`.
+fn list_from_tmp(tmp: &Path) -> Vec<SessionEntry> {
+    let mut out: Vec<SessionEntry> = Vec::new();
+    let Ok(dirs) = std::fs::read_dir(tmp) else {
+        return out;
+    };
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0);
+
+    for dir in dirs.flatten() {
+        let dir = dir.path();
+        if !dir.is_dir() {
+            continue;
+        }
+        let Ok(project) = std::fs::read_to_string(dir.join(".project_root")) else {
+            continue;
+        };
+        let project = project.trim().to_string();
+        if project.is_empty() {
+            continue;
+        }
+        let Ok(raw) = std::fs::read_to_string(dir.join("logs.json")) else {
+            continue;
+        };
+        let Ok(entries) = serde_json::from_str::<Vec<Value>>(&raw) else {
+            continue;
+        };
+
+        // Group prompts by sessionId: first = display, last = activity time.
+        let mut sessions: std::collections::HashMap<String, SessionEntry> =
+            std::collections::HashMap::new();
+        for e in &entries {
+            if e.get("type").and_then(|t| t.as_str()) != Some("user") {
+                continue;
+            }
+            let Some(id) = e.get("sessionId").and_then(|s| s.as_str()) else {
+                continue;
+            };
+            let msg = e.get("message").and_then(|m| m.as_str()).unwrap_or("");
+            let ts = e
+                .get("timestamp")
+                .and_then(|t| t.as_str())
+                .and_then(rfc3339_to_ms)
+                .unwrap_or(0);
+            match sessions.get_mut(id) {
+                Some(entry) => {
+                    entry.timestamp = entry.timestamp.max(ts);
+                    entry.prompt_count += 1;
+                }
+                None => {
+                    sessions.insert(
+                        id.to_string(),
+                        SessionEntry {
+                            agent: "gemini".to_string(),
+                            session_id: id.to_string(),
+                            display: msg.trim().chars().take(300).collect(),
+                            timestamp: ts,
+                            project_name: project_name(&project),
+                            project: project.clone(),
+                            total_tokens: 0,
+                            model: None,
+                            duration_minutes: None,
+                            is_live: false,
+                            error_count: 0,
+                            prompt_count: 1,
+                        },
+                    );
+                }
+            }
+        }
+
+        // Live check only for sessions active within the last hour — needs a
+        // chat-file mtime lookup, so keep it bounded.
+        let chats = dir.join("chats");
+        for entry in sessions.values_mut() {
+            if now.saturating_sub(entry.timestamp) > 3_600_000 {
+                continue;
+            }
+            let short: String = entry.session_id.chars().take(8).collect();
+            if let Ok(files) = std::fs::read_dir(&chats) {
+                entry.is_live = files.flatten().any(|f| {
+                    f.file_name().to_string_lossy().contains(&short)
+                        && is_recently_modified(&f.path())
+                });
+            }
+        }
+
+        out.extend(sessions.into_values());
+    }
+    out
+}
+
 impl SessionSource for GeminiSource {
     fn agent_id(&self) -> &'static str {
         "gemini"
     }
 
     fn list(&self, limit: usize) -> Vec<SessionEntry> {
-        // Sort by mtime (metadata only) BEFORE parsing — there can be
-        // thousands of chat files; we only open the newest `limit`.
-        let mut files = chat_files();
-        files.sort_by_key(|(p, _)| std::cmp::Reverse(file_mtime_ms(p).unwrap_or(0)));
-
-        let mut out: Vec<SessionEntry> = Vec::new();
-        let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
-        for (path, project) in files {
-            if out.len() >= limit {
-                break;
-            }
-            let Some(s) = summarize(&path) else { continue };
-            // A session can exist as both auto-saved .jsonl and /chat-saved
-            // .json — newest file wins (files are mtime-sorted).
-            if !seen.insert(s.session_id.clone()) {
-                continue;
-            }
-            if s.display.is_empty() && s.prompt_count == 0 {
-                continue; // context-only session, nothing to show
-            }
-            out.push(SessionEntry {
-                agent: "gemini".to_string(),
-                session_id: s.session_id,
-                display: if s.display.is_empty() {
-                    "(no prompt)".into()
-                } else {
-                    s.display
-                },
-                timestamp: file_mtime_ms(&path).unwrap_or(s.start_ms),
-                project_name: project_name(&project),
-                project,
-                total_tokens: 0,
-                model: None,
-                duration_minutes: None,
-                is_live: is_recently_modified(&path),
-                error_count: 0,
-                prompt_count: s.prompt_count.max(1),
-            });
-        }
+        let Some(home) = dirs::home_dir() else {
+            return vec![];
+        };
+        let mut out = list_from_tmp(&home.join(".gemini").join("tmp"));
+        out.sort_by_key(|e| std::cmp::Reverse(e.timestamp));
+        out.truncate(limit);
         out
     }
 
@@ -394,17 +393,6 @@ mod tests {
     );
 
     #[test]
-    fn jsonl_summary_skips_context_preamble() {
-        let dir = tempfile::tempdir().unwrap();
-        let p = dir.path().join("session-x-aaaa1111.jsonl");
-        std::fs::write(&p, JSONL).unwrap();
-        let s = summarize(&p).unwrap();
-        assert_eq!(s.session_id, "aaaa1111-2222-3333-4444-555566667777");
-        assert_eq!(s.display, "build the parser");
-        assert_eq!(s.prompt_count, 1);
-    }
-
-    #[test]
     fn jsonl_latest_snapshot_wins() {
         let dir = tempfile::tempdir().unwrap();
         let p = dir.path().join("session-x-aaaa1111.jsonl");
@@ -419,16 +407,35 @@ mod tests {
     }
 
     #[test]
-    fn json_format_and_string_content() {
-        let dir = tempfile::tempdir().unwrap();
-        let p = dir.path().join("session-y-bbbb2222.json");
+    fn lists_sessions_from_logs_json() {
+        let tmp = tempfile::tempdir().unwrap();
+        let proj = tmp.path().join("somehash");
+        std::fs::create_dir_all(proj.join("chats")).unwrap();
+        std::fs::write(proj.join(".project_root"), "/Users/x/myproj\n").unwrap();
         std::fs::write(
-            &p,
-            r#"{"sessionId":"bbbb2222-0000-0000-0000-000000000000","startTime":"2026-01-19T01:05:32.651Z","lastUpdated":"2026-01-19T01:06:29.826Z","messages":[{"id":"1","timestamp":"2026-01-19T01:05:32.651Z","type":"user","content":"investigate the codebase"},{"id":"2","timestamp":"2026-01-19T01:06:00.000Z","type":"gemini","content":"Here is what I found."}]}"#,
+            proj.join("logs.json"),
+            r#"[
+              {"sessionId":"s1","messageId":0,"type":"user","message":"first prompt","timestamp":"2026-03-18T00:20:00.000Z"},
+              {"sessionId":"s1","messageId":1,"type":"user","message":"second prompt","timestamp":"2026-03-18T00:23:18.000Z"},
+              {"sessionId":"s2","messageId":0,"type":"user","message":"other session","timestamp":"2026-03-19T10:00:00.000Z"}
+            ]"#,
         )
         .unwrap();
-        let s = summarize(&p).unwrap();
-        assert_eq!(s.display, "investigate the codebase");
-        assert_eq!(s.prompt_count, 1);
+        // Dir without .project_root is skipped
+        let orphan = tmp.path().join("orphan");
+        std::fs::create_dir_all(orphan.join("chats")).unwrap();
+        std::fs::write(orphan.join("logs.json"), r#"[{"sessionId":"x","messageId":0,"type":"user","message":"hidden","timestamp":"2026-03-01T00:00:00.000Z"}]"#).unwrap();
+
+        let mut out = list_from_tmp(tmp.path());
+        out.sort_by_key(|e| e.session_id.clone());
+        assert_eq!(out.len(), 2);
+        assert_eq!(out[0].session_id, "s1");
+        assert_eq!(out[0].display, "first prompt");
+        assert_eq!(out[0].prompt_count, 2);
+        assert_eq!(out[0].project, "/Users/x/myproj");
+        assert_eq!(out[0].project_name, "myproj");
+        // timestamp = last activity
+        assert!(out[0].timestamp > rfc3339_to_ms("2026-03-18T00:22:00.000Z").unwrap());
+        assert_eq!(out[1].session_id, "s2");
     }
 }
