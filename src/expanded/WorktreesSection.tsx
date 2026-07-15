@@ -56,7 +56,7 @@ interface WorktreesSectionProps {
   loading: boolean
   sessions: SessionEntry[]
   onRemoved: () => void
-  onRefresh: () => void
+  onRefresh: () => void | Promise<unknown>
   onOpenSession: (s: SessionEntry) => void
 }
 

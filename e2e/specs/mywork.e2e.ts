@@ -46,3 +46,14 @@ test('project card click opens the latest transcript', async ({ page }) => {
 test('standup section is gone', async ({ page }) => {
   await expect(page.getByText(/Standup/)).not.toBeVisible()
 })
+
+test('refresh button shows spin-then-checkmark feedback on click', async ({ page }) => {
+  const button = page.getByRole('button', { name: 'Refresh' })
+  await expect(button).toBeVisible()
+  await button.click()
+  // Spinning icon while the refresh promise is in flight
+  await expect(button.locator('svg.animate-spin')).toBeVisible()
+  // Then a checkmark confirming completion
+  await expect(button).toHaveAttribute('title', 'Refreshed')
+  await expect(button.locator('svg.animate-spin')).toHaveCount(0)
+})

@@ -69,7 +69,7 @@ interface MyWorkSectionProps {
   repos: RepoWorktrees[]
   loading: boolean
   goTo: (s: Section) => void
-  onRefresh: () => void
+  onRefresh: () => void | Promise<unknown>
   onOpenSession: (s: SessionEntry) => void
 }
 

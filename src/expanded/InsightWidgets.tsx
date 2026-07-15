@@ -42,23 +42,57 @@ export function HBar({ name, value, pct, color, hint }: {
   )
 }
 
-/** Small refresh icon button; spins while `busy`. */
-export function RefreshButton({ onClick, busy }: { onClick: () => void; busy?: boolean }) {
+/** Refresh button with feedback: spins while the refresh runs (min 600ms so
+ *  it's visible even when data returns instantly), then flashes a checkmark. */
+export function RefreshButton({ onClick, busy }: {
+  onClick: () => void | Promise<unknown>
+  busy?: boolean
+}) {
+  const [state, setState] = useState<'idle' | 'busy' | 'done'>('idle')
+
+  const handle = async () => {
+    if (state === 'busy') return
+    setState('busy')
+    const started = Date.now()
+    try {
+      await onClick()
+    } catch { /* sections surface their own errors */ }
+    const remaining = Math.max(0, 600 - (Date.now() - started))
+    setTimeout(() => {
+      setState('done')
+      setTimeout(() => setState('idle'), 1200)
+    }, remaining)
+  }
+
+  const spinning = state === 'busy' || (state === 'idle' && !!busy)
+  const done = state === 'done'
+
   return (
     <button
-      onClick={onClick}
-      title="Refresh"
+      onClick={handle}
+      title={done ? 'Refreshed' : 'Refresh'}
       aria-label="Refresh"
-      className="p-1.5 rounded-md border border-[var(--c-border)] text-[var(--c-text-3)] hover:text-[var(--c-text-2)] hover:border-[var(--c-text-3)]/50 transition-colors flex-shrink-0"
+      aria-busy={spinning}
+      className={`p-1.5 rounded-md border transition-colors flex-shrink-0 ${done ? 'border-emerald-500/40 text-emerald-400' : 'border-[var(--c-border)] text-[var(--c-text-3)] hover:text-[var(--c-text-2)] hover:border-[var(--c-text-3)]/50'}`}
     >
-      <svg
-        xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
-        stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
-        className={`w-3.5 h-3.5 ${busy ? 'animate-spin' : ''}`}
-      >
-        <path d="M21 12a9 9 0 1 1-2.64-6.36" />
-        <polyline points="21 3 21 9 15 9" />
-      </svg>
+      {done ? (
+        <svg
+          xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+          stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
+          className="w-3.5 h-3.5"
+        >
+          <polyline points="20 6 9 17 4 12" />
+        </svg>
+      ) : (
+        <svg
+          xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+          stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+          className={`w-3.5 h-3.5 ${spinning ? 'animate-spin' : ''}`}
+        >
+          <path d="M21 12a9 9 0 1 1-2.64-6.36" />
+          <polyline points="21 3 21 9 15 9" />
+        </svg>
+      )}
     </button>
   )
 }

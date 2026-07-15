@@ -152,7 +152,7 @@ export default function ExpandedApp() {
   const [sessionLimit, setSessionLimit] = useState(300)
 
   const fetchSessions = useCallback((limit: number) => {
-    invoke<SessionEntry[]>('list_sessions', { limit, offset: 0 })
+    return invoke<SessionEntry[]>('list_sessions', { limit, offset: 0 })
       .then(s => { setSessions(s); setSessionsLoading(false) })
       .catch(() => setSessionsLoading(false))
   }, [])
@@ -168,7 +168,7 @@ export default function ExpandedApp() {
   }, [fetchSessions])
 
   const fetchWorktrees = useCallback(() => {
-    invoke<RepoWorktrees[]>('list_worktrees')
+    return invoke<RepoWorktrees[]>('list_worktrees')
       .then(r => { setRepos(r); setReposLoading(false) })
       .catch(() => setReposLoading(false))
   }, [])
@@ -176,9 +176,11 @@ export default function ExpandedApp() {
   useEffect(() => { fetchWorktrees() }, [fetchWorktrees])
 
   const refreshAll = useCallback(() => {
-    fetchSessions(sessionLimit)
-    fetchWorktrees()
-    invoke('warm_session_stats').catch(() => {})
+    return Promise.all([
+      fetchSessions(sessionLimit),
+      fetchWorktrees(),
+      invoke('warm_session_stats').catch(() => {}),
+    ])
   }, [fetchSessions, fetchWorktrees, sessionLimit])
 
   // Freshness, three layers:
@@ -418,7 +420,7 @@ function SessionsSection({ sessions, loading, selected, onSelect, onRefresh, onL
   loading: boolean
   selected: SessionEntry | null
   onSelect: (s: SessionEntry) => void
-  onRefresh: () => void
+  onRefresh: () => void | Promise<unknown>
   onLoadMore: () => void
   hasMore: boolean
 }) {
