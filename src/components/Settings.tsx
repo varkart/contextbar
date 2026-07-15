@@ -214,8 +214,12 @@ export default function Settings({ updateInfo, theme, onThemeChange, onOpenLogs,
       invoke<string>('get_version').then(setVersion).catch(() => setVersion('0.5.0')),
       invoke<string>('get_shortcut').then(setShortcut).catch(() => {}),
       invoke<boolean>('get_vibrancy').then(setVibrancy).catch(() => {}),
-      invoke<string>('get_terminal').then(setTerminal).catch(() => {}),
-      invoke<string[]>('list_terminals').then(setTerminals).catch(() => {}),
+      invoke<string>('get_terminal')
+        .then(t => { if (typeof t === 'string' && t) setTerminal(t) })
+        .catch(() => {}),
+      invoke<string[]>('list_terminals')
+        .then(t => { if (Array.isArray(t) && t.length) setTerminals(t) })
+        .catch(() => {}),
       invoke<boolean>('check_accessibility').then(setAccessibilityGranted).catch(() => setAccessibilityGranted(true)),
     ]).finally(() => {
       setAutostartLoading(false)

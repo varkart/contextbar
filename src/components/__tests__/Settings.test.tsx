@@ -22,6 +22,8 @@ beforeEach(() => {
       case 'get_version':   return Promise.resolve('0.7.0')
       case 'get_shortcut':  return Promise.resolve('CommandOrControl+Shift+Space')
       case 'get_vibrancy':  return Promise.resolve(true)
+      case 'get_terminal':  return Promise.resolve('Terminal')
+      case 'list_terminals': return Promise.resolve(['Terminal', 'iTerm2'])
       default:              return Promise.resolve(null)
     }
   })
