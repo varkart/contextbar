@@ -14,6 +14,7 @@ use crate::engine::history::types::{
 use serde_json::Value;
 use std::io::BufRead;
 use std::path::{Path, PathBuf};
+use std::sync::{Mutex, OnceLock};
 
 /// Cap per-file read during listing — summaries live near the top.
 const LIST_SCAN_BYTES: u64 = 5 * 1024 * 1024;
@@ -23,7 +24,11 @@ const GET_SCAN_BYTES: u64 = 25 * 1024 * 1024;
 pub struct CodexSource;
 
 fn sessions_root() -> Option<PathBuf> {
-    let root = dirs::home_dir()?.join(".codex").join("sessions");
+    // ccusage convention: CODEX_HOME overrides the data dir.
+    let base = std::env::var("CODEX_HOME")
+        .map(PathBuf::from)
+        .unwrap_or(dirs::home_dir()?.join(".codex"));
+    let root = base.join("sessions");
     root.is_dir().then_some(root)
 }
 
@@ -81,6 +86,7 @@ fn rollout_files(limit_hint: usize) -> Vec<PathBuf> {
     files
 }
 
+#[derive(Clone)]
 struct Summary {
     id: String,
     cwd: String,
@@ -169,6 +175,36 @@ fn parse_summary(path: &Path) -> Option<Summary> {
     })
 }
 
+/// Rollouts are append-only and re-listed on every refresh/poll — memoize
+/// summaries by (mtime, size) so unchanged files are never re-scanned.
+fn summary_cache() -> &'static Mutex<std::collections::HashMap<PathBuf, (i64, u64, Summary)>> {
+    static CACHE: OnceLock<Mutex<std::collections::HashMap<PathBuf, (i64, u64, Summary)>>> =
+        OnceLock::new();
+    CACHE.get_or_init(Default::default)
+}
+
+fn cached_summary(path: &Path) -> Option<Summary> {
+    let meta = path.metadata().ok()?;
+    let mtime = meta
+        .modified()
+        .ok()
+        .and_then(|m| m.duration_since(std::time::UNIX_EPOCH).ok())
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0);
+    let size = meta.len();
+    if let Some((m, sz, cached)) = summary_cache().lock().unwrap().get(path) {
+        if *m == mtime && *sz == size {
+            return Some(cached.clone());
+        }
+    }
+    let fresh = parse_summary(path)?;
+    summary_cache()
+        .lock()
+        .unwrap()
+        .insert(path.to_path_buf(), (mtime, size, fresh.clone()));
+    Some(fresh)
+}
+
 fn project_name(path: &str) -> String {
     path.trim_end_matches('/')
         .rsplit('/')
@@ -196,7 +232,7 @@ impl SessionSource for CodexSource {
             if out.len() >= limit {
                 break;
             }
-            let Some(s) = parse_summary(&path) else {
+            let Some(s) = cached_summary(&path) else {
                 continue;
             };
             // Last activity = file mtime (rollout is append-only).
@@ -406,6 +442,21 @@ mod tests {
         let s = parse_summary(&p).unwrap();
         assert_eq!(s.id, "abc-123");
         assert_eq!(s.display, "(no prompt)");
+    }
+
+    #[test]
+    fn summary_cache_invalidates_on_change() {
+        let dir = tempfile::tempdir().unwrap();
+        let p = fixture_file(dir.path());
+        let first = cached_summary(&p).unwrap();
+        assert_eq!(first.prompt_count, 2);
+        // Append another user message — size changes, cache must refresh
+        let extra = "{\"timestamp\":\"2026-06-11T21:41:00.000Z\",\"type\":\"event_msg\",\"payload\":{\"type\":\"user_message\",\"message\":\"one more\"}}\n";
+        let mut content = std::fs::read_to_string(&p).unwrap();
+        content.push_str(extra);
+        std::fs::write(&p, content).unwrap();
+        let second = cached_summary(&p).unwrap();
+        assert_eq!(second.prompt_count, 3);
     }
 
     #[test]

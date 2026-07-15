@@ -25,12 +25,19 @@ const GET_SCAN_BYTES: u64 = 25 * 1024 * 1024;
 
 pub struct GeminiSource;
 
+/// Gemini data dir (ccusage convention: GEMINI_DATA_DIR overrides).
+fn tmp_root() -> Option<PathBuf> {
+    if let Ok(dir) = std::env::var("GEMINI_DATA_DIR") {
+        return Some(PathBuf::from(dir));
+    }
+    Some(dirs::home_dir()?.join(".gemini").join("tmp"))
+}
+
 /// (chat file, project path) pairs across all attributable project dirs.
 fn chat_files() -> Vec<(PathBuf, String)> {
-    let Some(home) = dirs::home_dir() else {
+    let Some(tmp) = tmp_root() else {
         return vec![];
     };
-    let tmp = home.join(".gemini").join("tmp");
     let mut out = Vec::new();
     let Ok(dirs) = std::fs::read_dir(&tmp) else {
         return vec![];
@@ -283,10 +290,10 @@ impl SessionSource for GeminiSource {
     }
 
     fn list(&self, limit: usize) -> Vec<SessionEntry> {
-        let Some(home) = dirs::home_dir() else {
+        let Some(tmp) = tmp_root() else {
             return vec![];
         };
-        let mut out = list_from_tmp(&home.join(".gemini").join("tmp"));
+        let mut out = list_from_tmp(&tmp);
         out.sort_by_key(|e| std::cmp::Reverse(e.timestamp));
         out.truncate(limit);
         out
