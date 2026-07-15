@@ -2502,8 +2502,8 @@ mod tests {
     #[test]
     fn percent_encode_path_escapes_spaces_and_keeps_slashes() {
         assert_eq!(
-            percent_encode_path("/Users/vk/my project/repo"),
-            "/Users/vk/my%20project/repo"
+            percent_encode_path("/Users/test/my project/repo"),
+            "/Users/test/my%20project/repo"
         );
         assert_eq!(percent_encode_path("/tmp/plain"), "/tmp/plain");
         assert_eq!(percent_encode_path("/a&b?c"), "/a%26b%3Fc");
