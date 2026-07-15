@@ -2,6 +2,8 @@
 //! CLI, Gemini CLI) implements `SessionSource`; the aggregator merges their
 //! sessions into one newest-first stream for the UI.
 
+pub mod codex;
+
 use super::history::{self, SessionDetail, SessionEntry};
 
 pub trait SessionSource: Sync {
@@ -34,7 +36,7 @@ impl SessionSource for ClaudeSource {
 }
 
 pub fn sources() -> Vec<&'static dyn SessionSource> {
-    vec![&ClaudeSource]
+    vec![&ClaudeSource, &codex::CodexSource]
 }
 
 pub fn source_for(agent: &str) -> Option<&'static dyn SessionSource> {
