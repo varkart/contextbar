@@ -142,6 +142,7 @@ pub fn get_session(
     };
 
     Some(SessionDetail {
+        agent: "claude".to_string(),
         session_id: session_id.to_string(),
         messages,
         total_tokens: total_usage,

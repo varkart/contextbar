@@ -1,8 +1,15 @@
 use serde::{Deserialize, Serialize};
 
+pub(crate) fn default_agent() -> String {
+    "claude".to_string()
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SessionEntry {
+    /// Which agent recorded this session ("claude" | "codex" | "gemini").
+    #[serde(default = "default_agent")]
+    pub agent: String,
     pub session_id: String,
     pub display: String,
     pub timestamp: u64,
@@ -20,6 +27,8 @@ pub struct SessionEntry {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SessionDetail {
+    #[serde(default = "default_agent")]
+    pub agent: String,
     pub session_id: String,
     pub messages: Vec<Message>,
     pub total_tokens: TokenUsage,

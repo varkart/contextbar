@@ -324,11 +324,11 @@ async fn list_sessions(
     search: Option<String>,
 ) -> Vec<engine::history::SessionEntry> {
     tokio::task::spawn_blocking(move || {
-        engine::history::list_sessions(
+        engine::sessions::list_all(
             limit.unwrap_or(200),
             offset.unwrap_or(0),
-            project_filter,
-            search,
+            project_filter.as_deref(),
+            search.as_deref(),
         )
     })
     .await
@@ -336,8 +336,11 @@ async fn list_sessions(
 }
 
 #[tauri::command]
-async fn get_session(session_id: String) -> Result<engine::history::SessionDetail, String> {
-    tokio::task::spawn_blocking(move || engine::history::get_session(&session_id))
+async fn get_session(
+    session_id: String,
+    agent: Option<String>,
+) -> Result<engine::history::SessionDetail, String> {
+    tokio::task::spawn_blocking(move || engine::sessions::get_any(agent.as_deref(), &session_id))
         .await
         .map_err(|e| e.to_string())?
 }
@@ -398,19 +401,23 @@ fn open_in_vscode(path: String) -> Result<(), String> {
 
 /// given project directory. macOS only; the path must live under $HOME.
 #[tauri::command]
-fn resume_in_terminal(project: String, session_id: Option<String>) -> Result<(), String> {
+fn resume_in_terminal(
+    project: String,
+    session_id: Option<String>,
+    agent: Option<String>,
+) -> Result<(), String> {
     let canonical = validate_tool_path(&project)?;
     if let Some(id) = &session_id {
         if id.is_empty() || !id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-') {
             return Err("invalid session id".into());
         }
     }
+    let source = engine::sessions::source_for(agent.as_deref().unwrap_or("claude"))
+        .ok_or("unknown agent")?;
     // Shell layer: single-quote the path; escape embedded single quotes.
     let path_str = canonical.to_string_lossy().replace('\'', r"'\''");
-    let shell_cmd = match &session_id {
-        Some(id) => format!("cd '{path_str}' && claude --resume {id}"),
-        None => format!("cd '{path_str}' && claude"),
-    };
+    let resume = source.resume_command(session_id.as_deref());
+    let shell_cmd = format!("cd '{path_str}' && {resume}");
     // AppleScript layer: escape backslashes and double quotes.
     let osa = shell_cmd.replace('\\', "\\\\").replace('"', "\\\"");
     let script = format!("tell application \"Terminal\"\nactivate\ndo script \"{osa}\"\nend tell");

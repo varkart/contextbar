@@ -123,6 +123,7 @@ pub fn list_sessions(
                 sessions.insert(
                     session_id.clone(),
                     SessionEntry {
+                        agent: "claude".to_string(),
                         session_id,
                         display,
                         timestamp,
