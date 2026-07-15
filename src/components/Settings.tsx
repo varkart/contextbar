@@ -205,6 +205,8 @@ export default function Settings({ updateInfo, theme, onThemeChange, onOpenLogs,
   const [accessibilityGranted, setAccessibilityGranted] = useState<boolean | null>(null)
   const [installing, setInstalling] = useState(false)
   const [installError, setInstallError] = useState<string | null>(null)
+  const [terminal, setTerminal] = useState('Terminal')
+  const [terminals, setTerminals] = useState<string[]>(['Terminal'])
 
   useEffect(() => {
     Promise.all([
@@ -212,6 +214,8 @@ export default function Settings({ updateInfo, theme, onThemeChange, onOpenLogs,
       invoke<string>('get_version').then(setVersion).catch(() => setVersion('0.5.0')),
       invoke<string>('get_shortcut').then(setShortcut).catch(() => {}),
       invoke<boolean>('get_vibrancy').then(setVibrancy).catch(() => {}),
+      invoke<string>('get_terminal').then(setTerminal).catch(() => {}),
+      invoke<string[]>('list_terminals').then(setTerminals).catch(() => {}),
       invoke<boolean>('check_accessibility').then(setAccessibilityGranted).catch(() => setAccessibilityGranted(true)),
     ]).finally(() => {
       setAutostartLoading(false)
@@ -284,6 +288,28 @@ export default function Settings({ updateInfo, theme, onThemeChange, onOpenLogs,
           <SettingRow label="Window vibrancy" description="Takes effect when panel reopens">
             <Toggle checked={vibrancy} onChange={handleVibrancy} disabled={vibrancyLoading} />
           </SettingRow>
+          {terminals.length > 1 && (
+            <SettingRow label="Resume terminal" description="App used by ▶ Resume buttons">
+              <div className="flex gap-1">
+                {terminals.map(t => (
+                  <button
+                    key={t}
+                    onClick={async () => {
+                      const prev = terminal
+                      setTerminal(t)
+                      try {
+                        await invoke('set_terminal', { terminal: t })
+                        capture('settings_terminal_changed', { terminal: t })
+                      } catch { setTerminal(prev) }
+                    }}
+                    className={`text-[12px] px-2.5 py-1 rounded-md border transition-colors ${terminal === t ? 'border-indigo-400/60 bg-indigo-500/10 text-indigo-400' : 'border-[var(--c-border)] text-[var(--c-text-3)] hover:text-[var(--c-text-2)]'}`}
+                  >
+                    {t}
+                  </button>
+                ))}
+              </div>
+            </SettingRow>
+          )}
         </div>
 
         {(onOpenLogs || onOpenDoctor) && (

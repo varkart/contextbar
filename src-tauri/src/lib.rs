@@ -356,6 +356,50 @@ fn get_history_stats() -> engine::history::HistoryStats {
 }
 
 /// Open Terminal.app and run `claude` (optionally `--resume <id>`) in the
+// ── Resume terminal preference ───────────────────────────────────────────────
+
+const KNOWN_TERMINALS: &[(&str, &str)] = &[
+    // (settings value, .app path)
+    ("Terminal", "/System/Applications/Utilities/Terminal.app"),
+    ("iTerm2", "/Applications/iTerm.app"),
+];
+
+/// Installed terminals the user can pick for Resume.
+#[tauri::command]
+fn list_terminals() -> Vec<String> {
+    KNOWN_TERMINALS
+        .iter()
+        .filter(|(name, path)| {
+            *name == "Terminal"
+                || std::path::Path::new(path).exists()
+                || dirs::home_dir()
+                    .map(|h| h.join(path.trim_start_matches('/')).exists())
+                    .unwrap_or(false)
+        })
+        .map(|(name, _)| name.to_string())
+        .collect()
+}
+
+#[tauri::command]
+fn get_terminal() -> String {
+    read_settings()
+        .get("terminal")
+        .and_then(|v| v.as_str())
+        .filter(|t| KNOWN_TERMINALS.iter().any(|(n, _)| n == t))
+        .unwrap_or("Terminal")
+        .to_string()
+}
+
+#[tauri::command]
+fn set_terminal(terminal: String) -> Result<(), String> {
+    if !KNOWN_TERMINALS.iter().any(|(n, _)| *n == terminal) {
+        return Err("unknown terminal".to_string());
+    }
+    let mut settings = read_settings();
+    settings["terminal"] = serde_json::json!(terminal);
+    write_settings(settings)
+}
+
 /// Last-modified times (ms) for a set of files under $HOME — used as a
 /// "last active" proxy for agents that don't write session logs.
 #[tauri::command]
@@ -420,12 +464,17 @@ fn resume_in_terminal(
     let shell_cmd = format!("cd '{path_str}' && {resume}");
     // AppleScript layer: escape backslashes and double quotes.
     let osa = shell_cmd.replace('\\', "\\\\").replace('"', "\\\"");
-    let script = format!("tell application \"Terminal\"\nactivate\ndo script \"{osa}\"\nend tell");
+    let script = match get_terminal().as_str() {
+        "iTerm2" => format!(
+            "tell application \"iTerm\"\nactivate\ncreate window with default profile\ntell current session of current window\nwrite text \"{osa}\"\nend tell\nend tell"
+        ),
+        _ => format!("tell application \"Terminal\"\nactivate\ndo script \"{osa}\"\nend tell"),
+    };
     std::process::Command::new("osascript")
         .arg("-e")
         .arg(script)
         .spawn()
-        .map_err(|e| format!("failed to launch Terminal: {e}"))?;
+        .map_err(|e| format!("failed to launch terminal: {e}"))?;
     Ok(())
 }
 
@@ -2238,6 +2287,9 @@ pub fn run() {
             remove_worktree,
             resume_in_terminal,
             get_file_mtimes,
+            list_terminals,
+            get_terminal,
+            set_terminal,
             is_vscode_installed,
             open_in_vscode,
             warm_session_stats,
