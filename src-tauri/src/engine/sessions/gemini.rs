@@ -12,7 +12,7 @@
 //!   transcript. The first user message is an injected `<session_context>`
 //!   preamble and is filtered out.
 
-use super::{file_mtime_ms, is_recently_modified, rfc3339_to_ms, SessionSource};
+use super::{is_recently_modified, rfc3339_to_ms, SessionSource};
 use crate::engine::history::types::{
     ContentBlock, Message, SessionDetail, SessionEntry, TokenUsage,
 };
@@ -75,25 +75,6 @@ fn text_of(content: &Value) -> String {
 
 fn is_context_preamble(text: &str) -> bool {
     text.trim_start().starts_with("<session_context")
-}
-
-/// First real user text + user-message count from a messages array.
-fn scan_messages(messages: &[Value]) -> (String, u32) {
-    let mut display = String::new();
-    let mut prompts = 0u32;
-    for m in messages {
-        if m.get("type").and_then(|t| t.as_str()) == Some("user") {
-            let text = text_of(m.get("content").unwrap_or(&Value::Null));
-            if is_context_preamble(&text) {
-                continue;
-            }
-            prompts += 1;
-            if display.is_empty() && !text.trim().is_empty() {
-                display = text.trim().chars().take(300).collect();
-            }
-        }
-    }
-    (display, prompts)
 }
 
 /// Latest full message array from a .jsonl session (last `$set` snapshot).

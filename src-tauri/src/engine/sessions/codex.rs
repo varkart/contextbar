@@ -33,7 +33,7 @@ fn rollout_files(limit_hint: usize) -> Vec<PathBuf> {
         return vec![];
     };
     let mut days: Vec<PathBuf> = Vec::new();
-    let mut sorted_dirs = |p: &Path| -> Vec<PathBuf> {
+    let sorted_dirs = |p: &Path| -> Vec<PathBuf> {
         let mut v: Vec<PathBuf> = std::fs::read_dir(p)
             .map(|it| {
                 it.flatten()
@@ -147,10 +147,8 @@ fn parse_summary(path: &Path) -> Option<Summary> {
                 }
             }
             (Some("event_msg"), Some("error")) => error_count += 1,
-            (Some("turn_context"), _) => {
-                if model.is_none() {
-                    model = p.get("model").and_then(|m| m.as_str()).map(String::from);
-                }
+            (Some("turn_context"), _) if model.is_none() => {
+                model = p.get("model").and_then(|m| m.as_str()).map(String::from);
             }
             _ => {}
         }
