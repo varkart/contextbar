@@ -37,6 +37,10 @@ fn rollout_files(limit_hint: usize) -> Vec<PathBuf> {
     let Some(root) = sessions_root() else {
         return vec![];
     };
+    rollout_files_in(&root, limit_hint)
+}
+
+fn rollout_files_in(root: &Path, limit_hint: usize) -> Vec<PathBuf> {
     let mut days: Vec<PathBuf> = Vec::new();
     let sorted_dirs = |p: &Path| -> Vec<PathBuf> {
         let mut v: Vec<PathBuf> = std::fs::read_dir(p)
@@ -51,7 +55,7 @@ fn rollout_files(limit_hint: usize) -> Vec<PathBuf> {
         v.reverse();
         v
     };
-    'outer: for year in sorted_dirs(&root) {
+    'outer: for year in sorted_dirs(root) {
         for month in sorted_dirs(&year) {
             for day in sorted_dirs(&month) {
                 days.push(day);
@@ -460,6 +464,25 @@ mod tests {
         std::fs::write(&p, content).unwrap();
         let second = cached_summary(&p).unwrap();
         assert_eq!(second.prompt_count, 3);
+    }
+
+    #[test]
+    fn rollout_listing_is_newest_first_and_limited() {
+        let dir = tempfile::tempdir().unwrap();
+        for (day, name) in [
+            ("2026/06/10", "rollout-2026-06-10T09-00-00-old-1.jsonl"),
+            ("2026/06/11", "rollout-2026-06-11T09-00-00-new-1.jsonl"),
+            ("2026/06/11", "rollout-2026-06-11T15-00-00-new-2.jsonl"),
+        ] {
+            let d = dir.path().join(day);
+            std::fs::create_dir_all(&d).unwrap();
+            std::fs::write(d.join(name), FIXTURE).unwrap();
+        }
+        let files = rollout_files_in(dir.path(), 10);
+        assert_eq!(files.len(), 3);
+        assert!(files[0].to_string_lossy().contains("new-2"));
+        assert!(files[2].to_string_lossy().contains("old-1"));
+        assert_eq!(rollout_files_in(dir.path(), 1).len(), 2); // day granularity, then capped by caller
     }
 
     #[test]
