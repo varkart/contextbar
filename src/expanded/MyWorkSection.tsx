@@ -7,7 +7,7 @@ import AgentBadge from '../components/history/AgentBadge'
 
 const DAY = 86_400_000
 const PALETTE = ['#6366f1', '#e8a94a', '#d98fd9', '#5fc9b8', '#7aa2e8', '#8fbf6b']
-const AGENT_COLORS: Record<string, string> = { claude: '#818cf8', codex: '#34d399', gemini: '#38bdf8' }
+const AGENT_COLORS: Record<string, string> = { claude: '#818cf8', codex: '#34d399', gemini: '#38bdf8', agy: '#e879f9' }
 
 type Tab = 'today' | 'yesterday' | 'week' | 'last7'
 const TABS: { id: Tab; label: string }[] = [

@@ -23,6 +23,7 @@ test('agent mix shows all agents active in the window', async ({ page }) => {
   await expect(page.getByText(/claude · \d+ session/)).toBeVisible()
   await expect(page.getByText(/codex · \d+ session/)).toBeVisible()
   await expect(page.getByText(/gemini · \d+ session/)).toBeVisible()
+  await expect(page.getByText(/agy · \d+ session/)).toBeVisible()
 })
 
 test('needs attention explains uncommitted work and links to repos', async ({ page }) => {

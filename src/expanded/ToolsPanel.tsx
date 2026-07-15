@@ -134,7 +134,7 @@ export default function ToolsPanel({
         const lastTouch = Math.max(0, ...(a.configFiles ?? []).map(p => configMtimes[p] ?? 0))
         // Agents with a session source always show a count (even 0);
         // agents without one fall back to the config-mtime proxy.
-        const hasSource = ['claude', 'codex', 'gemini'].includes(a.id)
+        const hasSource = ['claude', 'codex', 'gemini', 'agy'].includes(a.id)
         return {
           id: a.id,
           name: a.name,

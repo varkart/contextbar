@@ -99,7 +99,7 @@ export interface FileEntry {
 // ── Session History ──────────────────────────────────────────────────────────
 
 export interface SessionEntry {
-  /** Which agent recorded this session: "claude" | "codex" | "gemini". */
+  /** Which agent recorded this session: "claude" | "codex" | "gemini" | "agy". */
   agent: string
   sessionId: string
   display: string

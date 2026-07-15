@@ -2,6 +2,7 @@
 //! CLI, Gemini CLI) implements `SessionSource`; the aggregator merges their
 //! sessions into one newest-first stream for the UI.
 
+pub mod agy;
 pub mod codex;
 pub mod gemini;
 
@@ -37,7 +38,12 @@ impl SessionSource for ClaudeSource {
 }
 
 pub fn sources() -> Vec<&'static dyn SessionSource> {
-    vec![&ClaudeSource, &codex::CodexSource, &gemini::GeminiSource]
+    vec![
+        &ClaudeSource,
+        &codex::CodexSource,
+        &gemini::GeminiSource,
+        &agy::AgySource,
+    ]
 }
 
 pub fn source_for(agent: &str) -> Option<&'static dyn SessionSource> {

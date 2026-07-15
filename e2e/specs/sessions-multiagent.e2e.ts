@@ -11,10 +11,11 @@ test.beforeEach(async ({ page }) => {
   await page.waitForSelector('text=fix the login bug', { timeout: 8000 })
 })
 
-test('rows show agent badges for all three agents', async ({ page }) => {
+test('rows show agent badges for all four agents', async ({ page }) => {
   await expect(page.getByText('Claude', { exact: true }).first()).toBeVisible()
   await expect(page.getByText('Codex', { exact: true }).first()).toBeVisible()
   await expect(page.getByText('Gemini', { exact: true }).first()).toBeVisible()
+  await expect(page.getByText('Antigravity', { exact: true }).first()).toBeVisible()
 })
 
 test('agent filter pills narrow the list', async ({ page }) => {
@@ -24,6 +25,12 @@ test('agent filter pills narrow the list', async ({ page }) => {
   await expect(page.getByText('fix the login bug in the auth middleware')).not.toBeVisible()
   await page.getByRole('button', { name: 'All agents' }).click()
   await expect(page.getByText('fix the login bug in the auth middleware')).toBeVisible()
+})
+
+test('agy filter pill narrows to antigravity sessions', async ({ page }) => {
+  await page.getByRole('button', { name: 'agy', exact: true }).click()
+  await expect(page.getByText('add day filters and sort options to the search')).toBeVisible()
+  await expect(page.getByText('refactor the payment retry logic')).not.toBeVisible()
 })
 
 test('live session shows live indicator group', async ({ page }) => {
@@ -39,6 +46,12 @@ test('codex transcript opens with tool call and tokens', async ({ page }) => {
 test('gemini transcript opens', async ({ page }) => {
   await page.getByText('write integration tests for the parser').first().click()
   await expect(page.getByText('Added 12 integration tests.')).toBeVisible()
+})
+
+test('antigravity (agy) transcript opens with tool call', async ({ page }) => {
+  await page.getByText('add day filters and sort options to the search').first().click()
+  await expect(page.getByText('Added weekend/weekday time filters and a sort-by-date option.')).toBeVisible()
+  await expect(page.getByText('RUN_COMMAND')).toBeVisible()
 })
 
 test('resume passes the session agent to the backend', async ({ page }) => {
