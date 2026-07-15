@@ -89,7 +89,7 @@ fn latest_snapshot(path: &Path) -> Option<Vec<Value>> {
         let mut buf = String::new();
         std::io::BufReader::new(f).read_to_string(&mut buf).ok()?;
         // Drop the first (probably partial) line
-        buf.splitn(2, '\n').nth(1).unwrap_or("").to_string()
+        buf.split_once('\n').map(|x| x.1).unwrap_or("").to_string()
     };
     let mut last: Option<Vec<Value>> = None;
     for line in content.lines() {

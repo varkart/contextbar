@@ -323,10 +323,8 @@ impl SessionSource for CodexSource {
                         usage: None,
                     });
                 }
-                (Some("turn_context"), _) => {
-                    if model.is_none() {
-                        model = p.get("model").and_then(|m| m.as_str()).map(String::from);
-                    }
+                (Some("turn_context"), _) if model.is_none() => {
+                    model = p.get("model").and_then(|m| m.as_str()).map(String::from);
                 }
                 _ => {}
             }
