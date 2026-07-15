@@ -309,6 +309,7 @@ export default function ExpandedApp() {
             theme={theme}
             setTheme={setTheme}
             onOpenSession={openSessionById}
+            sessions={sessions}
           />
         )}
       </div>

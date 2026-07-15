@@ -129,9 +129,15 @@ interface SessionListProps {
 export default function SessionList({ sessions, onSelect, loading, onLoadMore, hasMore }: SessionListProps) {
   const [search, setSearch] = useState('')
   const [projectFilter, setProjectFilter] = useState<string | null>(null)
+  const [agentFilter, setAgentFilter] = useState<string | null>(null)
+
+  const agents = useMemo(() => [...new Set(sessions.map(s => s.agent))].sort(), [sessions])
 
   const filtered = useMemo(() => {
     let result = sessions
+    if (agentFilter) {
+      result = result.filter(s => s.agent === agentFilter)
+    }
     if (projectFilter) {
       result = result.filter(s => s.project === projectFilter)
     }
@@ -140,7 +146,7 @@ export default function SessionList({ sessions, onSelect, loading, onLoadMore, h
       result = result.filter(s => s.display.toLowerCase().includes(q) || s.projectName.toLowerCase().includes(q))
     }
     return result
-  }, [sessions, search, projectFilter])
+  }, [sessions, search, projectFilter, agentFilter])
 
   const groups = useMemo(() => groupByTime(filtered), [filtered])
 
@@ -179,6 +185,29 @@ export default function SessionList({ sessions, onSelect, loading, onLoadMore, h
           className="w-full bg-[var(--c-surface-2)] border border-[var(--c-border)] rounded-lg px-2.5 py-1.5 text-[12px] text-[var(--c-text)] placeholder:text-[var(--c-text-3)] outline-none focus:border-[var(--c-accent)]/50 transition-colors"
         />
       </div>
+
+      {/* Agent filter pills — only when more than one agent has sessions */}
+      {agents.length > 1 && (
+        <div className="px-3 pb-1.5 flex-shrink-0">
+          <div className="flex gap-1">
+            <button
+              onClick={() => setAgentFilter(null)}
+              className={`flex-shrink-0 text-[10px] px-2 py-0.5 rounded-full border transition-colors ${!agentFilter ? 'border-[var(--c-accent)]/50 bg-[var(--c-accent)]/10 text-[var(--c-accent)]' : 'border-[var(--c-border)] text-[var(--c-text-3)] hover:text-[var(--c-text-2)]'}`}
+            >
+              All agents
+            </button>
+            {agents.map(a => (
+              <button
+                key={a}
+                onClick={() => setAgentFilter(agentFilter === a ? null : a)}
+                className={`flex-shrink-0 text-[10px] px-2 py-0.5 rounded-full border capitalize transition-colors ${agentFilter === a ? 'border-[var(--c-accent)]/50 bg-[var(--c-accent)]/10 text-[var(--c-accent)]' : 'border-[var(--c-border)] text-[var(--c-text-3)] hover:text-[var(--c-text-2)]'}`}
+              >
+                {a}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Project filter pills */}
       {projects.length > 1 && (
@@ -235,7 +264,7 @@ export default function SessionList({ sessions, onSelect, loading, onLoadMore, h
             ))}
           </div>
         ))}
-        {!loading && onLoadMore && hasMore && !search && !projectFilter && (
+        {!loading && onLoadMore && hasMore && !search && !projectFilter && !agentFilter && (
           <div className="p-3">
             <button
               onClick={onLoadMore}

@@ -6,7 +6,7 @@ import { useNotifications } from '../useNotifications'
 import { useUpdateCheck } from '../useUpdateCheck'
 import { searchAgents } from '../search'
 import type { ThemePreference } from '../useTheme'
-import type { Agent, SessionInsights, TokenPoint } from '../types'
+import type { Agent, SessionEntry, SessionInsights, TokenPoint } from '../types'
 import { formatTokens } from '../components/history/SessionStats'
 import Header from '../components/Header'
 import ViewManager from '../components/views/ViewManager'
@@ -45,6 +45,8 @@ interface ToolsPanelProps {
   theme: ThemePreference
   setTheme: (t: ThemePreference) => void
   onOpenSession?: (sessionId: string) => void
+  /** Merged multi-agent session list — powers real per-agent activity counts. */
+  sessions?: SessionEntry[]
 }
 
 /**
@@ -64,6 +66,7 @@ export default function ToolsPanel({
   theme,
   setTheme,
   onOpenSession,
+  sessions,
 }: ToolsPanelProps) {
   const routerProps = useViewRouter({
     syncHash: false,
@@ -119,13 +122,31 @@ export default function ToolsPanel({
   }, [installedAgents])
 
   const agentActivity = useMemo(() => {
+    const monthAgo = Date.now() - 30 * 86_400_000
+    const sessionCounts = new Map<string, number>()
+    for (const s of sessions ?? []) {
+      if (s.timestamp >= monthAgo) {
+        sessionCounts.set(s.agent, (sessionCounts.get(s.agent) ?? 0) + 1)
+      }
+    }
     return installedAgents
       .map(a => {
         const lastTouch = Math.max(0, ...(a.configFiles ?? []).map(p => configMtimes[p] ?? 0))
-        return { id: a.id, name: a.name, lastTouch }
+        // Agents with a session source always show a count (even 0);
+        // agents without one fall back to the config-mtime proxy.
+        const hasSource = ['claude', 'codex', 'gemini'].includes(a.id)
+        return {
+          id: a.id,
+          name: a.name,
+          lastTouch,
+          sessionCount: hasSource ? (sessionCounts.get(a.id) ?? 0) : null,
+        }
       })
-      .sort((x, y) => (y.id === 'claude' ? 1 : 0) - (x.id === 'claude' ? 1 : 0) || y.lastTouch - x.lastTouch)
-  }, [installedAgents, configMtimes])
+      .sort(
+        (x, y) =>
+          (y.sessionCount ?? -1) - (x.sessionCount ?? -1) || y.lastTouch - x.lastTouch
+      )
+  }, [installedAgents, configMtimes, sessions])
 
   const agentInsights = useMemo(() => {
     const skills = installedAgents.flatMap(a => a.skills)
@@ -231,11 +252,11 @@ export default function ToolsPanel({
                       Agent activity
                     </p>
                     {agentActivity.map(a => {
-                      const isClaude = a.id === 'claude'
                       const ageDays = a.lastTouch > 0 ? (Date.now() - a.lastTouch) / 86_400_000 : Infinity
-                      const dot = isClaude || ageDays < 2 ? 'bg-emerald-400' : ageDays < 14 ? 'bg-amber-400' : 'bg-[var(--c-border)]'
-                      const signal = isClaude
-                        ? `${usage.sessionsAnalyzed} sessions in 30d`
+                      const active = (a.sessionCount ?? 0) > 0 || ageDays < 2
+                      const dot = active ? 'bg-emerald-400' : ageDays < 14 ? 'bg-amber-400' : 'bg-[var(--c-border)]'
+                      const signal = a.sessionCount !== null
+                        ? `${a.sessionCount} session${a.sessionCount === 1 ? '' : 's'} in 30d`
                         : a.lastTouch > 0
                           ? `config updated ${relativeDays(a.lastTouch)}`
                           : 'no activity signal'
@@ -248,7 +269,7 @@ export default function ToolsPanel({
                       )
                     })}
                     <p className="text-[9.5px] text-[var(--c-text-3)] opacity-60 mt-1">
-                      Only Claude Code records sessions — other agents show config file activity as best available signal
+                      Session counts for Claude Code, Codex and Gemini; other agents show config file activity as best available signal
                     </p>
                   </div>
                 </Collapsible>

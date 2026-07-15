@@ -7,6 +7,7 @@ import AgentBadge from '../components/history/AgentBadge'
 
 const DAY = 86_400_000
 const PALETTE = ['#6366f1', '#e8a94a', '#d98fd9', '#5fc9b8', '#7aa2e8', '#8fbf6b']
+const AGENT_COLORS: Record<string, string> = { claude: '#818cf8', codex: '#34d399', gemini: '#38bdf8' }
 
 type Tab = 'today' | 'yesterday' | 'week' | 'last7'
 const TABS: { id: Tab; label: string }[] = [
@@ -101,6 +102,13 @@ export default function MyWorkSection({ sessions, repos, loading, goTo, onRefres
     live: windowed.filter(s => s.isLive).length,
     projects: projects.length,
   }), [windowed, projects])
+
+  // Session share per agent in the selected window
+  const agentMix = useMemo(() => {
+    const counts = new Map<string, number>()
+    for (const s of windowed) counts.set(s.agent, (counts.get(s.agent) ?? 0) + 1)
+    return [...counts.entries()].sort((a, b) => b[1] - a[1])
+  }, [windowed])
 
   // Momentum always looks at the trailing 7 days, independent of the tab.
   const momentum = useMemo(() => {
@@ -226,6 +234,33 @@ export default function MyWorkSection({ sessions, repos, loading, goTo, onRefres
               <Stat n={String(stats.live)} lbl="Live" color={stats.live > 0 ? 'text-emerald-400' : ''} />
               <Stat n={String(stats.projects)} lbl="Projects" color="text-[var(--c-accent)]" />
             </div>
+
+            {/* Agent mix — which agents you used in the window */}
+            {agentMix.length > 0 && (
+              <div className="mb-5">
+                <SectionLabel>Agents — {tabLabel}</SectionLabel>
+                <div className="flex h-2.5 rounded-full overflow-hidden mb-2">
+                  {agentMix.map(([agent, count]) => (
+                    <div
+                      key={agent}
+                      title={`${agent}: ${count} session${count === 1 ? '' : 's'}`}
+                      style={{
+                        width: `${Math.max(2, (count / Math.max(1, stats.sessions)) * 100)}%`,
+                        background: AGENT_COLORS[agent] ?? '#71717a',
+                      }}
+                    />
+                  ))}
+                </div>
+                <div className="flex gap-4 flex-wrap">
+                  {agentMix.map(([agent, count]) => (
+                    <span key={agent} className="text-[11px] text-[var(--c-text-3)] flex items-center gap-1.5 capitalize">
+                      <span className="w-2 h-2 rounded-sm inline-block" style={{ background: AGENT_COLORS[agent] ?? '#71717a' }} />
+                      {agent} · {count} session{count === 1 ? '' : 's'}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* Focus bar — share of prompts per project in the window */}
             {projects.length > 0 && stats.prompts > 0 && (
