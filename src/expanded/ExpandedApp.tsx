@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { invoke } from '@tauri-apps/api/core'
+import { listen } from '@tauri-apps/api/event'
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow'
 import { useTheme } from '../useTheme'
 import { useAgents } from '../useAgents'
@@ -180,16 +181,22 @@ export default function ExpandedApp() {
     invoke('warm_session_stats').catch(() => {})
   }, [fetchSessions, fetchWorktrees, sessionLimit])
 
-  // Long-lived window: refetch when it regains focus, and poll the cheap
-  // session index every 30s while visible so live dots stay truthful.
+  // Freshness, three layers:
+  // 1. FSEvents push — the backend watcher emits sessions-changed the moment
+  //    any agent writes a session file.
+  // 2. Focus refetch — catch anything missed while the window was backgrounded.
+  // 3. Slow 60s tick — only to EXPIRE live dots (a session going quiet emits
+  //    no fs event, so nothing else would ever flip isLive off).
   useEffect(() => {
     const onFocus = () => refreshAll()
     window.addEventListener('focus', onFocus)
+    const unlisten = listen('sessions-changed', () => fetchSessions(sessionLimit))
     const interval = setInterval(() => {
       if (document.visibilityState === 'visible') fetchSessions(sessionLimit)
-    }, 30_000)
+    }, 60_000)
     return () => {
       window.removeEventListener('focus', onFocus)
+      unlisten.then(fn => fn())
       clearInterval(interval)
     }
   }, [refreshAll, fetchSessions, sessionLimit])
