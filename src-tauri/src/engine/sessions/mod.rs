@@ -3,6 +3,7 @@
 //! sessions into one newest-first stream for the UI.
 
 pub mod codex;
+pub mod gemini;
 
 use super::history::{self, SessionDetail, SessionEntry};
 
@@ -36,7 +37,7 @@ impl SessionSource for ClaudeSource {
 }
 
 pub fn sources() -> Vec<&'static dyn SessionSource> {
-    vec![&ClaudeSource, &codex::CodexSource]
+    vec![&ClaudeSource, &codex::CodexSource, &gemini::GeminiSource]
 }
 
 pub fn source_for(agent: &str) -> Option<&'static dyn SessionSource> {
