@@ -175,11 +175,14 @@ fn parse_summary(path: &Path) -> Option<Summary> {
     })
 }
 
+/// (mtime secs, size, parsed summary) memo entry.
+type CachedEntry = (i64, u64, Summary);
+type SummaryCache = Mutex<std::collections::HashMap<PathBuf, CachedEntry>>;
+
 /// Rollouts are append-only and re-listed on every refresh/poll — memoize
 /// summaries by (mtime, size) so unchanged files are never re-scanned.
-fn summary_cache() -> &'static Mutex<std::collections::HashMap<PathBuf, (i64, u64, Summary)>> {
-    static CACHE: OnceLock<Mutex<std::collections::HashMap<PathBuf, (i64, u64, Summary)>>> =
-        OnceLock::new();
+fn summary_cache() -> &'static SummaryCache {
+    static CACHE: OnceLock<SummaryCache> = OnceLock::new();
     CACHE.get_or_init(Default::default)
 }
 
