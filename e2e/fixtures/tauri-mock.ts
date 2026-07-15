@@ -245,7 +245,7 @@ export async function injectTauriMock(
           case 'get_file_mtimes':
             return Promise.resolve({})
           case 'list_terminals':
-            return Promise.resolve(['Terminal', 'iTerm2'])
+            return Promise.resolve(['Terminal', 'iTerm2', 'Warp'])
           case 'get_terminal':
             return Promise.resolve('Terminal')
           case 'set_terminal':

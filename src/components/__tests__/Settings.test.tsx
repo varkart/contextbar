@@ -23,7 +23,7 @@ beforeEach(() => {
       case 'get_shortcut':  return Promise.resolve('CommandOrControl+Shift+Space')
       case 'get_vibrancy':  return Promise.resolve(true)
       case 'get_terminal':  return Promise.resolve('Terminal')
-      case 'list_terminals': return Promise.resolve(['Terminal', 'iTerm2'])
+      case 'list_terminals': return Promise.resolve(['Terminal', 'iTerm2', 'Warp'])
       default:              return Promise.resolve(null)
     }
   })
@@ -282,5 +282,33 @@ describe('Settings — ShortcutRecorder', () => {
     fireEvent.click(recorder)
     fireEvent.keyDown(recorder, { key: 'Meta', metaKey: true })
     expect(screen.getByText('Press keys…')).toBeInTheDocument()
+  })
+
+  it('lists all detected terminals including Warp', async () => {
+    render(<Settings {...defaultProps} />)
+    await waitFor(() => expect(screen.getByText('Resume terminal')).toBeInTheDocument())
+    expect(screen.getByRole('button', { name: 'Terminal' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'iTerm2' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Warp' })).toBeInTheDocument()
+  })
+
+  it('selecting Warp persists the preference', async () => {
+    render(<Settings {...defaultProps} />)
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Warp' })).toBeInTheDocument())
+    mockInvoke.mockResolvedValue(null)
+    fireEvent.click(screen.getByRole('button', { name: 'Warp' }))
+    await waitFor(() =>
+      expect(mockInvoke).toHaveBeenCalledWith('set_terminal', { terminal: 'Warp' })
+    )
+  })
+
+  it('reverts terminal selection if set_terminal fails', async () => {
+    render(<Settings {...defaultProps} />)
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Warp' })).toBeInTheDocument())
+    mockInvoke.mockRejectedValue(new Error('failed'))
+    fireEvent.click(screen.getByRole('button', { name: 'Warp' }))
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Terminal' })).toHaveClass('border-indigo-400/60')
+    )
   })
 })

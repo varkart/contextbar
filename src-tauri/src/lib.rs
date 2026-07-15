@@ -355,13 +355,13 @@ fn get_history_stats() -> engine::history::HistoryStats {
     engine::history::get_history_stats()
 }
 
-/// Open Terminal.app and run `claude` (optionally `--resume <id>`) in the
 // ── Resume terminal preference ───────────────────────────────────────────────
 
 const KNOWN_TERMINALS: &[(&str, &str)] = &[
     // (settings value, .app path)
     ("Terminal", "/System/Applications/Utilities/Terminal.app"),
     ("iTerm2", "/Applications/iTerm.app"),
+    ("Warp", "/Applications/Warp.app"),
 ];
 
 /// Installed terminals the user can pick for Resume.
@@ -443,7 +443,29 @@ fn open_in_vscode(path: String) -> Result<(), String> {
     Ok(())
 }
 
-/// given project directory. macOS only; the path must live under $HOME.
+/// Minimal percent-encoding for a path used in a `warp://` URI query param —
+/// only the characters that would otherwise break the URI (no crate needed
+/// for this narrow case).
+fn percent_encode_path(path: &str) -> String {
+    let mut out = String::with_capacity(path.len());
+    for b in path.bytes() {
+        match b {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' | b'/' => {
+                out.push(b as char)
+            }
+            _ => out.push_str(&format!("%{b:02X}")),
+        }
+    }
+    out
+}
+
+/// Open Terminal.app / iTerm2 / Warp and resume the session's agent in
+/// `project`. Path must live under $HOME. Warp has no scripting interface to
+/// run a command on launch (confirmed: its `commands`/`exec` launch-config
+/// fields are silently ignored when triggered via URI — warpdotdev/Warp#9007),
+/// so for Warp we only open a tab at the right directory and return an error;
+/// callers fall back to copying the resume command to the clipboard, which
+/// every Resume button already does on failure.
 #[tauri::command]
 fn resume_in_terminal(
     project: String,
@@ -458,9 +480,19 @@ fn resume_in_terminal(
     }
     let source = engine::sessions::source_for(agent.as_deref().unwrap_or("claude"))
         .ok_or("unknown agent")?;
+    let resume = source.resume_command(session_id.as_deref());
+
+    if get_terminal() == "Warp" {
+        let uri = format!(
+            "warp://action/new_tab?path={}",
+            percent_encode_path(&canonical.to_string_lossy())
+        );
+        let _ = std::process::Command::new("open").arg(&uri).spawn();
+        return Err("Warp can't run commands automatically — copy and paste".into());
+    }
+
     // Shell layer: single-quote the path; escape embedded single quotes.
     let path_str = canonical.to_string_lossy().replace('\'', r"'\''");
-    let resume = source.resume_command(session_id.as_deref());
     let shell_cmd = format!("cd '{path_str}' && {resume}");
     // AppleScript layer: escape backslashes and double quotes.
     let osa = shell_cmd.replace('\\', "\\\\").replace('"', "\\\"");
@@ -2463,8 +2495,19 @@ fn show_expanded_window(app: &tauri::AppHandle, section: Option<&str>) {
 #[cfg(test)]
 mod tests {
     use super::{
-        github_blob_to_raw, parse_github_repo_url, validate_skill_content, validate_tool_path,
+        github_blob_to_raw, parse_github_repo_url, percent_encode_path, validate_skill_content,
+        validate_tool_path,
     };
+
+    #[test]
+    fn percent_encode_path_escapes_spaces_and_keeps_slashes() {
+        assert_eq!(
+            percent_encode_path("/Users/vk/my project/repo"),
+            "/Users/vk/my%20project/repo"
+        );
+        assert_eq!(percent_encode_path("/tmp/plain"), "/tmp/plain");
+        assert_eq!(percent_encode_path("/a&b?c"), "/a%26b%3Fc");
+    }
 
     #[test]
     fn test_validate_tool_path() {
