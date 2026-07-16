@@ -35,7 +35,7 @@ pub fn project_name(project: &str) -> String {
     project
         .trim_end_matches('/')
         .split('/')
-        .last()
+        .next_back()
         .filter(|s| !s.is_empty())
         .unwrap_or(project)
         .to_string()
@@ -51,7 +51,7 @@ fn is_file_live(path: &Path) -> bool {
         .and_then(|mtime| {
             mtime
                 .duration_since(std::time::UNIX_EPOCH)
-                .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))
+                .map_err(std::io::Error::other)
         })
         // 5 min window: a session is "live" while its file keeps changing.
         // Claude pauses between turns (user reading/typing), so a tight 60s
@@ -261,8 +261,8 @@ pub fn get_history_stats(home: &Path) -> HistoryStats {
 
 fn decode_project_path(encoded: &str) -> String {
     // "-Users-foo-bar" → "/Users/foo/bar"
-    if encoded.starts_with('-') {
-        format!("/{}", &encoded[1..].replace('-', "/"))
+    if let Some(stripped) = encoded.strip_prefix('-') {
+        format!("/{}", stripped.replace('-', "/"))
     } else {
         encoded.replace('-', "/")
     }

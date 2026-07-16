@@ -265,8 +265,7 @@ fn truncate_str(s: &str, max: usize) -> String {
 
 fn sanitize_xml(s: &str) -> String {
     let s = strip_tagged_content(s, "system-reminder");
-    let s = strip_tagged_content(&s, "command-name");
-    s
+    strip_tagged_content(&s, "command-name")
 }
 
 fn strip_tagged_content(s: &str, tag: &str) -> String {
