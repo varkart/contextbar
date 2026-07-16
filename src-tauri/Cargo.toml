@@ -38,6 +38,7 @@ notify = { version = "7", features = ["macos_fsevent"] }
 notify-debouncer-mini = "0.5"
 rusqlite = { version = "0.31", features = ["bundled"] }
 thiserror = "2"
+tauri-plugin-window-state = "2.4.1"
 
 [dev-dependencies]
 tempfile = "3"

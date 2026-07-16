@@ -119,6 +119,7 @@ pub fn start(app: AppHandle) {
         // E.g. if ~/.cursor doesn't exist yet, watch ~ so creating ~/.cursor/mcp.json fires events.
         let watch_targets: Vec<std::path::PathBuf> = vec![
             home.join(".claude"),
+            home.join(".codex"),
             home.join(".cursor"),
             home.join(".gemini"),
             home.join(".windsurf"),
@@ -156,6 +157,19 @@ pub fn start(app: AppHandle) {
                 .any(|e| matches!(e.kind, DebouncedEventKind::Any));
             if !relevant {
                 continue;
+            }
+
+            // Session stores changed? Tell the UI to refresh its session list
+            // (FSEvents push replaces most of the old 30s polling).
+            let sessions_touched = events.iter().any(|e| {
+                let p = e.path.to_string_lossy();
+                p.contains("/.claude/projects/")
+                    || p.ends_with("/.claude/history.jsonl")
+                    || p.contains("/.codex/sessions/")
+                    || p.contains("/.gemini/tmp/")
+            });
+            if sessions_touched {
+                let _ = app.emit("sessions-changed", ());
             }
 
             let (new_tools, new_skills, new_mcps) = take_snapshot(&app);

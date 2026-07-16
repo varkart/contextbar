@@ -1,8 +1,11 @@
+pub mod history;
 pub mod jsonc;
 pub mod manifest;
 pub mod mcp;
 pub mod resolve;
+pub mod sessions;
 pub mod skill;
+pub mod worktrees;
 
 use crate::models::Agent;
 use manifest::{DetectionSpec, Manifest, McpSourceSpec, SkillSourceSpec, VersionSpec};

@@ -129,6 +129,8 @@ export default function App() {
         notificationCount={notifications.length}
         onSettingsClick={() => goTo('settings')}
         onNotificationsClick={() => goTo('notifications')}
+        onHistoryClick={() => invoke('open_expanded_window', { section: 'sessions' }).catch(() => {})}
+        onExpandClick={() => invoke('open_expanded_window').catch(() => {})}
       />
       <div className="flex-1 overflow-hidden flex flex-col min-h-0">
         <ViewManager

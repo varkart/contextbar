@@ -19,14 +19,17 @@ interface AgentDetailPageProps {
   query?: string;
   matchedSkills?: Set<string>;
   matchedMcps?: Set<string>;
+  /** Expanded window renders its own large heading — skip the compact one. */
+  hideHeader?: boolean;
 }
 
-export default function AgentDetailPage({ agent, onSelectSkill, onSelectMcp, onOpenSkillsPage, onOpenMcpsPage, onOpenBackups, onAddSkill, onAddMcp, query, matchedSkills, matchedMcps }: AgentDetailPageProps) {
+export default function AgentDetailPage({ agent, onSelectSkill, onSelectMcp, onOpenSkillsPage, onOpenMcpsPage, onOpenBackups, onAddSkill, onAddMcp, query, matchedSkills, matchedMcps, hideHeader }: AgentDetailPageProps) {
   const colors = agentColor(agent.id);
   const [explainerTopic, setExplainerTopic] = useState<'skills' | 'mcps' | null>(null);
 
   return (
     <div className="relative flex flex-col h-full bg-[var(--c-bg)] animate-slide-in-right">
+      {!hideHeader && (
       <div className="flex items-center gap-2 px-4 py-2 border-b border-[var(--c-border)] flex-shrink-0">
         <span className={`inline-flex items-center justify-center w-[18px] h-[18px] rounded text-[11px] font-bold flex-shrink-0 ${colors.bg} ${colors.text}`}>
           {agent.name[0].toUpperCase()}
@@ -57,6 +60,7 @@ export default function AgentDetailPage({ agent, onSelectSkill, onSelectMcp, onO
           )}
         </div>
       </div>
+      )}
 
       <div className="flex-1 overflow-y-auto">
         <AgentDetails

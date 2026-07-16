@@ -97,6 +97,11 @@ fn hide_window(window: tauri::WebviewWindow) {
 }
 
 #[tauri::command]
+fn open_expanded_window(app: tauri::AppHandle, section: Option<String>) {
+    show_expanded_window(&app, section.as_deref());
+}
+
+#[tauri::command]
 fn get_skill_full_description(path: String) -> Option<String> {
     let canonical = validate_tool_path(&path).ok()?;
     detectors::read_skill_file_content(&canonical)
@@ -225,6 +230,28 @@ fn read_skill_dir(path: String) -> Result<crate::models::FileEntry, String> {
     read_entry(&canonical, 0)
 }
 
+/// Read a markdown file for inline rendering in the skill file browser.
+/// Same trust model as `read_skill_dir` (any path under $HOME), but
+/// restricted to markdown and size-capped.
+#[tauri::command]
+fn read_markdown_file(path: String) -> Result<String, String> {
+    let canonical = validate_tool_path(&path)?;
+    let ext = canonical
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("")
+        .to_lowercase();
+    if ext != "md" && ext != "markdown" {
+        return Err("not a markdown file".to_string());
+    }
+    const MAX_BYTES: u64 = 1024 * 1024; // 1 MB
+    let meta = std::fs::metadata(&canonical).map_err(|e| e.to_string())?;
+    if meta.len() > MAX_BYTES {
+        return Err(format!("file too large ({} bytes)", meta.len()));
+    }
+    std::fs::read_to_string(&canonical).map_err(|e| e.to_string())
+}
+
 fn read_entry(path: &std::path::Path, depth: usize) -> Result<crate::models::FileEntry, String> {
     let name = path
         .file_name()
@@ -283,6 +310,271 @@ fn reveal_in_finder(path: String) -> Result<(), String> {
         .spawn()
         .map_err(|e| e.to_string())?;
     Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// History commands
+// ---------------------------------------------------------------------------
+
+#[tauri::command]
+async fn list_sessions(
+    limit: Option<usize>,
+    offset: Option<usize>,
+    project_filter: Option<String>,
+    search: Option<String>,
+) -> Vec<engine::history::SessionEntry> {
+    tokio::task::spawn_blocking(move || {
+        engine::sessions::list_all(
+            limit.unwrap_or(200),
+            offset.unwrap_or(0),
+            project_filter.as_deref(),
+            search.as_deref(),
+        )
+    })
+    .await
+    .unwrap_or_default()
+}
+
+#[tauri::command]
+async fn get_session(
+    session_id: String,
+    agent: Option<String>,
+) -> Result<engine::history::SessionDetail, String> {
+    tokio::task::spawn_blocking(move || engine::sessions::get_any(agent.as_deref(), &session_id))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+fn list_session_projects() -> Vec<String> {
+    engine::history::list_session_projects()
+}
+
+#[tauri::command]
+fn get_history_stats() -> engine::history::HistoryStats {
+    engine::history::get_history_stats()
+}
+
+// ── Resume terminal preference ───────────────────────────────────────────────
+
+const KNOWN_TERMINALS: &[(&str, &str)] = &[
+    // (settings value, .app path)
+    ("Terminal", "/System/Applications/Utilities/Terminal.app"),
+    ("iTerm2", "/Applications/iTerm.app"),
+    ("Warp", "/Applications/Warp.app"),
+];
+
+/// Installed terminals the user can pick for Resume.
+#[tauri::command]
+fn list_terminals() -> Vec<String> {
+    KNOWN_TERMINALS
+        .iter()
+        .filter(|(name, path)| {
+            *name == "Terminal"
+                || std::path::Path::new(path).exists()
+                || dirs::home_dir()
+                    .map(|h| h.join(path.trim_start_matches('/')).exists())
+                    .unwrap_or(false)
+        })
+        .map(|(name, _)| name.to_string())
+        .collect()
+}
+
+#[tauri::command]
+fn get_terminal() -> String {
+    read_settings()
+        .get("terminal")
+        .and_then(|v| v.as_str())
+        .filter(|t| KNOWN_TERMINALS.iter().any(|(n, _)| n == t))
+        .unwrap_or("Terminal")
+        .to_string()
+}
+
+#[tauri::command]
+fn set_terminal(terminal: String) -> Result<(), String> {
+    if !KNOWN_TERMINALS.iter().any(|(n, _)| *n == terminal) {
+        return Err("unknown terminal".to_string());
+    }
+    let mut settings = read_settings();
+    settings["terminal"] = serde_json::json!(terminal);
+    write_settings(settings)
+}
+
+/// Last-modified times (ms) for a set of files under $HOME — used as a
+/// "last active" proxy for agents that don't write session logs.
+#[tauri::command]
+fn get_file_mtimes(paths: Vec<String>) -> std::collections::HashMap<String, u64> {
+    let mut out = std::collections::HashMap::new();
+    for p in paths {
+        let Ok(canonical) = validate_tool_path(&p) else {
+            continue;
+        };
+        if let Ok(meta) = std::fs::metadata(&canonical) {
+            if let Ok(modified) = meta.modified() {
+                if let Ok(d) = modified.duration_since(std::time::UNIX_EPOCH) {
+                    out.insert(p, d.as_millis() as u64);
+                }
+            }
+        }
+    }
+    out
+}
+
+#[tauri::command]
+fn is_vscode_installed() -> bool {
+    if std::path::Path::new("/Applications/Visual Studio Code.app").exists() {
+        return true;
+    }
+    dirs::home_dir()
+        .map(|h| h.join("Applications/Visual Studio Code.app").exists())
+        .unwrap_or(false)
+}
+
+/// Open a directory in Visual Studio Code. Path must live under $HOME.
+#[tauri::command]
+fn open_in_vscode(path: String) -> Result<(), String> {
+    let canonical = validate_tool_path(&path)?;
+    std::process::Command::new("open")
+        .arg("-a")
+        .arg("Visual Studio Code")
+        .arg(&canonical)
+        .spawn()
+        .map_err(|e| format!("failed to open VS Code: {e}"))?;
+    Ok(())
+}
+
+/// Minimal percent-encoding for a path used in a `warp://` URI query param —
+/// only the characters that would otherwise break the URI (no crate needed
+/// for this narrow case).
+fn percent_encode_path(path: &str) -> String {
+    let mut out = String::with_capacity(path.len());
+    for b in path.bytes() {
+        match b {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' | b'/' => {
+                out.push(b as char)
+            }
+            _ => out.push_str(&format!("%{b:02X}")),
+        }
+    }
+    out
+}
+
+/// Open Terminal.app / iTerm2 / Warp and resume the session's agent in
+/// `project`. Path must live under $HOME. Warp has no scripting interface to
+/// run a command on launch (confirmed: its `commands`/`exec` launch-config
+/// fields are silently ignored when triggered via URI — warpdotdev/Warp#9007),
+/// so for Warp we only open a tab at the right directory and return an error;
+/// callers fall back to copying the resume command to the clipboard, which
+/// every Resume button already does on failure.
+#[tauri::command]
+fn resume_in_terminal(
+    project: String,
+    session_id: Option<String>,
+    agent: Option<String>,
+) -> Result<(), String> {
+    let canonical = validate_tool_path(&project)?;
+    if let Some(id) = &session_id {
+        if id.is_empty() || !id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-') {
+            return Err("invalid session id".into());
+        }
+    }
+    let source = engine::sessions::source_for(agent.as_deref().unwrap_or("claude"))
+        .ok_or("unknown agent")?;
+    let resume = source.resume_command(session_id.as_deref());
+
+    if get_terminal() == "Warp" {
+        let uri = format!(
+            "warp://action/new_tab?path={}",
+            percent_encode_path(&canonical.to_string_lossy())
+        );
+        let _ = std::process::Command::new("open").arg(&uri).spawn();
+        return Err("Warp can't run commands automatically — copy and paste".into());
+    }
+
+    // Shell layer: single-quote the path; escape embedded single quotes.
+    let path_str = canonical.to_string_lossy().replace('\'', r"'\''");
+    let shell_cmd = format!("cd '{path_str}' && {resume}");
+    // AppleScript layer: escape backslashes and double quotes.
+    let osa = shell_cmd.replace('\\', "\\\\").replace('"', "\\\"");
+    let script = match get_terminal().as_str() {
+        "iTerm2" => format!(
+            "tell application \"iTerm\"\nactivate\ncreate window with default profile\ntell current session of current window\nwrite text \"{osa}\"\nend tell\nend tell"
+        ),
+        _ => format!("tell application \"Terminal\"\nactivate\ndo script \"{osa}\"\nend tell"),
+    };
+    std::process::Command::new("osascript")
+        .arg("-e")
+        .arg(script)
+        .spawn()
+        .map_err(|e| format!("failed to launch terminal: {e}"))?;
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Insights commands
+// ---------------------------------------------------------------------------
+
+/// Kick off a background parse of any new/changed session files into the
+/// session_stats cache. Emits `session-insights-updated` when new data landed.
+#[tauri::command]
+fn warm_session_stats(app: tauri::AppHandle) {
+    std::thread::spawn(move || {
+        let db = app.state::<db::DbState>();
+        let parsed = engine::history::stats::warm(&db);
+        if parsed > 0 {
+            let _ = app.emit("session-insights-updated", ());
+        }
+    });
+}
+
+#[tauri::command]
+fn get_session_insights(
+    db: tauri::State<'_, db::DbState>,
+    since_ms: u64,
+    projects: Option<Vec<String>>,
+) -> engine::history::stats::SessionInsights {
+    engine::history::stats::aggregate(&db, since_ms, projects.as_deref())
+}
+
+#[tauri::command]
+fn get_token_activity(
+    db: tauri::State<'_, db::DbState>,
+    since_ms: u64,
+    projects: Option<Vec<String>>,
+) -> Vec<engine::history::stats::TokenPoint> {
+    engine::history::stats::token_activity(&db, since_ms, projects.as_deref())
+}
+
+#[tauri::command]
+fn get_prompt_timestamps(since_ms: u64) -> Vec<u64> {
+    engine::history::stats::prompt_timestamps(since_ms)
+}
+
+#[tauri::command]
+async fn get_commit_activity(since_days: u32) -> Vec<u64> {
+    tokio::task::spawn_blocking(move || engine::worktrees::commit_timestamps(since_days))
+        .await
+        .unwrap_or_default()
+}
+
+// ---------------------------------------------------------------------------
+// Worktree commands
+// ---------------------------------------------------------------------------
+
+#[tauri::command]
+async fn list_worktrees() -> Vec<engine::worktrees::RepoWorktrees> {
+    tokio::task::spawn_blocking(engine::worktrees::list_worktrees)
+        .await
+        .unwrap_or_default()
+}
+
+#[tauri::command]
+async fn remove_worktree(repo_path: String, worktree_path: String) -> Result<(), String> {
+    tokio::task::spawn_blocking(move || {
+        engine::worktrees::remove_worktree(&repo_path, &worktree_path)
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 // ---------------------------------------------------------------------------
@@ -1936,6 +2228,13 @@ pub fn run() {
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
+        // Persist size/position of the expanded window only — the popover is
+        // always re-anchored to the tray and must stay out of state restore.
+        .plugin(
+            tauri_plugin_window_state::Builder::default()
+                .with_denylist(&["main"])
+                .build(),
+        )
         .setup(|app| {
             app.manage(db::open());
 
@@ -2012,8 +2311,27 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             get_agents,
+            list_sessions,
+            get_session,
+            list_session_projects,
+            get_history_stats,
+            list_worktrees,
+            remove_worktree,
+            resume_in_terminal,
+            get_file_mtimes,
+            list_terminals,
+            get_terminal,
+            set_terminal,
+            is_vscode_installed,
+            open_in_vscode,
+            warm_session_stats,
+            get_session_insights,
+            get_token_activity,
+            get_prompt_timestamps,
+            get_commit_activity,
             get_skill_full_description,
             hide_window,
+            open_expanded_window,
             get_version,
             get_autostart,
             set_autostart,
@@ -2022,6 +2340,7 @@ pub fn run() {
             get_vibrancy,
             set_vibrancy,
             read_skill_dir,
+            read_markdown_file,
             open_path,
             reveal_in_finder,
             open_url,
@@ -2128,11 +2447,67 @@ fn open_main_window(app: &tauri::AppHandle, hash: Option<&str>) {
     let _ = window.set_focus();
 }
 
+/// Show (or create) the large "expanded" app window. Unlike the tray popover
+/// it is a normal decorated, resizable window that survives losing focus.
+/// `section` deep-links via URL hash (e.g. "sessions"), mirroring the
+/// `#settings` convention used by `open_main_window`.
+fn show_expanded_window(app: &tauri::AppHandle, section: Option<&str>) {
+    // While the expanded window is open the app behaves like a regular app
+    // (dock icon, Cmd-Tab); it reverts to a tray-only accessory on close.
+    #[cfg(target_os = "macos")]
+    let _ = app.set_activation_policy(tauri::ActivationPolicy::Regular);
+
+    if let Some(window) = app.get_webview_window("expanded") {
+        if let Some(s) = section {
+            // JSON-encode to prevent JS injection via hash value
+            let hash_json = serde_json::to_string(s).unwrap_or_default();
+            let _ = window.eval(format!("window.location.hash = {hash_json}"));
+        }
+        let _ = window.unminimize();
+        let _ = window.show();
+        let _ = window.set_focus();
+        return;
+    }
+    let url = match section {
+        Some(s) => WebviewUrl::App(format!("/#{}", s).into()),
+        None => WebviewUrl::default(),
+    };
+    if let Ok(window) = WebviewWindowBuilder::new(app, "expanded", url)
+        .title("Context Bar")
+        .inner_size(1000.0, 700.0)
+        .min_inner_size(800.0, 560.0)
+        .resizable(true)
+        .build()
+    {
+        #[cfg(target_os = "macos")]
+        {
+            let app_handle = app.clone();
+            window.on_window_event(move |event| {
+                if let tauri::WindowEvent::Destroyed = event {
+                    let _ = app_handle.set_activation_policy(tauri::ActivationPolicy::Accessory);
+                }
+            });
+        }
+        let _ = window.set_focus();
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
-        github_blob_to_raw, parse_github_repo_url, validate_skill_content, validate_tool_path,
+        github_blob_to_raw, parse_github_repo_url, percent_encode_path, validate_skill_content,
+        validate_tool_path,
     };
+
+    #[test]
+    fn percent_encode_path_escapes_spaces_and_keeps_slashes() {
+        assert_eq!(
+            percent_encode_path("/Users/test/my project/repo"),
+            "/Users/test/my%20project/repo"
+        );
+        assert_eq!(percent_encode_path("/tmp/plain"), "/tmp/plain");
+        assert_eq!(percent_encode_path("/a&b?c"), "/a%26b%3Fc");
+    }
 
     #[test]
     fn test_validate_tool_path() {

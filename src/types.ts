@@ -95,3 +95,142 @@ export interface FileEntry {
   children: FileEntry[]
   extension?: string
 }
+
+// ── Session History ──────────────────────────────────────────────────────────
+
+export interface SessionEntry {
+  /** Which agent recorded this session: "claude" | "codex" | "gemini" | "agy". */
+  agent: string
+  sessionId: string
+  display: string
+  timestamp: number
+  project: string
+  projectName: string
+  totalTokens: number
+  model?: string
+  durationMinutes?: number
+  isLive: boolean
+  errorCount: number
+  /** Number of prompts submitted in this session. */
+  promptCount: number
+}
+
+export interface ContentBlock {
+  blockType: string
+  text?: string
+  toolName?: string
+  toolInput?: string
+  toolResult?: string
+  isError: boolean
+}
+
+export interface HistoryMessage {
+  role: string
+  content: ContentBlock[]
+  timestamp?: number
+  model?: string
+  usage?: TokenUsage
+}
+
+export interface TokenUsage {
+  inputTokens: number
+  outputTokens: number
+  cacheReadTokens: number
+  cacheCreationTokens: number
+}
+
+export interface SessionDetail {
+  agent: string
+  sessionId: string
+  messages: HistoryMessage[]
+  totalTokens: TokenUsage
+  model?: string
+  durationMs?: number
+  project: string
+  projectName: string
+  timestamp: number
+}
+
+export interface HistoryStats {
+  totalSessions: number
+  totalTokens: number
+  liveSessionId?: string
+}
+
+// ── Insights ──────────────────────────────────────────────────────────────────
+
+export interface ToolCount {
+  name: string
+  count: number
+}
+
+export interface ModelStat {
+  model: string
+  sessions: number
+  inputTokens: number
+  outputTokens: number
+  cacheReadTokens: number
+  cacheCreationTokens: number
+  estCostUsd?: number | null
+}
+
+export interface ProjectTokens {
+  project: string
+  projectName: string
+  tokens: number
+}
+
+export interface HeaviestSession {
+  sessionId: string
+  display: string
+  tokens: number
+}
+
+export interface TokenPoint {
+  tsMs: number
+  tokens: number
+}
+
+export interface SessionInsights {
+  sessionsAnalyzed: number
+  inputTokens: number
+  outputTokens: number
+  cacheReadTokens: number
+  cacheCreationTokens: number
+  estCostUsd: number
+  cacheReadRatio: number
+  avgToolCalls: number
+  perModel: ModelStat[]
+  perProject: ProjectTokens[]
+  toolCounts: ToolCount[]
+  mcpToolCounts: ToolCount[]
+  skillCounts: ToolCount[]
+  heaviest?: HeaviestSession | null
+}
+
+// ── Worktrees ─────────────────────────────────────────────────────────────────
+
+export interface WorktreeInfo {
+  path: string
+  branch?: string
+  isPrimary: boolean
+  isDetached: boolean
+  isDirty: boolean
+  ahead: number
+  behind: number
+  isMerged: boolean
+  /** Unix seconds of the last commit in this worktree. */
+  lastCommitTs?: number
+  lastCommitSubject?: string
+}
+
+export interface RepoWorktrees {
+  repoName: string
+  repoPath: string
+  baseBranch: string
+  worktrees: WorktreeInfo[]
+  /** Agent instruction/config files present at the repo root (CLAUDE.md, AGENTS.md, …). */
+  agentFiles: string[]
+  /** Skill names under <root>/.claude/skills/. */
+  repoSkills: string[]
+}

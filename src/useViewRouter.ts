@@ -25,20 +25,39 @@ export interface UseViewRouterResult extends RouterState {
   openAddSkill: () => void
   openAddMcp: () => void
   goTo: (view: View) => void
+  resetTo: (view: View) => void
   escape: () => void
   refreshSelected: (tools: Agent[]) => void
 }
 
-export function useViewRouter(): UseViewRouterResult {
+export interface UseViewRouterOptions {
+  /** Mirror the view into window.location.hash (popover behavior). Default true. */
+  syncHash?: boolean
+  /** Called when Escape unwinds past the root. Default: hide the window. */
+  onExit?: () => void
+  /** Start at this view instead of deriving from the hash. */
+  initialView?: View
+}
+
+export function useViewRouter(options: UseViewRouterOptions = {}): UseViewRouterResult {
+  const { syncHash = true, onExit, initialView } = options
   const [state, dispatch] = useReducer(
     routerReducer,
     undefined,
-    () => initialRouterState(window.location.hash),
+    () => {
+      const s = initialRouterState(window.location.hash)
+      // Embedded routers escape to 'main', never to a stale back-view.
+      return initialView
+        ? { ...s, view: initialView, allSkillsBackView: 'main' as View, allMcpsBackView: 'main' as View }
+        : s
+    },
   )
 
   useEffect(() => {
-    window.location.hash = state.view === 'settings' ? '#settings' : ''
-  }, [state.view])
+    if (syncHash) {
+      window.location.hash = state.view === 'settings' ? '#settings' : ''
+    }
+  }, [state.view, syncHash])
 
   const selectAgent = useCallback((tool: Agent) => {
     dispatch({ type: 'SELECT_AGENT', tool })
@@ -79,6 +98,8 @@ export function useViewRouter(): UseViewRouterResult {
 
   const goTo = useCallback((view: View) => dispatch({ type: 'GO_TO', view }), [])
 
+  const resetTo = useCallback((view: View) => dispatch({ type: 'RESET_TO', view }), [])
+
   const escape = useCallback(() => {
     const result = escapeTransition(
       state.view, state.skillBackView, state.mcpBackView, state.selectedAgent,
@@ -86,8 +107,9 @@ export function useViewRouter(): UseViewRouterResult {
       state.addSkillBackView, state.addMcpBackView,
     )
     if (result.type === 'navigate') dispatch({ type: 'GO_TO', view: result.to })
+    else if (onExit) onExit()
     else invoke('hide_window').catch(() => {})
-  }, [state.view, state.skillBackView, state.mcpBackView, state.selectedAgent, state.allSkillsBackView, state.allMcpsBackView, state.addSkillBackView, state.addMcpBackView])
+  }, [state.view, state.skillBackView, state.mcpBackView, state.selectedAgent, state.allSkillsBackView, state.allMcpsBackView, state.addSkillBackView, state.addMcpBackView, onExit])
 
   const refreshSelected = useCallback((tools: Agent[]) => {
     dispatch({ type: 'REFRESH_SELECTED', tools })
@@ -106,6 +128,7 @@ export function useViewRouter(): UseViewRouterResult {
     openAddSkill,
     openAddMcp,
     goTo,
+    resetTo,
     escape,
     refreshSelected,
   }

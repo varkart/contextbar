@@ -17,6 +17,7 @@ export type View =
   | 'notifications'
   | 'logs'
   | 'doctor'
+  | 'config-backup'
 
 export type AgentsListMode = 'default'
 
@@ -40,6 +41,7 @@ const _VIEW_REGISTRY: Record<View, true> = {
   'notifications': true,
   'logs': true,
   'doctor': true,
+  'config-backup': true,
 }
 
 /** Every registered view. Used by tests to assert Escape is handled for all of them. */
@@ -70,6 +72,7 @@ export type RouterAction =
   | { type: 'OPEN_SKILLS_PAGE'; fromView: View }
   | { type: 'OPEN_MCPS_PAGE'; fromView: View }
   | { type: 'GO_TO'; view: View }
+  | { type: 'RESET_TO'; view: View }
   | { type: 'OPEN_ADD_SKILL'; fromView: View }
   | { type: 'OPEN_ADD_MCP'; fromView: View }
   | { type: 'REFRESH_SELECTED'; tools: Agent[] }
@@ -101,6 +104,8 @@ export function escapeTransition(
   if (view === 'agents-list') return { type: 'navigate', to: 'main' }
   if (view === 'settings' || view === 'notifications' || view === 'logs' || view === 'doctor')
     return { type: 'navigate', to: 'main' }
+  if (view === 'config-backup')
+    return { type: 'navigate', to: selectedAgent ? 'agent-detail' : 'main' }
   return { type: 'hide' }
 }
 
@@ -157,6 +162,16 @@ export function routerReducer(state: RouterState, action: RouterAction): RouterS
 
     case 'GO_TO':
       return { ...state, view: action.view }
+
+    // Fresh stack rooted at `view` — used by embedded routers (expanded window)
+    // where escape should unwind to 'main' rather than a stale back-view.
+    case 'RESET_TO':
+      return {
+        ...initialRouterState(),
+        view: action.view,
+        allSkillsBackView: 'main',
+        allMcpsBackView: 'main',
+      }
 
     case 'REFRESH_SELECTED': {
       const tools = action.tools

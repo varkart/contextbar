@@ -67,17 +67,41 @@ describe('SkillDetailPanel', () => {
     expect(screen.getByText(skill.path)).toBeInTheDocument()
   })
 
-  it('clicking a file invokes open_path', async () => {
+  it('clicking a markdown file renders it inline', async () => {
     mockInvoke.mockResolvedValueOnce(fileTree)
-    mockInvoke.mockResolvedValue(undefined)
+    mockInvoke.mockResolvedValue('# Rendered heading\n\nBody text')
     render(<SkillDetailPanel skill={skill} onBack={vi.fn()} />)
     await waitFor(() => expect(screen.getByText('SKILL.md')).toBeInTheDocument())
     fireEvent.click(screen.getByText('SKILL.md'))
     await waitFor(() =>
-      expect(mockInvoke).toHaveBeenCalledWith('open_path', {
+      expect(mockInvoke).toHaveBeenCalledWith('read_markdown_file', {
         path: '~/.claude/skills/impeccable/SKILL.md',
       })
     )
+    // Rendered as markdown, not raw text
+    await waitFor(() =>
+      expect(screen.getByRole('heading', { name: 'Rendered heading' })).toBeInTheDocument()
+    )
+    expect(mockInvoke).not.toHaveBeenCalledWith('open_path', expect.anything())
+  })
+
+  it('non-markdown files are listed but cannot be opened', async () => {
+    const treeWithScript: FileEntry = {
+      ...fileTree,
+      children: [
+        ...fileTree.children,
+        { name: 'run.sh', path: '~/.claude/skills/impeccable/run.sh', isDir: false, extension: 'sh', children: [] },
+      ],
+    }
+    mockInvoke.mockResolvedValueOnce(treeWithScript)
+    mockInvoke.mockResolvedValue(undefined)
+    render(<SkillDetailPanel skill={skill} onBack={vi.fn()} />)
+    await waitFor(() => expect(screen.getByText('run.sh')).toBeInTheDocument())
+    const row = screen.getByText('run.sh').closest('button')!
+    expect(row).toBeDisabled()
+    fireEvent.click(row)
+    expect(mockInvoke).not.toHaveBeenCalledWith('open_path', expect.anything())
+    expect(mockInvoke).not.toHaveBeenCalledWith('read_markdown_file', expect.anything())
   })
 
   it('invokes read_skill_dir with correct path', async () => {
