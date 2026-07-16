@@ -12,6 +12,7 @@ import MyWorkSection from './MyWorkSection'
 import ToolsPanel, { type ToolsSection } from './ToolsPanel'
 import { Tile, TileRow } from './InsightTiles'
 import { RefreshButton } from './InsightWidgets'
+import CommandPalette, { buildPaletteItems } from './CommandPalette'
 
 export type Section =
   | 'work'
@@ -255,12 +256,32 @@ export default function ExpandedApp() {
     return () => window.removeEventListener('keydown', handler)
   }, [goTo])
 
+  // ⌘K opens the command palette from anywhere in the window.
+  const [paletteOpen, setPaletteOpen] = useState(false)
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (!e.metaKey || e.shiftKey || e.altKey || e.ctrlKey) return
+      if (e.key.toLowerCase() !== 'k') return
+      e.preventDefault()
+      setPaletteOpen(o => !o)
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [])
+
+  const paletteItems = useMemo(
+    () => buildPaletteItems(sessions, repos, { goTo, openSession, viewSessionsForRepo }),
+    [sessions, repos, goTo, openSession, viewSessionsForRepo]
+  )
+
   // Escape inside tools sections is owned by ToolsPanel (it unwinds the
   // embedded view stack first); here we only handle the custom sections.
+  // The command palette owns Escape while open (guarded below) so it can
+  // close itself without also closing the window or navigating home.
   useEffect(() => {
     if (isToolsSection(section)) return
     const handler = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape') return
+      if (e.key !== 'Escape' || paletteOpen) return
       if (section === 'work') {
         getCurrentWebviewWindow().close().catch(() => {})
       } else {
@@ -269,7 +290,7 @@ export default function ExpandedApp() {
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [section, goTo])
+  }, [section, goTo, paletteOpen])
 
   const installedAgents = useMemo(() => agents.filter(a => a.installed), [agents])
   const counts = useMemo(() => ({
@@ -282,7 +303,8 @@ export default function ExpandedApp() {
 
   return (
     <div className="w-screen h-screen bg-[var(--c-bg)] text-[var(--c-text)] flex overflow-hidden">
-      <Sidebar section={section} goTo={goTo} counts={counts} />
+      <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} items={paletteItems} />
+      <Sidebar section={section} goTo={goTo} counts={counts} onOpenPalette={() => setPaletteOpen(true)} />
       <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
         {section === 'work' && (
           <MyWorkSection
@@ -358,10 +380,11 @@ function countFor(id: Section, counts: SectionCounts): number | null {
   return null
 }
 
-function Sidebar({ section, goTo, counts }: {
+function Sidebar({ section, goTo, counts, onOpenPalette }: {
   section: Section
   goTo: (s: Section) => void
   counts: SectionCounts
+  onOpenPalette: () => void
 }) {
   const group = (label: string, items: { id: Section; label: string }[], startIndex: number) => (
     <div className="mb-1">
@@ -399,6 +422,20 @@ function Sidebar({ section, goTo, counts }: {
       >
         <span className="w-3.5 h-3.5 rounded" style={{ background: 'linear-gradient(135deg, #a5b4fc, #6366f1)' }} />
         <span className="text-[13px] font-bold tracking-tight">Context Bar</span>
+      </button>
+      <button
+        onClick={onOpenPalette}
+        className="flex items-center gap-2 mx-2 mt-2 px-2.5 py-1.5 rounded-lg border border-[var(--c-border)] text-[11.5px] text-[var(--c-text-3)] hover:text-[var(--c-text-2)] hover:border-[var(--c-text-3)] transition-colors"
+      >
+        <svg
+          xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+          stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"
+          className="w-3.5 h-3.5 flex-shrink-0"
+        >
+          <circle cx="11" cy="11" r="7" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
+        </svg>
+        <span className="flex-1 text-left">Jump to anything…</span>
+        <span className="text-[9px] font-mono opacity-70">⌘K</span>
       </button>
       <nav className="flex-1 overflow-y-auto pb-2">
         {group('Work', WORK_SECTIONS, 1)}
