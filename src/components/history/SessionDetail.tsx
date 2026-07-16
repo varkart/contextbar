@@ -1,9 +1,48 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { invoke } from '@tauri-apps/api/core'
-import type { SessionEntry, SessionDetail as SessionDetailType } from '../../types'
+import type { SessionEntry, SessionDetail as SessionDetailType, HistoryMessage, ContentBlock } from '../../types'
 import SessionStats from './SessionStats'
 import MessageBubble from './MessageBubble'
+import ToolCallGroup from './ToolCallGroup'
 import AgentBadge from './AgentBadge'
+
+/** Runs of this many or more sequential tool-only messages collapse into one
+ *  group. Codex/agy push one message per tool step (no batching like Claude),
+ *  so a session with a long tool-heavy stretch becomes a wall of repeated
+ *  avatar rows without this. */
+const COLLAPSE_THRESHOLD = 3
+
+export function isToolOnlyMessage(m: HistoryMessage): boolean {
+  return m.role === 'assistant' && m.content.length > 0 && m.content.every(b => b.blockType === 'tool_use')
+}
+
+type RenderUnit =
+  | { kind: 'message'; message: HistoryMessage; key: number }
+  | { kind: 'toolGroup'; blocks: ContentBlock[]; key: number }
+
+/** Collapse consecutive tool-only messages into one group; everything else
+ *  (text turns, user turns, short tool runs) renders as before. */
+export function groupMessages(messages: HistoryMessage[]): RenderUnit[] {
+  const units: RenderUnit[] = []
+  let i = 0
+  while (i < messages.length) {
+    if (isToolOnlyMessage(messages[i])) {
+      let j = i
+      while (j < messages.length && isToolOnlyMessage(messages[j])) j++
+      const run = messages.slice(i, j)
+      if (run.length >= COLLAPSE_THRESHOLD) {
+        units.push({ kind: 'toolGroup', blocks: run.flatMap(m => m.content), key: i })
+      } else {
+        run.forEach((m, k) => units.push({ kind: 'message', message: m, key: i + k }))
+      }
+      i = j
+    } else {
+      units.push({ kind: 'message', message: messages[i], key: i })
+      i++
+    }
+  }
+  return units
+}
 
 interface SessionDetailProps {
   session: SessionEntry
@@ -58,6 +97,8 @@ export default function SessionDetail({ session }: SessionDetailProps) {
     (acc, m) => acc + m.content.filter(b => b.blockType === 'tool_use').length,
     0
   ) ?? 0
+
+  const renderUnits = useMemo(() => groupMessages(detail?.messages ?? []), [detail])
 
   const ts = new Date(session.timestamp)
   const dateStr = ts.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
@@ -124,9 +165,11 @@ export default function SessionDetail({ session }: SessionDetailProps) {
             {error}
           </div>
         )}
-        {detail?.messages.map((msg, i) => (
-          <MessageBubble key={i} message={msg} />
-        ))}
+        {renderUnits.map(unit =>
+          unit.kind === 'toolGroup'
+            ? <ToolCallGroup key={unit.key} blocks={unit.blocks} />
+            : <MessageBubble key={unit.key} message={unit.message} />
+        )}
         {detail && detail.messages.length === 0 && (
           <p className="text-[11px] text-[var(--c-text-3)] text-center py-6">No messages found</p>
         )}

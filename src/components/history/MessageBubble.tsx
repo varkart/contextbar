@@ -2,10 +2,16 @@ import React from 'react'
 import ReactMarkdown from 'react-markdown'
 import type { HistoryMessage, ContentBlock } from '../../types'
 import ToolCallBlock from './ToolCallBlock'
+import ToolCallGroup from './ToolCallGroup'
 
 interface MessageBubbleProps {
   message: HistoryMessage
 }
+
+/** Runs of this many or more sequential tool calls collapse into one group
+ *  (Claude batches multiple tool_use blocks into one turn — a long turn can
+ *  still contain a dozen+ of them). */
+const COLLAPSE_THRESHOLD = 3
 
 function renderAssistantContent(blocks: ContentBlock[]) {
   const elements: React.ReactElement[] = []
@@ -17,7 +23,16 @@ function renderAssistantContent(blocks: ContentBlock[]) {
     if (block.blockType === 'thinking') continue
 
     if (block.blockType === 'tool_use') {
-      elements.push(<ToolCallBlock key={i} block={block} />)
+      // Consume the whole run of consecutive tool_use blocks at once.
+      let j = i
+      while (j < blocks.length && blocks[j].blockType === 'tool_use') j++
+      const run = blocks.slice(i, j)
+      if (run.length >= COLLAPSE_THRESHOLD) {
+        elements.push(<ToolCallGroup key={i} blocks={run} />)
+      } else {
+        run.forEach((b, k) => elements.push(<ToolCallBlock key={i + k} block={b} />))
+      }
+      i = j - 1
       continue
     }
 
