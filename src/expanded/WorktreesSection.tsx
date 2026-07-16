@@ -58,9 +58,10 @@ interface WorktreesSectionProps {
   onRemoved: () => void
   onRefresh: () => void | Promise<unknown>
   onOpenSession: (s: SessionEntry) => void
+  onViewSessions: (repo: RepoWorktrees) => void
 }
 
-export default function WorktreesSection({ repos, loading, sessions, onRemoved, onRefresh, onOpenSession }: WorktreesSectionProps) {
+export default function WorktreesSection({ repos, loading, sessions, onRemoved, onRefresh, onOpenSession, onViewSessions }: WorktreesSectionProps) {
   const [filter, setFilter] = useState<Filter>('all')
   const [search, setSearch] = useState('')
   const [expanded, setExpanded] = useState<string | null>(null)
@@ -266,6 +267,13 @@ export default function WorktreesSection({ repos, loading, sessions, onRemoved, 
                 </span>
               </button>
               <div className="flex items-center gap-1.5 shrink-0">
+                <button
+                  onClick={() => onViewSessions(repo)}
+                  title="View all sessions for this repo"
+                  className="flex items-center gap-1 text-[10px] px-2.5 py-1 rounded-md border border-[var(--c-border)] text-[var(--c-text-3)] hover:text-[var(--c-text-2)] hover:border-[var(--c-text-3)]/50 transition-colors"
+                >
+                  ◷ Sessions
+                </button>
                 <button
                   onClick={() => toggleRepoInsights(repo)}
                   aria-expanded={!!insightsOpen[repo.repoPath]}

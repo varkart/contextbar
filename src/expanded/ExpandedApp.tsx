@@ -210,10 +210,20 @@ export default function ExpandedApp() {
     return () => window.removeEventListener('hashchange', onHash)
   }, [])
 
-  const goTo = useCallback((s: Section) => {
+  // Sessions can be scoped to one repo's worktree paths (via "View sessions"
+  // on a repo card). Plain navigation — sidebar, hotkeys, breadcrumbs — always
+  // clears it; only the repo-driven entry point sets it.
+  const [sessionsScope, setSessionsScope] = useState<{ name: string; paths: string[] } | null>(null)
+
+  const goTo = useCallback((s: Section, scope?: { name: string; paths: string[] }) => {
     setSection(s)
+    setSessionsScope(scope ?? null)
     window.location.hash = s === 'work' ? '' : s
   }, [])
+
+  const viewSessionsForRepo = useCallback((repo: RepoWorktrees) => {
+    goTo('sessions', { name: repo.repoName, paths: repo.worktrees.map(w => w.path) })
+  }, [goTo])
 
   const goHome = useCallback(() => goTo('work'), [goTo])
 
@@ -293,6 +303,8 @@ export default function ExpandedApp() {
             onRefresh={refreshAll}
             onLoadMore={loadMoreSessions}
             hasMore={sessions.length >= sessionLimit}
+            scope={sessionsScope}
+            onClearScope={() => setSessionsScope(null)}
           />
         )}
         {section === 'worktrees' && (
@@ -303,6 +315,7 @@ export default function ExpandedApp() {
             onRemoved={fetchWorktrees}
             onRefresh={refreshAll}
             onOpenSession={openSession}
+            onViewSessions={viewSessionsForRepo}
           />
         )}
         {isToolsSection(section) && (
@@ -415,7 +428,7 @@ function Sidebar({ section, goTo, counts }: {
 
 // ── Sessions ─────────────────────────────────────────────────────────────────
 
-function SessionsSection({ sessions, loading, selected, onSelect, onRefresh, onLoadMore, hasMore }: {
+function SessionsSection({ sessions, loading, selected, onSelect, onRefresh, onLoadMore, hasMore, scope, onClearScope }: {
   sessions: SessionEntry[]
   loading: boolean
   selected: SessionEntry | null
@@ -423,20 +436,26 @@ function SessionsSection({ sessions, loading, selected, onSelect, onRefresh, onL
   onRefresh: () => void | Promise<unknown>
   onLoadMore: () => void
   hasMore: boolean
+  scope: { name: string; paths: string[] } | null
+  onClearScope: () => void
 }) {
+  const scoped = useMemo(
+    () => (scope ? sessions.filter(s => scope.paths.includes(s.project)) : sessions),
+    [sessions, scope]
+  )
   const insights = useMemo(() => {
     const now = Date.now()
     const dayAgo = now - 86_400_000
     const weekAgo = now - 7 * 86_400_000
     return {
-      total: sessions.length,
-      today: sessions.filter(s => s.timestamp >= dayAgo).length,
-      week: sessions.filter(s => s.timestamp >= weekAgo).length,
-      live: sessions.filter(s => s.isLive).length,
-      projects: new Set(sessions.map(s => s.project)).size,
-      prompts: sessions.reduce((n, s) => n + s.promptCount, 0),
+      total: scoped.length,
+      today: scoped.filter(s => s.timestamp >= dayAgo).length,
+      week: scoped.filter(s => s.timestamp >= weekAgo).length,
+      live: scoped.filter(s => s.isLive).length,
+      projects: new Set(scoped.map(s => s.project)).size,
+      prompts: scoped.reduce((n, s) => n + s.promptCount, 0),
     }
-  }, [sessions])
+  }, [scoped])
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
@@ -444,12 +463,20 @@ function SessionsSection({ sessions, loading, selected, onSelect, onRefresh, onL
         <div>
           <h2 className="text-[16px] font-semibold tracking-tight">Sessions</h2>
           <p className="text-[12px] text-[var(--c-text-3)] mt-0.5">
-            Claude Code conversation history across your projects
+            Claude, Codex, Gemini and Antigravity conversation history across your projects
           </p>
         </div>
         <RefreshButton onClick={onRefresh} busy={loading} />
       </div>
-      {!loading && sessions.length > 0 && (
+      {scope && (
+        <div className="px-6 pb-2 flex-shrink-0">
+          <span className="inline-flex items-center gap-1.5 text-[11px] px-2.5 py-1 rounded-full border border-[var(--c-accent)]/50 bg-[var(--c-accent)]/10 text-[var(--c-accent)]">
+            Repo: {scope.name}
+            <button onClick={onClearScope} className="hover:text-[var(--c-text)] transition-colors" aria-label="Clear repo filter">✕</button>
+          </span>
+        </div>
+      )}
+      {!loading && scoped.length > 0 && (
         <div className="px-4 pb-1 flex-shrink-0">
           <TileRow>
             <Tile value={insights.total} label="Sessions" />
@@ -463,7 +490,7 @@ function SessionsSection({ sessions, loading, selected, onSelect, onRefresh, onL
       )}
       <div className="flex-1 flex overflow-hidden">
         <div className="w-80 shrink-0 border-r border-[var(--c-border)] flex flex-col overflow-hidden">
-          <SessionList sessions={sessions} onSelect={onSelect} loading={loading} onLoadMore={onLoadMore} hasMore={hasMore} />
+          <SessionList sessions={scoped} onSelect={onSelect} loading={loading} onLoadMore={onLoadMore} hasMore={hasMore} />
         </div>
         <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
           {selected ? (

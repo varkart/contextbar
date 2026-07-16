@@ -72,3 +72,30 @@ test('linked session on a worktree opens its transcript in Sessions', async ({ p
   await expect(page.getByRole('heading', { name: 'Sessions' })).toBeVisible()
   await expect(page.getByText('Refactored with exponential backoff.')).toBeVisible()
 })
+
+test('repo Sessions button scopes Sessions to that repo only', async ({ page }) => {
+  await page.getByRole('button', { name: '◷ Sessions' }).first().click()
+  await expect(page.getByRole('heading', { name: 'Sessions' })).toBeVisible()
+  await expect(page.getByText('Repo: alpha')).toBeVisible()
+  // alpha-scoped sessions visible
+  await expect(page.getByText('fix the login bug in the auth middleware')).toBeVisible()
+  await expect(page.getByText('refactor the payment retry logic')).toBeVisible()
+  // beta-only sessions filtered out
+  await expect(page.getByText('write integration tests for the parser')).not.toBeVisible()
+})
+
+test('clearing the repo scope chip shows all sessions again', async ({ page }) => {
+  await page.getByRole('button', { name: '◷ Sessions' }).first().click()
+  await expect(page.getByText('Repo: alpha')).toBeVisible()
+  await page.getByRole('button', { name: 'Clear repo filter' }).click()
+  await expect(page.getByText('Repo: alpha')).not.toBeVisible()
+  await expect(page.getByText('write integration tests for the parser')).toBeVisible()
+})
+
+test('navigating to Sessions via sidebar does not carry a stale repo scope', async ({ page }) => {
+  await page.getByRole('button', { name: '◷ Sessions' }).first().click()
+  await expect(page.getByText('Repo: alpha')).toBeVisible()
+  await page.getByRole('navigation').getByRole('button', { name: /Repos/ }).click()
+  await page.getByRole('navigation').getByRole('button', { name: /Sessions/ }).click()
+  await expect(page.getByText('Repo: alpha')).not.toBeVisible()
+})
