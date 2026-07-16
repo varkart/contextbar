@@ -57,3 +57,27 @@ test('hash deep-link opens the right section', async ({ page }) => {
   await page.goto('/#sessions')
   await expect(page.getByRole('heading', { name: 'Sessions' })).toBeVisible()
 })
+
+test('cmd+K opens the command palette and navigates via a section item', async ({ page }) => {
+  await page.keyboard.press('Meta+k')
+  await expect(page.getByPlaceholder('Search sessions, repos, sections…')).toBeVisible()
+  await page.keyboard.type('repo')
+  await page.getByRole('dialog', { name: 'Command palette' }).getByRole('button', { name: /Repos/ }).click()
+  await expect(page.getByRole('heading', { name: 'Repos' })).toBeVisible()
+  await expect(page.getByPlaceholder('Search sessions, repos, sections…')).not.toBeVisible()
+})
+
+test('cmd+K palette jumps to a matching session transcript', async ({ page }) => {
+  await page.keyboard.press('Meta+k')
+  await page.keyboard.type('login bug')
+  await page.getByRole('button', { name: /fix the login bug/ }).click()
+  await expect(page.getByRole('heading', { name: 'Sessions' })).toBeVisible()
+})
+
+test('escape closes the command palette without closing the window', async ({ page }) => {
+  await page.keyboard.press('Meta+k')
+  await expect(page.getByPlaceholder('Search sessions, repos, sections…')).toBeVisible()
+  await page.keyboard.press('Escape')
+  await expect(page.getByPlaceholder('Search sessions, repos, sections…')).not.toBeVisible()
+  await expect(page.getByRole('heading', { name: 'My Work' })).toBeVisible()
+})
