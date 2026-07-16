@@ -90,7 +90,7 @@ function highlightMatch(text: string, idx: number[]) {
   idx.forEach((i, k) => {
     if (i > last) nodes.push(text.slice(last, i))
     nodes.push(
-      <mark key={k} className="bg-transparent text-[var(--c-accent)] font-semibold">
+      <mark key={k} className="bg-transparent text-indigo-400 font-semibold">
         {text[i]}
       </mark>
     )
@@ -209,7 +209,7 @@ export default function CommandPalette({ open, onClose, items }: {
                     key={item.id}
                     onMouseEnter={() => setSel(idx)}
                     onClick={() => { onClose(); item.action() }}
-                    className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-left text-[12.5px] transition-colors ${idx === sel ? 'bg-[var(--c-accent)]/15 text-[var(--c-accent)]' : 'text-[var(--c-text-2)] hover:bg-[var(--c-surface-2)]'}`}
+                    className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-left text-[12.5px] transition-colors ${idx === sel ? 'bg-indigo-400/15 text-indigo-400' : 'text-[var(--c-text-2)] hover:bg-[var(--c-hover)]'}`}
                   >
                     <span className="flex-1 min-w-0 truncate">{highlightMatch(item.title, m.idx)}</span>
                     {item.sub && (

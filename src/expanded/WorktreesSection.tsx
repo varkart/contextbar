@@ -3,7 +3,7 @@ import { invoke } from '@tauri-apps/api/core'
 import type { RepoWorktrees, WorktreeInfo, SessionEntry, SessionInsights } from '../types'
 import { formatTokens } from '../components/history/SessionStats'
 import { Tile, TileRow } from './InsightTiles'
-import { HBar, RefreshButton, shortModel } from './InsightWidgets'
+import { HBar, RefreshButton, shortModel, SkeletonCards } from './InsightWidgets'
 import AgentBadge from '../components/history/AgentBadge'
 
 export type WorktreeStatus = 'active' | 'stale' | 'abandoned' | 'primary'
@@ -59,9 +59,10 @@ interface WorktreesSectionProps {
   onRefresh: () => void | Promise<unknown>
   onOpenSession: (s: SessionEntry) => void
   onViewSessions: (repo: RepoWorktrees) => void
+  showToast: (type: 'success' | 'error', message: string) => void
 }
 
-export default function WorktreesSection({ repos, loading, sessions, onRemoved, onRefresh, onOpenSession, onViewSessions }: WorktreesSectionProps) {
+export default function WorktreesSection({ repos, loading, sessions, onRemoved, onRefresh, onOpenSession, onViewSessions, showToast }: WorktreesSectionProps) {
   const [filter, setFilter] = useState<Filter>('all')
   const [search, setSearch] = useState('')
   const [expanded, setExpanded] = useState<string | null>(null)
@@ -225,11 +226,7 @@ export default function WorktreesSection({ repos, loading, sessions, onRemoved, 
           </div>
         )}
 
-        {loading && (
-          <div className="flex items-center justify-center h-32">
-            <div className="w-4 h-4 border-2 border-[var(--c-accent)]/40 border-t-[var(--c-accent)] rounded-full animate-spin" />
-          </div>
-        )}
+        {loading && <SkeletonCards count={4} />}
 
         {!loading && visibleRepos.length === 0 && (
           <p className="text-[12px] text-[var(--c-text-3)] text-center py-10">
@@ -284,7 +281,7 @@ export default function WorktreesSection({ repos, loading, sessions, onRemoved, 
                 </button>
                 {vscodeAvailable && (
                   <button
-                    onClick={() => invoke('open_in_vscode', { path: repo.repoPath }).catch(() => {})}
+                    onClick={() => invoke('open_in_vscode', { path: repo.repoPath }).catch(() => showToast('error', 'Could not open VS Code'))}
                     title="Open repo in Visual Studio Code"
                     className="text-[10px] px-2.5 py-1 rounded-md border border-[var(--c-border)] text-[var(--c-text-3)] hover:text-[var(--c-text-2)] hover:border-[var(--c-text-3)]/50 transition-colors"
                   >
@@ -382,7 +379,7 @@ export default function WorktreesSection({ repos, loading, sessions, onRemoved, 
                           </button>
                           {vscodeAvailable && (
                             <button
-                              onClick={() => invoke('open_in_vscode', { path: wt.path }).catch(() => {})}
+                              onClick={() => invoke('open_in_vscode', { path: wt.path }).catch(() => showToast('error', 'Could not open VS Code'))}
                               title="Open worktree in Visual Studio Code"
                               className="text-[11px] px-3 py-1.5 rounded-md border border-[var(--c-border)] text-[var(--c-text-3)] hover:text-[var(--c-text-2)] transition-colors"
                             >
@@ -390,7 +387,7 @@ export default function WorktreesSection({ repos, loading, sessions, onRemoved, 
                             </button>
                           )}
                           <button
-                            onClick={() => invoke('reveal_in_finder', { path: wt.path }).catch(() => {})}
+                            onClick={() => invoke('reveal_in_finder', { path: wt.path }).catch(() => showToast('error', 'Could not reveal in Finder'))}
                             className="text-[11px] px-3 py-1.5 rounded-md border border-[var(--c-border)] text-[var(--c-text-3)] hover:text-[var(--c-text-2)] transition-colors"
                           >
                             Reveal in Finder

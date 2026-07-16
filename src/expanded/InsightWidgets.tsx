@@ -9,6 +9,62 @@ export function shortModel(model: string): string {
   return model.replace(/^claude-/, '').replace(/-\d{8}$/, '')
 }
 
+/** Pulsing placeholder block — shape the caller's own layout, don't invent one. */
+export function SkeletonBar({ width = '100%', height = '10px', className = '' }: {
+  width?: string
+  height?: string
+  className?: string
+}) {
+  return (
+    <div
+      className={`animate-pulse rounded bg-[var(--c-surface-2)] ${className}`}
+      style={{ width, height }}
+    />
+  )
+}
+
+/** Row of tile-shaped skeletons matching <Tile>'s footprint. */
+export function SkeletonTiles({ count = 4 }: { count?: number }) {
+  return (
+    <div className="grid gap-2.5 mb-5" style={{ gridTemplateColumns: `repeat(${count}, 1fr)` }}>
+      {Array.from({ length: count }, (_, i) => (
+        <div key={i} className="rounded-xl border border-[var(--c-border)] bg-[var(--c-surface-2)]/40 px-3 py-2.5 text-center">
+          <SkeletonBar width="40%" height="16px" className="mx-auto" />
+          <SkeletonBar width="70%" height="9px" className="mx-auto mt-2" />
+        </div>
+      ))}
+    </div>
+  )
+}
+
+/** List-row skeletons matching a two-line title + meta row shape. */
+export function SkeletonRows({ count = 6 }: { count?: number }) {
+  return (
+    <div>
+      {Array.from({ length: count }, (_, i) => (
+        <div key={i} className="px-3 py-2.5 border-b border-[var(--c-border)]/50 last:border-0">
+          <SkeletonBar width={`${70 + (i % 3) * 8}%`} height="12px" />
+          <SkeletonBar width="35%" height="9px" className="mt-2" />
+        </div>
+      ))}
+    </div>
+  )
+}
+
+/** Card-shaped skeletons matching a repo/session-group card footprint. */
+export function SkeletonCards({ count = 3 }: { count?: number }) {
+  return (
+    <div className="space-y-2.5">
+      {Array.from({ length: count }, (_, i) => (
+        <div key={i} className="rounded-xl border border-[var(--c-border)] bg-[var(--c-surface-2)]/40 px-4 py-3.5">
+          <SkeletonBar width="35%" height="13px" />
+          <SkeletonBar width="55%" height="9px" className="mt-2.5" />
+        </div>
+      ))}
+    </div>
+  )
+}
+
 export function Card({ title, sub, children }: { title: string; sub?: string; children: React.ReactNode }) {
   return (
     <div className="rounded-xl border border-[var(--c-border)] bg-[var(--c-surface-2)]/40 p-4">

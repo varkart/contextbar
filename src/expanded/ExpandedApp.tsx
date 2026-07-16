@@ -13,6 +13,8 @@ import ToolsPanel, { type ToolsSection } from './ToolsPanel'
 import { Tile, TileRow } from './InsightTiles'
 import { RefreshButton } from './InsightWidgets'
 import CommandPalette, { buildPaletteItems } from './CommandPalette'
+import { useToasts, ToastStack } from './Toast'
+import { useCoachmark, Coachmark } from './Coachmark'
 
 export type Section =
   | 'work'
@@ -151,11 +153,12 @@ export default function ExpandedApp() {
   }, [])
 
   const [sessionLimit, setSessionLimit] = useState(300)
+  const { toasts, showToast, dismissToast } = useToasts()
 
   const fetchSessions = useCallback((limit: number) => {
     return invoke<SessionEntry[]>('list_sessions', { limit, offset: 0 })
-      .then(s => { setSessions(s); setSessionsLoading(false) })
-      .catch(() => setSessionsLoading(false))
+      .then(s => { setSessions(s); setSessionsLoading(false); return true })
+      .catch(() => { setSessionsLoading(false); return false })
   }, [])
 
   useEffect(() => { fetchSessions(300) }, [fetchSessions])
@@ -170,19 +173,20 @@ export default function ExpandedApp() {
 
   const fetchWorktrees = useCallback(() => {
     return invoke<RepoWorktrees[]>('list_worktrees')
-      .then(r => { setRepos(r); setReposLoading(false) })
-      .catch(() => setReposLoading(false))
+      .then(r => { setRepos(r); setReposLoading(false); return true })
+      .catch(() => { setReposLoading(false); return false })
   }, [])
 
   useEffect(() => { fetchWorktrees() }, [fetchWorktrees])
 
-  const refreshAll = useCallback(() => {
-    return Promise.all([
+  const refreshAll = useCallback(async () => {
+    const [sessionsOk, worktreesOk] = await Promise.all([
       fetchSessions(sessionLimit),
       fetchWorktrees(),
-      invoke('warm_session_stats').catch(() => {}),
     ])
-  }, [fetchSessions, fetchWorktrees, sessionLimit])
+    invoke('warm_session_stats').catch(() => {})
+    if (!sessionsOk || !worktreesOk) showToast('error', 'Refresh failed — check your connection')
+  }, [fetchSessions, fetchWorktrees, sessionLimit, showToast])
 
   // Freshness, three layers:
   // 1. FSEvents push — the backend watcher emits sessions-changed the moment
@@ -269,6 +273,13 @@ export default function ExpandedApp() {
     return () => window.removeEventListener('keydown', handler)
   }, [])
 
+  // First-run nudge toward ⌘K — dismissed permanently the moment the
+  // palette is opened by any means (button, hotkey, or the "×").
+  const { visible: coachmarkVisible, dismiss: dismissCoachmark } = useCoachmark('contextbar:expanded:coachmark:palette')
+  useEffect(() => {
+    if (paletteOpen) dismissCoachmark()
+  }, [paletteOpen, dismissCoachmark])
+
   const paletteItems = useMemo(
     () => buildPaletteItems(sessions, repos, { goTo, openSession, viewSessionsForRepo }),
     [sessions, repos, goTo, openSession, viewSessionsForRepo]
@@ -304,7 +315,15 @@ export default function ExpandedApp() {
   return (
     <div className="w-screen h-screen bg-[var(--c-bg)] text-[var(--c-text)] flex overflow-hidden">
       <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} items={paletteItems} />
-      <Sidebar section={section} goTo={goTo} counts={counts} onOpenPalette={() => setPaletteOpen(true)} />
+      <ToastStack toasts={toasts} onDismiss={dismissToast} />
+      <Sidebar
+        section={section}
+        goTo={goTo}
+        counts={counts}
+        onOpenPalette={() => setPaletteOpen(true)}
+        coachmarkVisible={coachmarkVisible}
+        onDismissCoachmark={dismissCoachmark}
+      />
       <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
         {section === 'work' && (
           <MyWorkSection
@@ -314,6 +333,7 @@ export default function ExpandedApp() {
             goTo={goTo}
             onRefresh={refreshAll}
             onOpenSession={openSession}
+            showToast={showToast}
           />
         )}
         {section === 'sessions' && (
@@ -338,6 +358,7 @@ export default function ExpandedApp() {
             onRefresh={refreshAll}
             onOpenSession={openSession}
             onViewSessions={viewSessionsForRepo}
+            showToast={showToast}
           />
         )}
         {isToolsSection(section) && (
@@ -380,11 +401,13 @@ function countFor(id: Section, counts: SectionCounts): number | null {
   return null
 }
 
-function Sidebar({ section, goTo, counts, onOpenPalette }: {
+function Sidebar({ section, goTo, counts, onOpenPalette, coachmarkVisible, onDismissCoachmark }: {
   section: Section
   goTo: (s: Section) => void
   counts: SectionCounts
   onOpenPalette: () => void
+  coachmarkVisible: boolean
+  onDismissCoachmark: () => void
 }) {
   const group = (label: string, items: { id: Section; label: string }[], startIndex: number) => (
     <div className="mb-1">
@@ -423,20 +446,27 @@ function Sidebar({ section, goTo, counts, onOpenPalette }: {
         <span className="w-3.5 h-3.5 rounded" style={{ background: 'linear-gradient(135deg, #a5b4fc, #6366f1)' }} />
         <span className="text-[13px] font-bold tracking-tight">Context Bar</span>
       </button>
-      <button
-        onClick={onOpenPalette}
-        className="flex items-center gap-2 mx-2 mt-2 px-2.5 py-1.5 rounded-lg border border-[var(--c-border)] text-[11.5px] text-[var(--c-text-3)] hover:text-[var(--c-text-2)] hover:border-[var(--c-text-3)] transition-colors"
-      >
-        <svg
-          xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
-          stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"
-          className="w-3.5 h-3.5 flex-shrink-0"
+      <div className="relative">
+        <button
+          onClick={onOpenPalette}
+          className="flex items-center gap-2 mx-2 mt-2 px-2.5 py-1.5 rounded-lg border border-[var(--c-border)] text-[11.5px] text-[var(--c-text-3)] hover:text-[var(--c-text-2)] hover:border-[var(--c-text-3)] transition-colors w-[calc(100%-16px)]"
         >
-          <circle cx="11" cy="11" r="7" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
-        </svg>
-        <span className="flex-1 text-left">Jump to anything…</span>
-        <span className="text-[9px] font-mono opacity-70">⌘K</span>
-      </button>
+          <svg
+            xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+            stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"
+            className="w-3.5 h-3.5 flex-shrink-0"
+          >
+            <circle cx="11" cy="11" r="7" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
+          </svg>
+          <span className="flex-1 text-left">Jump to anything…</span>
+          <span className="text-[9px] font-mono opacity-70">⌘K</span>
+        </button>
+        {coachmarkVisible && (
+          <Coachmark title="💡 Try ⌘K" onDismiss={onDismissCoachmark}>
+            Jump to any session, repo, or section instantly — no more clicking through menus.
+          </Coachmark>
+        )}
+      </div>
       <nav className="flex-1 overflow-y-auto pb-2">
         {group('Work', WORK_SECTIONS, 1)}
         {group('Configure', CONFIGURE_SECTIONS, 4)}
