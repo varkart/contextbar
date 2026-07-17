@@ -1,7 +1,44 @@
-import { useState, useMemo } from 'react'
-import type { SessionEntry } from '../../types'
+import { useState, useMemo, useEffect } from 'react'
+import { invoke } from '@tauri-apps/api/core'
+import type { SessionEntry, TranscriptMatch } from '../../types'
 import { formatTokens, tokenBadgeColor } from './SessionStats'
 import AgentBadge from './AgentBadge'
+
+// FTS snippet() wraps matched terms in \u0001…\u0002 marker bytes.
+const MARK_START = '\u0001'
+const MARK_END = '\u0002'
+
+function Snippet({ text }: { text: string }) {
+  const parts = text.split(/([\u0001\u0002])/)
+  let inMark = false
+  return (
+    <p className="text-[11px] text-[var(--c-text-3)] line-clamp-2 leading-snug mt-1">
+      {parts.map((p, i) => {
+        if (p === MARK_START) { inMark = true; return null }
+        if (p === MARK_END) { inMark = false; return null }
+        if (!p) return null
+        return inMark
+          ? <mark key={i} className="bg-[var(--c-accent)]/20 text-[var(--c-accent)] rounded-sm px-0.5">{p}</mark>
+          : <span key={i}>{p}</span>
+      })}
+    </p>
+  )
+}
+
+function matchToEntry(m: TranscriptMatch): SessionEntry {
+  return {
+    agent: m.agent,
+    sessionId: m.sessionId,
+    display: m.display || '(no prompt)',
+    timestamp: m.timestamp,
+    project: m.project,
+    projectName: m.projectName,
+    totalTokens: m.totalTokens,
+    isLive: false,
+    errorCount: 0,
+    promptCount: 1,
+  }
+}
 
 function relativeTime(ts: number): string {
   const diff = Date.now() - ts
@@ -48,9 +85,11 @@ function groupByTime(entries: SessionEntry[]): { label: string; items: SessionEn
 interface SessionRowProps {
   session: SessionEntry
   onSelect: (s: SessionEntry) => void
+  /** Transcript extract shown under the meta row (deep-search hits). */
+  snippet?: string
 }
 
-function SessionRow({ session, onSelect }: SessionRowProps) {
+function SessionRow({ session, onSelect, snippet }: SessionRowProps) {
   const totalTokens = session.totalTokens
 
   return (
@@ -104,6 +143,8 @@ function SessionRow({ session, onSelect }: SessionRowProps) {
               </>
             )}
           </div>
+
+          {snippet && <Snippet text={snippet} />}
         </div>
 
         {/* Token badge */}
@@ -149,6 +190,35 @@ export default function SessionList({ sessions, onSelect, loading, onLoadMore, h
   }, [sessions, search, projectFilter, agentFilter])
 
   const groups = useMemo(() => groupByTime(filtered), [filtered])
+
+  // Deep search: debounced FTS lookup over full transcripts (all agents).
+  const [transcriptHits, setTranscriptHits] = useState<TranscriptMatch[]>([])
+  useEffect(() => {
+    const q = search.trim()
+    if (q.length < 2) {
+      setTranscriptHits([])
+      return
+    }
+    let stale = false
+    const t = setTimeout(() => {
+      invoke<TranscriptMatch[]>('search_transcripts', { query: q, limit: 50 })
+        .then(hits => { if (!stale) setTranscriptHits(hits) })
+        .catch(() => { if (!stale) setTranscriptHits([]) })
+    }, 250)
+    return () => { stale = true; clearTimeout(t) }
+  }, [search])
+
+  // Transcript-only matches: hide sessions the shallow filter already shows,
+  // and respect the active agent/project pills.
+  const deepHits = useMemo(() => {
+    if (!search.trim()) return []
+    const shown = new Set(filtered.map(s => s.sessionId))
+    return transcriptHits.filter(h =>
+      !shown.has(h.sessionId)
+      && (!agentFilter || h.agent === agentFilter)
+      && (!projectFilter || h.project === projectFilter)
+    )
+  }, [transcriptHits, filtered, search, agentFilter, projectFilter])
 
   // Unique projects for filter pills — disambiguate same-name dirs with parent
   const projects = useMemo(() => {
@@ -240,7 +310,7 @@ export default function SessionList({ sessions, onSelect, loading, onLoadMore, h
             <div className="w-4 h-4 border-2 border-[var(--c-accent)]/40 border-t-[var(--c-accent)] rounded-full animate-spin" />
           </div>
         )}
-        {!loading && groups.length === 0 && (
+        {!loading && groups.length === 0 && deepHits.length === 0 && (
           <div className="px-3 py-8 text-center">
             <p className="text-[12px] text-[var(--c-text-3)]">
               {search || projectFilter ? 'No sessions match' : 'No Claude sessions found'}
@@ -264,6 +334,23 @@ export default function SessionList({ sessions, onSelect, loading, onLoadMore, h
             ))}
           </div>
         ))}
+        {deepHits.length > 0 && (
+          <div>
+            <div className="px-3 py-1 bg-[var(--c-surface-2)]/50">
+              <span className="text-[10px] font-semibold text-[var(--c-text-3)] uppercase tracking-wider">
+                In transcripts
+              </span>
+            </div>
+            {deepHits.map(hit => (
+              <SessionRow
+                key={hit.sessionId}
+                session={matchToEntry(hit)}
+                onSelect={onSelect}
+                snippet={hit.snippet}
+              />
+            ))}
+          </div>
+        )}
         {!loading && onLoadMore && hasMore && !search && !projectFilter && !agentFilter && (
           <div className="p-3">
             <button

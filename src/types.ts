@@ -115,6 +115,19 @@ export interface SessionEntry {
   promptCount: number
 }
 
+/** One full-text hit from the transcript index (search_transcripts). */
+export interface TranscriptMatch {
+  sessionId: string
+  agent: string
+  /** Extract around the match; hits wrapped in … markers. */
+  snippet: string
+  display: string
+  project: string
+  projectName: string
+  timestamp: number
+  totalTokens: number
+}
+
 export interface ContentBlock {
   blockType: string
   text?: string
