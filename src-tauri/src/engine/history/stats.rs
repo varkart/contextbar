@@ -164,74 +164,125 @@ fn est_cost(
     )
 }
 
+/// Concatenated user/assistant text of a session, capped so one huge
+/// transcript can't bloat the FTS index.
+fn transcript_text(detail: &super::SessionDetail) -> String {
+    const CAP: usize = 256 * 1024;
+    let mut out = String::new();
+    'outer: for msg in &detail.messages {
+        if msg.role != "user" && msg.role != "assistant" {
+            continue;
+        }
+        for block in &msg.content {
+            if let Some(t) = &block.text {
+                if t.is_empty() {
+                    continue;
+                }
+                out.push_str(t);
+                out.push('\n');
+                if out.len() >= CAP {
+                    break 'outer;
+                }
+            }
+        }
+    }
+    out
+}
+
 /// Parse any session files that are new or changed since the last warm pass
-/// and upsert one stats row per session. Returns the number of (re)parsed
-/// sessions. Safe to call repeatedly.
+/// and upsert one stats row per session (plus its FTS transcript row).
+/// Covers every session source, not just Claude. Returns the number of
+/// (re)parsed sessions. Safe to call repeatedly.
 pub fn warm(db: &DbState) -> usize {
     let Some(home) = dirs::home_dir() else {
         return 0;
     };
-    // Large limit — the index read is cheap; parsing is what the cache guards.
-    let entries = index::list_sessions(&home, 2000, 0, None, None);
     let mut parsed = 0usize;
 
-    for entry in entries {
-        let path = index::session_file_path(&home, &entry.project, &entry.session_id);
-        let Ok(meta) = std::fs::metadata(&path) else {
-            continue;
-        };
-        let mtime = meta
-            .modified()
-            .ok()
-            .and_then(|m| m.duration_since(std::time::UNIX_EPOCH).ok())
-            .map(|d| d.as_secs() as i64)
-            .unwrap_or(0);
-        let size = meta.len() as i64;
+    for source in crate::engine::sessions::sources() {
+        let is_claude = source.agent_id() == "claude";
+        // Large limit — listing is cheap; parsing is what the cache guards.
+        let limit = if is_claude { 2000 } else { 500 };
 
-        let cached: Option<(i64, i64)> = {
-            let conn = db.0.lock().unwrap();
-            conn.query_row(
-                "SELECT mtime, size FROM session_stats WHERE session_id = ?1",
-                [&entry.session_id],
-                |r| Ok((r.get(0)?, r.get(1)?)),
-            )
-            .ok()
-        };
-        if cached == Some((mtime, size)) {
-            continue;
+        for entry in source.list(limit) {
+            let Some(path) = source.transcript_file(&entry) else {
+                continue;
+            };
+            let Ok(meta) = std::fs::metadata(&path) else {
+                continue;
+            };
+            let mtime = meta
+                .modified()
+                .ok()
+                .and_then(|m| m.duration_since(std::time::UNIX_EPOCH).ok())
+                .map(|d| d.as_secs() as i64)
+                .unwrap_or(0);
+            let size = meta.len() as i64;
+
+            let cached: Option<(i64, i64)> = {
+                let conn = db.0.lock().unwrap();
+                conn.query_row(
+                    "SELECT mtime, size FROM session_stats WHERE session_id = ?1",
+                    [&entry.session_id],
+                    |r| Ok((r.get(0)?, r.get(1)?)),
+                )
+                .ok()
+            };
+            if cached == Some((mtime, size)) {
+                continue;
+            }
+
+            // Claude fast path: source.get() would rescan history.jsonl per
+            // session to find the project; we already have it on the entry.
+            let detail = if is_claude {
+                parser::get_session(&home, &entry.session_id, &entry.project, entry.timestamp)
+            } else {
+                source.get(&entry.session_id)
+            };
+            let Some(detail) = detail else {
+                continue;
+            };
+
+            upsert_session(db, &entry, &detail, mtime, size);
+            parsed += 1;
         }
+    }
+    parsed
+}
 
-        let Some(detail) =
-            parser::get_session(&home, &entry.session_id, &entry.project, entry.timestamp)
-        else {
-            continue;
-        };
-
-        let mut tool_calls: HashMap<String, u64> = HashMap::new();
-        let mut skill_calls: HashMap<String, u64> = HashMap::new();
-        for msg in &detail.messages {
-            for block in &msg.content {
-                if block.block_type == "tool_use" {
-                    if let Some(name) = &block.tool_name {
-                        *tool_calls.entry(name.clone()).or_insert(0) += 1;
-                        if name == "Skill" {
-                            if let Some(skill) =
-                                block.tool_input.as_deref().and_then(skill_name_from_input)
-                            {
-                                *skill_calls.entry(skill).or_insert(0) += 1;
-                            }
+/// Write one session's stats row and FTS transcript.
+fn upsert_session(
+    db: &DbState,
+    entry: &super::SessionEntry,
+    detail: &super::SessionDetail,
+    mtime: i64,
+    size: i64,
+) {
+    let mut tool_calls: HashMap<String, u64> = HashMap::new();
+    let mut skill_calls: HashMap<String, u64> = HashMap::new();
+    for msg in &detail.messages {
+        for block in &msg.content {
+            if block.block_type == "tool_use" {
+                if let Some(name) = &block.tool_name {
+                    *tool_calls.entry(name.clone()).or_insert(0) += 1;
+                    if name == "Skill" {
+                        if let Some(skill) =
+                            block.tool_input.as_deref().and_then(skill_name_from_input)
+                        {
+                            *skill_calls.entry(skill).or_insert(0) += 1;
                         }
                     }
                 }
             }
         }
-        let tool_calls_json = serde_json::to_string(&tool_calls).unwrap_or_else(|_| "{}".into());
-        let skill_calls_json = serde_json::to_string(&skill_calls).unwrap_or_else(|_| "{}".into());
-        let t = &detail.total_tokens;
+    }
+    let tool_calls_json = serde_json::to_string(&tool_calls).unwrap_or_else(|_| "{}".into());
+    let skill_calls_json = serde_json::to_string(&skill_calls).unwrap_or_else(|_| "{}".into());
+    let t = &detail.total_tokens;
 
-        let conn = db.0.lock().unwrap();
-        let _ = conn.execute(
-            "INSERT INTO session_stats
+    let conn = db.0.lock().unwrap();
+    let _ = conn.execute(
+        "INSERT INTO session_stats
                (session_id, agent, project, project_name, display, ts, model,
                 input_tokens, output_tokens, cache_read, cache_creation,
                 msg_count, tool_calls, skill_calls, mtime, size)
@@ -242,28 +293,32 @@ pub fn warm(db: &DbState) -> usize {
                cache_read=excluded.cache_read, cache_creation=excluded.cache_creation,
                msg_count=excluded.msg_count, tool_calls=excluded.tool_calls,
                skill_calls=excluded.skill_calls, mtime=excluded.mtime, size=excluded.size",
-            rusqlite::params![
-                entry.session_id,
-                entry.agent,
-                entry.project,
-                entry.project_name,
-                entry.display,
-                entry.timestamp as i64,
-                detail.model.clone().unwrap_or_default(),
-                t.input_tokens as i64,
-                t.output_tokens as i64,
-                t.cache_read_tokens as i64,
-                t.cache_creation_tokens as i64,
-                detail.messages.len() as i64,
-                tool_calls_json,
-                skill_calls_json,
-                mtime,
-                size,
-            ],
-        );
-        parsed += 1;
+        rusqlite::params![
+            entry.session_id,
+            entry.agent,
+            entry.project,
+            entry.project_name,
+            entry.display,
+            entry.timestamp as i64,
+            detail.model.clone().unwrap_or_default(),
+            t.input_tokens as i64,
+            t.output_tokens as i64,
+            t.cache_read_tokens as i64,
+            t.cache_creation_tokens as i64,
+            detail.messages.len() as i64,
+            tool_calls_json,
+            skill_calls_json,
+            mtime,
+            size,
+        ],
+    );
+    drop(conn);
+
+    let mut text = transcript_text(detail);
+    if text.is_empty() {
+        text = entry.display.clone();
     }
-    parsed
+    crate::db::index_transcript(db, &entry.session_id, &entry.agent, &text);
 }
 
 /// Aggregate cached rows with `ts >= since_ms` into one insights payload.

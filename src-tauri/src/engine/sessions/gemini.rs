@@ -358,6 +358,16 @@ impl SessionSource for GeminiSource {
         None
     }
 
+    fn transcript_file(&self, entry: &SessionEntry) -> Option<PathBuf> {
+        // Chat filenames embed a short prefix of the session id.
+        let short: String = entry.session_id.chars().take(8).collect();
+        chat_files().into_iter().find_map(|(path, _)| {
+            path.file_name()
+                .is_some_and(|n| n.to_string_lossy().contains(&short))
+                .then_some(path)
+        })
+    }
+
     fn resume_command(&self, _session_id: Option<&str>) -> String {
         // Per-id resume is only exposed through gemini's interactive browser;
         // --resume reopens the most recent session in this project.
