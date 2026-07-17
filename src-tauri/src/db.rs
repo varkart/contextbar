@@ -188,7 +188,97 @@ fn migrate(conn: &mut Connection) -> Result<(), AppError> {
         conn.pragma_update(None, "user_version", 8)?;
     }
 
+    if version < 9 {
+        // Full-text index over session transcripts. Content is rebuilt by the
+        // stats warm pass, so the table can be dropped/recreated freely.
+        conn.execute_batch(
+            "CREATE VIRTUAL TABLE IF NOT EXISTS session_fts USING fts5(
+                content,
+                session_id UNINDEXED,
+                agent UNINDEXED
+            );",
+        )?;
+        conn.pragma_update(None, "user_version", 9)?;
+    }
+
     Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Transcript full-text search
+// ---------------------------------------------------------------------------
+
+/// Replace the FTS row(s) for a session with fresh transcript text.
+pub fn index_transcript(state: &DbState, session_id: &str, agent: &str, content: &str) {
+    let Ok(conn) = state.0.lock() else { return };
+    let _ = conn.execute(
+        "DELETE FROM session_fts WHERE session_id = ?1",
+        rusqlite::params![session_id],
+    );
+    let _ = conn.execute(
+        "INSERT INTO session_fts (content, session_id, agent) VALUES (?1, ?2, ?3)",
+        rusqlite::params![content, session_id, agent],
+    );
+}
+
+#[derive(serde::Serialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct TranscriptMatch {
+    pub session_id: String,
+    pub agent: String,
+    /// Extract around the match; hits wrapped in \u{1}…\u{2} marker bytes.
+    pub snippet: String,
+}
+
+/// Escape user input into an FTS5 MATCH expression: every term quoted
+/// (so operators like AND/OR/NEAR or stray quotes can't break the query),
+/// last term treated as a prefix for search-as-you-type.
+fn fts_match_expr(query: &str) -> Option<String> {
+    let terms: Vec<&str> = query.split_whitespace().collect();
+    if terms.is_empty() {
+        return None;
+    }
+    let n = terms.len();
+    let expr = terms
+        .iter()
+        .enumerate()
+        .map(|(i, t)| {
+            let escaped = t.replace('"', "\"\"");
+            if i == n - 1 {
+                format!("\"{escaped}\"*")
+            } else {
+                format!("\"{escaped}\"")
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(" ");
+    Some(expr)
+}
+
+pub fn search_transcripts(state: &DbState, query: &str, limit: usize) -> Vec<TranscriptMatch> {
+    let Some(expr) = fts_match_expr(query) else {
+        return vec![];
+    };
+    let Ok(conn) = state.0.lock() else {
+        return vec![];
+    };
+    let Ok(mut stmt) = conn.prepare(
+        "SELECT session_id, agent,
+                snippet(session_fts, 0, char(1), char(2), '…', 16)
+         FROM session_fts WHERE session_fts MATCH ?1
+         ORDER BY rank LIMIT ?2",
+    ) else {
+        return vec![];
+    };
+    stmt.query_map(rusqlite::params![expr, limit as i64], |r| {
+        Ok(TranscriptMatch {
+            session_id: r.get(0)?,
+            agent: r.get(1)?,
+            snippet: r.get(2)?,
+        })
+    })
+    .map(|rows| rows.flatten().collect())
+    .unwrap_or_default()
 }
 
 // ---------------------------------------------------------------------------
@@ -695,6 +785,50 @@ mod tests {
             .query_row("SELECT COUNT(*) FROM audit_events", [], |r| r.get(0))
             .unwrap();
         assert_eq!(count, 1);
+    }
+
+    // ── transcript FTS ────────────────────────────────────────────────────────
+
+    #[test]
+    fn fts_index_and_search_roundtrip() {
+        let db = test_db();
+        index_transcript(&db, "s1", "claude", "fix the auth middleware token expiry");
+        index_transcript(&db, "s2", "codex", "refactor database connection pooling");
+
+        let hits = search_transcripts(&db, "auth middleware", 10);
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].session_id, "s1");
+        assert_eq!(hits[0].agent, "claude");
+        assert!(hits[0].snippet.contains('\u{1}'), "snippet marks matches");
+    }
+
+    #[test]
+    fn fts_last_term_is_prefix_match() {
+        let db = test_db();
+        index_transcript(&db, "s1", "claude", "implement transcript search");
+        let hits = search_transcripts(&db, "transcr", 10);
+        assert_eq!(hits.len(), 1);
+    }
+
+    #[test]
+    fn fts_reindex_replaces_old_content() {
+        let db = test_db();
+        index_transcript(&db, "s1", "claude", "old needle content");
+        index_transcript(&db, "s1", "claude", "new content entirely");
+
+        assert!(search_transcripts(&db, "needle", 10).is_empty());
+        assert_eq!(search_transcripts(&db, "entirely", 10).len(), 1);
+    }
+
+    #[test]
+    fn fts_operators_and_quotes_are_neutralized() {
+        let db = test_db();
+        index_transcript(&db, "s1", "claude", "plain text here");
+        // None of these should error or panic
+        assert!(search_transcripts(&db, "AND OR NOT", 10).is_empty());
+        assert!(search_transcripts(&db, "\"unbalanced", 10).is_empty());
+        assert!(search_transcripts(&db, "col:value", 10).is_empty());
+        assert!(search_transcripts(&db, "   ", 10).is_empty());
     }
 
     // ── schema ────────────────────────────────────────────────────────────────
