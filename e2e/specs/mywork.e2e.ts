@@ -33,9 +33,9 @@ test('needs attention explains uncommitted work and links to repos', async ({ pa
   await expect(page.getByRole('heading', { name: 'Repos' })).toBeVisible()
 })
 
-test('activity heatmap and commit bars render', async ({ page }) => {
-  await expect(page.getByText('Activity heatmap')).toBeVisible()
+test('commit bars and token trend render', async ({ page }) => {
   await expect(page.getByText('Commits per day')).toBeVisible()
+  await expect(page.getByText('Token trend')).toBeVisible()
 })
 
 test('project card click opens the latest transcript', async ({ page }) => {

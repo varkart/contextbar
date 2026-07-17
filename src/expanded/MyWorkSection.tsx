@@ -1,8 +1,8 @@
 import { useState, useEffect, useMemo } from 'react'
 import { invoke } from '@tauri-apps/api/core'
-import type { RepoWorktrees, SessionEntry } from '../types'
+import type { RepoWorktrees, SessionEntry, TokenPoint } from '../types'
 import type { Section } from './ExpandedApp'
-import { Card, ActivityHeatmap, CommitBars, RefreshButton, SkeletonTiles, SkeletonCards } from './InsightWidgets'
+import { Card, CommitBars, TokenTrend, RefreshButton, SkeletonTiles, SkeletonCards } from './InsightWidgets'
 import AgentBadge from '../components/history/AgentBadge'
 
 const DAY = 86_400_000
@@ -81,15 +81,14 @@ function todayKey(): string {
 export default function MyWorkSection({ sessions, repos, loading, goTo, onRefresh, onOpenSession, showToast }: MyWorkSectionProps) {
   const [tab, setTab] = useState<Tab>('today')
   const [copiedResume, setCopiedResume] = useState<string | null>(null)
-  const [promptTs, setPromptTs] = useState<number[]>([])
   const [commitTs, setCommitTs] = useState<number[]>([])
+  const [tokenPoints, setTokenPoints] = useState<TokenPoint[]>([])
   const [vscodeAvailable, setVscodeAvailable] = useState(false)
   const [peakDismissed, setPeakDismissed] = useState(() => !!localStorage.getItem(todayKey()))
 
   useEffect(() => {
-    const sinceMs = Date.now() - 30 * DAY
-    invoke<number[]>('get_prompt_timestamps', { sinceMs }).then(setPromptTs).catch(() => {})
     invoke<number[]>('get_commit_activity', { sinceDays: 14 }).then(setCommitTs).catch(() => {})
+    invoke<TokenPoint[]>('get_token_activity', { sinceMs: Date.now() - 183 * DAY }).then(setTokenPoints).catch(() => {})
     invoke<boolean>('is_vscode_installed').then(setVscodeAvailable).catch(() => {})
   }, [])
 
@@ -338,11 +337,11 @@ export default function MyWorkSection({ sessions, repos, loading, goTo, onRefres
 
             {/* Activity: when you work + what lands */}
             <div className="grid grid-cols-2 gap-3 mb-5">
-              <Card title="Activity heatmap" sub="Prompts by weekday × hour — last 30 days, local time">
-                <ActivityHeatmap timestamps={promptTs} />
-              </Card>
               <Card title="Commits per day" sub="All branches, all repos — last 14 days">
                 <CommitBars commitSecs={commitTs} />
+              </Card>
+              <Card title="Token trend" sub="Usage over time, local time">
+                <TokenTrend points={tokenPoints} />
               </Card>
             </div>
 

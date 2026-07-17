@@ -3,7 +3,6 @@ import type { TokenPoint } from '../types'
 import { formatTokens } from '../components/history/SessionStats'
 
 const DAY = 86_400_000
-const DAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 
 export function shortModel(model: string): string {
   return model.replace(/^claude-/, '').replace(/-\d{8}$/, '')
@@ -189,49 +188,6 @@ function HoverReadout({ text, placeholder }: { text: string | null; placeholder:
       <span className={`text-[10.5px] font-mono ${text ? 'text-[var(--c-text-2)]' : 'text-[var(--c-text-3)] opacity-50'}`}>
         {text ?? placeholder}
       </span>
-    </div>
-  )
-}
-
-/** Weekday × hour prompt-density grid from raw timestamps (ms), local time. */
-export function ActivityHeatmap({ timestamps }: { timestamps: number[] }) {
-  const [hover, setHover] = useState<string | null>(null)
-  const { grid, max } = useMemo(() => {
-    const grid: number[][] = Array.from({ length: 7 }, () => Array(24).fill(0))
-    let max = 0
-    for (const ts of timestamps) {
-      const d = new Date(ts)
-      const day = (d.getDay() + 6) % 7 // Monday = 0
-      const cell = ++grid[day][d.getHours()]
-      if (cell > max) max = cell
-    }
-    return { grid, max }
-  }, [timestamps])
-
-  return (
-    <div className="min-w-0 overflow-hidden" onMouseLeave={() => setHover(null)}>
-      <HoverReadout text={hover} placeholder="hover a cell for details" />
-      <div className="grid gap-[3px]" style={{ gridTemplateColumns: '30px repeat(24, minmax(0, 1fr))' }}>
-        {DAY_LABELS.map((label, di) => (
-          <div key={label} className="contents">
-            <span className="text-[9px] font-mono text-[var(--c-text-3)] self-center">{label}</span>
-            {grid[di].map((v, h) => {
-              const alpha = v === 0 ? 0 : 0.25 + 0.75 * (v / Math.max(1, max))
-              return (
-                <span
-                  key={h}
-                  onMouseEnter={() => setHover(`${label} ${h}:00–${h + 1}:00 · ${v} prompt${v === 1 ? '' : 's'}`)}
-                  className="h-2.5 w-full rounded-[2px] hover:ring-1 hover:ring-[var(--c-accent)]"
-                  style={{ background: v === 0 ? 'var(--c-surface-2)' : `rgba(129,140,248,${alpha.toFixed(2)})` }}
-                />
-              )
-            })}
-          </div>
-        ))}
-      </div>
-      <div className="flex justify-between text-[9px] font-mono text-[var(--c-text-3)] mt-1.5 pl-[33px]">
-        <span>0</span><span>6</span><span>12</span><span>18</span><span>23</span>
-      </div>
     </div>
   )
 }
