@@ -164,6 +164,75 @@ fn est_cost(
     )
 }
 
+// ── Usage windows (rolling 5h / 7d meters per agent) ─────────────────────────
+
+#[derive(Debug, Clone, Serialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentUsage {
+    pub agent: String,
+    pub tokens_5h: u64,
+    pub cost_5h: f64,
+    pub sessions_5h: u64,
+    pub tokens_7d: u64,
+    pub cost_7d: f64,
+    pub sessions_7d: u64,
+}
+
+/// Per-agent token/cost totals for the rolling 5-hour and 7-day windows,
+/// aggregated from the session_stats cache. Approximate: a session's whole
+/// usage is attributed to its last-activity timestamp.
+pub fn usage_windows(db: &DbState) -> Vec<AgentUsage> {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as i64)
+        .unwrap_or(0);
+    let cut_5h = now - 5 * 3_600_000;
+    let cut_7d = now - 7 * 86_400_000;
+
+    let mut by_agent: HashMap<String, AgentUsage> = HashMap::new();
+    {
+        let Ok(conn) = db.0.lock() else { return vec![] };
+        let Ok(mut stmt) = conn.prepare(
+            "SELECT agent, ts, model, input_tokens, output_tokens, cache_read, cache_creation
+             FROM session_stats WHERE ts >= ?1",
+        ) else {
+            return vec![];
+        };
+        let rows = stmt.query_map([cut_7d], |r| {
+            Ok((
+                r.get::<_, String>(0)?,
+                r.get::<_, i64>(1)?,
+                r.get::<_, String>(2)?,
+                r.get::<_, i64>(3)?.max(0) as u64,
+                r.get::<_, i64>(4)?.max(0) as u64,
+                r.get::<_, i64>(5)?.max(0) as u64,
+                r.get::<_, i64>(6)?.max(0) as u64,
+            ))
+        });
+        let Ok(rows) = rows else { return vec![] };
+        for (agent, ts, model, input, output, cache_read, cache_creation) in rows.flatten() {
+            let tokens = input + output;
+            let cost = est_cost(input, output, cache_read, cache_creation, &model).unwrap_or(0.0);
+            let u = by_agent.entry(agent.clone()).or_insert_with(|| AgentUsage {
+                agent,
+                ..Default::default()
+            });
+            u.tokens_7d += tokens;
+            u.cost_7d += cost;
+            u.sessions_7d += 1;
+            if ts >= cut_5h {
+                u.tokens_5h += tokens;
+                u.cost_5h += cost;
+                u.sessions_5h += 1;
+            }
+        }
+    }
+
+    let mut out: Vec<AgentUsage> = by_agent.into_values().collect();
+    out.sort_by(|a, b| b.tokens_7d.cmp(&a.tokens_7d));
+    out
+}
+
 /// Concatenated user/assistant text of a session, capped so one huge
 /// transcript can't bloat the FTS index.
 fn transcript_text(detail: &super::SessionDetail) -> String {

@@ -201,6 +201,91 @@ fn migrate(conn: &mut Connection) -> Result<(), AppError> {
         conn.pragma_update(None, "user_version", 9)?;
     }
 
+    if version < 10 {
+        // User-authored session metadata (pins, tags). Unlike session_stats
+        // this is NOT a rebuildable cache — never drop it in later migrations.
+        conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS session_meta (
+                session_id TEXT PRIMARY KEY,
+                pinned     INTEGER NOT NULL DEFAULT 0,
+                tags       TEXT    NOT NULL DEFAULT '[]',
+                updated_at INTEGER NOT NULL DEFAULT 0
+            );",
+        )?;
+        conn.pragma_update(None, "user_version", 10)?;
+    }
+
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Session metadata (pins, tags)
+// ---------------------------------------------------------------------------
+
+#[derive(serde::Serialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct SessionMeta {
+    pub session_id: String,
+    pub pinned: bool,
+    pub tags: Vec<String>,
+}
+
+/// All rows that still carry meaning (pinned or tagged).
+pub fn get_all_session_meta(state: &DbState) -> Vec<SessionMeta> {
+    let Ok(conn) = state.0.lock() else {
+        return vec![];
+    };
+    let Ok(mut stmt) = conn.prepare(
+        "SELECT session_id, pinned, tags FROM session_meta
+         WHERE pinned != 0 OR tags != '[]'",
+    ) else {
+        return vec![];
+    };
+    stmt.query_map([], |r| {
+        let tags_json: String = r.get(2)?;
+        Ok(SessionMeta {
+            session_id: r.get(0)?,
+            pinned: r.get::<_, i64>(1)? != 0,
+            tags: serde_json::from_str(&tags_json).unwrap_or_default(),
+        })
+    })
+    .map(|rows| rows.flatten().collect())
+    .unwrap_or_default()
+}
+
+pub fn set_session_pinned(state: &DbState, session_id: &str, pinned: bool) -> Result<(), AppError> {
+    let conn = state.0.lock().map_err(|_| AppError::MutexPoisoned)?;
+    conn.execute(
+        "INSERT INTO session_meta (session_id, pinned, updated_at) VALUES (?1, ?2, ?3)
+         ON CONFLICT(session_id) DO UPDATE SET
+           pinned = excluded.pinned, updated_at = excluded.updated_at",
+        rusqlite::params![session_id, pinned as i64, now_ms()],
+    )?;
+    Ok(())
+}
+
+pub fn set_session_tags(
+    state: &DbState,
+    session_id: &str,
+    tags: &[String],
+) -> Result<(), AppError> {
+    // Normalize: trim, drop empties, dedupe (case-insensitive), keep order.
+    let mut seen = std::collections::HashSet::new();
+    let clean: Vec<String> = tags
+        .iter()
+        .map(|t| t.trim().to_string())
+        .filter(|t| !t.is_empty() && t.len() <= 40)
+        .filter(|t| seen.insert(t.to_lowercase()))
+        .take(20)
+        .collect();
+    let tags_json = serde_json::to_string(&clean).unwrap_or_else(|_| "[]".into());
+    let conn = state.0.lock().map_err(|_| AppError::MutexPoisoned)?;
+    conn.execute(
+        "INSERT INTO session_meta (session_id, tags, updated_at) VALUES (?1, ?2, ?3)
+         ON CONFLICT(session_id) DO UPDATE SET
+           tags = excluded.tags, updated_at = excluded.updated_at",
+        rusqlite::params![session_id, tags_json, now_ms()],
+    )?;
     Ok(())
 }
 
@@ -801,6 +886,52 @@ mod tests {
             .query_row("SELECT COUNT(*) FROM audit_events", [], |r| r.get(0))
             .unwrap();
         assert_eq!(count, 1);
+    }
+
+    // ── session meta (pins, tags) ─────────────────────────────────────────────
+
+    #[test]
+    fn pin_then_unpin_roundtrip() {
+        let db = test_db();
+        set_session_pinned(&db, "s1", true).unwrap();
+        let meta = get_all_session_meta(&db);
+        assert_eq!(meta.len(), 1);
+        assert!(meta[0].pinned);
+
+        set_session_pinned(&db, "s1", false).unwrap();
+        assert!(
+            get_all_session_meta(&db).is_empty(),
+            "unpinned+untagged rows drop out"
+        );
+    }
+
+    #[test]
+    fn tags_normalized_and_preserved_across_pin_updates() {
+        let db = test_db();
+        set_session_tags(
+            &db,
+            "s1",
+            &["  rust ".into(), "".into(), "Rust".into(), "wip".into()],
+        )
+        .unwrap();
+        set_session_pinned(&db, "s1", true).unwrap();
+
+        let meta = get_all_session_meta(&db);
+        assert_eq!(meta.len(), 1);
+        assert!(meta[0].pinned);
+        assert_eq!(
+            meta[0].tags,
+            vec!["rust", "wip"],
+            "trimmed, deduped case-insensitively"
+        );
+    }
+
+    #[test]
+    fn clearing_tags_on_unpinned_session_removes_from_listing() {
+        let db = test_db();
+        set_session_tags(&db, "s1", &["a".into()]).unwrap();
+        set_session_tags(&db, "s1", &[]).unwrap();
+        assert!(get_all_session_meta(&db).is_empty());
     }
 
     // ── transcript FTS ────────────────────────────────────────────────────────

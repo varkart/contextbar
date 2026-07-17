@@ -527,6 +527,36 @@ fn warm_session_stats(app: tauri::AppHandle) {
     });
 }
 
+/// Rolling 5h/7d token+cost meters per agent, from the session_stats cache.
+#[tauri::command]
+fn get_usage_windows(db: tauri::State<'_, db::DbState>) -> Vec<engine::history::stats::AgentUsage> {
+    engine::history::stats::usage_windows(&db)
+}
+
+/// All pinned/tagged sessions.
+#[tauri::command]
+fn get_session_meta(db: tauri::State<'_, db::DbState>) -> Vec<db::SessionMeta> {
+    db::get_all_session_meta(&db)
+}
+
+#[tauri::command]
+fn set_session_pinned(
+    db: tauri::State<'_, db::DbState>,
+    session_id: String,
+    pinned: bool,
+) -> Result<(), String> {
+    db::set_session_pinned(&db, &session_id, pinned).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn set_session_tags(
+    db: tauri::State<'_, db::DbState>,
+    session_id: String,
+    tags: Vec<String>,
+) -> Result<(), String> {
+    db::set_session_tags(&db, &session_id, &tags).map_err(|e| e.to_string())
+}
+
 /// Full-text search across indexed session transcripts (all agents).
 #[tauri::command]
 fn search_transcripts(
@@ -2336,6 +2366,10 @@ pub fn run() {
             open_in_vscode,
             warm_session_stats,
             search_transcripts,
+            get_usage_windows,
+            get_session_meta,
+            set_session_pinned,
+            set_session_tags,
             get_session_insights,
             get_token_activity,
             get_prompt_timestamps,
