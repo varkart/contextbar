@@ -81,3 +81,25 @@ test('escape closes the command palette without closing the window', async ({ pa
   await expect(page.getByPlaceholder('Search sessions, repos, sections…')).not.toBeVisible()
   await expect(page.getByRole('heading', { name: 'My Work' })).toBeVisible()
 })
+
+test('first-run coachmark appears once and dismisses on close', async ({ page }) => {
+  await expect(page.getByText('Try ⌘K')).toBeVisible({ timeout: 2000 })
+  await page.getByRole('button', { name: 'Dismiss' }).click()
+  await expect(page.getByText('Try ⌘K')).not.toBeVisible()
+})
+
+test('coachmark dismisses automatically once the palette is opened', async ({ page }) => {
+  await expect(page.getByText('Try ⌘K')).toBeVisible({ timeout: 2000 })
+  await page.keyboard.press('Meta+k')
+  await page.keyboard.press('Escape')
+  await expect(page.getByText('Try ⌘K')).not.toBeVisible()
+})
+
+test('coachmark does not reappear after it has been dismissed', async ({ page }) => {
+  await expect(page.getByText('Try ⌘K')).toBeVisible({ timeout: 2000 })
+  await page.getByRole('button', { name: 'Dismiss' }).click()
+  await page.reload()
+  await page.waitForSelector('text=My Work', { timeout: 8000 })
+  await page.waitForTimeout(900)
+  await expect(page.getByText('Try ⌘K')).not.toBeVisible()
+})

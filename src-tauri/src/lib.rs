@@ -546,11 +546,6 @@ fn get_token_activity(
 }
 
 #[tauri::command]
-fn get_prompt_timestamps(since_ms: u64) -> Vec<u64> {
-    engine::history::stats::prompt_timestamps(since_ms)
-}
-
-#[tauri::command]
 async fn get_commit_activity(since_days: u32) -> Vec<u64> {
     tokio::task::spawn_blocking(move || engine::worktrees::commit_timestamps(since_days))
         .await
@@ -2327,7 +2322,6 @@ pub fn run() {
             warm_session_stats,
             get_session_insights,
             get_token_activity,
-            get_prompt_timestamps,
             get_commit_activity,
             get_skill_full_description,
             hide_window,
