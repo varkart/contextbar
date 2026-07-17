@@ -1,6 +1,6 @@
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo, useEffect, useCallback } from 'react'
 import { invoke } from '@tauri-apps/api/core'
-import type { SessionEntry, TranscriptMatch } from '../../types'
+import type { SessionEntry, SessionMeta, TranscriptMatch } from '../../types'
 import { formatTokens, tokenBadgeColor } from './SessionStats'
 import AgentBadge from './AgentBadge'
 
@@ -87,9 +87,12 @@ interface SessionRowProps {
   onSelect: (s: SessionEntry) => void
   /** Transcript extract shown under the meta row (deep-search hits). */
   snippet?: string
+  pinned?: boolean
+  tags?: string[]
+  onTogglePin?: (s: SessionEntry, pinned: boolean) => void
 }
 
-function SessionRow({ session, onSelect, snippet }: SessionRowProps) {
+function SessionRow({ session, onSelect, snippet, pinned, tags, onTogglePin }: SessionRowProps) {
   const totalTokens = session.totalTokens
 
   return (
@@ -142,10 +145,38 @@ function SessionRow({ session, onSelect, snippet }: SessionRowProps) {
                 </span>
               </>
             )}
+            {tags?.map(t => (
+              <span
+                key={t}
+                className="text-[9px] px-1.5 py-px rounded-full bg-[var(--c-accent)]/10 text-[var(--c-accent)] flex-shrink-0"
+              >
+                {t}
+              </span>
+            ))}
           </div>
 
           {snippet && <Snippet text={snippet} />}
         </div>
+
+        {/* Pin toggle — span, not button: rows are already <button>s */}
+        {onTogglePin && (
+          <span
+            role="button"
+            tabIndex={0}
+            title={pinned ? 'Unpin session' : 'Pin session'}
+            onClick={e => { e.stopPropagation(); onTogglePin(session, !pinned) }}
+            onKeyDown={e => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault()
+                e.stopPropagation()
+                onTogglePin(session, !pinned)
+              }
+            }}
+            className={`flex-shrink-0 text-[12px] leading-none mt-0.5 transition-opacity ${pinned ? 'text-amber-400' : 'text-[var(--c-text-3)] opacity-0 group-hover:opacity-60 hover:!opacity-100'}`}
+          >
+            {pinned ? '★' : '☆'}
+          </span>
+        )}
 
         {/* Token badge */}
         {totalTokens > 0 && (
@@ -171,6 +202,34 @@ export default function SessionList({ sessions, onSelect, loading, onLoadMore, h
   const [search, setSearch] = useState('')
   const [projectFilter, setProjectFilter] = useState<string | null>(null)
   const [agentFilter, setAgentFilter] = useState<string | null>(null)
+  const [tagFilter, setTagFilter] = useState<string | null>(null)
+
+  // Pins and tags, keyed by session id.
+  const [meta, setMeta] = useState<Record<string, SessionMeta>>({})
+  useEffect(() => {
+    invoke<SessionMeta[]>('get_session_meta')
+      .then(rows => setMeta(Object.fromEntries(rows.map(m => [m.sessionId, m]))))
+      .catch(() => {})
+  }, [sessions])
+
+  const togglePin = useCallback((s: SessionEntry, pinned: boolean) => {
+    setMeta(prev => ({
+      ...prev,
+      [s.sessionId]: { sessionId: s.sessionId, tags: prev[s.sessionId]?.tags ?? [], pinned },
+    }))
+    invoke('set_session_pinned', { sessionId: s.sessionId, pinned }).catch(() => {
+      setMeta(prev => ({
+        ...prev,
+        [s.sessionId]: { sessionId: s.sessionId, tags: prev[s.sessionId]?.tags ?? [], pinned: !pinned },
+      }))
+    })
+  }, [])
+
+  const allTags = useMemo(() => {
+    const tags = new Set<string>()
+    for (const m of Object.values(meta)) for (const t of m.tags) tags.add(t)
+    return [...tags].sort()
+  }, [meta])
 
   const agents = useMemo(() => [...new Set(sessions.map(s => s.agent))].sort(), [sessions])
 
@@ -182,14 +241,25 @@ export default function SessionList({ sessions, onSelect, loading, onLoadMore, h
     if (projectFilter) {
       result = result.filter(s => s.project === projectFilter)
     }
+    if (tagFilter) {
+      result = result.filter(s => meta[s.sessionId]?.tags.includes(tagFilter))
+    }
     if (search.trim()) {
       const q = search.toLowerCase()
       result = result.filter(s => s.display.toLowerCase().includes(q) || s.projectName.toLowerCase().includes(q))
     }
     return result
-  }, [sessions, search, projectFilter, agentFilter])
+  }, [sessions, search, projectFilter, agentFilter, tagFilter, meta])
 
-  const groups = useMemo(() => groupByTime(filtered), [filtered])
+  // Pinned sessions float above the time groups.
+  const pinned = useMemo(
+    () => filtered.filter(s => meta[s.sessionId]?.pinned),
+    [filtered, meta]
+  )
+  const groups = useMemo(
+    () => groupByTime(filtered.filter(s => !meta[s.sessionId]?.pinned)),
+    [filtered, meta]
+  )
 
   // Deep search: debounced FTS lookup over full transcripts (all agents).
   const [transcriptHits, setTranscriptHits] = useState<TranscriptMatch[]>([])
@@ -217,8 +287,9 @@ export default function SessionList({ sessions, onSelect, loading, onLoadMore, h
       !shown.has(h.sessionId)
       && (!agentFilter || h.agent === agentFilter)
       && (!projectFilter || h.project === projectFilter)
+      && (!tagFilter || meta[h.sessionId]?.tags.includes(tagFilter))
     )
-  }, [transcriptHits, filtered, search, agentFilter, projectFilter])
+  }, [transcriptHits, filtered, search, agentFilter, projectFilter, tagFilter, meta])
 
   // Unique projects for filter pills — disambiguate same-name dirs with parent
   const projects = useMemo(() => {
@@ -279,6 +350,23 @@ export default function SessionList({ sessions, onSelect, loading, onLoadMore, h
         </div>
       )}
 
+      {/* Tag filter pills — only when the user has tagged sessions */}
+      {allTags.length > 0 && (
+        <div className="px-3 pb-1.5 flex-shrink-0">
+          <div className="flex gap-1 overflow-x-auto scrollbar-hide">
+            {allTags.map(t => (
+              <button
+                key={t}
+                onClick={() => setTagFilter(tagFilter === t ? null : t)}
+                className={`flex-shrink-0 text-[10px] px-2 py-0.5 rounded-full border transition-colors ${tagFilter === t ? 'border-[var(--c-accent)]/50 bg-[var(--c-accent)]/10 text-[var(--c-accent)]' : 'border-[var(--c-border)] text-[var(--c-text-3)] hover:text-[var(--c-text-2)]'}`}
+              >
+                #{t}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Project filter pills */}
       {projects.length > 1 && (
         <div className="px-3 pb-1.5 flex-shrink-0">
@@ -310,16 +398,35 @@ export default function SessionList({ sessions, onSelect, loading, onLoadMore, h
             <div className="w-4 h-4 border-2 border-[var(--c-accent)]/40 border-t-[var(--c-accent)] rounded-full animate-spin" />
           </div>
         )}
-        {!loading && groups.length === 0 && deepHits.length === 0 && (
+        {!loading && groups.length === 0 && pinned.length === 0 && deepHits.length === 0 && (
           <div className="px-3 py-8 text-center">
             <p className="text-[12px] text-[var(--c-text-3)]">
-              {search || projectFilter ? 'No sessions match' : 'No Claude sessions found'}
+              {search || projectFilter || tagFilter ? 'No sessions match' : 'No Claude sessions found'}
             </p>
-            {!search && !projectFilter && (
+            {!search && !projectFilter && !tagFilter && (
               <p className="text-[11px] text-[var(--c-text-3)] opacity-60 mt-1">
                 Start a session with <code className="font-mono">claude</code> in your terminal
               </p>
             )}
+          </div>
+        )}
+        {pinned.length > 0 && (
+          <div>
+            <div className="px-3 py-1 bg-[var(--c-surface-2)]/50">
+              <span className="text-[10px] font-semibold text-[var(--c-text-3)] uppercase tracking-wider">
+                Pinned
+              </span>
+            </div>
+            {pinned.map(session => (
+              <SessionRow
+                key={session.sessionId}
+                session={session}
+                onSelect={onSelect}
+                pinned
+                tags={meta[session.sessionId]?.tags}
+                onTogglePin={togglePin}
+              />
+            ))}
           </div>
         )}
         {groups.map(group => (
@@ -330,7 +437,14 @@ export default function SessionList({ sessions, onSelect, loading, onLoadMore, h
               </span>
             </div>
             {group.items.map(session => (
-              <SessionRow key={session.sessionId} session={session} onSelect={onSelect} />
+              <SessionRow
+                key={session.sessionId}
+                session={session}
+                onSelect={onSelect}
+                pinned={false}
+                tags={meta[session.sessionId]?.tags}
+                onTogglePin={togglePin}
+              />
             ))}
           </div>
         ))}
@@ -351,7 +465,7 @@ export default function SessionList({ sessions, onSelect, loading, onLoadMore, h
             ))}
           </div>
         )}
-        {!loading && onLoadMore && hasMore && !search && !projectFilter && !agentFilter && (
+        {!loading && onLoadMore && hasMore && !search && !projectFilter && !agentFilter && !tagFilter && (
           <div className="p-3">
             <button
               onClick={onLoadMore}
