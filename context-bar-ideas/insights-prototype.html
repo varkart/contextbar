@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Insights — Prototype</title>
+<style>
+  :root{
+    --bg:#09090b; --surface:#131316; --surface2:#1b1b1f; --border:#27272a;
+    --text:#e4e4e7; --muted:#a1a1aa; --faint:#71717a;
+    --accent:#818cf8; --accent-dim:rgba(129,140,248,.14);
+    --green:#34d399; --green-dim:rgba(52,211,153,.13);
+    --amber:#fbbf24; --amber-dim:rgba(251,191,36,.13);
+    --rose:#fb7185; --rose-dim:rgba(251,113,133,.13);
+    --pink:#e879f9; --teal:#2dd4bf;
+    --mono:'SF Mono',ui-monospace,Menlo,Consolas,monospace;
+    --sans:-apple-system,'Inter','Segoe UI',sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--text);font-family:var(--sans)}
+  body{padding:40px 24px 80px}
+  .wrap{max-width:960px;margin:0 auto}
+  .eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--accent);margin:0 0 8px}
+  h1{font-size:28px;font-weight:650;margin:0 0 6px;letter-spacing:-.01em}
+  .sub{color:var(--muted);font-size:14px;margin:0 0 18px}
+
+  /* review bar */
+  .reviewbar{position:sticky;top:0;z-index:50;background:rgba(9,9,11,.92);backdrop-filter:blur(6px);
+    border:1px solid var(--border);border-radius:10px;padding:10px 16px;margin-bottom:22px;
+    display:flex;align-items:center;gap:14px;font-size:12.5px;color:var(--muted)}
+  .reviewbar b{color:var(--text);font-family:var(--mono)}
+  .reviewbar .spacer{flex:1}
+  .btn{border:none;border-radius:8px;padding:8px 14px;font-size:12.5px;font-weight:600;cursor:pointer;font-family:var(--sans)}
+  .btn-primary{background:var(--accent);color:#0a0a1a}
+  .btn-primary:hover{filter:brightness(1.1)}
+  .hint{font-size:11.5px;color:var(--faint)}
+
+  /* tabs */
+  .tabs{display:flex;gap:8px;margin-bottom:24px}
+  .tab{background:var(--surface);border:1px solid var(--border);color:var(--muted);border-radius:999px;
+    padding:6px 14px;font-size:12px;cursor:pointer}
+  .tab.active{background:var(--accent-dim);border-color:var(--accent);color:var(--accent)}
+
+  /* sections */
+  .section{margin-bottom:30px}
+  .section-title{display:flex;align-items:baseline;gap:10px;margin:0 0 4px}
+  .section-title h2{font-size:16px;font-weight:650;margin:0;letter-spacing:-.01em}
+  .section-title .where{font-size:11px;color:var(--faint);font-family:var(--mono)}
+  .section-sub{font-size:12px;color:var(--faint);margin:0 0 12px}
+
+  .grid{display:grid;gap:10px}
+  .g2{grid-template-columns:repeat(2,1fr)}
+  .g3{grid-template-columns:repeat(3,1fr)}
+  .g6{grid-template-columns:repeat(6,1fr)}
+  @media(max-width:760px){.g6{grid-template-columns:repeat(3,1fr)}.g3{grid-template-columns:1fr}.g2{grid-template-columns:1fr}}
+
+  /* cards — selectable */
+  .card{position:relative;background:var(--surface);border:1px solid var(--border);border-radius:12px;
+    padding:14px 16px;cursor:pointer;transition:border-color .12s, opacity .12s}
+  .card:hover{border-color:var(--faint)}
+  .card.keep{border-color:var(--green);box-shadow:0 0 0 1px var(--green)}
+  .card.drop{opacity:.35;border-style:dashed}
+  .card .mark{position:absolute;top:8px;right:10px;font-size:11px;font-family:var(--mono);display:none}
+  .card.keep .mark.k{display:block;color:var(--green)}
+  .card.drop .mark.d{display:block;color:var(--rose)}
+
+  .cost{position:absolute;bottom:10px;right:12px;font-size:9px;font-family:var(--mono);
+    letter-spacing:.08em;text-transform:uppercase;padding:2px 7px;border-radius:999px}
+  .cost.cheap{background:var(--green-dim);color:var(--green)}
+  .cost.med{background:var(--amber-dim);color:var(--amber)}
+  .cost.p2{background:var(--rose-dim);color:var(--rose)}
+
+  .tile .num{font-family:var(--mono);font-size:21px;font-weight:600}
+  .tile .lbl{font-size:10px;color:var(--muted);letter-spacing:.06em;text-transform:uppercase;margin-top:2px}
+  .delta{font-size:11px;font-family:var(--mono);margin-left:6px}
+  .delta.up{color:var(--green)} .delta.down{color:var(--rose)} .delta.flat{color:var(--faint)}
+
+  .card h3{margin:0 0 2px;font-size:13.5px;font-weight:650}
+  .card .desc{font-size:11.5px;color:var(--faint);margin:0 0 12px}
+
+  /* heatmap */
+  .heatmap{display:grid;grid-template-columns:34px repeat(24,1fr);gap:3px;align-items:center}
+  .hm-day{font-size:9.5px;color:var(--faint);font-family:var(--mono)}
+  .hm-cell{aspect-ratio:1;border-radius:2px;background:var(--surface2)}
+  .hm-1{background:rgba(129,140,248,.25)} .hm-2{background:rgba(129,140,248,.5)}
+  .hm-3{background:rgba(129,140,248,.75)} .hm-4{background:var(--accent)}
+  .hm-hours{grid-column:2/-1;display:flex;justify-content:space-between;font-size:9px;color:var(--faint);font-family:var(--mono);margin-top:2px}
+
+  /* bars */
+  .hbar{display:flex;align-items:center;gap:10px;margin-bottom:7px;font-size:12px}
+  .hbar .name{width:110px;font-family:var(--mono);color:var(--muted);flex:none;text-align:right}
+  .hbar .track{flex:1;height:14px;background:var(--surface2);border-radius:4px;overflow:hidden}
+  .hbar .fill{height:100%;border-radius:4px;background:var(--accent)}
+  .hbar .val{width:70px;font-family:var(--mono);color:var(--faint);font-size:11px;flex:none}
+
+  .stack{display:flex;height:14px;border-radius:6px;overflow:hidden;margin:8px 0 8px}
+  .legend{display:flex;gap:14px;flex-wrap:wrap;font-size:11px;color:var(--muted)}
+  .sw{display:inline-block;width:8px;height:8px;border-radius:2px;margin-right:5px}
+
+  .spark{display:flex;align-items:flex-end;gap:3px;height:46px;margin:8px 0 4px}
+  .spark span{flex:1;background:var(--accent-dim);border-top:2px solid var(--accent);border-radius:2px 2px 0 0}
+
+  table{width:100%;border-collapse:collapse;font-size:12px}
+  th{font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--faint);text-align:left;
+    padding:6px 8px;border-bottom:1px solid var(--border);font-weight:600}
+  td{padding:7px 8px;border-bottom:1px solid rgba(39,39,42,.5);font-family:var(--mono);color:var(--muted)}
+  td:first-child{color:var(--text);font-family:var(--sans);font-weight:500}
+  tr:last-child td{border-bottom:none}
+
+  .rowline{display:flex;justify-content:space-between;gap:10px;padding:7px 0;border-bottom:1px solid rgba(39,39,42,.5);font-size:12px}
+  .rowline:last-child{border-bottom:none}
+  .rowline .l{color:var(--text)} .rowline .l small{color:var(--faint);font-family:var(--mono);margin-left:6px}
+  .rowline .r{font-family:var(--mono);color:var(--muted);white-space:nowrap}
+  .pos{color:var(--green)} .neg{color:var(--rose)} .warn{color:var(--amber)}
+
+  footer{text-align:center;margin-top:44px;color:var(--faint);font-size:11.5px;font-family:var(--mono)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <p class="eyebrow">Context Bar / Insights — proposal</p>
+  <h1>All possible stats</h1>
+  <p class="sub">Every insight we could build, with mock data. <b style="color:var(--text)">Click a card once to KEEP (green), twice to DROP (dashed), third click resets.</b> Cost tag bottom-right of each card: how hard to build.</p>
+
+  <div class="reviewbar">
+    <span>Keep: <b id="c-keep">0</b></span>
+    <span>Drop: <b id="c-drop">0</b></span>
+    <span>Undecided: <b id="c-none">0</b></span>
+    <span class="spacer"></span>
+    <span class="hint" id="copied"></span>
+    <button class="btn btn-primary" onclick="copySelection()">Copy selection</button>
+  </div>
+
+  <div class="tabs">
+    <div class="tab active">Last 7 days</div><div class="tab">30 days</div><div class="tab">90 days</div>
+    <span class="hint" style="align-self:center">← every stat respects the range picker</span>
+  </div>
+
+  <!-- ═══════════ 1. OVERVIEW ═══════════ -->
+  <div class="section">
+    <div class="section-title"><h2>1 · Overview digest</h2><span class="where">→ My Work top / new Insights section</span></div>
+    <p class="section-sub">Headline tiles with week-over-week deltas.</p>
+    <div class="grid g6">
+      <div class="card tile" data-id="ov-sessions"><span class="mark k">KEEP</span><span class="mark d">DROP</span>
+        <div class="num">24<span class="delta up">▲20%</span></div><div class="lbl">Sessions</div><span class="cost cheap">cheap</span></div>
+      <div class="card tile" data-id="ov-prompts"><span class="mark k">KEEP</span><span class="mark d">DROP</span>
+        <div class="num">118<span class="delta up">▲8%</span></div><div class="lbl">Prompts</div><span class="cost cheap">cheap</span></div>
+      <div class="card tile" data-id="ov-tokens"><span class="mark k">KEEP</span><span class="mark d">DROP</span>
+        <div class="num">14.2M<span class="delta down">▼12%</span></div><div class="lbl">Tokens</div><span class="cost med">medium</span></div>
+      <div class="card tile" data-id="ov-cost"><span class="mark k">KEEP</span><span class="mark d">DROP</span>
+        <div class="num">$38.40<span class="delta down">▼9%</span></div><div class="lbl">Est. cost</div><span class="cost med">medium</span></div>
+      <div class="card tile" data-id="ov-commits"><span class="mark k">KEEP</span><span class="mark d">DROP</span>
+        <div class="num">31<span class="delta up">▲5</span></div><div class="lbl">Commits</div><span class="cost med">medium</span></div>
+      <div class="card tile" data-id="ov-projects"><span class="mark k">KEEP</span><span class="mark d">DROP</span>
+        <div class="num">5<span class="delta flat">=</span></div><div class="lbl">Projects</div><span class="cost cheap">cheap</span></div>
+    </div>
+  </div>
+
+  <!-- ═══════════ 2. SESSIONS ═══════════ -->
+  <div class="section">
+    <div class="section-title"><h2>2 · Sessions</h2><span class="where">→ Sessions section</span></div>
+    <div class="grid g2">
+      <div class="card" data-id="se-heatmap"><span class="mark k">KEEP</span><span class="mark d">DROP</span>
+        <h3>Activity heatmap</h3><p class="desc">When you actually work — day × hour, prompt density.</p>
+        <div class="heatmap" id="heatmap"></div>
+        <div class="heatmap" style="margin-top:2px"><span></span><div class="hm-hours"><span>0</span><span>6</span><span>12</span><span>18</span><span>23</span></div></div>
+        <span class="cost cheap">cheap</span>
+      </div>
+      <div class="card" data-id="se-modelmix"><span class="mark k">KEEP</span><span class="mark d">DROP</span>
+        <h3>Model mix</h3><p class="desc">Share of sessions per model (field already in index, unused).</p>
+        <div class="stack">
+          <div style="width:58%;background:var(--accent)"></div>
+          <div style="width:29%;background:var(--pink)"></div>
+          <div style="width:13%;background:var(--teal)"></div>
+        </div>
+        <div class="legend">
+          <span><span class="sw" style="background:var(--accent)"></span>sonnet 58%</span>
+          <span><span class="sw" style="background:var(--pink)"></span>opus 29%</span>
+          <span><span class="sw" style="background:var(--teal)"></span>haiku 13%</span>
+        </div>
+        <div class="spark" title="sessions per day, 14 days">
+          <span style="height:30%"></span><span style="height:55%"></span><span style="height:40%"></span><span style="height:70%"></span><span style="height:20%"></span><span style="height:10%"></span><span style="height:45%"></span><span style="height:60%"></span><span style="height:85%"></span><span style="height:50%"></span><span style="height:35%"></span><span style="height:100%"></span><span style="height:65%"></span><span style="height:75%"></span>
+        </div>
+        <p class="desc" style="margin:0">Sessions per day — 14-day trend</p>
+        <span class="cost cheap">cheap</span>
+      </div>
+    </div>
+    <div class="grid g6" style="margin-top:10px">
+      <div class="card tile" data-id="se-avgprompts"><span class="mark k">KEEP</span><span class="mark d">DROP</span>
+        <div class="num">4.9</div><div class="lbl">Avg prompts / session</div><span class="cost cheap">cheap</span></div>
+      <div class="card tile" data-id="se-longest"><span class="mark k">KEEP</span><span class="mark d">DROP</span>
+        <div class="num">38</div><div class="lbl">Longest (prompts)</div><span class="cost cheap">cheap</span></div>
+      <div class="card tile" data-id="se-errorpct"><span class="mark k">KEEP</span><span class="mark d">DROP</span>
+        <div class="num warn">21%</div><div class="lbl">Sessions w/ errors</div><span class="cost cheap">cheap</span></div>
+      <div class="card tile" data-id="se-toolcalls"><span class="mark k">KEEP</span><span class="mark d">DROP</span>
+        <div class="num">96</div><div class="lbl">Avg tool calls</div><span class="cost med">medium</span></div>
+      <div class="card tile" data-id="se-outcome"><span class="mark k">KEEP</span><span class="mark d">DROP</span>
+        <div class="num pos">76%</div><div class="lbl">Clean outcome</div><span class="cost med">medium</span></div>
+      <div class="card tile" data-id="se-resumed"><span class="mark k">KEEP</span><span class="mark d">DROP</span>
+        <div class="num">6</div><div class="lbl">Resumed sessions</div><span class="cost med">medium</span></div>
+    </div>
+  </div>
+
+  <!-- ═══════════ 3. TOKENS & COST ═══════════ -->
+  <div class="section">
+    <div class="section-title"><h2>3 · Tokens &amp; cost</h2><span class="where">→ new tiles in Sessions + My Work · needs one-time background aggregation into SQLite</span></div>
+    <div class="grid g2">
+      <div class="card" data-id="tk-project"><span class="mark k">KEEP</span><span class="mark d">DROP</span>
+        <h3>Tokens by project</h3><p class="desc">Where the budget goes.</p>
+        <div class="hbar"><span class="name">agentbar</span><div class="track"><div class="fill" style="width:88%"></div></div><span class="val">6.1M</span></div>
+        <div class="hbar"><span class="name">shadowdev</span><div class="track"><div class="fill" style="width:60%;background:var(--pink)"></div></div><span class="val">4.2M</span></div>
+        <div class="hbar"><span class="name">juno</span><div class="track"><div class="fill" style="width:38%;background:var(--teal)"></div></div><span class="val">2.6M</span></div>
+        <div class="hbar"><span class="name">sql-lens</span><div class="track"><div class="fill" style="width:14%;background:var(--amber)"></div></div><span class="val">0.9M</span></div>
+        <div class="hbar"><span class="name">learn-fw</span><div class="track"><div class="fill" style="width:6%;background:var(--rose)"></div></div><span class="val">0.4M</span></div>
+        <span class="cost med">medium</span>
+      </div>
+      <div class="card" data-id="tk-cost"><span class="mark k">KEEP</span><span class="mark d">DROP</span>
+        <h3>Cost estimate by model</h3><p class="desc">Tokens × public API rates. Cache reads discounted.</p>
+        <table>
+          <tr><th>Model</th><th>In</th><th>Out</th><th>Cache</th><th>Est.</th></tr>
+          <tr><td>sonnet-4</td><td>3.1M</td><td>1.8M</td><td>72%</td><td>$21.10</td></tr>
+          <tr><td>opus-4</td><td>1.2M</td><td>0.6M</td><td>81%</td><td>$15.90</td></tr>
+          <tr><td>haiku-4.5</td><td>0.9M</td><td>0.3M</td><td>64%</td><td>$1.40</td></tr>
+        </table>
+        <span class="cost med">medium</span>
+      </div>
+    </div>
+    <div class="grid g3" style="margin-top:10px">
+      <div class="card tile" data-id="tk-cache"><span class="mark k">KEEP</span><span class="mark d">DROP</span>
+        <div class="num pos">74%</div><div class="lbl">Cache-read ratio</div><span class="cost med">medium</span></div>
+      <div class="card tile" data-id="tk-iosplit"><span class="mark k">KEEP</span><span class="mark d">DROP</span>
+        <div class="num">2.9 : 1</div><div class="lbl">Input : output</div><span class="cost med">medium</span></div>
+      <div class="card tile" data-id="tk-heaviest"><span class="mark k">KEEP</span><span class="mark d">DROP</span>
+        <div class="num">1.9M</div><div class="lbl">Heaviest session</div><span class="cost med">medium</span></div>
+    </div>
+  </div>
+
+  <!-- ═══════════ 4. TOOL USAGE ═══════════ -->
+  <div class="section">
+    <div class="section-title"><h2>4 · Tool usage</h2><span class="where">→ Sessions detail + Insights · counted during same background parse</span></div>
+    <div class="grid g2">
+      <div class="card" data-id="tu-top"><span class="mark k">KEEP</span><span class="mark d">DROP</span>
+        <h3>Top tools</h3><p class="desc">What Claude actually does in your sessions.</p>
+        <div class="hbar"><span class="name">Bash</span><div class="track"><div class="fill" style="width:95%"></div></div><span class="val">1,523</span></div>
+        <div class="hbar"><span class="name">Edit</span><div class="track"><div class="fill" style="width:56%"></div></div><span class="val">897</span></div>
+        <div class="hbar"><span class="name">Read</span><div class="track"><div class="fill" style="width:40%"></div></div><span class="val">640</span></div>
+        <div class="hbar"><span class="name">Write</span><div class="track"><div class="fill" style="width:13%"></div></div><span class="val">210</span></div>
+        <div class="hbar"><span class="name">Grep</span><div class="track"><div class="fill" style="width:11%"></div></div><span class="val">180</span></div>
+        <span class="cost med">medium</span>
+      </div>
+      <div class="card" data-id="tu-mcp"><span class="mark k">KEEP</span><span class="mark d">DROP</span>
+        <h3>MCP tools called</h3><p class="desc">Which of your configured MCP servers earn their keep — bridges Agents ↔ Sessions.</p>
+        <div class="hbar"><span class="name">netlify</span><div class="track"><div class="fill" style="width:70%;background:var(--teal)"></div></div><span class="val">64</span></div>
+        <div class="hbar"><span class="name">posthog</span><div class="track"><div class="fill" style="width:35%;background:var(--teal)"></div></div><span class="val">31</span></div>
+        <div class="hbar"><span class="name">github</span><div class="track"><div class="fill" style="width:8%;background:var(--teal)"></div></div><span class="val">7</span></div>
+        <p class="desc" style="margin:8px 0 0"><span class="warn">3 configured MCP servers never called in 30d</span> — cleanup candidates.</p>
+        <span class="cost med">medium</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════ 5. WORKTREES ═══════════ -->
+  <div class="section">
+    <div class="section-title"><h2>5 · Worktrees</h2><span class="where">→ Worktrees section, extra tiles + per-row badges</span></div>
+    <div class="grid g6">
+      <div class="card tile" data-id="wt-unmerged"><span class="mark k">KEEP</span><span class="mark d">DROP</span>
+        <div class="num">23</div><div class="lbl">Unmerged commits</div><span class="cost cheap">cheap</span></div>
+      <div class="card tile" data-id="wt-oldestdirty"><span class="mark k">KEEP</span><span class="mark d">DROP</span>
+        <div class="num neg">42d</div><div class="lbl">Oldest dirty</div><span class="cost cheap">cheap</span></div>
+      <div class="card tile" data-id="wt-rebase"><span class="mark k">KEEP</span><span class="mark d">DROP</span>
+        <div class="num warn">3</div><div class="lbl">Rebase candidates</div><span class="cost cheap">cheap</span></div>
+      <div class="card tile" data-id="wt-avgage"><span class="mark k">KEEP</span><span class="mark d">DROP</span>
+        <div class="num">18d</div><div class="lbl">Avg age</div><span class="cost cheap">cheap</span></div>
+      <div class="card tile" data-id="wt-diffstat"><span class="mark k">KEEP</span><span class="mark d">DROP</span>
+        <div class="num"><span class="pos">+840</span> <span class="neg">−212</span></div><div class="lbl">Unmerged diff</div><span class="cost med">medium</span></div>
+      <div class="card tile" data-id="wt-size"><span class="mark k">KEEP</span><span class="mark d">DROP</span>
+        <div class="num">5.2 GB</div><div class="lbl">Reclaimable</div><span class="cost p2">phase 2</span></div>
+    </div>
+    <div class="card" style="margin-top:10px" data-id="wt-riskrows"><span class="mark k">KEEP</span><span class="mark d">DROP</span>
+      <h3>Risk list</h3><p class="desc">Branches ranked by data-loss / drift risk (dirty × age × behind).</p>
+      <div class="rowline"><span class="l">feature/old-migration <small>juno</small></span><span class="r"><span class="neg">dirty 42d</span> · ↓9 behind</span></div>
+      <div class="rowline"><span class="l">feat/mcp-registry <small>shadowdev</small></span><span class="r"><span class="warn">dirty 12d</span> · ↓3 behind</span></div>
+      <div class="rowline"><span class="l">feat/bootstrap <small>shadowdev</small></span><span class="r">↑5 ahead · <span class="warn">no PR</span></span></div>
+      <span class="cost cheap">cheap</span>
+    </div>
+  </div>
+
+  <!-- ═══════════ 6. MY WORK EXTRAS ═══════════ -->
+  <div class="section">
+    <div class="section-title"><h2>6 · My Work extras</h2><span class="where">→ My Work section</span></div>
+    <div class="grid g3">
+      <div class="card" data-id="mw-switches"><span class="mark k">KEEP</span><span class="mark d">DROP</span>
+        <h3>Context switches</h3><p class="desc">Project changes between consecutive sessions.</p>
+        <div class="num" style="font-family:var(--mono);font-size:21px;font-weight:600">4 <span class="delta down" style="font-size:11px">▼ from 7</span></div>
+        <p class="desc" style="margin:6px 0 0">Best focus: Tuesday — 1 project, 9 prompts straight</p>
+        <span class="cost cheap">cheap</span>
+      </div>
+      <div class="card" data-id="mw-commits"><span class="mark k">KEEP</span><span class="mark d">DROP</span>
+        <h3>Commits per day</h3><p class="desc">git log --since across known repos.</p>
+        <div class="spark">
+          <span style="height:40%"></span><span style="height:70%"></span><span style="height:100%"></span><span style="height:25%"></span><span style="height:0%"></span><span style="height:55%"></span><span style="height:80%"></span>
+        </div>
+        <div class="legend"><span>Mon → Sun · total 31</span></div>
+        <span class="cost med">medium</span>
+      </div>
+      <div class="card" data-id="mw-outcomemix"><span class="mark k">KEEP</span><span class="mark d">DROP</span>
+        <h3>Session outcome mix</h3><p class="desc">Heuristic: error density + ending state.</p>
+        <div class="stack">
+          <div style="width:76%;background:var(--green)"></div>
+          <div style="width:16%;background:var(--amber)"></div>
+          <div style="width:8%;background:var(--rose)"></div>
+        </div>
+        <div class="legend">
+          <span><span class="sw" style="background:var(--green)"></span>clean 76%</span>
+          <span><span class="sw" style="background:var(--amber)"></span>choppy 16%</span>
+          <span><span class="sw" style="background:var(--rose)"></span>friction 8%</span>
+        </div>
+        <span class="cost med">medium</span>
+      </div>
+    </div>
+    <div class="grid g3" style="margin-top:10px">
+      <div class="card tile" data-id="mw-streak"><span class="mark k">KEEP</span><span class="mark d">DROP</span>
+        <div class="num">🔥 6d</div><div class="lbl">Longest streak (30d sparkline)</div><span class="cost p2">phase 2</span></div>
+      <div class="card tile" data-id="mw-needsyou"><span class="mark k">KEEP</span><span class="mark d">DROP</span>
+        <div class="num warn">2</div><div class="lbl">Waiting on you (live)</div><span class="cost p2">phase 2</span></div>
+      <div class="card tile" data-id="mw-digest"><span class="mark k">KEEP</span><span class="mark d">DROP</span>
+        <div class="num">Weekly</div><div class="lbl">Insights digest page</div><span class="cost p2">phase 2</span></div>
+    </div>
+  </div>
+
+  <!-- ═══════════ 7. AGENTS ═══════════ -->
+  <div class="section">
+    <div class="section-title"><h2>7 · Agents</h2><span class="where">→ Agents section, below existing tiles</span></div>
+    <div class="grid g3">
+      <div class="card" data-id="ag-dupes"><span class="mark k">KEEP</span><span class="mark d">DROP</span>
+        <h3>Duplicated skills</h3><p class="desc">Same contentHash across tools — sync or prune.</p>
+        <div class="rowline"><span class="l">graphify</span><span class="r">claude · cursor · gemini</span></div>
+        <div class="rowline"><span class="l">visualcave</span><span class="r">claude · cursor</span></div>
+        <div class="rowline"><span class="l">caveman</span><span class="r">claude · kiro</span></div>
+        <span class="cost cheap">cheap</span>
+      </div>
+      <div class="card" data-id="ag-inactive"><span class="mark k">KEEP</span><span class="mark d">DROP</span>
+        <h3>Dead weight</h3><p class="desc">Installed but inactive.</p>
+        <div class="stack">
+          <div style="width:64%;background:var(--green)"></div>
+          <div style="width:36%;background:var(--surface2)"></div>
+        </div>
+        <div class="legend"><span><span class="sw" style="background:var(--green)"></span>active 27</span><span><span class="sw" style="background:var(--surface2);border:1px solid var(--border)"></span>inactive 15</span></div>
+        <p class="desc" style="margin:8px 0 0">5 skills never toggled on since install</p>
+        <span class="cost cheap">cheap</span>
+      </div>
+      <div class="card" data-id="ag-secrets"><span class="mark k">KEEP</span><span class="mark d">DROP</span>
+        <h3>Hygiene</h3><p class="desc">Counts only — values never read.</p>
+        <div class="rowline"><span class="l">MCPs with secrets</span><span class="r warn">4</span></div>
+        <div class="rowline"><span class="l">Config errors</span><span class="r neg">1</span></div>
+        <div class="rowline"><span class="l">Agents sharing an MCP</span><span class="r">github ×3</span></div>
+        <span class="cost cheap">cheap</span>
+      </div>
+    </div>
+  </div>
+
+  <footer>Prototype — static mock data, nothing is read or written. Palette matches Context Bar dark theme.</footer>
+</div>
+
+<script>
+// heatmap mock
+(function(){
+  const days=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+  const hm=document.getElementById('heatmap');
+  let seed=7;
+  const rnd=()=>{seed=(seed*16807)%2147483647;return seed/2147483647};
+  days.forEach((d,di)=>{
+    const lbl=document.createElement('span');lbl.className='hm-day';lbl.textContent=d;hm.appendChild(lbl);
+    for(let h=0;h<24;h++){
+      const c=document.createElement('span');
+      let v=0;
+      if(h>=9&&h<=23){v=rnd();if(di<5&&h>=19)v+=.35;if(di>=5)v*=.6}
+      const lvl=v>.85?4:v>.65?3:v>.45?2:v>.3?1:0;
+      c.className='hm-cell'+(lvl?' hm-'+lvl:'');
+      c.title=d+' '+h+':00';
+      hm.appendChild(c);
+    }
+  });
+})();
+
+// keep/drop review
+const cards=[...document.querySelectorAll('.card[data-id]')];
+function refresh(){
+  const k=cards.filter(c=>c.classList.contains('keep')).length;
+  const d=cards.filter(c=>c.classList.contains('drop')).length;
+  document.getElementById('c-keep').textContent=k;
+  document.getElementById('c-drop').textContent=d;
+  document.getElementById('c-none').textContent=cards.length-k-d;
+}
+cards.forEach(c=>c.addEventListener('click',e=>{
+  if(e.target.closest('a,button'))return;
+  if(c.classList.contains('keep')){c.classList.remove('keep');c.classList.add('drop')}
+  else if(c.classList.contains('drop')){c.classList.remove('drop')}
+  else{c.classList.add('keep')}
+  refresh();
+}));
+function copySelection(){
+  const k=cards.filter(c=>c.classList.contains('keep')).map(c=>c.dataset.id);
+  const d=cards.filter(c=>c.classList.contains('drop')).map(c=>c.dataset.id);
+  const txt='KEEP: '+(k.join(', ')||'—')+'\nDROP: '+(d.join(', ')||'—');
+  navigator.clipboard.writeText(txt).then(()=>{
+    document.getElementById('copied').textContent='copied ✓';
+    setTimeout(()=>document.getElementById('copied').textContent='',1500);
+  });
+}
+refresh();
+</script>
+</body>
+</html>

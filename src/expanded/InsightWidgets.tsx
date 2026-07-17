@@ -3,10 +3,65 @@ import type { TokenPoint } from '../types'
 import { formatTokens } from '../components/history/SessionStats'
 
 const DAY = 86_400_000
-const DAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 
 export function shortModel(model: string): string {
   return model.replace(/^claude-/, '').replace(/-\d{8}$/, '')
+}
+
+/** Pulsing placeholder block — shape the caller's own layout, don't invent one. */
+export function SkeletonBar({ width = '100%', height = '10px', className = '' }: {
+  width?: string
+  height?: string
+  className?: string
+}) {
+  return (
+    <div
+      className={`animate-pulse rounded bg-[var(--c-surface-2)] ${className}`}
+      style={{ width, height }}
+    />
+  )
+}
+
+/** Row of tile-shaped skeletons matching <Tile>'s footprint. */
+export function SkeletonTiles({ count = 4 }: { count?: number }) {
+  return (
+    <div className="grid gap-2.5 mb-5" style={{ gridTemplateColumns: `repeat(${count}, 1fr)` }}>
+      {Array.from({ length: count }, (_, i) => (
+        <div key={i} className="rounded-xl border border-[var(--c-border)] bg-[var(--c-surface-2)]/40 px-3 py-2.5 text-center">
+          <SkeletonBar width="40%" height="16px" className="mx-auto" />
+          <SkeletonBar width="70%" height="9px" className="mx-auto mt-2" />
+        </div>
+      ))}
+    </div>
+  )
+}
+
+/** List-row skeletons matching a two-line title + meta row shape. */
+export function SkeletonRows({ count = 6 }: { count?: number }) {
+  return (
+    <div>
+      {Array.from({ length: count }, (_, i) => (
+        <div key={i} className="px-3 py-2.5 border-b border-[var(--c-border)]/50 last:border-0">
+          <SkeletonBar width={`${70 + (i % 3) * 8}%`} height="12px" />
+          <SkeletonBar width="35%" height="9px" className="mt-2" />
+        </div>
+      ))}
+    </div>
+  )
+}
+
+/** Card-shaped skeletons matching a repo/session-group card footprint. */
+export function SkeletonCards({ count = 3 }: { count?: number }) {
+  return (
+    <div className="space-y-2.5">
+      {Array.from({ length: count }, (_, i) => (
+        <div key={i} className="rounded-xl border border-[var(--c-border)] bg-[var(--c-surface-2)]/40 px-4 py-3.5">
+          <SkeletonBar width="35%" height="13px" />
+          <SkeletonBar width="55%" height="9px" className="mt-2.5" />
+        </div>
+      ))}
+    </div>
+  )
 }
 
 export function Card({ title, sub, children }: { title: string; sub?: string; children: React.ReactNode }) {
@@ -133,49 +188,6 @@ function HoverReadout({ text, placeholder }: { text: string | null; placeholder:
       <span className={`text-[10.5px] font-mono ${text ? 'text-[var(--c-text-2)]' : 'text-[var(--c-text-3)] opacity-50'}`}>
         {text ?? placeholder}
       </span>
-    </div>
-  )
-}
-
-/** Weekday × hour prompt-density grid from raw timestamps (ms), local time. */
-export function ActivityHeatmap({ timestamps }: { timestamps: number[] }) {
-  const [hover, setHover] = useState<string | null>(null)
-  const { grid, max } = useMemo(() => {
-    const grid: number[][] = Array.from({ length: 7 }, () => Array(24).fill(0))
-    let max = 0
-    for (const ts of timestamps) {
-      const d = new Date(ts)
-      const day = (d.getDay() + 6) % 7 // Monday = 0
-      const cell = ++grid[day][d.getHours()]
-      if (cell > max) max = cell
-    }
-    return { grid, max }
-  }, [timestamps])
-
-  return (
-    <div className="min-w-0 overflow-hidden" onMouseLeave={() => setHover(null)}>
-      <HoverReadout text={hover} placeholder="hover a cell for details" />
-      <div className="grid gap-[3px]" style={{ gridTemplateColumns: '30px repeat(24, minmax(0, 1fr))' }}>
-        {DAY_LABELS.map((label, di) => (
-          <div key={label} className="contents">
-            <span className="text-[9px] font-mono text-[var(--c-text-3)] self-center">{label}</span>
-            {grid[di].map((v, h) => {
-              const alpha = v === 0 ? 0 : 0.25 + 0.75 * (v / Math.max(1, max))
-              return (
-                <span
-                  key={h}
-                  onMouseEnter={() => setHover(`${label} ${h}:00–${h + 1}:00 · ${v} prompt${v === 1 ? '' : 's'}`)}
-                  className="h-2.5 w-full rounded-[2px] hover:ring-1 hover:ring-[var(--c-accent)]"
-                  style={{ background: v === 0 ? 'var(--c-surface-2)' : `rgba(129,140,248,${alpha.toFixed(2)})` }}
-                />
-              )
-            })}
-          </div>
-        ))}
-      </div>
-      <div className="flex justify-between text-[9px] font-mono text-[var(--c-text-3)] mt-1.5 pl-[33px]">
-        <span>0</span><span>6</span><span>12</span><span>18</span><span>23</span>
-      </div>
     </div>
   )
 }

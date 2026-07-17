@@ -82,6 +82,19 @@ function groupByTime(entries: SessionEntry[]): { label: string; items: SessionEn
   return groups
 }
 
+function SkeletonRows({ count = 6 }: { count?: number }) {
+  return (
+    <div>
+      {Array.from({ length: count }, (_, i) => (
+        <div key={i} className="px-3 py-2.5 border-b border-[var(--c-border)]/50 last:border-0">
+          <div className="animate-pulse rounded bg-[var(--c-surface-2)] h-3" style={{ width: `${70 + (i % 3) * 8}%` }} />
+          <div className="animate-pulse rounded bg-[var(--c-surface-2)] h-2.5 mt-2" style={{ width: '35%' }} />
+        </div>
+      ))}
+    </div>
+  )
+}
+
 interface SessionRowProps {
   session: SessionEntry
   onSelect: (s: SessionEntry) => void
@@ -393,11 +406,7 @@ export default function SessionList({ sessions, onSelect, loading, onLoadMore, h
 
       {/* Session list */}
       <div className="flex-1 overflow-y-auto">
-        {loading && (
-          <div className="flex items-center justify-center h-20">
-            <div className="w-4 h-4 border-2 border-[var(--c-accent)]/40 border-t-[var(--c-accent)] rounded-full animate-spin" />
-          </div>
-        )}
+        {loading && <SkeletonRows count={6} />}
         {!loading && groups.length === 0 && pinned.length === 0 && deepHits.length === 0 && (
           <div className="px-3 py-8 text-center">
             <p className="text-[12px] text-[var(--c-text-3)]">

@@ -650,29 +650,6 @@ pub fn token_activity(db: &DbState, since_ms: u64, projects: Option<&[String]>) 
         .collect()
 }
 
-/// All prompt timestamps (ms) from history.jsonl newer than `since_ms` —
-/// powers the activity heatmap; bucketing happens frontend-side in local time.
-pub fn prompt_timestamps(since_ms: u64) -> Vec<u64> {
-    let Some(home) = dirs::home_dir() else {
-        return vec![];
-    };
-    let path = index::history_jsonl_path(&home);
-    let Ok(content) = std::fs::read_to_string(&path) else {
-        return vec![];
-    };
-
-    #[derive(serde::Deserialize)]
-    struct Line {
-        timestamp: Option<u64>,
-    }
-    content
-        .lines()
-        .filter_map(|l| serde_json::from_str::<Line>(l.trim()).ok())
-        .filter_map(|l| l.timestamp)
-        .filter(|ts| *ts >= since_ms)
-        .collect()
-}
-
 #[cfg(test)]
 mod smoke {
     // Runs against the real home dir: `cargo test -- --ignored warm_and_search`.

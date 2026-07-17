@@ -1,8 +1,8 @@
 import { useState, useEffect, useMemo } from 'react'
 import { invoke } from '@tauri-apps/api/core'
-import type { AgentUsage, RepoWorktrees, SessionEntry } from '../types'
+import type { AgentUsage, RepoWorktrees, SessionEntry, TokenPoint } from '../types'
 import type { Section } from './ExpandedApp'
-import { Card, ActivityHeatmap, CommitBars, RefreshButton } from './InsightWidgets'
+import { Card, CommitBars, TokenTrend, RefreshButton, SkeletonTiles, SkeletonCards } from './InsightWidgets'
 import AgentBadge from '../components/history/AgentBadge'
 import { formatTokens } from '../components/history/SessionStats'
 
@@ -78,20 +78,25 @@ interface MyWorkSectionProps {
   goTo: (s: Section) => void
   onRefresh: () => void | Promise<unknown>
   onOpenSession: (s: SessionEntry) => void
+  showToast: (type: 'success' | 'error', message: string) => void
 }
 
-export default function MyWorkSection({ sessions, repos, loading, goTo, onRefresh, onOpenSession }: MyWorkSectionProps) {
+function todayKey(): string {
+  return `contextbar:expanded:peakbanner:${new Date().toISOString().slice(0, 10)}`
+}
+
+export default function MyWorkSection({ sessions, repos, loading, goTo, onRefresh, onOpenSession, showToast }: MyWorkSectionProps) {
   const [tab, setTab] = useState<Tab>('today')
   const [copiedResume, setCopiedResume] = useState<string | null>(null)
-  const [promptTs, setPromptTs] = useState<number[]>([])
   const [commitTs, setCommitTs] = useState<number[]>([])
+  const [tokenPoints, setTokenPoints] = useState<TokenPoint[]>([])
   const [vscodeAvailable, setVscodeAvailable] = useState(false)
   const [usage, setUsage] = useState<AgentUsage[]>([])
+  const [peakDismissed, setPeakDismissed] = useState(() => !!localStorage.getItem(todayKey()))
 
   useEffect(() => {
-    const sinceMs = Date.now() - 30 * DAY
-    invoke<number[]>('get_prompt_timestamps', { sinceMs }).then(setPromptTs).catch(() => {})
     invoke<number[]>('get_commit_activity', { sinceDays: 14 }).then(setCommitTs).catch(() => {})
+    invoke<TokenPoint[]>('get_token_activity', { sinceMs: Date.now() - 183 * DAY }).then(setTokenPoints).catch(() => {})
     invoke<boolean>('is_vscode_installed').then(setVscodeAvailable).catch(() => {})
     invoke<AgentUsage[]>('get_usage_windows').then(setUsage).catch(() => {})
   }, [sessions])
@@ -111,6 +116,26 @@ export default function MyWorkSection({ sessions, repos, loading, goTo, onRefres
     live: windowed.filter(s => s.isLive).length,
     projects: projects.length,
   }), [windowed, projects])
+
+  // Peak-end banner — always summarizes "today", independent of the
+  // selected tab, so it doesn't disappear when browsing other windows.
+  const peakSummary = useMemo(() => {
+    const [start, end] = windowFor('today')
+    const today = sessions.filter(s => s.timestamp >= start && s.timestamp < end)
+    if (!today.length) return null
+    const todayProjects = groupByProject(today)
+    return {
+      sessionCount: today.length,
+      prompts: today.reduce((n, s) => n + s.promptCount, 0),
+      projectCount: todayProjects.length,
+      topProject: todayProjects[0]?.name ?? null,
+    }
+  }, [sessions])
+
+  const dismissPeakBanner = () => {
+    localStorage.setItem(todayKey(), '1')
+    setPeakDismissed(true)
+  }
 
   // Session share per agent in the selected window
   const agentMix = useMemo(() => {
@@ -208,6 +233,30 @@ export default function MyWorkSection({ sessions, repos, loading, goTo, onRefres
       </div>
 
       <div className="flex-1 overflow-y-auto px-6 pb-6">
+        {!loading && peakSummary && !peakDismissed && (
+          <div className="flex items-center gap-3 rounded-xl border border-indigo-400/30 bg-gradient-to-br from-indigo-400/10 to-fuchsia-400/10 px-4 py-3 mb-4">
+            <span className="text-[19px] leading-none">🎯</span>
+            <div className="flex-1 min-w-0">
+              <b className="text-[12.5px] font-semibold">Nice work today</b>
+              <p className="text-[11.5px] text-[var(--c-text-2)] mt-0.5">
+                {peakSummary.sessionCount} session{peakSummary.sessionCount === 1 ? '' : 's'}
+                {peakSummary.prompts > 0 && `, ${peakSummary.prompts} prompt${peakSummary.prompts === 1 ? '' : 's'}`}
+                {peakSummary.topProject && (
+                  <> across {peakSummary.projectCount} project{peakSummary.projectCount === 1 ? '' : 's'} — most active on{' '}
+                    <b className="text-indigo-400">{peakSummary.topProject}</b>
+                  </>
+                )}
+              </p>
+            </div>
+            <button
+              onClick={dismissPeakBanner}
+              aria-label="Dismiss"
+              className="text-[var(--c-text-3)] hover:text-[var(--c-text)] transition-colors flex-shrink-0"
+            >
+              ✕
+            </button>
+          </div>
+        )}
         {/* Time tabs */}
         <div className="flex gap-1.5 mb-4">
           {TABS.map(t => (
@@ -222,9 +271,10 @@ export default function MyWorkSection({ sessions, repos, loading, goTo, onRefres
         </div>
 
         {loading && (
-          <div className="flex items-center justify-center h-32">
-            <div className="w-4 h-4 border-2 border-[var(--c-accent)]/40 border-t-[var(--c-accent)] rounded-full animate-spin" />
-          </div>
+          <>
+            <SkeletonTiles count={4} />
+            <SkeletonCards count={3} />
+          </>
         )}
 
         {!loading && sessions.length === 0 && (
@@ -327,11 +377,11 @@ export default function MyWorkSection({ sessions, repos, loading, goTo, onRefres
 
             {/* Activity: when you work + what lands */}
             <div className="grid grid-cols-2 gap-3 mb-5">
-              <Card title="Activity heatmap" sub="Prompts by weekday × hour — last 30 days, local time">
-                <ActivityHeatmap timestamps={promptTs} />
-              </Card>
               <Card title="Commits per day" sub="All branches, all repos — last 14 days">
                 <CommitBars commitSecs={commitTs} />
+              </Card>
+              <Card title="Token trend" sub="Usage over time, local time">
+                <TokenTrend points={tokenPoints} />
               </Card>
             </div>
 
@@ -439,7 +489,7 @@ export default function MyWorkSection({ sessions, repos, loading, goTo, onRefres
                           </button>
                           {vscodeAvailable && (
                             <button
-                              onClick={() => invoke('open_in_vscode', { path: p.project }).catch(() => {})}
+                              onClick={() => invoke('open_in_vscode', { path: p.project }).catch(() => showToast('error', 'Could not open VS Code'))}
                               title="Open project in Visual Studio Code"
                               className="text-[11px] px-3 py-1.5 rounded-md border border-[var(--c-border)] text-[var(--c-text-3)] hover:text-[var(--c-text-2)] transition-colors"
                             >
@@ -447,7 +497,7 @@ export default function MyWorkSection({ sessions, repos, loading, goTo, onRefres
                             </button>
                           )}
                           <button
-                            onClick={() => invoke('reveal_in_finder', { path: p.project }).catch(() => {})}
+                            onClick={() => invoke('reveal_in_finder', { path: p.project }).catch(() => showToast('error', 'Could not reveal in Finder'))}
                             className="text-[11px] px-3 py-1.5 rounded-md border border-[var(--c-border)] text-[var(--c-text-3)] hover:text-[var(--c-text-2)] transition-colors"
                           >
                             Reveal in Finder

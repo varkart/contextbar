@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Worktrees — Prototype</title>
+<style>
+  :root{
+    --bg: #12141c;
+    --surface: #1a1d29;
+    --surface-2: #212437;
+    --border: #2a2e42;
+    --text: #e9e7e2;
+    --text-muted: #8b8fa8;
+    --text-faint: #5c6079;
+    --teal: #5fc9b8;
+    --teal-dim: rgba(95,201,184,0.14);
+    --amber: #e8a94a;
+    --amber-dim: rgba(232,169,74,0.14);
+    --red: #d9707a;
+    --red-dim: rgba(217,112,122,0.14);
+    --moss: #8fbf6b;
+    --moss-dim: rgba(143,191,107,0.14);
+    --gray: #5c6079;
+    --gray-dim: rgba(92,96,121,0.16);
+    --mono: 'SF Mono', 'JetBrains Mono', ui-monospace, Menlo, Consolas, monospace;
+    --sans: -apple-system, 'Inter', 'Segoe UI', sans-serif;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--text);font-family:var(--sans);}
+  body{padding:40px 24px 80px;}
+  .wrap{max-width:900px;margin:0 auto;}
+
+  /* Header */
+  .header{margin-bottom:28px;}
+  .eyebrow{
+    font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;
+    color:var(--teal);margin:0 0 8px;
+  }
+  h1{font-size:28px;font-weight:650;margin:0 0 6px;letter-spacing:-0.01em;}
+  .sub{color:var(--text-muted);font-size:14px;margin:0;}
+
+  /* Signature: trunk graph */
+  .trunk-rail{position:relative;margin:28px 0 8px;padding-left:22px;}
+  .trunk-line{
+    position:absolute;left:6px;top:4px;bottom:4px;width:2px;
+    background:linear-gradient(var(--teal), var(--gray) 85%, transparent);
+    border-radius:2px;
+  }
+  .trunk-dot{
+    position:absolute;left:2px;top:0;width:10px;height:10px;border-radius:50%;
+    background:var(--teal); box-shadow:0 0 0 4px var(--teal-dim);
+  }
+
+  /* Search + filters */
+  .controls{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:20px 0 18px;}
+  .search{
+    flex:1;min-width:220px;background:var(--surface);border:1px solid var(--border);
+    border-radius:9px;padding:9px 14px;color:var(--text);font-size:13.5px;font-family:var(--sans);
+    outline:none;transition:border-color .15s;
+  }
+  .search:focus{border-color:var(--teal);}
+  .search::placeholder{color:var(--text-faint);}
+  .pill{
+    background:var(--surface);border:1px solid var(--border);color:var(--text-muted);
+    border-radius:999px;padding:7px 14px;font-size:12.5px;font-family:var(--sans);cursor:pointer;
+    transition:all .15s;white-space:nowrap;
+  }
+  .pill:hover{border-color:var(--text-faint);color:var(--text);}
+  .pill.active{background:var(--teal-dim);border-color:var(--teal);color:var(--teal);}
+
+  /* Stat row */
+  .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:14px;}
+  .stat{
+    background:var(--surface);border:1px solid var(--border);border-radius:10px;
+    padding:14px 16px;text-align:center;
+  }
+  .stat .num{font-family:var(--mono);font-size:22px;font-weight:600;}
+  .stat .lbl{font-size:11px;color:var(--text-muted);letter-spacing:.06em;text-transform:uppercase;margin-top:2px;}
+  .stat.active .num{color:var(--moss);}
+  .stat.stale .num{color:var(--amber);}
+  .stat.abandoned .num{color:var(--red);}
+
+  /* Cleanup banner */
+  .cleanup{
+    display:flex;align-items:center;justify-content:space-between;gap:12px;
+    background:var(--moss-dim);border:1px solid rgba(143,191,107,.35);border-radius:10px;
+    padding:13px 18px;margin-bottom:24px;
+  }
+  .cleanup .msg{font-size:13.5px;}
+  .cleanup .msg b{color:var(--moss);font-family:var(--mono);}
+  .btn{
+    border:none;border-radius:8px;padding:9px 16px;font-size:13px;font-weight:600;
+    cursor:pointer;font-family:var(--sans);transition:filter .15s, transform .05s;
+  }
+  .btn:active{transform:scale(.97);}
+  .btn-primary{background:var(--moss);color:#0e1508;}
+  .btn-primary:hover{filter:brightness(1.08);}
+  .btn-ghost{background:transparent;border:1px solid var(--border);color:var(--text-muted);}
+  .btn-ghost:hover{color:var(--text);border-color:var(--text-faint);}
+  .btn-danger{background:var(--red);color:#2a0a0d;}
+  .btn-danger:hover{filter:brightness(1.08);}
+
+  /* Repo groups */
+  .repo-group{margin-bottom:22px;}
+  .repo-title{
+    font-family:var(--mono);font-size:12px;color:var(--text-faint);text-transform:uppercase;
+    letter-spacing:.08em;margin:0 0 10px 22px;display:flex;align-items:center;gap:8px;
+  }
+  .repo-title .count{color:var(--text-muted);}
+
+  .row-list{position:relative;padding-left:22px;}
+  .row-list::before{
+    content:"";position:absolute;left:6px;top:0;bottom:0;width:2px;background:var(--border);
+  }
+
+  .worktree{
+    position:relative;background:var(--surface);border:1px solid var(--border);
+    border-radius:10px;padding:14px 16px;margin-bottom:8px;cursor:pointer;
+    transition:border-color .15s, background .15s;
+  }
+  .worktree::before{
+    content:"";position:absolute;left:-16px;top:50%;width:14px;height:2px;background:var(--border);
+  }
+  .worktree:hover{border-color:var(--text-faint);background:var(--surface-2);}
+  .worktree.expanded{border-color:var(--teal);}
+
+  .wt-top{display:flex;align-items:center;justify-content:space-between;gap:10px;}
+  .wt-name{display:flex;align-items:center;gap:9px;font-family:var(--mono);font-size:14.5px;font-weight:600;}
+  .dot{width:8px;height:8px;border-radius:50%;flex:none;}
+  .dot.active{background:var(--moss);box-shadow:0 0 0 3px var(--moss-dim);}
+  .dot.stale{background:var(--amber);box-shadow:0 0 0 3px var(--amber-dim);}
+  .dot.abandoned{background:var(--red);box-shadow:0 0 0 3px var(--red-dim);}
+  .dot.dead{background:var(--gray);}
+
+  .wt-meta{font-size:12.5px;color:var(--text-muted);margin-top:3px;font-family:var(--sans);}
+  .wt-meta .agent{color:var(--teal);}
+
+  .wt-badges{display:flex;align-items:center;gap:6px;flex:none;}
+  .badge{
+    font-size:11px;font-family:var(--mono);padding:3px 9px;border-radius:999px;white-space:nowrap;
+  }
+  .badge.safe{background:var(--moss-dim);color:var(--moss);}
+  .badge.warn{background:var(--amber-dim);color:var(--amber);}
+  .badge.size{background:var(--gray-dim);color:var(--text-muted);}
+  .badge.ahead{background:var(--teal-dim);color:var(--teal);}
+  .chev{color:var(--text-faint);font-size:13px;transition:transform .15s;}
+  .worktree.expanded .chev{transform:rotate(90deg);}
+
+  .wt-detail{
+    display:none;margin-top:14px;padding-top:14px;border-top:1px solid var(--border);
+  }
+  .worktree.expanded .wt-detail{display:block;}
+  .detail-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px;}
+  .detail-cell{background:var(--surface-2);border-radius:8px;padding:10px 12px;}
+  .detail-cell .v{font-family:var(--mono);font-size:15px;font-weight:600;}
+  .detail-cell .k{font-size:10.5px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;margin-top:2px;}
+  .detail-actions{display:flex;gap:8px;margin-bottom:14px;}
+  .sessions{font-size:12.5px;color:var(--text-muted);}
+  .sessions .s{padding:7px 0;border-bottom:1px solid var(--border);}
+  .sessions .s:last-child{border-bottom:none;}
+  .sessions .s b{color:var(--text);font-weight:500;}
+
+  .empty{
+    text-align:center;color:var(--text-faint);font-size:13.5px;padding:40px 0;font-family:var(--mono);
+  }
+
+  footer{text-align:center;margin-top:40px;color:var(--text-faint);font-size:11.5px;font-family:var(--mono);}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="header">
+    <p class="eyebrow">Context Bar / Worktrees</p>
+    <h1>Worktrees</h1>
+    <p class="sub">Every isolated branch you or an agent has checked out, across every repo, in one place.</p>
+  </div>
+
+  <div class="trunk-rail"><div class="trunk-line"></div><div class="trunk-dot"></div></div>
+
+  <div class="controls">
+    <input class="search" id="search" placeholder="Search worktrees by branch or repo…" oninput="applyFilters()">
+    <button class="pill active" data-filter="all" onclick="setFilter('all')">All <span id="count-all"></span></button>
+    <button class="pill" data-filter="active" onclick="setFilter('active')">Active</button>
+    <button class="pill" data-filter="stale" onclick="setFilter('stale')">Stale</button>
+    <button class="pill" data-filter="abandoned" onclick="setFilter('abandoned')">Abandoned</button>
+    <button class="pill" data-filter="safe" onclick="setFilter('safe')">Safe to delete</button>
+  </div>
+
+  <div class="stats">
+    <div class="stat active"><div class="num">3</div><div class="lbl">Active</div></div>
+    <div class="stat stale"><div class="num">4</div><div class="lbl">Stale</div></div>
+    <div class="stat abandoned"><div class="num">5</div><div class="lbl">Abandoned</div></div>
+  </div>
+
+  <div class="cleanup">
+    <div class="msg">🧹 <b>5.2 GB</b> reclaimable — 5 worktrees are merged, clean, and safe to delete.</div>
+    <button class="btn btn-primary" onclick="alert('Would open the cleanup selection flow — pick which of the 5 to remove, then run \'git worktree remove\' for each.')">Review &amp; clean</button>
+  </div>
+
+  <div id="groups"></div>
+
+</div>
+
+<footer>Prototype — static data, no real git operations are performed.</footer>
+
+<script>
+const DATA = [
+  { repo:"juno", items:[
+    { branch:"feature/cdc-consumer", status:"active", agent:"claude · sonnet-4", last:"2h ago", sessions:3, ahead:2, behind:0, size:"680 MB", merged:false, dirty:false, tokens:"1.1M",
+      commit:"fix: sanitizer field mapping for partner_type",
+      sessionList:[
+        {title:"Add CDC consumer for partner_company_type", meta:"2h ago · sonnet-4 · 450k tokens"},
+        {title:"Debug kafka-cannonball connector env vars", meta:"4h ago · sonnet-4 · 280k tokens"},
+        {title:"Initial CDC pipeline setup", meta:"2d ago · opus-4 · 180k tokens"}
+      ]},
+    { branch:"fix/auth-timeout", status:"stale", agent:"claude", last:"5d ago", sessions:1, ahead:0, behind:0, size:"420 MB", merged:true, dirty:false, tokens:"210k",
+      commit:"fix: extend timeout for SSO token refresh", sessionList:[{title:"Fix auth timeout on SSO refresh", meta:"5d ago · sonnet-4 · 210k tokens"}]},
+    { branch:"feature/old-migration", status:"abandoned", agent:"claude", last:"42d ago", sessions:2, ahead:1, behind:9, size:"1.2 GB", merged:false, dirty:true, tokens:"640k",
+      commit:"wip: migration draft (uncommitted)", sessionList:[{title:"Draft schema migration", meta:"42d ago · opus-4 · 640k tokens"}]},
+    { branch:"spike/prototype-v1", status:"dead", agent:"no sessions", last:"91d ago", sessions:0, ahead:0, behind:0, size:"1.8 GB", merged:true, dirty:false, tokens:"—",
+      commit:"spike: early prototype exploration", sessionList:[]},
+    { branch:"feature/payment-retry", status:"dead", agent:"cursor", last:"68d ago", sessions:1, ahead:0, behind:0, size:"1.1 GB", merged:true, dirty:false, tokens:"95k",
+      commit:"feat: exponential backoff for payment retries", sessionList:[{title:"Add retry backoff logic", meta:"68d ago · cursor · 95k tokens"}]},
+  ]},
+  { repo:"shadowdev", items:[
+    { branch:"feat/bootstrap", status:"active", agent:"claude · opus-4", last:"3d ago", sessions:8, ahead:5, behind:0, size:"2.3 GB", merged:false, dirty:false, tokens:"3.2M",
+      commit:"feat: agent orchestration bootstrap sequence",
+      sessionList:[
+        {title:"Implement agent orchestration for bootstrap", meta:"3d ago · opus-4 · 890k tokens"},
+        {title:"Wire up sub-agent spawn protocol", meta:"4d ago · opus-4 · 610k tokens"}
+      ]},
+    { branch:"feat/mcp-registry", status:"stale", agent:"claude", last:"12d ago", sessions:4, ahead:0, behind:3, size:"890 MB", merged:false, dirty:true, tokens:"1.4M",
+      commit:"wip: registry schema (uncommitted)", sessionList:[{title:"Draft MCP registry schema", meta:"12d ago · sonnet-4 · 1.4M tokens"}]},
+    { branch:"spike/rust-wasm", status:"dead", agent:"no sessions", last:"72d ago", sessions:0, ahead:0, behind:0, size:"950 MB", merged:true, dirty:false, tokens:"—",
+      commit:"spike: rust→wasm compile target", sessionList:[]},
+  ]},
+  { repo:"contextbar", items:[
+    { branch:"feat/history-viewer", status:"active", agent:"kiro", last:"1d ago", sessions:2, ahead:3, behind:0, size:"310 MB", merged:false, dirty:false, tokens:"680k",
+      commit:"feat: session history viewer scaffold", sessionList:[{title:"Scaffold history viewer tab", meta:"1d ago · kiro · 680k tokens"}]},
+    { branch:"fix/mcp-timeout", status:"dead", agent:"claude", last:"28d ago", sessions:1, ahead:0, behind:0, size:"380 MB", merged:true, dirty:false, tokens:"110k",
+      commit:"fix: MCP discovery timeout for enterprise servers", sessionList:[{title:"Fix MCP discovery timeout", meta:"28d ago · sonnet-4 · 110k tokens"}]},
+  ]},
+];
+
+let currentFilter = "all";
+
+function statusLabel(s){
+  return {active:"Active", stale:"Stale", abandoned:"Abandoned", dead:"Dead"}[s] || s;
+}
+
+function matchesFilter(item){
+  if(currentFilter==="all") return true;
+  if(currentFilter==="active") return item.status==="active";
+  if(currentFilter==="stale") return item.status==="stale";
+  if(currentFilter==="abandoned") return item.status==="abandoned" || item.status==="dead";
+  if(currentFilter==="safe") return item.merged && !item.dirty;
+  return true;
+}
+
+function matchesSearch(item, repo, q){
+  if(!q) return true;
+  q = q.toLowerCase();
+  return item.branch.toLowerCase().includes(q) || repo.toLowerCase().includes(q);
+}
+
+function render(){
+  const q = document.getElementById('search').value;
+  const container = document.getElementById('groups');
+  container.innerHTML = "";
+  let totalShown = 0;
+
+  DATA.forEach(group=>{
+    const filtered = group.items.filter(it => matchesFilter(it) && matchesSearch(it, group.repo, q));
+    if(filtered.length===0) return;
+    totalShown += filtered.length;
+
+    const gDiv = document.createElement('div');
+    gDiv.className = "repo-group";
+    gDiv.innerHTML = `<div class="repo-title">${group.repo} <span class="count">· ${filtered.length} worktree${filtered.length>1?'s':''}</span></div>`;
+
+    const rowList = document.createElement('div');
+    rowList.className = "row-list";
+
+    filtered.forEach((item, idx)=>{
+      const id = `${group.repo}-${idx}`;
+      const wt = document.createElement('div');
+      wt.className = "worktree";
+      wt.id = "wt-"+id;
+
+      let badges = "";
+      if(item.merged && !item.dirty) badges += `<span class="badge safe">safe</span>`;
+      if(item.dirty) badges += `<span class="badge warn">⚠ uncommitted</span>`;
+      if(!item.merged && item.ahead>0) badges += `<span class="badge ahead">↑${item.ahead} ahead</span>`;
+      if(parseFloat(item.size) > 1 && item.size.includes("GB")) badges += `<span class="badge size">${item.size}</span>`;
+
+      wt.innerHTML = `
+        <div class="wt-top" onclick="toggle('${id}')">
+          <div>
+            <div class="wt-name"><span class="dot ${item.status}"></span>${item.branch}</div>
+            <div class="wt-meta">${item.last} · <span class="agent">${item.agent}</span> · ${item.sessions} session${item.sessions===1?'':'s'}</div>
+          </div>
+          <div class="wt-badges">${badges}<span class="chev">›</span></div>
+        </div>
+        <div class="wt-detail">
+          <div class="detail-grid">
+            <div class="detail-cell"><div class="v">${item.last}</div><div class="k">Last active</div></div>
+            <div class="detail-cell"><div class="v">↑${item.ahead} ↓${item.behind}</div><div class="k">Ahead / behind</div></div>
+            <div class="detail-cell"><div class="v">${item.tokens}</div><div class="k">Tokens</div></div>
+            <div class="detail-cell"><div class="v">${item.size}</div><div class="k">Size</div></div>
+          </div>
+          <div class="detail-actions">
+            <button class="btn btn-primary" onclick="event.stopPropagation(); alert('Would resume this worktree\\'s most recent session.')">▶ Resume</button>
+            <button class="btn btn-ghost" onclick="event.stopPropagation(); alert('Would open this worktree in your editor/terminal.')">📁 Open</button>
+            ${item.merged ? `<button class="btn btn-ghost" onclick="event.stopPropagation(); alert('Would run: git worktree remove ${item.branch}')">🗑 Delete</button>` : `<button class="btn btn-ghost" onclick="event.stopPropagation(); alert('Would run: git merge into base branch, surfacing conflicts if any.')">⇄ Merge into main</button>`}
+          </div>
+          <div style="font-size:12px;color:var(--text-faint);margin-bottom:8px;font-family:var(--mono);">${item.commit}</div>
+          <div class="sessions">
+            ${item.sessionList.length ? item.sessionList.map(s=>`<div class="s"><b>${s.title}</b><br>${s.meta}</div>`).join("") : "<div class='s'>No agent sessions recorded.</div>"}
+          </div>
+        </div>
+      `;
+      rowList.appendChild(wt);
+    });
+
+    gDiv.appendChild(rowList);
+    container.appendChild(gDiv);
+  });
+
+  if(totalShown===0){
+    container.innerHTML = `<div class="empty">No worktrees match this filter.<br>Try clearing the search or picking a different filter.</div>`;
+  }
+}
+
+function toggle(id){
+  const el = document.getElementById('wt-'+id);
+  const wasOpen = el.classList.contains('expanded');
+  document.querySelectorAll('.worktree.expanded').forEach(w=>w.classList.remove('expanded'));
+  if(!wasOpen) el.classList.add('expanded');
+}
+
+function setFilter(f){
+  currentFilter = f;
+  document.querySelectorAll('.pill').forEach(p=>p.classList.toggle('active', p.dataset.filter===f));
+  render();
+}
+
+function applyFilters(){ render(); }
+
+render();
+</script>
+</body>
+</html>
