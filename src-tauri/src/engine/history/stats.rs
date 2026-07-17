@@ -603,3 +603,43 @@ pub fn prompt_timestamps(since_ms: u64) -> Vec<u64> {
         .filter(|ts| *ts >= since_ms)
         .collect()
 }
+
+#[cfg(test)]
+mod smoke {
+    // Runs against the real home dir: `cargo test -- --ignored warm_and_search`.
+    #[test]
+    #[ignore]
+    fn warm_and_search_real_data() {
+        let mut conn = rusqlite::Connection::open_in_memory().unwrap();
+        crate::db::migrate_for_test(&mut conn);
+        let db = crate::db::DbState(std::sync::Arc::new(std::sync::Mutex::new(conn)));
+
+        let t0 = std::time::Instant::now();
+        let parsed = super::warm(&db);
+        println!("warm: parsed {parsed} sessions in {:?}", t0.elapsed());
+
+        let agents: Vec<(String, i64)> = {
+            let conn = db.0.lock().unwrap();
+            let mut stmt = conn
+                .prepare("SELECT agent, COUNT(*) FROM session_stats GROUP BY agent")
+                .unwrap();
+            stmt.query_map([], |r| Ok((r.get(0)?, r.get(1)?)))
+                .unwrap()
+                .flatten()
+                .collect()
+        };
+        println!("session_stats rows by agent: {agents:?}");
+
+        for q in ["error", "test", "fix"] {
+            let hits = crate::db::search_transcripts(&db, q, 5);
+            println!(
+                "search '{q}': {} hits, first: {:?}",
+                hits.len(),
+                hits.first().map(|h| (
+                    h.agent.clone(),
+                    h.snippet.chars().take(60).collect::<String>()
+                ))
+            );
+        }
+    }
+}
