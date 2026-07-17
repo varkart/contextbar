@@ -3,7 +3,7 @@
 //! (mtime, size) — re-parsing only happens when a file changes, so the warm
 //! pass is cheap after the first run.
 
-use super::{index, parser};
+use super::parser;
 use crate::db::DbState;
 use serde::Serialize;
 use std::collections::HashMap;
@@ -229,7 +229,7 @@ pub fn usage_windows(db: &DbState) -> Vec<AgentUsage> {
     }
 
     let mut out: Vec<AgentUsage> = by_agent.into_values().collect();
-    out.sort_by(|a, b| b.tokens_7d.cmp(&a.tokens_7d));
+    out.sort_by_key(|u| std::cmp::Reverse(u.tokens_7d));
     out
 }
 
