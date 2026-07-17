@@ -386,6 +386,10 @@ impl SessionSource for CodexSource {
         })
     }
 
+    fn transcript_file(&self, entry: &SessionEntry) -> Option<PathBuf> {
+        find_session_file(&entry.session_id)
+    }
+
     fn resume_command(&self, session_id: Option<&str>) -> String {
         match session_id {
             Some(id) => format!("codex resume {id}"),

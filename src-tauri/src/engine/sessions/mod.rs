@@ -15,6 +15,13 @@ pub trait SessionSource: Sync {
     fn get(&self, session_id: &str) -> Option<SessionDetail>;
     /// Shell command that resumes work in `project` (id optional).
     fn resume_command(&self, session_id: Option<&str>) -> String;
+    /// On-disk transcript backing this entry, used by the stats warm pass
+    /// for (mtime, size) staleness checks. None when the source can't map
+    /// an entry to a single file.
+    fn transcript_file(&self, entry: &SessionEntry) -> Option<std::path::PathBuf> {
+        let _ = entry;
+        None
+    }
 }
 
 struct ClaudeSource;
@@ -34,6 +41,14 @@ impl SessionSource for ClaudeSource {
             Some(id) => format!("claude --resume {id}"),
             None => "claude".to_string(),
         }
+    }
+    fn transcript_file(&self, entry: &SessionEntry) -> Option<std::path::PathBuf> {
+        let home = dirs::home_dir()?;
+        Some(history::session_file(
+            &home,
+            &entry.project,
+            &entry.session_id,
+        ))
     }
 }
 

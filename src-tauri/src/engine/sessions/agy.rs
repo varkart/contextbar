@@ -253,6 +253,10 @@ impl SessionSource for AgySource {
             None => "agy".to_string(),
         }
     }
+
+    fn transcript_file(&self, entry: &SessionEntry) -> Option<PathBuf> {
+        Some(transcript_path(&root()?, &entry.session_id))
+    }
 }
 
 #[cfg(test)]

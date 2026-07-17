@@ -115,6 +115,37 @@ export interface SessionEntry {
   promptCount: number
 }
 
+/** User-authored session metadata (get_session_meta). */
+export interface SessionMeta {
+  sessionId: string
+  pinned: boolean
+  tags: string[]
+}
+
+/** Rolling per-agent usage meters (get_usage_windows). */
+export interface AgentUsage {
+  agent: string
+  tokens5h: number
+  cost5h: number
+  sessions5h: number
+  tokens7d: number
+  cost7d: number
+  sessions7d: number
+}
+
+/** One full-text hit from the transcript index (search_transcripts). */
+export interface TranscriptMatch {
+  sessionId: string
+  agent: string
+  /** Extract around the match; hits wrapped in … markers. */
+  snippet: string
+  display: string
+  project: string
+  projectName: string
+  timestamp: number
+  totalTokens: number
+}
+
 export interface ContentBlock {
   blockType: string
   text?: string

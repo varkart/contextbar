@@ -188,7 +188,198 @@ fn migrate(conn: &mut Connection) -> Result<(), AppError> {
         conn.pragma_update(None, "user_version", 8)?;
     }
 
+    if version < 9 {
+        // Full-text index over session transcripts. Content is rebuilt by the
+        // stats warm pass, so the table can be dropped/recreated freely.
+        conn.execute_batch(
+            "CREATE VIRTUAL TABLE IF NOT EXISTS session_fts USING fts5(
+                content,
+                session_id UNINDEXED,
+                agent UNINDEXED
+            );",
+        )?;
+        conn.pragma_update(None, "user_version", 9)?;
+    }
+
+    if version < 10 {
+        // User-authored session metadata (pins, tags). Unlike session_stats
+        // this is NOT a rebuildable cache — never drop it in later migrations.
+        conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS session_meta (
+                session_id TEXT PRIMARY KEY,
+                pinned     INTEGER NOT NULL DEFAULT 0,
+                tags       TEXT    NOT NULL DEFAULT '[]',
+                updated_at INTEGER NOT NULL DEFAULT 0
+            );",
+        )?;
+        conn.pragma_update(None, "user_version", 10)?;
+    }
+
     Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Session metadata (pins, tags)
+// ---------------------------------------------------------------------------
+
+#[derive(serde::Serialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct SessionMeta {
+    pub session_id: String,
+    pub pinned: bool,
+    pub tags: Vec<String>,
+}
+
+/// All rows that still carry meaning (pinned or tagged).
+pub fn get_all_session_meta(state: &DbState) -> Vec<SessionMeta> {
+    let Ok(conn) = state.0.lock() else {
+        return vec![];
+    };
+    let Ok(mut stmt) = conn.prepare(
+        "SELECT session_id, pinned, tags FROM session_meta
+         WHERE pinned != 0 OR tags != '[]'",
+    ) else {
+        return vec![];
+    };
+    stmt.query_map([], |r| {
+        let tags_json: String = r.get(2)?;
+        Ok(SessionMeta {
+            session_id: r.get(0)?,
+            pinned: r.get::<_, i64>(1)? != 0,
+            tags: serde_json::from_str(&tags_json).unwrap_or_default(),
+        })
+    })
+    .map(|rows| rows.flatten().collect())
+    .unwrap_or_default()
+}
+
+pub fn set_session_pinned(state: &DbState, session_id: &str, pinned: bool) -> Result<(), AppError> {
+    let conn = state.0.lock().map_err(|_| AppError::MutexPoisoned)?;
+    conn.execute(
+        "INSERT INTO session_meta (session_id, pinned, updated_at) VALUES (?1, ?2, ?3)
+         ON CONFLICT(session_id) DO UPDATE SET
+           pinned = excluded.pinned, updated_at = excluded.updated_at",
+        rusqlite::params![session_id, pinned as i64, now_ms()],
+    )?;
+    Ok(())
+}
+
+pub fn set_session_tags(
+    state: &DbState,
+    session_id: &str,
+    tags: &[String],
+) -> Result<(), AppError> {
+    // Normalize: trim, drop empties, dedupe (case-insensitive), keep order.
+    let mut seen = std::collections::HashSet::new();
+    let clean: Vec<String> = tags
+        .iter()
+        .map(|t| t.trim().to_string())
+        .filter(|t| !t.is_empty() && t.len() <= 40)
+        .filter(|t| seen.insert(t.to_lowercase()))
+        .take(20)
+        .collect();
+    let tags_json = serde_json::to_string(&clean).unwrap_or_else(|_| "[]".into());
+    let conn = state.0.lock().map_err(|_| AppError::MutexPoisoned)?;
+    conn.execute(
+        "INSERT INTO session_meta (session_id, tags, updated_at) VALUES (?1, ?2, ?3)
+         ON CONFLICT(session_id) DO UPDATE SET
+           tags = excluded.tags, updated_at = excluded.updated_at",
+        rusqlite::params![session_id, tags_json, now_ms()],
+    )?;
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Transcript full-text search
+// ---------------------------------------------------------------------------
+
+/// Replace the FTS row(s) for a session with fresh transcript text.
+pub fn index_transcript(state: &DbState, session_id: &str, agent: &str, content: &str) {
+    let Ok(conn) = state.0.lock() else { return };
+    let _ = conn.execute(
+        "DELETE FROM session_fts WHERE session_id = ?1",
+        rusqlite::params![session_id],
+    );
+    let _ = conn.execute(
+        "INSERT INTO session_fts (content, session_id, agent) VALUES (?1, ?2, ?3)",
+        rusqlite::params![content, session_id, agent],
+    );
+}
+
+#[derive(serde::Serialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct TranscriptMatch {
+    pub session_id: String,
+    pub agent: String,
+    /// Extract around the match; hits wrapped in \u{1}…\u{2} marker bytes.
+    pub snippet: String,
+    // Session metadata joined from session_stats (defaults when absent).
+    pub display: String,
+    pub project: String,
+    pub project_name: String,
+    pub timestamp: u64,
+    pub total_tokens: u64,
+}
+
+/// Escape user input into an FTS5 MATCH expression: every term quoted
+/// (so operators like AND/OR/NEAR or stray quotes can't break the query),
+/// last term treated as a prefix for search-as-you-type.
+fn fts_match_expr(query: &str) -> Option<String> {
+    let terms: Vec<&str> = query.split_whitespace().collect();
+    if terms.is_empty() {
+        return None;
+    }
+    let n = terms.len();
+    let expr = terms
+        .iter()
+        .enumerate()
+        .map(|(i, t)| {
+            let escaped = t.replace('"', "\"\"");
+            if i == n - 1 {
+                format!("\"{escaped}\"*")
+            } else {
+                format!("\"{escaped}\"")
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(" ");
+    Some(expr)
+}
+
+pub fn search_transcripts(state: &DbState, query: &str, limit: usize) -> Vec<TranscriptMatch> {
+    let Some(expr) = fts_match_expr(query) else {
+        return vec![];
+    };
+    let Ok(conn) = state.0.lock() else {
+        return vec![];
+    };
+    let Ok(mut stmt) = conn.prepare(
+        "SELECT f.session_id, f.agent,
+                snippet(session_fts, 0, char(1), char(2), '…', 16),
+                COALESCE(s.display, ''), COALESCE(s.project, ''),
+                COALESCE(s.project_name, ''), COALESCE(s.ts, 0),
+                COALESCE(s.input_tokens + s.output_tokens, 0)
+         FROM session_fts f
+         LEFT JOIN session_stats s ON s.session_id = f.session_id
+         WHERE session_fts MATCH ?1
+         ORDER BY rank LIMIT ?2",
+    ) else {
+        return vec![];
+    };
+    stmt.query_map(rusqlite::params![expr, limit as i64], |r| {
+        Ok(TranscriptMatch {
+            session_id: r.get(0)?,
+            agent: r.get(1)?,
+            snippet: r.get(2)?,
+            display: r.get(3)?,
+            project: r.get(4)?,
+            project_name: r.get(5)?,
+            timestamp: r.get::<_, i64>(6)?.max(0) as u64,
+            total_tokens: r.get::<_, i64>(7)?.max(0) as u64,
+        })
+    })
+    .map(|rows| rows.flatten().collect())
+    .unwrap_or_default()
 }
 
 // ---------------------------------------------------------------------------
@@ -695,6 +886,96 @@ mod tests {
             .query_row("SELECT COUNT(*) FROM audit_events", [], |r| r.get(0))
             .unwrap();
         assert_eq!(count, 1);
+    }
+
+    // ── session meta (pins, tags) ─────────────────────────────────────────────
+
+    #[test]
+    fn pin_then_unpin_roundtrip() {
+        let db = test_db();
+        set_session_pinned(&db, "s1", true).unwrap();
+        let meta = get_all_session_meta(&db);
+        assert_eq!(meta.len(), 1);
+        assert!(meta[0].pinned);
+
+        set_session_pinned(&db, "s1", false).unwrap();
+        assert!(
+            get_all_session_meta(&db).is_empty(),
+            "unpinned+untagged rows drop out"
+        );
+    }
+
+    #[test]
+    fn tags_normalized_and_preserved_across_pin_updates() {
+        let db = test_db();
+        set_session_tags(
+            &db,
+            "s1",
+            &["  rust ".into(), "".into(), "Rust".into(), "wip".into()],
+        )
+        .unwrap();
+        set_session_pinned(&db, "s1", true).unwrap();
+
+        let meta = get_all_session_meta(&db);
+        assert_eq!(meta.len(), 1);
+        assert!(meta[0].pinned);
+        assert_eq!(
+            meta[0].tags,
+            vec!["rust", "wip"],
+            "trimmed, deduped case-insensitively"
+        );
+    }
+
+    #[test]
+    fn clearing_tags_on_unpinned_session_removes_from_listing() {
+        let db = test_db();
+        set_session_tags(&db, "s1", &["a".into()]).unwrap();
+        set_session_tags(&db, "s1", &[]).unwrap();
+        assert!(get_all_session_meta(&db).is_empty());
+    }
+
+    // ── transcript FTS ────────────────────────────────────────────────────────
+
+    #[test]
+    fn fts_index_and_search_roundtrip() {
+        let db = test_db();
+        index_transcript(&db, "s1", "claude", "fix the auth middleware token expiry");
+        index_transcript(&db, "s2", "codex", "refactor database connection pooling");
+
+        let hits = search_transcripts(&db, "auth middleware", 10);
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].session_id, "s1");
+        assert_eq!(hits[0].agent, "claude");
+        assert!(hits[0].snippet.contains('\u{1}'), "snippet marks matches");
+    }
+
+    #[test]
+    fn fts_last_term_is_prefix_match() {
+        let db = test_db();
+        index_transcript(&db, "s1", "claude", "implement transcript search");
+        let hits = search_transcripts(&db, "transcr", 10);
+        assert_eq!(hits.len(), 1);
+    }
+
+    #[test]
+    fn fts_reindex_replaces_old_content() {
+        let db = test_db();
+        index_transcript(&db, "s1", "claude", "old needle content");
+        index_transcript(&db, "s1", "claude", "new content entirely");
+
+        assert!(search_transcripts(&db, "needle", 10).is_empty());
+        assert_eq!(search_transcripts(&db, "entirely", 10).len(), 1);
+    }
+
+    #[test]
+    fn fts_operators_and_quotes_are_neutralized() {
+        let db = test_db();
+        index_transcript(&db, "s1", "claude", "plain text here");
+        // None of these should error or panic
+        assert!(search_transcripts(&db, "AND OR NOT", 10).is_empty());
+        assert!(search_transcripts(&db, "\"unbalanced", 10).is_empty());
+        assert!(search_transcripts(&db, "col:value", 10).is_empty());
+        assert!(search_transcripts(&db, "   ", 10).is_empty());
     }
 
     // ── schema ────────────────────────────────────────────────────────────────

@@ -1,9 +1,16 @@
 import { useState, useEffect, useMemo } from 'react'
 import { invoke } from '@tauri-apps/api/core'
-import type { RepoWorktrees, SessionEntry, TokenPoint } from '../types'
+import type { AgentUsage, RepoWorktrees, SessionEntry, TokenPoint } from '../types'
 import type { Section } from './ExpandedApp'
 import { Card, CommitBars, TokenTrend, RefreshButton, SkeletonTiles, SkeletonCards } from './InsightWidgets'
 import AgentBadge from '../components/history/AgentBadge'
+import { formatTokens } from '../components/history/SessionStats'
+
+function formatCost(usd: number): string {
+  if (usd === 0) return '—'
+  if (usd < 0.01) return '<$0.01'
+  return `$${usd.toFixed(2)}`
+}
 
 const DAY = 86_400_000
 const PALETTE = ['#6366f1', '#e8a94a', '#d98fd9', '#5fc9b8', '#7aa2e8', '#8fbf6b']
@@ -84,13 +91,15 @@ export default function MyWorkSection({ sessions, repos, loading, goTo, onRefres
   const [commitTs, setCommitTs] = useState<number[]>([])
   const [tokenPoints, setTokenPoints] = useState<TokenPoint[]>([])
   const [vscodeAvailable, setVscodeAvailable] = useState(false)
+  const [usage, setUsage] = useState<AgentUsage[]>([])
   const [peakDismissed, setPeakDismissed] = useState(() => !!localStorage.getItem(todayKey()))
 
   useEffect(() => {
     invoke<number[]>('get_commit_activity', { sinceDays: 14 }).then(setCommitTs).catch(() => {})
     invoke<TokenPoint[]>('get_token_activity', { sinceMs: Date.now() - 183 * DAY }).then(setTokenPoints).catch(() => {})
     invoke<boolean>('is_vscode_installed').then(setVscodeAvailable).catch(() => {})
-  }, [])
+    invoke<AgentUsage[]>('get_usage_windows').then(setUsage).catch(() => {})
+  }, [sessions])
 
   const tabLabel = TABS.find(t => t.id === tab)?.label ?? ''
 
@@ -284,6 +293,37 @@ export default function MyWorkSection({ sessions, repos, loading, goTo, onRefres
               <Stat n={String(stats.live)} lbl="Live" color={stats.live > 0 ? 'text-emerald-400' : ''} />
               <Stat n={String(stats.projects)} lbl="Projects" color="text-[var(--c-accent)]" />
             </div>
+
+            {/* Usage meters — rolling windows, independent of the tab */}
+            {usage.length > 0 && (
+              <div className="mb-5">
+                <SectionLabel>Usage meters — rolling 5h / 7d (approx)</SectionLabel>
+                <div className="grid grid-cols-2 gap-2.5" style={{ gridTemplateColumns: `repeat(${Math.min(usage.length, 4)}, minmax(0, 1fr))` }}>
+                  {usage.map(u => {
+                    const pct = u.tokens7d > 0 ? Math.min(100, (u.tokens5h / u.tokens7d) * 100) : 0
+                    return (
+                      <div key={u.agent} className="rounded-xl border border-[var(--c-border)] bg-[var(--c-surface-2)]/40 px-3 py-2.5">
+                        <div className="flex items-center gap-1.5 mb-1.5">
+                          <span className="w-2 h-2 rounded-sm inline-block" style={{ background: AGENT_COLORS[u.agent] ?? '#71717a' }} />
+                          <span className="text-[11px] font-medium capitalize">{u.agent}</span>
+                        </div>
+                        <div className="flex items-baseline justify-between">
+                          <span className="text-[13px] font-semibold tabular-nums">{formatTokens(u.tokens5h)}</span>
+                          <span className="text-[10px] text-[var(--c-text-3)]">{formatCost(u.cost5h)} · 5h</span>
+                        </div>
+                        <div className="h-1 rounded-full bg-[var(--c-border)] my-1.5 overflow-hidden">
+                          <div className="h-full rounded-full" style={{ width: `${pct}%`, background: AGENT_COLORS[u.agent] ?? '#71717a' }} />
+                        </div>
+                        <div className="flex items-baseline justify-between">
+                          <span className="text-[11px] tabular-nums text-[var(--c-text-2)]">{formatTokens(u.tokens7d)}</span>
+                          <span className="text-[10px] text-[var(--c-text-3)]">{formatCost(u.cost7d)} · 7d</span>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
 
             {/* Agent mix — which agents you used in the window */}
             {agentMix.length > 0 && (

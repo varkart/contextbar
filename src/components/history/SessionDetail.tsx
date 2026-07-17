@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { invoke } from '@tauri-apps/api/core'
-import type { SessionEntry, SessionDetail as SessionDetailType, HistoryMessage, ContentBlock } from '../../types'
+import type { SessionEntry, SessionDetail as SessionDetailType, SessionMeta, HistoryMessage, ContentBlock } from '../../types'
 import SessionStats from './SessionStats'
 import MessageBubble from './MessageBubble'
 import ToolCallGroup from './ToolCallGroup'
@@ -42,6 +42,61 @@ export function groupMessages(messages: HistoryMessage[]): RenderUnit[] {
     }
   }
   return units
+}
+
+/** Inline tag chips with add/remove, persisted via set_session_tags. */
+function TagEditor({ sessionId }: { sessionId: string }) {
+  const [tags, setTags] = useState<string[]>([])
+  const [draft, setDraft] = useState('')
+
+  useEffect(() => {
+    setDraft('')
+    invoke<SessionMeta[]>('get_session_meta')
+      .then(rows => setTags(rows.find(m => m.sessionId === sessionId)?.tags ?? []))
+      .catch(() => setTags([]))
+  }, [sessionId])
+
+  const save = (next: string[]) => {
+    setTags(next)
+    invoke('set_session_tags', { sessionId, tags: next }).catch(() => {})
+  }
+
+  const addDraft = () => {
+    const t = draft.trim()
+    if (!t) return
+    setDraft('')
+    if (tags.some(x => x.toLowerCase() === t.toLowerCase())) return
+    save([...tags, t])
+  }
+
+  return (
+    <div className="flex items-center gap-1 mt-1.5 flex-wrap">
+      {tags.map(t => (
+        <span
+          key={t}
+          className="text-[9px] px-1.5 py-px rounded-full bg-[var(--c-accent)]/10 text-[var(--c-accent)] flex items-center gap-1"
+        >
+          {t}
+          <button
+            onClick={() => save(tags.filter(x => x !== t))}
+            title={`Remove tag ${t}`}
+            className="opacity-60 hover:opacity-100"
+          >
+            ×
+          </button>
+        </span>
+      ))}
+      <input
+        type="text"
+        value={draft}
+        onChange={e => setDraft(e.target.value)}
+        onKeyDown={e => { if (e.key === 'Enter') addDraft() }}
+        onBlur={addDraft}
+        placeholder="+ tag"
+        className="w-16 bg-transparent text-[10px] text-[var(--c-text-2)] placeholder:text-[var(--c-text-3)] outline-none border-b border-transparent focus:border-[var(--c-accent)]/40"
+      />
+    </div>
+  )
 }
 
 interface SessionDetailProps {
@@ -151,6 +206,7 @@ export default function SessionDetail({ session }: SessionDetailProps) {
       {/* First prompt */}
       <div className="px-3 py-2 flex-shrink-0 border-b border-[var(--c-border)]">
         <p className="text-[11px] text-[var(--c-text-3)] line-clamp-2 italic">"{session.display}"</p>
+        <TagEditor sessionId={session.sessionId} />
       </div>
 
       {/* Conversation */}

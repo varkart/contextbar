@@ -5,6 +5,11 @@ pub mod types;
 
 pub use types::{HistoryStats, SessionDetail, SessionEntry};
 
+/// Path of the JSONL transcript backing a Claude session.
+pub fn session_file(home: &std::path::Path, project: &str, session_id: &str) -> std::path::PathBuf {
+    index::session_file_path(home, project, session_id)
+}
+
 pub fn list_sessions(
     limit: usize,
     offset: usize,

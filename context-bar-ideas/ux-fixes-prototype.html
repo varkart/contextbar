@@ -1,0 +1,624 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>UX Fixes — Interactive Prototype</title>
+<style>
+  :root{
+    --bg:#09090b; --surface:#131316; --surface2:#1b1b1f; --border:#27272a; --border-sub:#1f1f23;
+    --text:#e4e4e7; --text2:#a1a1aa; --text3:#71717a;
+    --accent:#818cf8; --accent-dim:rgba(129,140,248,.14);
+    --green:#34d399; --green-dim:rgba(52,211,153,.14);
+    --amber:#fbbf24; --amber-dim:rgba(251,191,36,.14);
+    --rose:#fb7185; --rose-dim:rgba(251,113,133,.14);
+    --sky:#38bdf8; --fuchsia:#e879f9;
+    --mono:'SF Mono',ui-monospace,Menlo,Consolas,monospace;
+    --sans:-apple-system,'Inter','Segoe UI',sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--text);font-family:var(--sans);height:100%;overflow:hidden}
+  body{font-size:13px}
+  .app{display:flex;height:100vh;width:100vw}
+
+  /* ── sidebar ── */
+  .sidebar{width:210px;flex-shrink:0;border-right:1px solid var(--border);background:rgba(27,27,31,.3);display:flex;flex-direction:column}
+  .brand{display:flex;align-items:center;gap:8px;padding:0 16px;height:48px;border-bottom:1px solid var(--border);cursor:pointer;flex-shrink:0}
+  .brand .dot{width:14px;height:14px;border-radius:4px;background:linear-gradient(135deg,#a5b4fc,#6366f1)}
+  .brand b{font-size:13px;font-weight:700;letter-spacing:-.01em}
+  .nav{flex:1;overflow-y:auto;padding:8px 0}
+  .nav-group{margin-bottom:4px}
+  .nav-label{padding:12px 16px 4px;font-family:var(--mono);font-size:9.5px;text-transform:uppercase;letter-spacing:.08em;color:var(--text3)}
+  .nav-item{width:calc(100% - 16px);margin:0 8px 2px;display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;background:none;border:none;color:var(--text2);cursor:pointer;text-align:left;font-size:12.5px;font-family:var(--sans);position:relative}
+  .nav-item:hover{background:var(--surface2);color:var(--text)}
+  .nav-item.active{background:var(--accent-dim);color:var(--accent);font-weight:600;box-shadow:inset 2px 0 0 var(--accent)}
+  .nav-item .ico{width:16px;text-align:center;opacity:.75;flex-shrink:0}
+  .nav-item .cnt{margin-left:auto;font-family:var(--mono);font-size:10.5px;color:var(--text3)}
+  .nav-item .kbd{margin-left:auto;font-family:var(--mono);font-size:9px;color:var(--text3);opacity:0;transition:opacity .1s}
+  .nav-item:hover .kbd{opacity:.7}
+  .nav-item:hover .cnt{display:none}
+  .footer-nav{border-top:1px solid var(--border);padding:8px 0}
+
+  /* ── coachmark (first-run discovery) ── */
+  .coachmark{position:absolute;top:52px;left:16px;background:var(--accent);color:#0a0a1a;
+    border-radius:10px;padding:10px 14px;font-size:12px;font-weight:500;max-width:230px;z-index:80;
+    box-shadow:0 8px 24px rgba(129,140,248,.35);animation:cm-in .25s ease}
+  .coachmark::before{content:"";position:absolute;top:-6px;left:24px;width:12px;height:12px;background:var(--accent);transform:rotate(45deg)}
+  .coachmark b{display:block;margin-bottom:2px}
+  .coachmark .cm-x{position:absolute;top:6px;right:8px;background:none;border:none;color:#0a0a1a;opacity:.6;cursor:pointer;font-size:13px;padding:2px}
+  @keyframes cm-in{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:translateY(0)}}
+
+  /* ── main ── */
+  .main{flex:1;display:flex;flex-direction:column;overflow:hidden;position:relative}
+  .topbar{height:48px;flex-shrink:0;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;padding:0 20px}
+  .topbar h1{font-size:14px;font-weight:650;margin:0}
+  .topbar .sub{font-size:11px;color:var(--text3)}
+  .spacer{flex:1}
+  .icon-btn{width:28px;height:28px;border-radius:8px;border:1px solid var(--border);background:var(--surface);color:var(--text3);
+    display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:13px;transition:all .12s}
+  .icon-btn:hover{color:var(--text);border-color:var(--text3)}
+  .icon-btn.spinning svg{animation:spin .7s linear infinite}
+  .icon-btn.done{border-color:rgba(52,211,153,.4);color:var(--green)}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .cmdk-trigger{display:flex;align-items:center;gap:8px;background:var(--surface);border:1px solid var(--border);border-radius:8px;
+    padding:6px 10px;color:var(--text3);font-size:11.5px;cursor:pointer;min-width:220px}
+  .cmdk-trigger:hover{border-color:var(--text3)}
+  .cmdk-trigger kbd{margin-left:auto;font-family:var(--mono);font-size:10px;background:var(--surface2);padding:1px 5px;border-radius:4px;border:1px solid var(--border)}
+
+  .content{flex:1;overflow-y:auto;padding:20px 24px}
+
+  /* ── peak-end banner ── */
+  .peak-banner{display:flex;align-items:center;gap:12px;background:linear-gradient(135deg,rgba(129,140,248,.12),rgba(232,121,249,.08));
+    border:1px solid rgba(129,140,248,.3);border-radius:12px;padding:14px 18px;margin-bottom:18px}
+  .peak-banner .emoji{font-size:22px}
+  .peak-banner b{font-size:13px}
+  .peak-banner p{margin:2px 0 0;font-size:11.5px;color:var(--text2)}
+  .peak-banner .px{margin-left:auto;background:none;border:none;color:var(--text3);cursor:pointer;font-size:14px}
+
+  /* ── tiles ── */
+  .tiles{display:grid;grid-template-columns:repeat(6,1fr);gap:8px;margin-bottom:18px}
+  .tile{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:10px 12px;text-align:center}
+  .tile .num{font-family:var(--mono);font-size:16px;font-weight:600}
+  .tile .lbl{font-size:9.5px;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;margin-top:2px}
+  .tile.skel .num, .tile.skel .lbl{background:var(--surface2);border-radius:4px;color:transparent;animation:pulse 1.3s ease-in-out infinite}
+  .tile.skel .num{height:16px;width:40%;margin:0 auto}
+  .tile.skel .lbl{height:9px;width:70%;margin:6px auto 0}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+
+  .section-title{font-size:12.5px;font-weight:600;margin:18px 0 10px}
+  .section-title:first-child{margin-top:0}
+
+  /* ── needs attention ── */
+  .attn{display:flex;gap:10px;background:var(--surface);border:1px solid var(--border);border-left:2px solid var(--rose);
+    border-radius:10px;padding:12px 14px;margin-bottom:8px}
+  .attn b{font-family:var(--mono);font-size:12px}
+  .attn .badge{font-size:9px;font-family:var(--mono);padding:1px 6px;border-radius:999px;background:var(--rose-dim);color:var(--rose);margin-left:8px}
+  .attn p{margin:4px 0 0;font-size:11px;color:var(--text2)}
+  .attn .why{color:var(--text3)}
+  .attn .go{margin-left:auto;background:none;border:none;color:var(--accent);font-size:11px;cursor:pointer;flex-shrink:0}
+
+  /* ── sessions list/detail sync ── */
+  .split{display:flex;gap:14px;height:260px}
+  .list-pane{width:260px;flex-shrink:0;border:1px solid var(--border);border-radius:10px;overflow-y:auto;background:var(--surface)}
+  .srow{display:flex;align-items:center;gap:8px;padding:9px 12px;border-bottom:1px solid var(--border-sub);cursor:pointer;position:relative}
+  .srow:hover{background:var(--surface2)}
+  .srow.selected{background:var(--accent-dim);box-shadow:inset 2px 0 0 var(--accent)}
+  .srow .badge{font-size:8px;font-family:var(--mono);text-transform:uppercase;padding:1px 5px;border-radius:999px;flex-shrink:0}
+  .srow .t{font-size:11.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .srow.selected .t{color:var(--accent);font-weight:600}
+  .detail-pane{flex:1;border:1px solid var(--border);border-radius:10px;padding:14px;background:var(--surface);overflow-y:auto}
+  .detail-pane .empty{color:var(--text3);font-size:12px;text-align:center;padding-top:60px}
+  .msg{margin-bottom:10px;font-size:12px;line-height:1.5}
+  .msg b{color:var(--text2);display:block;font-size:10px;text-transform:uppercase;letter-spacing:.04em;margin-bottom:2px}
+
+  /* ── repos with legend + pin ── */
+  .legend{display:flex;gap:14px;flex-wrap:wrap;font-size:10.5px;color:var(--text3);margin-bottom:10px;background:var(--surface2)/50;padding:8px 12px;border-radius:8px;background:rgba(27,27,31,.5)}
+  .legend span{display:flex;align-items:center;gap:5px}
+  .legend .sw{width:8px;height:8px;border-radius:999px}
+  .repo-card{display:flex;align-items:center;gap:10px;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:10px 12px;margin-bottom:6px;cursor:grab}
+  .repo-card.dragging{opacity:.4}
+  .repo-card .pin{background:none;border:none;color:var(--text3);cursor:pointer;font-size:13px;padding:2px}
+  .repo-card .pin.pinned{color:var(--amber)}
+  .repo-card .av{width:26px;height:26px;border-radius:7px;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:11px;color:#0a0a0f;flex-shrink:0}
+  .repo-card .name{font-size:12.5px;font-weight:600}
+  .repo-card .meta{font-size:10.5px;color:var(--text3)}
+  .repo-card .badges{margin-left:auto;display:flex;gap:5px}
+  .rbadge{font-size:9px;font-family:var(--mono);padding:2px 7px;border-radius:999px}
+
+  /* ── skills bulk toggle ── */
+  .bulk-bar{display:flex;align-items:center;gap:10px;background:var(--surface2);border-radius:8px;padding:8px 12px;margin-bottom:8px;font-size:11.5px;color:var(--text2)}
+  .bulk-bar button{font-size:11px;padding:4px 10px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text2);cursor:pointer}
+  .bulk-bar button:hover{color:var(--text);border-color:var(--text3)}
+  .skill-row{display:flex;align-items:center;gap:10px;padding:8px 12px;border-bottom:1px solid var(--border-sub);font-size:12px}
+  .skill-row input{accent-color:var(--accent)}
+  .toggle{width:30px;height:17px;border-radius:999px;background:var(--border);position:relative;cursor:pointer;flex-shrink:0;margin-left:auto;transition:background .15s}
+  .toggle.on{background:var(--accent)}
+  .toggle::after{content:"";position:absolute;top:2px;left:2px;width:13px;height:13px;border-radius:50%;background:#fff;transition:transform .15s}
+  .toggle.on::after{transform:translateX(13px)}
+
+  /* ── settings ── */
+  .settings-row{display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border-sub)}
+  .settings-row .l{font-size:12.5px}
+  .settings-row .d{font-size:10.5px;color:var(--text3);margin-top:1px}
+  .changelog{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-top:14px}
+  .changelog h4{margin:0 0 8px;font-size:11.5px;display:flex;align-items:center;gap:6px}
+  .changelog ul{margin:0;padding-left:16px;font-size:11.5px;color:var(--text2);line-height:1.7}
+  .btn-outline{font-size:11px;padding:5px 12px;border-radius:7px;border:1px solid var(--border);background:var(--surface);color:var(--text2);cursor:pointer}
+  .btn-outline:hover{color:var(--text);border-color:var(--text3)}
+  .btn-danger-outline{border-color:rgba(251,113,133,.35);color:var(--rose)}
+  .btn-danger-outline:hover{background:var(--rose-dim);border-color:var(--rose)}
+
+  /* ── command palette ── */
+  .cmdk-overlay{position:fixed;inset:0;background:rgba(0,0,0,.55);display:none;align-items:flex-start;justify-content:center;padding-top:14vh;z-index:100}
+  .cmdk-overlay.open{display:flex}
+  .cmdk{width:560px;max-width:90vw;background:var(--surface);border:1px solid var(--border);border-radius:14px;box-shadow:0 24px 60px rgba(0,0,0,.5);overflow:hidden}
+  .cmdk-input-wrap{display:flex;align-items:center;gap:10px;padding:14px 16px;border-bottom:1px solid var(--border)}
+  .cmdk-input-wrap svg{color:var(--text3);flex-shrink:0}
+  .cmdk-input{flex:1;background:none;border:none;outline:none;color:var(--text);font-size:14px;font-family:var(--sans)}
+  .cmdk-input::placeholder{color:var(--text3)}
+  .cmdk-esc{font-family:var(--mono);font-size:10px;color:var(--text3);border:1px solid var(--border);padding:1px 6px;border-radius:4px}
+  .cmdk-results{max-height:360px;overflow-y:auto;padding:6px}
+  .cmdk-group{padding:6px 10px 2px;font-family:var(--mono);font-size:9.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--text3)}
+  .cmdk-item{display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:8px;cursor:pointer;font-size:12.5px}
+  .cmdk-item .ico{width:20px;text-align:center;opacity:.7}
+  .cmdk-item .main{flex:1;overflow:hidden}
+  .cmdk-item .t{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .cmdk-item .s{font-size:10.5px;color:var(--text3)}
+  .cmdk-item.hi{background:var(--accent-dim)}
+  .cmdk-item.hi .t{color:var(--accent)}
+  .cmdk-item mark{background:none;color:var(--accent);font-weight:700}
+  .cmdk-empty{padding:30px;text-align:center;color:var(--text3);font-size:12px}
+  .cmdk-footer{display:flex;gap:14px;padding:8px 14px;border-top:1px solid var(--border);font-size:10px;color:var(--text3)}
+  .cmdk-footer span{display:flex;align-items:center;gap:4px}
+  .cmdk-footer kbd{font-family:var(--mono);background:var(--surface2);padding:1px 5px;border-radius:4px;border:1px solid var(--border)}
+
+  /* ── toasts ── */
+  .toast-stack{position:fixed;bottom:20px;right:20px;display:flex;flex-direction:column;gap:8px;z-index:90}
+  .toast{display:flex;align-items:center;gap:10px;background:var(--surface);border:1px solid var(--border);border-radius:10px;
+    padding:10px 14px;font-size:12px;min-width:240px;box-shadow:0 10px 30px rgba(0,0,0,.4);animation:toast-in .2s ease}
+  .toast.success{border-left:3px solid var(--green)}
+  .toast.error{border-left:3px solid var(--rose)}
+  .toast .ico{font-size:14px}
+  .toast .msg{flex:1}
+  .toast .x{background:none;border:none;color:var(--text3);cursor:pointer;font-size:12px}
+  @keyframes toast-in{from{opacity:0;transform:translateX(20px)}to{opacity:1;transform:translateX(0)}}
+  .toast.leaving{animation:toast-out .18s ease forwards}
+  @keyframes toast-out{to{opacity:0;transform:translateX(20px)}}
+
+  .demo-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:6px}
+  .note{font-size:10.5px;color:var(--text3);margin-top:4px}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- ═══════ SIDEBAR ═══════ -->
+  <div class="sidebar" style="position:relative">
+    <button class="brand" onclick="goto('work')">
+      <span class="dot"></span><b>Context Bar</b>
+    </button>
+    <nav class="nav">
+      <div class="nav-group">
+        <div class="nav-label">Work</div>
+        <button class="nav-item active" data-view="work" onclick="goto('work')"><span class="ico">▤</span>My Work<span class="cnt">5</span><span class="kbd">⌘1</span></button>
+        <button class="nav-item" data-view="sessions" onclick="goto('sessions')"><span class="ico">◷</span>Sessions<span class="cnt">4</span><span class="kbd">⌘2</span></button>
+        <button class="nav-item" data-view="repos" onclick="goto('repos')"><span class="ico">⑂</span>Repos<span class="cnt">3</span><span class="kbd">⌘3</span></button>
+      </div>
+      <div class="nav-group">
+        <div class="nav-label">Configure</div>
+        <button class="nav-item" data-view="agents" onclick="goto('agents')"><span class="ico">◆</span>Agents<span class="cnt">4</span><span class="kbd">⌘4</span></button>
+        <button class="nav-item" data-view="skills" onclick="goto('skills')"><span class="ico">✦</span>Skills<span class="cnt">27</span><span class="kbd">⌘5</span></button>
+        <button class="nav-item" data-view="settings" onclick="goto('settings')"><span class="ico">⚙</span>Settings<span class="kbd">⌘,</span></button>
+      </div>
+    </nav>
+    <div id="coachmark-anchor"></div>
+  </div>
+
+  <!-- ═══════ MAIN ═══════ -->
+  <div class="main">
+    <div class="topbar">
+      <h1 id="page-title">My Work</h1>
+      <span class="sub" id="page-sub">Everything happening across your projects</span>
+      <div class="spacer"></div>
+      <div class="cmdk-trigger" onclick="openCmdk()">
+        <span>Jump to anything…</span><kbd>⌘K</kbd>
+      </div>
+      <button class="icon-btn" id="refresh-btn" onclick="doRefresh()" title="Refresh">
+        <svg id="refresh-ico" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><polyline points="21 3 21 9 15 9"/></svg>
+      </button>
+    </div>
+
+    <div class="content" id="content">
+      <!-- filled by JS per view -->
+    </div>
+  </div>
+</div>
+
+<!-- ═══════ COMMAND PALETTE ═══════ -->
+<div class="cmdk-overlay" id="cmdk-overlay" onclick="if(event.target===this)closeCmdk()">
+  <div class="cmdk">
+    <div class="cmdk-input-wrap">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      <input class="cmdk-input" id="cmdk-input" placeholder="Search sessions, repos, skills, agents…" oninput="renderCmdk()">
+      <span class="cmdk-esc">ESC</span>
+    </div>
+    <div class="cmdk-results" id="cmdk-results"></div>
+    <div class="cmdk-footer">
+      <span><kbd>↑↓</kbd> navigate</span>
+      <span><kbd>↵</kbd> select</span>
+      <span><kbd>⌘K</kbd> toggle</span>
+    </div>
+  </div>
+</div>
+
+<div class="toast-stack" id="toast-stack"></div>
+
+<script>
+/* ═══════════════════════ DATA ═══════════════════════ */
+const AGENT_COLOR = {claude:'#818cf8',codex:'#34d399',gemini:'#38bdf8',agy:'#e879f9'};
+const sessions = [
+  {id:'s1',agent:'claude',title:'fix the login bug in auth middleware',project:'alpha',time:'2m ago',live:true,
+   msgs:[{r:'user',t:'fix the login bug in the auth middleware'},{r:'assistant',t:'Found it — token expiry check used < instead of <=. Fixed.'}]},
+  {id:'s2',agent:'codex',title:'refactor payment retry logic',project:'alpha',time:'3h ago',live:false,
+   msgs:[{r:'user',t:'refactor the payment retry logic'},{r:'tool',t:'exec_command: pytest tests/payments'},{r:'assistant',t:'Refactored with exponential backoff, all tests green.'}]},
+  {id:'s3',agent:'gemini',title:'write integration tests for the parser',project:'beta',time:'5h ago',live:false,
+   msgs:[{r:'user',t:'write integration tests for the parser'},{r:'assistant',t:'Added 12 integration tests covering edge cases.'}]},
+  {id:'s4',agent:'agy',title:'add day filters and sort options to search',project:'beta',time:'8h ago',live:false,
+   msgs:[{r:'user',t:'add day filters and sort options to the search'},{r:'tool',t:'RUN_COMMAND: rg filters'},{r:'assistant',t:'Added weekend/weekday time filters and sort-by-date.'}]},
+];
+const repos = [
+  {id:'r1',name:'alpha',color:'#6366f1',branch:'main',wt:3,safe:1,dirty:1,pinned:true},
+  {id:'r2',name:'beta',color:'#e8a94a',branch:'main',wt:2,safe:0,dirty:0,pinned:false},
+  {id:'r3',name:'visualcave',color:'#2dd4bf',branch:'main',wt:1,safe:1,dirty:0,pinned:false},
+];
+const skillsData = [
+  {name:'impeccable',agent:'claude',active:true},
+  {name:'graphify',agent:'claude',active:true},
+  {name:'deploy',agent:'codex',active:false},
+  {name:'visualcave',agent:'agy',active:true},
+  {name:'caveman',agent:'claude',active:true},
+];
+const cmdkIndex = [
+  ...sessions.map(s=>({group:'Sessions',icon:'◷',title:s.title,sub:`${s.project} · ${s.agent}`,action:()=>{goto('sessions');selectSession(s.id)}})),
+  ...repos.map(r=>({group:'Repos',icon:'⑂',title:r.name,sub:`${r.wt} worktrees`,action:()=>goto('repos')})),
+  ...skillsData.map(sk=>({group:'Skills',icon:'✦',title:sk.name,sub:sk.agent,action:()=>goto('skills')})),
+  {group:'Agents',icon:'◆',title:'Claude Code',sub:'Configure',action:()=>goto('agents')},
+  {group:'Agents',icon:'◆',title:'Codex CLI',sub:'Configure',action:()=>goto('agents')},
+  {group:'Actions',icon:'↻',title:'Refresh all data',sub:'⌘R',action:()=>doRefresh()},
+  {group:'Actions',icon:'⚙',title:'Open Settings',sub:'⌘,',action:()=>goto('settings')},
+];
+
+let currentView='work', selectedSessionId=null, cmdkSel=0, pageLoaded={};
+
+/* ═══════════════════════ VIEW RENDERING ═══════════════════════ */
+function goto(view){
+  currentView=view;
+  document.querySelectorAll('.nav-item').forEach(n=>n.classList.toggle('active',n.dataset.view===view));
+  const titles={work:['My Work','Everything happening across your projects'],
+    sessions:['Sessions','Claude Code, Codex, Gemini and Antigravity — all in one place'],
+    repos:['Repos','Every checkout across your repos, in one place'],
+    agents:['Agents','Installed AI tools and their status'],
+    skills:['Skills','Skills across all your agents'],
+    settings:['Settings','']};
+  document.getElementById('page-title').textContent=titles[view][0];
+  document.getElementById('page-sub').textContent=titles[view][1];
+  render();
+}
+
+function render(){
+  const c=document.getElementById('content');
+  if(currentView==='work') return renderWork(c);
+  if(currentView==='sessions') return renderSessions(c);
+  if(currentView==='repos') return renderRepos(c);
+  if(currentView==='skills') return renderSkills(c);
+  if(currentView==='settings') return renderSettings(c);
+  c.innerHTML='<p style="color:var(--text3)">Demo view — not built for this prototype.</p>';
+}
+
+function renderWork(c){
+  const skeleton = !pageLoaded.work;
+  c.innerHTML=`
+    <div class="peak-banner" id="peak-banner">
+      <span class="emoji">🎯</span>
+      <div><b>Nice work today</b><p>3 sessions shipped, 1 bug fixed, longest streak on <b style="color:var(--accent)">alpha</b> — 5 days running</p></div>
+      <button class="px" onclick="document.getElementById('peak-banner').style.display='none'">✕</button>
+    </div>
+
+    <div class="section-title">Overview — Today</div>
+    <div class="tiles">
+      ${['Sessions','Prompts','Live','Projects','Codex tok','Est cost'].map((l,i)=>`
+        <div class="tile ${skeleton?'skel':''}">
+          <div class="num">${['4','23','1','2','431K','$0.62'][i]}</div>
+          <div class="lbl">${l}</div>
+        </div>`).join('')}
+    </div>
+
+    <div class="section-title">Needs attention</div>
+    <div class="attn">
+      <div>
+        <b>feature/wip <span class="badge">uncommitted</span></b>
+        <p class="why">Has edited files that were never committed — sitting for 10 days, risk of losing work</p>
+        <p>alpha · last commit 10d ago</p>
+      </div>
+      <button class="go" onclick="goto('repos')">Open in Repos →</button>
+    </div>
+
+    <div class="section-title">Sessions</div>
+    ${renderSplitPane()}
+  `;
+  if(skeleton){ pageLoaded.work=true; setTimeout(()=>{ if(currentView==='work') render(); },900); }
+}
+
+function renderSplitPane(){
+  return `<div class="split">
+    <div class="list-pane" id="list-pane">
+      ${sessions.map(s=>`
+        <div class="srow ${selectedSessionId===s.id?'selected':''}" onclick="selectSession('${s.id}')">
+          <span class="badge" style="background:${AGENT_COLOR[s.agent]}22;color:${AGENT_COLOR[s.agent]}">${s.agent}</span>
+          ${s.live?'<span style="width:6px;height:6px;border-radius:50%;background:var(--green);flex-shrink:0"></span>':''}
+          <span class="t">${s.title}</span>
+        </div>`).join('')}
+    </div>
+    <div class="detail-pane" id="detail-pane">
+      ${renderDetail()}
+    </div>
+  </div>`;
+}
+
+function renderDetail(){
+  if(!selectedSessionId) return `<div class="empty">Select a session to view its transcript<br><span class="note">← list row highlights &amp; stays in sync</span></div>`;
+  const s=sessions.find(x=>x.id===selectedSessionId);
+  return s.msgs.map(m=>`<div class="msg"><b>${m.r}</b>${m.t}</div>`).join('');
+}
+
+function selectSession(id){
+  selectedSessionId=id;
+  // Re-render just the split pane if present, else full page
+  const lp=document.getElementById('list-pane'), dp=document.getElementById('detail-pane');
+  if(lp&&dp){
+    lp.querySelectorAll('.srow').forEach((el,i)=>el.classList.toggle('selected', sessions[i].id===id));
+    dp.innerHTML=renderDetail();
+  } else { render(); }
+}
+
+function renderSessions(c){
+  c.innerHTML=`
+    <div class="tiles" style="grid-template-columns:repeat(4,1fr)">
+      ${['Sessions','Today','Live','Projects'].map((l,i)=>`
+        <div class="tile"><div class="num">${['4','1','1','2'][i]}</div><div class="lbl">${l}</div></div>`).join('')}
+    </div>
+    <div class="section-title">All sessions</div>
+    ${renderSplitPane()}
+  `;
+}
+
+function renderRepos(c){
+  const sorted=[...repos].sort((a,b)=>(b.pinned-a.pinned));
+  c.innerHTML=`
+    <div class="legend">
+      <span><span class="sw" style="background:var(--amber)"></span>pinned — stays on top</span>
+      <span><span class="sw" style="background:var(--green)"></span>safe to delete — merged &amp; clean</span>
+      <span><span class="sw" style="background:var(--rose)"></span>uncommitted changes</span>
+      <span>↑↓ commits ahead/behind base</span>
+    </div>
+    <div id="repo-list">
+      ${sorted.map(r=>repoCardHtml(r)).join('')}
+    </div>
+    <p class="note">Drag a card to reorder · click 📌 to pin</p>
+  `;
+  enableDrag();
+}
+
+function repoCardHtml(r){
+  return `<div class="repo-card" draggable="true" data-id="${r.id}">
+    <span style="cursor:grab;color:var(--text3);font-size:12px">⠿</span>
+    <button class="pin ${r.pinned?'pinned':''}" onclick="togglePin('${r.id}')" title="Pin to top">📌</button>
+    <span class="av" style="background:${r.color}">${r.name[0].toUpperCase()}</span>
+    <div><div class="name">${r.name}</div><div class="meta">${r.wt} worktrees · base ${r.branch}</div></div>
+    <div class="badges">
+      ${r.safe?'<span class="rbadge" style="background:var(--green-dim);color:var(--green)">safe</span>':''}
+      ${r.dirty?'<span class="rbadge" style="background:var(--rose-dim);color:var(--rose)">dirty</span>':''}
+    </div>
+  </div>`;
+}
+
+function togglePin(id){
+  const r=repos.find(x=>x.id===id); r.pinned=!r.pinned;
+  showToast(r.pinned?'success':'success', r.pinned?`Pinned ${r.name}`:`Unpinned ${r.name}`);
+  render();
+}
+
+let dragSrc=null;
+function enableDrag(){
+  const cards=[...document.querySelectorAll('.repo-card')];
+  cards.forEach(c=>{
+    c.addEventListener('dragstart',e=>{dragSrc=c.dataset.id;c.classList.add('dragging')});
+    c.addEventListener('dragend',()=>c.classList.remove('dragging'));
+    c.addEventListener('dragover',e=>e.preventDefault());
+    c.addEventListener('drop',e=>{
+      e.preventDefault();
+      const targetId=c.dataset.id;
+      if(targetId===dragSrc) return;
+      const si=repos.findIndex(r=>r.id===dragSrc), ti=repos.findIndex(r=>r.id===targetId);
+      const [moved]=repos.splice(si,1); repos.splice(ti,0,moved);
+      showToast('success','Reordered repos');
+      render();
+    });
+  });
+}
+
+function renderSkills(c){
+  c.innerHTML=`
+    <div class="bulk-bar">
+      <input type="checkbox" id="bulk-all" onchange="bulkToggle(this.checked)">
+      <span>Select all</span>
+      <button onclick="bulkAction(true)">Enable selected</button>
+      <button onclick="bulkAction(false)">Disable selected</button>
+      <span class="note" style="margin-left:auto" id="bulk-count">0 selected</span>
+    </div>
+    <div style="border:1px solid var(--border);border-radius:10px;overflow:hidden">
+      ${skillsData.map((s,i)=>`
+        <div class="skill-row">
+          <input type="checkbox" class="skill-check" data-i="${i}" onchange="updateBulkCount()">
+          <span>${s.name}</span>
+          <span class="note" style="color:var(--text3)">${s.agent}</span>
+          <div class="toggle ${s.active?'on':''}" onclick="toggleSkill(${i})"></div>
+        </div>`).join('')}
+    </div>
+  `;
+}
+function toggleSkill(i){ skillsData[i].active=!skillsData[i].active; render(); showToast('success',`${skillsData[i].name} ${skillsData[i].active?'enabled':'disabled'}`); }
+function bulkToggle(all){ document.querySelectorAll('.skill-check').forEach(cb=>cb.checked=all); updateBulkCount(); }
+function updateBulkCount(){ const n=document.querySelectorAll('.skill-check:checked').length; document.getElementById('bulk-count').textContent=n+' selected'; }
+function bulkAction(enable){
+  const checked=[...document.querySelectorAll('.skill-check:checked')];
+  if(!checked.length){ showToast('error','Select at least one skill first'); return; }
+  checked.forEach(cb=>skillsData[cb.dataset.i].active=enable);
+  showToast('success',`${enable?'Enabled':'Disabled'} ${checked.length} skill${checked.length>1?'s':''}`);
+  render();
+}
+
+function renderSettings(c){
+  c.innerHTML=`
+    <div class="section-title">General</div>
+    <div class="settings-row"><div><div class="l">Autostart on login</div></div><div class="toggle on"></div></div>
+    <div class="settings-row"><div><div class="l">Window vibrancy</div><div class="d">Takes effect when panel reopens</div></div><div class="toggle on"></div></div>
+    <div class="settings-row">
+      <div><div class="l">All settings</div><div class="d">Restore defaults if something looks wrong</div></div>
+      <button class="btn-outline btn-danger-outline" onclick="showToast('success','Settings reset to defaults')">Reset to defaults</button>
+    </div>
+
+    <div class="changelog">
+      <h4>✨ What's new in v0.9.0</h4>
+      <ul>
+        <li>Multi-agent sessions — Claude, Codex, Gemini, Antigravity in one view</li>
+        <li>⌘K command palette — jump to anything instantly</li>
+        <li>Repo pinning and reordering</li>
+        <li>Bulk skill enable/disable</li>
+      </ul>
+    </div>
+  `;
+}
+
+/* ═══════════════════════ REFRESH BUTTON — real feedback ═══════════════════════ */
+function doRefresh(){
+  const btn=document.getElementById('refresh-btn');
+  if(btn.classList.contains('spinning')) return;
+  btn.classList.add('spinning');
+  const t0=Date.now();
+  setTimeout(()=>{
+    const remain=Math.max(0,600-(Date.now()-t0));
+    setTimeout(()=>{
+      btn.classList.remove('spinning');
+      btn.classList.add('done');
+      btn.innerHTML=`<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`;
+      setTimeout(()=>{
+        btn.classList.remove('done');
+        btn.innerHTML=`<svg id="refresh-ico" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><polyline points="21 3 21 9 15 9"/></svg>`;
+      },1200);
+    },remain);
+  },50);
+}
+
+/* ═══════════════════════ TOAST — unified feedback (fixes silent .catch) ═══════════════════════ */
+function showToast(type,msg){
+  const stack=document.getElementById('toast-stack');
+  const el=document.createElement('div');
+  el.className='toast '+type;
+  el.innerHTML=`<span class="ico">${type==='success'?'✓':'⚠'}</span><span class="msg">${msg}</span><button class="x" onclick="this.parentElement.remove()">✕</button>`;
+  stack.appendChild(el);
+  setTimeout(()=>{ el.classList.add('leaving'); setTimeout(()=>el.remove(),200); },3200);
+}
+
+/* ═══════════════════════ COMMAND PALETTE ═══════════════════════ */
+function openCmdk(){
+  document.getElementById('cmdk-overlay').classList.add('open');
+  const inp=document.getElementById('cmdk-input');
+  inp.value=''; cmdkSel=0;
+  renderCmdk();
+  setTimeout(()=>inp.focus(),10);
+}
+function closeCmdk(){ document.getElementById('cmdk-overlay').classList.remove('open'); }
+
+function fuzzyMatch(q,text){
+  q=q.toLowerCase(); text=text.toLowerCase();
+  if(!q) return {ok:true,idx:[]};
+  let ti=0, idx=[];
+  for(const c of q){
+    const found=text.indexOf(c,ti);
+    if(found===-1) return {ok:false};
+    idx.push(found); ti=found+1;
+  }
+  return {ok:true,idx};
+}
+function highlight(text,idx){
+  if(!idx.length) return text;
+  let out='', last=0;
+  idx.forEach(i=>{ out+=text.slice(last,i)+'<mark>'+text[i]+'</mark>'; last=i+1; });
+  return out+text.slice(last);
+}
+
+function renderCmdk(){
+  const q=document.getElementById('cmdk-input').value;
+  const scored=cmdkIndex.map(item=>({item,m:fuzzyMatch(q,item.title)})).filter(x=>x.m.ok);
+  const groups={};
+  scored.forEach(x=>{ (groups[x.item.group]=groups[x.item.group]||[]).push(x); });
+  cmdkSel=0;
+  const res=document.getElementById('cmdk-results');
+  if(!scored.length){ res.innerHTML='<div class="cmdk-empty">No matches for "'+q+'"</div>'; return; }
+  let html='', flatIndex=0;
+  for(const g in groups){
+    html+=`<div class="cmdk-group">${g}</div>`;
+    groups[g].forEach(x=>{
+      html+=`<div class="cmdk-item ${flatIndex===0?'hi':''}" data-idx="${flatIndex}" onclick="runCmdk(${flatIndex})">
+        <span class="ico">${x.item.icon}</span>
+        <div class="main"><div class="t">${highlight(x.item.title,x.m.idx)}</div><div class="s">${x.item.sub}</div></div>
+      </div>`;
+      flatIndex++;
+    });
+  }
+  res.innerHTML=html;
+  window._cmdkFlat=scored.map(x=>x.item);
+}
+function runCmdk(i){ closeCmdk(); window._cmdkFlat[i].action(); }
+function moveCmdkSel(delta){
+  const items=[...document.querySelectorAll('.cmdk-item')];
+  if(!items.length) return;
+  items[cmdkSel]?.classList.remove('hi');
+  cmdkSel=(cmdkSel+delta+items.length)%items.length;
+  items[cmdkSel].classList.add('hi');
+  items[cmdkSel].scrollIntoView({block:'nearest'});
+}
+
+document.addEventListener('keydown',e=>{
+  if((e.metaKey||e.ctrlKey)&&e.key==='k'){ e.preventDefault(); document.getElementById('cmdk-overlay').classList.contains('open')?closeCmdk():openCmdk(); return; }
+  if(document.getElementById('cmdk-overlay').classList.contains('open')){
+    if(e.key==='Escape'){ closeCmdk(); return; }
+    if(e.key==='ArrowDown'){ e.preventDefault(); moveCmdkSel(1); return; }
+    if(e.key==='ArrowUp'){ e.preventDefault(); moveCmdkSel(-1); return; }
+    if(e.key==='Enter'){ e.preventDefault(); runCmdk(cmdkSel); return; }
+    return;
+  }
+  if((e.metaKey||e.ctrlKey)&&/^[1-5]$/.test(e.key)){
+    e.preventDefault();
+    const views=['work','sessions','repos','agents','skills'];
+    goto(views[+e.key-1]);
+  }
+});
+
+/* ═══════════════════════ FIRST-RUN COACHMARK ═══════════════════════ */
+window.addEventListener('load',()=>{
+  render();
+  setTimeout(()=>{
+    const anchor=document.getElementById('coachmark-anchor');
+    anchor.innerHTML=`<div class="coachmark">
+      <button class="cm-x" onclick="this.parentElement.remove()">✕</button>
+      <b>💡 Try ⌘K</b>
+      Jump to any session, repo, or skill instantly — no more clicking through menus.
+    </div>`;
+  },600);
+  setTimeout(()=>showToast('success','Synced 4 sessions from 4 agents'),1400);
+});
+</script>
+</body>
+</html>
