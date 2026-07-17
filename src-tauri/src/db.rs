@@ -228,6 +228,12 @@ pub struct TranscriptMatch {
     pub agent: String,
     /// Extract around the match; hits wrapped in \u{1}…\u{2} marker bytes.
     pub snippet: String,
+    // Session metadata joined from session_stats (defaults when absent).
+    pub display: String,
+    pub project: String,
+    pub project_name: String,
+    pub timestamp: u64,
+    pub total_tokens: u64,
 }
 
 /// Escape user input into an FTS5 MATCH expression: every term quoted
@@ -263,9 +269,14 @@ pub fn search_transcripts(state: &DbState, query: &str, limit: usize) -> Vec<Tra
         return vec![];
     };
     let Ok(mut stmt) = conn.prepare(
-        "SELECT session_id, agent,
-                snippet(session_fts, 0, char(1), char(2), '…', 16)
-         FROM session_fts WHERE session_fts MATCH ?1
+        "SELECT f.session_id, f.agent,
+                snippet(session_fts, 0, char(1), char(2), '…', 16),
+                COALESCE(s.display, ''), COALESCE(s.project, ''),
+                COALESCE(s.project_name, ''), COALESCE(s.ts, 0),
+                COALESCE(s.input_tokens + s.output_tokens, 0)
+         FROM session_fts f
+         LEFT JOIN session_stats s ON s.session_id = f.session_id
+         WHERE session_fts MATCH ?1
          ORDER BY rank LIMIT ?2",
     ) else {
         return vec![];
@@ -275,6 +286,11 @@ pub fn search_transcripts(state: &DbState, query: &str, limit: usize) -> Vec<Tra
             session_id: r.get(0)?,
             agent: r.get(1)?,
             snippet: r.get(2)?,
+            display: r.get(3)?,
+            project: r.get(4)?,
+            project_name: r.get(5)?,
+            timestamp: r.get::<_, i64>(6)?.max(0) as u64,
+            total_tokens: r.get::<_, i64>(7)?.max(0) as u64,
         })
     })
     .map(|rows| rows.flatten().collect())

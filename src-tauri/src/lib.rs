@@ -527,6 +527,16 @@ fn warm_session_stats(app: tauri::AppHandle) {
     });
 }
 
+/// Full-text search across indexed session transcripts (all agents).
+#[tauri::command]
+fn search_transcripts(
+    db: tauri::State<'_, db::DbState>,
+    query: String,
+    limit: Option<usize>,
+) -> Vec<db::TranscriptMatch> {
+    db::search_transcripts(&db, &query, limit.unwrap_or(50))
+}
+
 #[tauri::command]
 fn get_session_insights(
     db: tauri::State<'_, db::DbState>,
@@ -2325,6 +2335,7 @@ pub fn run() {
             is_vscode_installed,
             open_in_vscode,
             warm_session_stats,
+            search_transcripts,
             get_session_insights,
             get_token_activity,
             get_prompt_timestamps,
