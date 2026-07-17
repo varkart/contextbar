@@ -710,5 +710,18 @@ mod smoke {
                 ))
             );
         }
+
+        for u in super::usage_windows(&db) {
+            println!(
+                "usage {}: 5h {} tok (${:.2}, {} sessions) | 7d {} tok (${:.2}, {} sessions)",
+                u.agent,
+                u.tokens_5h,
+                u.cost_5h,
+                u.sessions_5h,
+                u.tokens_7d,
+                u.cost_7d,
+                u.sessions_7d
+            );
+        }
     }
 }
