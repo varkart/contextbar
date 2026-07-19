@@ -219,15 +219,22 @@ export default function ExpandedApp() {
   // on a repo card). Plain navigation — sidebar, hotkeys, breadcrumbs — always
   // clears it; only the repo-driven entry point sets it.
   const [sessionsScope, setSessionsScope] = useState<{ name: string; paths: string[] } | null>(null)
+  // Preselected agent filter for the Sessions list (via agent chips on My Work).
+  const [sessionsAgentPreset, setSessionsAgentPreset] = useState<string | null>(null)
 
-  const goTo = useCallback((s: Section, scope?: { name: string; paths: string[] }) => {
+  const goTo = useCallback((s: Section, scope?: { name: string; paths: string[] }, agent?: string) => {
     setSection(s)
     setSessionsScope(scope ?? null)
+    setSessionsAgentPreset(agent ?? null)
     window.location.hash = s === 'work' ? '' : s
   }, [])
 
   const viewSessionsForRepo = useCallback((repo: RepoWorktrees) => {
     goTo('sessions', { name: repo.repoName, paths: repo.worktrees.map(w => w.path) })
+  }, [goTo])
+
+  const viewSessionsForProject = useCallback((name: string, path: string) => {
+    goTo('sessions', { name, paths: [path] })
   }, [goTo])
 
   const goHome = useCallback(() => goTo('work'), [goTo])
@@ -333,6 +340,7 @@ export default function ExpandedApp() {
             goTo={goTo}
             onRefresh={refreshAll}
             onOpenSession={openSession}
+            onOpenSessionsForProject={viewSessionsForProject}
             showToast={showToast}
           />
         )}
@@ -347,6 +355,7 @@ export default function ExpandedApp() {
             hasMore={sessions.length >= sessionLimit}
             scope={sessionsScope}
             onClearScope={() => setSessionsScope(null)}
+            agentPreset={sessionsAgentPreset}
           />
         )}
         {section === 'worktrees' && (
@@ -409,47 +418,72 @@ function Sidebar({ section, goTo, counts, onOpenPalette, coachmarkVisible, onDis
   coachmarkVisible: boolean
   onDismissCoachmark: () => void
 }) {
+  const [collapsed, setCollapsed] = useState(
+    () => !!localStorage.getItem('contextbar:expanded:sidebar-collapsed')
+  )
+  const toggleCollapsed = () => {
+    setCollapsed(v => {
+      const next = !v
+      if (next) localStorage.setItem('contextbar:expanded:sidebar-collapsed', '1')
+      else localStorage.removeItem('contextbar:expanded:sidebar-collapsed')
+      return next
+    })
+  }
+
+  const navItem = (id: Section, label: string, hotkey?: number) => {
+    const active = section === id
+    const count = countFor(id, counts)
+    return (
+      <button
+        key={id}
+        onClick={() => goTo(id)}
+        aria-current={active ? 'page' : undefined}
+        title={collapsed ? `${label}${count !== null ? ` · ${count}` : ''}` : undefined}
+        className={`group w-[calc(100%-16px)] mx-2 mb-0.5 flex items-center rounded-lg transition-colors ${collapsed ? 'justify-center px-0 py-2' : 'gap-2.5 px-2.5 py-2 text-left'} ${active ? 'bg-[var(--c-accent)]/15 text-[var(--c-accent)] font-semibold shadow-[inset_2px_0_0_var(--c-accent)]' : 'text-[var(--c-text-2)] hover:bg-[var(--c-surface-2)] hover:text-[var(--c-text)]'}`}
+      >
+        <span className={active ? 'text-[var(--c-accent)]' : 'text-[var(--c-text-3)] group-hover:text-[var(--c-text-2)]'}>
+          <NavIcon name={id} />
+        </span>
+        {!collapsed && (
+          <>
+            <span className="text-[12.5px] flex-1">{label}</span>
+            {count !== null && <span className={`text-[11px] tabular-nums group-hover:hidden ${active ? 'text-[var(--c-accent)]/80' : 'text-[var(--c-text-3)]'}`}>{count}</span>}
+            {hotkey !== undefined && (
+              <span className={`text-[9px] font-mono text-[var(--c-text-3)] opacity-60 ${count !== null ? 'hidden group-hover:inline' : ''}`}>⌘{hotkey}</span>
+            )}
+          </>
+        )}
+      </button>
+    )
+  }
+
   const group = (label: string, items: { id: Section; label: string }[], startIndex: number) => (
     <div className="mb-1">
-      <div className="px-4 pt-3 pb-1 text-[9.5px] font-mono uppercase tracking-wider text-[var(--c-text-3)]">
-        {label}
-      </div>
-      {items.map((s, i) => {
-        const active = section === s.id
-        const count = countFor(s.id, counts)
-        return (
-          <button
-            key={s.id}
-            onClick={() => goTo(s.id)}
-            aria-current={active ? 'page' : undefined}
-            className={`group w-[calc(100%-16px)] mx-2 mb-0.5 flex items-center gap-2.5 px-2.5 py-2 text-left rounded-lg transition-colors ${active ? 'bg-[var(--c-accent)]/15 text-[var(--c-accent)] font-semibold shadow-[inset_2px_0_0_var(--c-accent)]' : 'text-[var(--c-text-2)] hover:bg-[var(--c-surface-2)] hover:text-[var(--c-text)]'}`}
-          >
-            <span className={active ? 'text-[var(--c-accent)]' : 'text-[var(--c-text-3)] group-hover:text-[var(--c-text-2)]'}>
-              <NavIcon name={s.id} />
-            </span>
-            <span className="text-[12.5px] flex-1">{s.label}</span>
-            {count !== null && <span className={`text-[11px] tabular-nums group-hover:hidden ${active ? 'text-[var(--c-accent)]/80' : 'text-[var(--c-text-3)]'}`}>{count}</span>}
-            <span className={`text-[9px] font-mono text-[var(--c-text-3)] opacity-60 ${count !== null ? 'hidden group-hover:inline' : ''}`}>⌘{startIndex + i}</span>
-          </button>
-        )
-      })}
+      {!collapsed && (
+        <div className="px-4 pt-3 pb-1 text-[9.5px] font-mono uppercase tracking-wider text-[var(--c-text-3)]">
+          {label}
+        </div>
+      )}
+      {collapsed && <div className="mx-3 my-2 border-t border-[var(--c-border)]/60" />}
+      {items.map((s, i) => navItem(s.id, s.label, startIndex + i))}
     </div>
   )
 
   return (
-    <div className="w-52 shrink-0 border-r border-[var(--c-border)] flex flex-col bg-[var(--c-surface-2)]/30">
+    <div className={`${collapsed ? 'w-12' : 'w-52'} shrink-0 border-r border-[var(--c-border)] flex flex-col bg-[var(--c-surface-2)]/30 transition-[width] duration-150`}>
       <button
         onClick={() => goTo('work')}
-        className="flex items-center gap-2 px-4 h-12 border-b border-[var(--c-border)] hover:opacity-80 transition-opacity"
+        className={`flex items-center h-12 border-b border-[var(--c-border)] hover:opacity-80 transition-opacity ${collapsed ? 'justify-center' : 'gap-2 px-4'}`}
         title="My Work"
       >
-        <span className="w-3.5 h-3.5 rounded" style={{ background: 'linear-gradient(135deg, #a5b4fc, #6366f1)' }} />
-        <span className="text-[13px] font-bold tracking-tight">Context Bar</span>
+        <span className="w-3.5 h-3.5 rounded flex-shrink-0" style={{ background: 'linear-gradient(135deg, #a5b4fc, #6366f1)' }} />
+        {!collapsed && <span className="text-[13px] font-bold tracking-tight">Context Bar</span>}
       </button>
       <div className="relative">
         <button
           onClick={onOpenPalette}
-          className="flex items-center gap-2 mx-2 mt-2 px-2.5 py-1.5 rounded-lg border border-[var(--c-border)] text-[11.5px] text-[var(--c-text-3)] hover:text-[var(--c-text-2)] hover:border-[var(--c-text-3)] transition-colors w-[calc(100%-16px)]"
+          title={collapsed ? 'Jump to anything (⌘K)' : undefined}
+          className={`flex items-center mx-2 mt-2 rounded-lg border border-[var(--c-border)] text-[11.5px] text-[var(--c-text-3)] hover:text-[var(--c-text-2)] hover:border-[var(--c-text-3)] transition-colors w-[calc(100%-16px)] ${collapsed ? 'justify-center py-1.5' : 'gap-2 px-2.5 py-1.5'}`}
         >
           <svg
             xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
@@ -458,10 +492,14 @@ function Sidebar({ section, goTo, counts, onOpenPalette, coachmarkVisible, onDis
           >
             <circle cx="11" cy="11" r="7" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
           </svg>
-          <span className="flex-1 text-left">Jump to anything…</span>
-          <span className="text-[9px] font-mono opacity-70">⌘K</span>
+          {!collapsed && (
+            <>
+              <span className="flex-1 text-left">Jump to anything…</span>
+              <span className="text-[9px] font-mono opacity-70">⌘K</span>
+            </>
+          )}
         </button>
-        {coachmarkVisible && (
+        {coachmarkVisible && !collapsed && (
           <Coachmark title="💡 Try ⌘K" onDismiss={onDismissCoachmark}>
             Jump to any session, repo, or section instantly — no more clicking through menus.
           </Coachmark>
@@ -472,22 +510,21 @@ function Sidebar({ section, goTo, counts, onOpenPalette, coachmarkVisible, onDis
         {group('Configure', CONFIGURE_SECTIONS, 4)}
       </nav>
       <div className="border-t border-[var(--c-border)] py-2">
-        {([['notifications', 'Notifications'], ['settings', 'Settings']] as const).map(([id, label]) => {
-          const active = section === id
-          return (
-            <button
-              key={id}
-              onClick={() => goTo(id)}
-              aria-current={active ? 'page' : undefined}
-              className={`w-[calc(100%-16px)] mx-2 mb-0.5 flex items-center gap-2.5 px-2.5 py-2 text-left rounded-lg transition-colors ${active ? 'bg-[var(--c-accent)]/15 text-[var(--c-accent)] font-semibold shadow-[inset_2px_0_0_var(--c-accent)]' : 'text-[var(--c-text-3)] hover:bg-[var(--c-surface-2)] hover:text-[var(--c-text-2)]'}`}
-            >
-              <span className={active ? 'text-[var(--c-accent)]' : 'text-[var(--c-text-3)]'}>
-                <NavIcon name={id} />
-              </span>
-              <span className="text-[12.5px]">{label}</span>
-            </button>
-          )
-        })}
+        {navItem('notifications', 'Notifications')}
+        {navItem('settings', 'Settings')}
+        <button
+          onClick={toggleCollapsed}
+          title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          className={`w-[calc(100%-16px)] mx-2 mt-0.5 flex items-center rounded-lg text-[var(--c-text-3)] hover:bg-[var(--c-surface-2)] hover:text-[var(--c-text-2)] transition-colors ${collapsed ? 'justify-center py-2' : 'gap-2.5 px-2.5 py-2'}`}
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+            stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+            className={`w-3.5 h-3.5 transition-transform ${collapsed ? 'rotate-180' : ''}`}>
+            <polyline points="11 17 6 12 11 7" /><polyline points="18 17 13 12 18 7" />
+          </svg>
+          {!collapsed && <span className="text-[12.5px]">Collapse</span>}
+        </button>
       </div>
     </div>
   )
@@ -495,7 +532,28 @@ function Sidebar({ section, goTo, counts, onOpenPalette, coachmarkVisible, onDis
 
 // ── Sessions ─────────────────────────────────────────────────────────────────
 
-function SessionsSection({ sessions, loading, selected, onSelect, onRefresh, onLoadMore, hasMore, scope, onClearScope }: {
+type SessionTimeFilter = 'all' | 'today' | 'week' | 'last7'
+
+const SESSION_TIME_FILTERS: { id: SessionTimeFilter; label: string }[] = [
+  { id: 'all', label: 'All' },
+  { id: 'today', label: 'Today' },
+  { id: 'week', label: 'This Week' },
+  { id: 'last7', label: 'Last 7 Days' },
+]
+
+function sessionTimeCutoff(f: SessionTimeFilter): number {
+  if (f === 'all') return 0
+  const midnight = new Date()
+  midnight.setHours(0, 0, 0, 0)
+  if (f === 'today') return midnight.getTime()
+  if (f === 'week') {
+    const day = (midnight.getDay() + 6) % 7 // Monday = 0
+    return midnight.getTime() - day * 86_400_000
+  }
+  return Date.now() - 7 * 86_400_000
+}
+
+function SessionsSection({ sessions, loading, selected, onSelect, onRefresh, onLoadMore, hasMore, scope, onClearScope, agentPreset }: {
   sessions: SessionEntry[]
   loading: boolean
   selected: SessionEntry | null
@@ -505,24 +563,22 @@ function SessionsSection({ sessions, loading, selected, onSelect, onRefresh, onL
   hasMore: boolean
   scope: { name: string; paths: string[] } | null
   onClearScope: () => void
+  agentPreset: string | null
 }) {
-  const scoped = useMemo(
-    () => (scope ? sessions.filter(s => scope.paths.includes(s.project)) : sessions),
-    [sessions, scope]
-  )
-  const insights = useMemo(() => {
-    const now = Date.now()
-    const dayAgo = now - 86_400_000
-    const weekAgo = now - 7 * 86_400_000
-    return {
-      total: scoped.length,
-      today: scoped.filter(s => s.timestamp >= dayAgo).length,
-      week: scoped.filter(s => s.timestamp >= weekAgo).length,
-      live: scoped.filter(s => s.isLive).length,
-      projects: new Set(scoped.map(s => s.project)).size,
-      prompts: scoped.reduce((n, s) => n + s.promptCount, 0),
-    }
-  }, [scoped])
+  const [timeFilter, setTimeFilter] = useState<SessionTimeFilter>('all')
+  const scoped = useMemo(() => {
+    let result = scope ? sessions.filter(s => scope.paths.includes(s.project)) : sessions
+    const cutoff = sessionTimeCutoff(timeFilter)
+    // Live sessions always stay visible regardless of the time window.
+    if (cutoff > 0) result = result.filter(s => s.isLive || s.timestamp >= cutoff)
+    return result
+  }, [sessions, scope, timeFilter])
+  const insights = useMemo(() => ({
+    total: scoped.length,
+    live: scoped.filter(s => s.isLive).length,
+    projects: new Set(scoped.map(s => s.project)).size,
+    prompts: scoped.reduce((n, s) => n + s.promptCount, 0),
+  }), [scoped])
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
@@ -535,20 +591,27 @@ function SessionsSection({ sessions, loading, selected, onSelect, onRefresh, onL
         </div>
         <RefreshButton onClick={onRefresh} busy={loading} />
       </div>
-      {scope && (
-        <div className="px-6 pb-2 flex-shrink-0">
+      <div className="px-6 pb-2 flex-shrink-0 flex items-center gap-2 flex-wrap">
+        {SESSION_TIME_FILTERS.map(f => (
+          <button
+            key={f.id}
+            onClick={() => setTimeFilter(f.id)}
+            className={`text-[11px] px-3 py-1 rounded-full border transition-colors ${timeFilter === f.id ? 'border-[var(--c-accent)]/50 bg-[var(--c-accent)]/10 text-[var(--c-accent)]' : 'border-[var(--c-border)] text-[var(--c-text-3)] hover:text-[var(--c-text-2)]'}`}
+          >
+            {f.label}
+          </button>
+        ))}
+        {scope && (
           <span className="inline-flex items-center gap-1.5 text-[11px] px-2.5 py-1 rounded-full border border-[var(--c-accent)]/50 bg-[var(--c-accent)]/10 text-[var(--c-accent)]">
             Repo: {scope.name}
             <button onClick={onClearScope} className="hover:text-[var(--c-text)] transition-colors" aria-label="Clear repo filter">✕</button>
           </span>
-        </div>
-      )}
+        )}
+      </div>
       {!loading && scoped.length > 0 && (
         <div className="px-4 pb-1 flex-shrink-0">
           <TileRow>
             <Tile value={insights.total} label="Sessions" />
-            <Tile value={insights.today} label="Today" color="text-[var(--c-accent)]" />
-            <Tile value={insights.week} label="This week" />
             <Tile value={insights.live} label="Live" color={insights.live > 0 ? 'text-emerald-400' : 'text-[var(--c-text-3)]'} />
             <Tile value={insights.projects} label="Projects" />
             <Tile value={insights.prompts} label="Prompts" color="text-amber-400" />
@@ -557,7 +620,7 @@ function SessionsSection({ sessions, loading, selected, onSelect, onRefresh, onL
       )}
       <div className="flex-1 flex overflow-hidden">
         <div className="w-80 shrink-0 border-r border-[var(--c-border)] flex flex-col overflow-hidden">
-          <SessionList sessions={scoped} onSelect={onSelect} loading={loading} onLoadMore={onLoadMore} hasMore={hasMore} />
+          <SessionList key={agentPreset ?? 'all'} sessions={scoped} onSelect={onSelect} loading={loading} onLoadMore={onLoadMore} hasMore={hasMore} selectedId={selected?.sessionId} initialAgentFilter={agentPreset} />
         </div>
         <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
           {selected ? (

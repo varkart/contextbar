@@ -67,7 +67,7 @@ export function buildPaletteItems(
     .map(s => ({
       id: `session-${s.sessionId}`,
       group: 'Sessions' as const,
-      title: s.display,
+      title: s.title ?? s.display,
       sub: s.projectName,
       action: () => handlers.openSession(s),
     }))

@@ -8,7 +8,6 @@ import { searchAgents } from '../search'
 import type { ThemePreference } from '../useTheme'
 import type { Agent, SessionEntry, SessionInsights, TokenPoint } from '../types'
 import { formatTokens } from '../components/history/SessionStats'
-import Header from '../components/Header'
 import ViewManager from '../components/views/ViewManager'
 import { Tile, TileRow } from './InsightTiles'
 import { Collapsible, HBar, TokenTrend, shortModel } from './InsightWidgets'
@@ -31,6 +30,16 @@ const ROOT_VIEW: Record<ToolsSection, View> = {
   mcps: 'all-mcps-list',
   settings: 'settings',
   notifications: 'notifications',
+}
+
+// Expanded window uses section headings (the sidebar carries navigation);
+// the popover keeps its breadcrumb Header.
+const SECTION_HEADINGS: Record<ToolsSection, { title: string; sub: string }> = {
+  agents: { title: 'Agents', sub: 'Installed AI coding agents — skills, MCPs and permissions per agent' },
+  skills: { title: 'Skills', sub: 'Every skill across your agents — search, toggle, add' },
+  mcps: { title: 'MCPs', sub: 'MCP servers across your agents — status, tools, add' },
+  settings: { title: 'Settings', sub: 'Preferences, appearance and updates' },
+  notifications: { title: 'Notifications', sub: 'Alerts from agents and config watchers' },
 }
 
 interface ToolsPanelProps {
@@ -73,7 +82,7 @@ export default function ToolsPanel({
     onExit: goHome,
     initialView: ROOT_VIEW[section],
   })
-  const { view, goTo, resetTo, escape, refreshSelected, openAgentsList } = routerProps
+  const { view, goTo, resetTo, escape, refreshSelected } = routerProps
 
   const { notifications, fetchNotifications } = useNotifications()
   const [version, setVersion] = useState('')
@@ -191,22 +200,22 @@ export default function ToolsPanel({
   return (
     <div className="flex-1 min-w-0 flex overflow-hidden">
       <div className="w-full h-full flex flex-col overflow-hidden">
-        <Header
-          view={view}
-          selectedAgent={routerProps.selectedAgent}
-          selectedSkill={routerProps.selectedSkill}
-          selectedMcp={routerProps.selectedMcp}
-          skillBackView={routerProps.skillBackView}
-          mcpBackView={routerProps.mcpBackView}
-          allSkillsBackView={routerProps.allSkillsBackView}
-          allMcpsBackView={routerProps.allMcpsBackView}
-          goTo={goTo}
-          openAgentsList={openAgentsList}
-          updateAvailable={!!updateInfo}
-          notificationCount={notifications.length}
-          onSettingsClick={() => goTo('settings')}
-          onNotificationsClick={() => goTo('notifications')}
-        />
+        {view === ROOT_VIEW[section] && (
+          <div className="px-6 pt-5 pb-3 flex-shrink-0">
+            <h2 className="text-[16px] font-semibold tracking-tight">{SECTION_HEADINGS[section].title}</h2>
+            <p className="text-[12px] text-[var(--c-text-3)] mt-0.5">{SECTION_HEADINGS[section].sub}</p>
+          </div>
+        )}
+        {view !== ROOT_VIEW[section] && (
+          <div className="px-6 pt-3 pb-2 flex-shrink-0">
+            <button
+              onClick={() => resetTo(ROOT_VIEW[section])}
+              className="text-[11px] text-[var(--c-text-3)] hover:text-[var(--c-text-2)] transition-colors"
+            >
+              ← {SECTION_HEADINGS[section].title}
+            </button>
+          </div>
+        )}
         {view === 'agents-list' && !loading && (
           <div className="px-3 pt-3 flex-shrink-0">
             <TileRow>
