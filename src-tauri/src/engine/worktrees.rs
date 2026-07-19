@@ -249,7 +249,7 @@ pub fn list_worktrees() -> Vec<RepoWorktrees> {
         };
         let base = base_branch(&primary_root);
         let entries = parse_worktree_list(&listing);
-        let worktrees: Vec<WorktreeInfo> = entries
+        let mut worktrees: Vec<WorktreeInfo> = entries
             .iter()
             .enumerate()
             .filter(|(_, (p, _, _))| p.is_dir())
@@ -258,6 +258,8 @@ pub fn list_worktrees() -> Vec<RepoWorktrees> {
         if worktrees.is_empty() {
             continue;
         }
+        // Most recently committed first.
+        worktrees.sort_by_key(|w| std::cmp::Reverse(w.last_commit_ts.unwrap_or(0)));
 
         let repo_name = primary_root
             .file_name()
@@ -273,7 +275,19 @@ pub fn list_worktrees() -> Vec<RepoWorktrees> {
         });
     }
 
-    result.sort_by_key(|r| r.repo_name.to_lowercase());
+    // Most recently active repo first (max worktree commit time); name as tiebreak.
+    result.sort_by(|a, b| {
+        let ts = |r: &RepoWorktrees| {
+            r.worktrees
+                .iter()
+                .filter_map(|w| w.last_commit_ts)
+                .max()
+                .unwrap_or(0)
+        };
+        ts(b)
+            .cmp(&ts(a))
+            .then_with(|| a.repo_name.to_lowercase().cmp(&b.repo_name.to_lowercase()))
+    });
     result
 }
 

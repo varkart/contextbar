@@ -22,6 +22,10 @@ pub struct SessionEntry {
     pub error_count: u32,
     /// Number of prompts submitted in this session (lines in history.jsonl).
     pub prompt_count: u32,
+    /// Session title as shown by the agent's own resume picker: the user's
+    /// rename (custom-title) or the AI-generated title (ai-title), if any.
+    #[serde(default)]
+    pub title: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -37,6 +41,9 @@ pub struct SessionDetail {
     pub project: String,
     pub project_name: String,
     pub timestamp: u64,
+    /// See SessionEntry::title.
+    #[serde(default)]
+    pub title: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

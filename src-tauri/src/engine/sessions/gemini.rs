@@ -257,6 +257,7 @@ fn list_from_tmp(tmp: &Path) -> Vec<SessionEntry> {
                             is_live: false,
                             error_count: 0,
                             prompt_count: 1,
+                            title: None,
                         },
                     );
                 }
@@ -347,6 +348,7 @@ impl SessionSource for GeminiSource {
                 agent: "gemini".to_string(),
                 session_id: session_id.to_string(),
                 messages,
+                title: None,
                 total_tokens: usage,
                 model: None,
                 duration_ms: last_ms.checked_sub(start_ms),

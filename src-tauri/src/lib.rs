@@ -318,21 +318,31 @@ fn reveal_in_finder(path: String) -> Result<(), String> {
 
 #[tauri::command]
 async fn list_sessions(
+    db: tauri::State<'_, db::DbState>,
     limit: Option<usize>,
     offset: Option<usize>,
     project_filter: Option<String>,
     search: Option<String>,
-) -> Vec<engine::history::SessionEntry> {
-    tokio::task::spawn_blocking(move || {
-        engine::sessions::list_all(
+) -> Result<Vec<engine::history::SessionEntry>, ()> {
+    // Titles (ai-title / custom-title records) are indexed by the stats warm
+    // pass; overlay them so the list matches each agent's own resume picker.
+    let titles = db::get_session_titles(&db);
+    Ok(tokio::task::spawn_blocking(move || {
+        let mut entries = engine::sessions::list_all(
             limit.unwrap_or(200),
             offset.unwrap_or(0),
             project_filter.as_deref(),
             search.as_deref(),
-        )
+        );
+        for e in &mut entries {
+            if e.title.is_none() {
+                e.title = titles.get(&e.session_id).cloned();
+            }
+        }
+        entries
     })
     .await
-    .unwrap_or_default()
+    .unwrap_or_default())
 }
 
 #[tauri::command]
@@ -555,6 +565,38 @@ fn set_session_tags(
     tags: Vec<String>,
 ) -> Result<(), String> {
     db::set_session_tags(&db, &session_id, &tags).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn set_session_name(
+    db: tauri::State<'_, db::DbState>,
+    session_id: String,
+    name: Option<String>,
+) -> Result<(), String> {
+    db::set_session_name(&db, &session_id, name.as_deref()).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn get_repo_meta(db: tauri::State<'_, db::DbState>) -> Vec<db::RepoMeta> {
+    db::get_all_repo_meta(&db)
+}
+
+#[tauri::command]
+fn set_repo_name(
+    db: tauri::State<'_, db::DbState>,
+    repo_path: String,
+    name: Option<String>,
+) -> Result<(), String> {
+    db::set_repo_name(&db, &repo_path, name.as_deref()).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn set_repo_notes(
+    db: tauri::State<'_, db::DbState>,
+    path: String,
+    notes: Option<String>,
+) -> Result<(), String> {
+    db::set_repo_notes(&db, &path, notes.as_deref()).map_err(|e| e.to_string())
 }
 
 /// Full-text search across indexed session transcripts (all agents).
@@ -2030,6 +2072,12 @@ fn read_backup_content(backup_path: String) -> Result<String, String> {
     std::fs::read_to_string(&canonical).map_err(|e| e.to_string())
 }
 
+#[tauri::command]
+fn read_config_content(config_path: String) -> Result<String, String> {
+    validate_tool_path(&config_path)?;
+    std::fs::read_to_string(&config_path).map_err(|e| e.to_string())
+}
+
 // ---------------------------------------------------------------------------
 // IPC commands – npm installer (v0.13)
 // ---------------------------------------------------------------------------
@@ -2365,6 +2413,10 @@ pub fn run() {
             get_session_meta,
             set_session_pinned,
             set_session_tags,
+            set_session_name,
+            get_repo_meta,
+            set_repo_name,
+            set_repo_notes,
             get_session_insights,
             get_token_activity,
             get_commit_activity,
@@ -2407,6 +2459,7 @@ pub fn run() {
             list_config_backups,
             restore_config_backup,
             read_backup_content,
+            read_config_content,
             get_permissions,
             add_permission_rule,
             remove_permission_rule,

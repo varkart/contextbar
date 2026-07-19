@@ -108,6 +108,7 @@ fn list_from_root(root: &std::path::Path, limit: usize) -> Vec<SessionEntry> {
                         is_live: is_live(root, &id),
                         error_count: 0,
                         prompt_count: 1,
+                        title: None,
                     },
                 );
             }
@@ -224,6 +225,7 @@ fn get_from_root(root: &std::path::Path, session_id: &str) -> Option<SessionDeta
         agent: "agy".to_string(),
         session_id: session_id.to_string(),
         messages,
+        title: None,
         total_tokens: Default::default(),
         model: None,
         duration_ms: last_ms.checked_sub(start_ms),

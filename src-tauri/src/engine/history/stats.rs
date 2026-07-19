@@ -352,12 +352,12 @@ fn upsert_session(
     let conn = db.0.lock().unwrap();
     let _ = conn.execute(
         "INSERT INTO session_stats
-               (session_id, agent, project, project_name, display, ts, model,
+               (session_id, agent, project, project_name, display, title, ts, model,
                 input_tokens, output_tokens, cache_read, cache_creation,
                 msg_count, tool_calls, skill_calls, mtime, size)
-             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16)
+             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17)
              ON CONFLICT(session_id) DO UPDATE SET
-               ts=excluded.ts, model=excluded.model,
+               ts=excluded.ts, model=excluded.model, title=excluded.title,
                input_tokens=excluded.input_tokens, output_tokens=excluded.output_tokens,
                cache_read=excluded.cache_read, cache_creation=excluded.cache_creation,
                msg_count=excluded.msg_count, tool_calls=excluded.tool_calls,
@@ -368,6 +368,7 @@ fn upsert_session(
             entry.project,
             entry.project_name,
             entry.display,
+            detail.title,
             entry.timestamp as i64,
             detail.model.clone().unwrap_or_default(),
             t.input_tokens as i64,
