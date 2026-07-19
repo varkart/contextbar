@@ -1,0 +1,751 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Context Bar — Popover Secondary Pages ×3</title>
+<style>
+  :root {
+    --c-bg:#ffffff; --c-surface:#f4f4f5; --c-hover:#f4f4f5;
+    --c-border:rgba(228,228,231,.9); --c-border-sub:rgba(228,228,231,.6);
+    --c-text:#18181b; --c-text-2:#71717a; --c-text-3:#a1a1aa;
+    --c-input:rgba(244,244,245,.9); --c-skeleton:#e4e4e7; --page-bg:#ececee;
+  }
+  .dark {
+    --c-bg:#09090b; --c-surface:#18181b; --c-hover:rgba(255,255,255,.025);
+    --c-border:rgba(39,39,42,.8); --c-border-sub:rgba(39,39,42,.5);
+    --c-text:#e4e4e7; --c-text-2:#71717a; --c-text-3:#52525b;
+    --c-input:rgba(39,39,42,.6); --c-skeleton:#27272a; --page-bg:#121214;
+  }
+  * { box-sizing:border-box; -webkit-font-smoothing:antialiased; margin:0; padding:0; }
+  body { font-family:'Geist',-apple-system,BlinkMacSystemFont,system-ui,sans-serif;
+    background:var(--page-bg); color:var(--c-text); padding:32px 24px 64px; }
+  h1 { font-size:20px; font-weight:600; letter-spacing:-.02em; }
+  h2 { font-size:16px; font-weight:600; letter-spacing:-.01em; margin:44px 0 4px; }
+  .sub { font-size:13px; color:var(--c-text-2); margin:4px 0 20px; }
+  .toggle { position:fixed; top:20px; right:24px; z-index:10; padding:6px 14px; border-radius:8px;
+    font-size:12px; font-weight:500; background:var(--c-surface); border:1px solid var(--c-border);
+    color:var(--c-text); cursor:pointer; }
+  .grid { display:flex; flex-wrap:wrap; gap:32px; align-items:flex-start; }
+  .proto { display:flex; flex-direction:column; gap:8px; }
+  .proto-label { font-size:12.5px; font-weight:600; }
+  .proto-label span { display:block; font-weight:400; font-size:11px; color:var(--c-text-2); margin-top:2px; max-width:380px; line-height:1.4; }
+  .frame { width:380px; height:520px; background:var(--c-bg); border:1px solid var(--c-border);
+    border-radius:14px; overflow:hidden; display:flex; flex-direction:column;
+    box-shadow:0 12px 32px rgba(0,0,0,.10); }
+  .mono { font-family:'Geist Mono','SF Mono',ui-monospace,monospace; }
+  .hdr { display:flex; align-items:center; gap:8px; padding:10px 14px; border-bottom:1px solid var(--c-border); flex-shrink:0; font-size:12px; color:var(--c-text-3); }
+  .hdr .logo { width:16px; height:16px; border-radius:4px; background:linear-gradient(135deg,#8b5cf6,#6366f1); flex-shrink:0; }
+  .hdr .crumb b { color:var(--c-text); font-weight:500; }
+  .hdr .icons { margin-left:auto; display:flex; gap:9px; }
+  .ftr { display:flex; align-items:center; justify-content:space-between; padding:8px 14px;
+    border-top:1px solid var(--c-border); font-size:10.5px; color:var(--c-text-3); flex-shrink:0; }
+  .body { flex:1; overflow-y:auto; scrollbar-width:none; }
+  .body::-webkit-scrollbar { display:none; }
+  .avatar { width:26px; height:26px; border-radius:7px; display:flex; align-items:center; justify-content:center;
+    font-size:11px; font-weight:600; color:#fff; flex-shrink:0; }
+  .av-cl { background:#d97757; } .av-cu { background:#4f46e5; } .av-ge { background:#1a73e8; } .av-co { background:#52525b; }
+  .mini { width:16px; height:16px; border-radius:4px; font-size:8px; }
+  .pill { font-size:10px; padding:2px 8px; border-radius:99px; background:var(--c-surface);
+    color:var(--c-text-2); border:1px solid var(--c-border-sub); white-space:nowrap; }
+  .pill.ind { color:#818cf8; border-color:rgba(99,102,241,.3); background:rgba(99,102,241,.07); }
+  .pill.vio { color:#a78bfa; border-color:rgba(139,92,246,.3); background:rgba(139,92,246,.07); }
+  .pill.grn { color:#34d399; border-color:rgba(16,185,129,.3); background:rgba(16,185,129,.07); }
+  .pill.amb { color:#f59e0b; border-color:rgba(245,158,11,.3); background:rgba(245,158,11,.07); }
+  .pill.red { color:#ef4444; border-color:rgba(239,68,68,.3); background:rgba(239,68,68,.07); }
+  .sw { width:26px; height:15px; border-radius:99px; background:var(--c-skeleton); position:relative; flex-shrink:0; }
+  .sw.on { background:#10b981; }
+  .sw::after { content:''; position:absolute; top:2px; left:2px; width:11px; height:11px; border-radius:50%; background:#fff; }
+  .sw.on::after { left:auto; right:2px; }
+  .sect-h { font-size:10px; text-transform:uppercase; letter-spacing:.06em; color:var(--c-text-3); }
+  .search { display:flex; align-items:center; gap:7px; background:var(--c-input); border:1px solid var(--c-border);
+    border-radius:8px; padding:6px 10px; font-size:12.5px; color:var(--c-text-3); }
+  .inp { background:var(--c-input); border:1px solid var(--c-border); border-radius:8px; padding:7px 10px;
+    font-size:12.5px; color:var(--c-text-3); }
+  .btn { display:inline-block; padding:7px 14px; border-radius:8px; font-size:12px; font-weight:500;
+    background:var(--c-text); color:var(--c-bg); }
+  .btn.ghost { background:transparent; color:var(--c-text-2); border:1px solid var(--c-border); }
+  .row { display:flex; align-items:center; gap:9px; padding:10px 14px; border-bottom:1px solid var(--c-border-sub); font-size:12.5px; }
+  .seg { display:flex; background:var(--c-surface); border:1px solid var(--c-border-sub); border-radius:8px; padding:2px; }
+  .seg span { flex:1; text-align:center; padding:5px 0; font-size:11px; border-radius:6px; color:var(--c-text-3); }
+  .seg .act { background:var(--c-bg); color:var(--c-text); font-weight:500; box-shadow:0 1px 3px rgba(0,0,0,.1); }
+</style>
+</head>
+<body>
+<button class="toggle" onclick="document.documentElement.classList.toggle('dark')">☾ / ☀︎ theme</button>
+<h1>Popover — secondary pages, 3 alternates each</h1>
+<p class="sub">Add MCP (=Add Skill, fewer fields) · Settings · Notifications · Doctor · Backups · Permissions · Activity Log.</p>
+
+<!-- ══════════════ ADD MCP ══════════════ -->
+<h2>5 · Add MCP (Add Skill = same skeleton)</h2>
+<div class="grid">
+
+  <div class="proto">
+    <div class="proto-label">5A · Wizard <span>3 steps with progress: where → what → configure. One decision per screen, impossible to get lost.</span></div>
+    <div class="frame">
+      <div class="hdr"><div class="logo"></div><span class="crumb">MCPs › <b>Add server</b></span><div class="icons"><span>✕</span></div></div>
+      <div style="display:flex;gap:4px;padding:12px 16px 0;">
+        <div style="flex:1;height:3px;border-radius:2px;background:#8b5cf6;"></div>
+        <div style="flex:1;height:3px;border-radius:2px;background:#8b5cf6;"></div>
+        <div style="flex:1;height:3px;border-radius:2px;background:var(--c-skeleton);"></div>
+      </div>
+      <div style="padding:14px 16px 4px;">
+        <div style="font-size:10px;color:#a78bfa;font-weight:600;letter-spacing:.05em;">STEP 2 OF 3</div>
+        <div style="font-size:16px;font-weight:600;margin-top:4px;">What kind of server?</div>
+      </div>
+      <div class="body" style="padding:10px 16px;display:flex;flex-direction:column;gap:7px;">
+        <div style="border:1.5px solid #8b5cf6;border-radius:10px;padding:12px;background:rgba(139,92,246,.05);">
+          <div style="font-size:13px;font-weight:600;">📦 npm package</div>
+          <div style="font-size:10.5px;color:var(--c-text-2);margin-top:3px;">Runs via npx — most common. We handle install + updates.</div>
+        </div>
+        <div style="border:1px solid var(--c-border);border-radius:10px;padding:12px;">
+          <div style="font-size:13px;font-weight:600;">🌐 HTTP / SSE</div>
+          <div style="font-size:10.5px;color:var(--c-text-2);margin-top:3px;">Remote server, just a URL.</div>
+        </div>
+        <div style="border:1px solid var(--c-border);border-radius:10px;padding:12px;">
+          <div style="font-size:13px;font-weight:600;">⌨ Custom command</div>
+          <div style="font-size:10.5px;color:var(--c-text-2);margin-top:3px;">Any executable — docker, scripts, binaries.</div>
+        </div>
+        <div style="border:1px solid var(--c-border);border-radius:10px;padding:12px;">
+          <div style="font-size:13px;font-weight:600;">📋 Paste JSON</div>
+          <div style="font-size:10.5px;color:var(--c-text-2);margin-top:3px;">Got a config snippet from docs? Paste it, we parse it.</div>
+        </div>
+      </div>
+      <div style="padding:10px 16px;border-top:1px solid var(--c-border);display:flex;justify-content:space-between;">
+        <span class="btn ghost">← Back</span><span class="btn">Continue →</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="proto">
+    <div class="proto-label">5B · Single form + live preview <span>Everything on one screen, command preview updates live at bottom. Fastest for people who know what they want.</span></div>
+    <div class="frame">
+      <div class="hdr"><div class="logo"></div><span class="crumb">MCPs › <b>Add server</b></span><div class="icons"><span>✕</span></div></div>
+      <div class="body" style="padding:14px 16px;display:flex;flex-direction:column;gap:11px;">
+        <div>
+          <div class="sect-h" style="margin-bottom:6px;">Install to</div>
+          <div style="display:flex;gap:5px;">
+            <span class="pill vio"><span class="avatar av-cl mini" style="display:inline-flex;">C</span> Claude ✓</span>
+            <span class="pill"><span class="avatar av-cu mini" style="display:inline-flex;">C</span> Cursor</span>
+            <span class="pill"><span class="avatar av-ge mini" style="display:inline-flex;">G</span> Gemini</span>
+          </div>
+        </div>
+        <div>
+          <div class="sect-h" style="margin-bottom:6px;">Type</div>
+          <div class="seg"><span class="act">npx</span><span>HTTP</span><span>Command</span><span>Docker</span><span>JSON</span></div>
+        </div>
+        <div>
+          <div class="sect-h" style="margin-bottom:6px;">Name</div>
+          <div class="inp mono" style="color:var(--c-text);">linear</div>
+        </div>
+        <div>
+          <div class="sect-h" style="margin-bottom:6px;">Package</div>
+          <div class="inp mono" style="color:var(--c-text);">@linear/mcp-server</div>
+          <div style="font-size:10px;color:#34d399;margin-top:4px;">✓ found on npm · v1.2.0 · 14k weekly downloads</div>
+        </div>
+        <div>
+          <div class="sect-h" style="margin-bottom:6px;">Env (optional)</div>
+          <div class="inp mono" style="font-size:11px;">LINEAR_API_KEY=•••</div>
+        </div>
+        <div class="mono" style="background:#0c0c10;border-radius:8px;padding:10px 12px;font-size:10px;color:#86efac;">
+          $ npx -y @linear/mcp-server
+        </div>
+      </div>
+      <div style="padding:10px 16px;border-top:1px solid var(--c-border);display:flex;justify-content:flex-end;gap:8px;">
+        <span class="btn ghost">Cancel</span><span class="btn">Add MCP</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="proto">
+    <div class="proto-label">5C · Paste-first magic box <span>One giant input: paste JSON, npm name, URL, or docs snippet — auto-detect everything, confirm chips below. Zero-form UX.</span></div>
+    <div class="frame">
+      <div class="hdr"><div class="logo"></div><span class="crumb">MCPs › <b>Add server</b></span><div class="icons"><span>✕</span></div></div>
+      <div class="body" style="padding:16px;">
+        <div style="font-size:15px;font-weight:600;">Paste anything</div>
+        <div style="font-size:11px;color:var(--c-text-3);margin-top:3px;">JSON config · npm package · URL · install command from docs</div>
+        <div class="mono" style="margin-top:10px;border:1.5px dashed var(--c-border);border-radius:10px;padding:12px;font-size:10.5px;line-height:1.7;color:var(--c-text-2);min-height:110px;">
+          {"mcpServers": {"linear": {"command": "npx",<br>&nbsp;&nbsp;"args": ["-y", "@linear/mcp-server"],<br>&nbsp;&nbsp;"env": {"LINEAR_API_KEY": "lin_api_…"}}}}
+        </div>
+        <div style="margin-top:12px;padding:12px;background:rgba(16,185,129,.06);border:1px solid rgba(16,185,129,.25);border-radius:10px;">
+          <div style="font-size:11px;color:#10b981;font-weight:600;">✓ Detected: npx MCP server</div>
+          <div style="margin-top:8px;display:flex;flex-wrap:wrap;gap:5px;">
+            <span class="pill">name: <b class="mono">linear</b></span>
+            <span class="pill">pkg: <b class="mono">@linear/mcp-server</b></span>
+            <span class="pill amb">🔒 1 secret found</span>
+          </div>
+        </div>
+        <div style="margin-top:12px;">
+          <div class="sect-h" style="margin-bottom:6px;">Install to</div>
+          <div style="display:flex;gap:5px;">
+            <span class="pill vio">Claude ✓</span><span class="pill vio">Cursor ✓</span><span class="pill">Gemini</span>
+          </div>
+        </div>
+      </div>
+      <div style="padding:10px 16px;border-top:1px solid var(--c-border);display:flex;justify-content:flex-end;gap:8px;">
+        <span class="btn ghost">Clear</span><span class="btn">Add to 2 agents</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════ SETTINGS ══════════════ -->
+<h2>6 · Settings</h2>
+<div class="grid">
+
+  <div class="proto">
+    <div class="proto-label">6A · macOS grouped rows <span>System Settings idiom: titled groups, rows with trailing controls. Familiar, boring in a good way.</span></div>
+    <div class="frame">
+      <div class="hdr"><div class="logo"></div><span class="crumb"><b>Settings</b></span><div class="icons"><span>✕</span></div></div>
+      <div class="body" style="padding:12px 14px;">
+        <div class="sect-h">General</div>
+        <div style="margin:6px 0 14px;border:1px solid var(--c-border-sub);border-radius:10px;overflow:hidden;">
+          <div class="row">Launch at login<span class="sw on" style="margin-left:auto;"></span></div>
+          <div class="row">Global shortcut<span class="mono pill" style="margin-left:auto;">⌥⌘Space</span></div>
+          <div class="row" style="border-bottom:none;">Accessibility<span class="pill grn" style="margin-left:auto;">granted</span></div>
+        </div>
+        <div class="sect-h">Appearance</div>
+        <div style="margin:6px 0 14px;border:1px solid var(--c-border-sub);border-radius:10px;overflow:hidden;">
+          <div class="row">Theme
+            <div class="seg" style="margin-left:auto;width:150px;"><span>Light</span><span class="act">System</span><span>Dark</span></div>
+          </div>
+          <div class="row" style="border-bottom:none;">Window vibrancy<span class="sw on" style="margin-left:auto;"></span></div>
+        </div>
+        <div class="sect-h">Privacy</div>
+        <div style="margin:6px 0 14px;border:1px solid var(--c-border-sub);border-radius:10px;overflow:hidden;">
+          <div class="row" style="border-bottom:none;">Share anonymous usage<span class="sw on" style="margin-left:auto;"></span></div>
+        </div>
+        <div class="sect-h">About</div>
+        <div style="margin:6px 0;border:1px solid var(--c-border-sub);border-radius:10px;overflow:hidden;">
+          <div class="row">Version<span class="mono" style="margin-left:auto;font-size:11px;color:var(--c-text-3);">0.9.0</span></div>
+          <div class="row" style="border-bottom:none;">Update<span class="pill ind" style="margin-left:auto;">Install 0.9.1</span></div>
+        </div>
+      </div>
+      <div class="ftr"><span>Doctor · Activity log</span><span>⏻</span></div>
+    </div>
+  </div>
+
+  <div class="proto">
+    <div class="proto-label">6B · Icon tabs <span>Category tab bar on top — General / Look / Dev / About. Less scrolling, clear map, room per section to grow.</span></div>
+    <div class="frame">
+      <div class="hdr"><div class="logo"></div><span class="crumb"><b>Settings</b></span><div class="icons"><span>✕</span></div></div>
+      <div style="display:flex;gap:6px;padding:12px 14px;border-bottom:1px solid var(--c-border);">
+        <div style="flex:1;text-align:center;padding:9px 0;border-radius:9px;background:var(--c-surface);border:1px solid var(--c-border);"><div style="font-size:15px;">⚙</div><div style="font-size:9.5px;font-weight:500;margin-top:2px;">General</div></div>
+        <div style="flex:1;text-align:center;padding:9px 0;border-radius:9px;color:var(--c-text-3);"><div style="font-size:15px;">🎨</div><div style="font-size:9.5px;margin-top:2px;">Look</div></div>
+        <div style="flex:1;text-align:center;padding:9px 0;border-radius:9px;color:var(--c-text-3);"><div style="font-size:15px;">🔧</div><div style="font-size:9.5px;margin-top:2px;">Dev</div></div>
+        <div style="flex:1;text-align:center;padding:9px 0;border-radius:9px;color:var(--c-text-3);"><div style="font-size:15px;">ⓘ</div><div style="font-size:9.5px;margin-top:2px;">About</div></div>
+      </div>
+      <div class="body" style="padding:14px;">
+        <div class="row" style="padding:12px 4px;">
+          <div><div style="font-weight:500;">Launch at login</div><div style="font-size:10.5px;color:var(--c-text-3);margin-top:2px;">Start Context Bar when you log in</div></div>
+          <span class="sw on" style="margin-left:auto;"></span>
+        </div>
+        <div class="row" style="padding:12px 4px;">
+          <div><div style="font-weight:500;">Global shortcut</div><div style="font-size:10.5px;color:var(--c-text-3);margin-top:2px;">Toggle popover from anywhere</div></div>
+          <span class="mono pill" style="margin-left:auto;">⌥⌘Space</span>
+        </div>
+        <div class="row" style="padding:12px 4px;">
+          <div><div style="font-weight:500;">Resume terminal</div><div style="font-size:10.5px;color:var(--c-text-3);margin-top:2px;">Where "Resume session" opens</div></div>
+          <span class="pill" style="margin-left:auto;">Ghostty ▾</span>
+        </div>
+        <div class="row" style="padding:12px 4px;border-bottom:none;">
+          <div><div style="font-weight:500;">Accessibility access</div><div style="font-size:10.5px;color:var(--c-text-3);margin-top:2px;">Needed for the global shortcut</div></div>
+          <span class="pill grn" style="margin-left:auto;">granted</span>
+        </div>
+      </div>
+      <div class="ftr"><span>v0.9.0</span><span>⏻</span></div>
+    </div>
+  </div>
+
+  <div class="proto">
+    <div class="proto-label">6C · Searchable flat list <span>VS Code idiom: search box filters one flat list, every setting inline-editable, section jump chips. Best once settings > 15.</span></div>
+    <div class="frame">
+      <div class="hdr"><div class="logo"></div><span class="crumb"><b>Settings</b></span><div class="icons"><span>✕</span></div></div>
+      <div style="padding:10px 14px 8px;"><div class="search">⌕ Search settings…</div></div>
+      <div style="padding:0 14px 10px;display:flex;gap:5px;">
+        <span class="pill" style="background:var(--c-text);color:var(--c-bg);">All</span><span class="pill">General</span><span class="pill">Appearance</span><span class="pill">Privacy</span><span class="pill">Dev</span>
+      </div>
+      <div class="body" style="border-top:1px solid var(--c-border);">
+        <div class="row"><div style="flex:1;"><span style="font-size:9px;color:var(--c-text-3);text-transform:uppercase;">general</span><div>Launch at login</div></div><span class="sw on"></span></div>
+        <div class="row"><div style="flex:1;"><span style="font-size:9px;color:var(--c-text-3);text-transform:uppercase;">general</span><div>Global shortcut</div></div><span class="mono pill">⌥⌘Space</span></div>
+        <div class="row"><div style="flex:1;"><span style="font-size:9px;color:var(--c-text-3);text-transform:uppercase;">appearance</span><div>Theme</div></div><span class="pill">System ▾</span></div>
+        <div class="row"><div style="flex:1;"><span style="font-size:9px;color:var(--c-text-3);text-transform:uppercase;">appearance</span><div>Window vibrancy</div></div><span class="sw on"></span></div>
+        <div class="row"><div style="flex:1;"><span style="font-size:9px;color:var(--c-text-3);text-transform:uppercase;">privacy</span><div>Anonymous analytics</div></div><span class="sw on"></span></div>
+        <div class="row"><div style="flex:1;"><span style="font-size:9px;color:var(--c-text-3);text-transform:uppercase;">dev</span><div>Doctor</div></div><span class="pill">Open →</span></div>
+        <div class="row" style="border-bottom:none;"><div style="flex:1;"><span style="font-size:9px;color:var(--c-text-3);text-transform:uppercase;">dev</span><div>Activity log</div></div><span class="pill">Open →</span></div>
+      </div>
+      <div class="ftr"><span>v0.9.0 · update available</span><span>⏻</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════ NOTIFICATIONS ══════════════ -->
+<h2>7 · Notifications</h2>
+<div class="grid">
+
+  <div class="proto">
+    <div class="proto-label">7A · Card feed <span>Refined current: level-colored cards, dismiss on hover, clear-all. Simple, calm.</span></div>
+    <div class="frame">
+      <div class="hdr"><div class="logo"></div><span class="crumb"><b>Notifications</b></span><div class="icons"><span style="font-size:10px;">Clear all</span></div></div>
+      <div class="body" style="padding:12px 14px;display:flex;flex-direction:column;gap:8px;">
+        <div style="border:1px solid rgba(239,68,68,.25);background:rgba(239,68,68,.05);border-radius:10px;padding:11px;">
+          <div style="display:flex;gap:7px;align-items:center;"><span class="pill red">error</span><span style="font-size:12px;font-weight:600;">MCP server failed</span><span style="margin-left:auto;font-size:9.5px;color:var(--c-text-3);">2h</span></div>
+          <div style="font-size:11px;color:var(--c-text-2);margin-top:5px;line-height:1.45;"><span class="mono">sentry</span> did not respond in 30s on Claude Code. Run Doctor to diagnose.</div>
+        </div>
+        <div style="border:1px solid rgba(245,158,11,.25);background:rgba(245,158,11,.05);border-radius:10px;padding:11px;">
+          <div style="display:flex;gap:7px;align-items:center;"><span class="pill amb">warn</span><span style="font-size:12px;font-weight:600;">Config changed externally</span><span style="margin-left:auto;font-size:9.5px;color:var(--c-text-3);">5h</span></div>
+          <div style="font-size:11px;color:var(--c-text-2);margin-top:5px;line-height:1.45;"><span class="mono">~/.claude/settings.json</span> was edited outside Context Bar. Backup created.</div>
+        </div>
+        <div style="border:1px solid var(--c-border);border-radius:10px;padding:11px;">
+          <div style="display:flex;gap:7px;align-items:center;"><span class="pill ind">info</span><span style="font-size:12px;font-weight:600;">2 new skills detected</span><span style="margin-left:auto;font-size:9.5px;color:var(--c-text-3);">1d</span></div>
+          <div style="font-size:11px;color:var(--c-text-2);margin-top:5px;line-height:1.45;"><span class="mono">graphify</span> and <span class="mono">caveman</span> added to Claude Code.</div>
+        </div>
+      </div>
+      <div class="ftr"><span>3 notifications</span><span>⏻</span></div>
+    </div>
+  </div>
+
+  <div class="proto">
+    <div class="proto-label">7B · Timeline <span>Day-grouped rail: thin timeline line, compact entries. Reads as history, not inbox — good when volume grows.</span></div>
+    <div class="frame">
+      <div class="hdr"><div class="logo"></div><span class="crumb"><b>Notifications</b></span><div class="icons"><span style="font-size:10px;">Clear all</span></div></div>
+      <div class="body" style="padding:14px 16px;">
+        <div class="sect-h">Today</div>
+        <div style="border-left:2px solid var(--c-border);margin:8px 0 14px 5px;padding-left:14px;display:flex;flex-direction:column;gap:12px;">
+          <div style="position:relative;">
+            <span style="position:absolute;left:-19px;top:3px;width:8px;height:8px;border-radius:50%;background:#ef4444;"></span>
+            <div style="font-size:12px;font-weight:600;">MCP server failed <span style="font-weight:400;color:var(--c-text-3);font-size:10px;">14:22</span></div>
+            <div style="font-size:11px;color:var(--c-text-2);margin-top:2px;"><span class="mono">sentry</span> timeout on Claude Code · <span style="color:#818cf8;">Run Doctor →</span></div>
+          </div>
+          <div style="position:relative;">
+            <span style="position:absolute;left:-19px;top:3px;width:8px;height:8px;border-radius:50%;background:#f59e0b;"></span>
+            <div style="font-size:12px;font-weight:600;">External config edit <span style="font-weight:400;color:var(--c-text-3);font-size:10px;">11:03</span></div>
+            <div style="font-size:11px;color:var(--c-text-2);margin-top:2px;"><span class="mono">settings.json</span> · backup created · <span style="color:#818cf8;">View diff →</span></div>
+          </div>
+        </div>
+        <div class="sect-h">Yesterday</div>
+        <div style="border-left:2px solid var(--c-border);margin:8px 0 0 5px;padding-left:14px;display:flex;flex-direction:column;gap:12px;">
+          <div style="position:relative;">
+            <span style="position:absolute;left:-19px;top:3px;width:8px;height:8px;border-radius:50%;background:#6366f1;"></span>
+            <div style="font-size:12px;font-weight:600;">2 new skills detected <span style="font-weight:400;color:var(--c-text-3);font-size:10px;">18:40</span></div>
+            <div style="font-size:11px;color:var(--c-text-2);margin-top:2px;"><span class="mono">graphify, caveman</span> → Claude Code</div>
+          </div>
+          <div style="position:relative;">
+            <span style="position:absolute;left:-19px;top:3px;width:8px;height:8px;border-radius:50%;background:#6366f1;"></span>
+            <div style="font-size:12px;font-weight:600;">Update installed <span style="font-weight:400;color:var(--c-text-3);font-size:10px;">09:12</span></div>
+            <div style="font-size:11px;color:var(--c-text-2);margin-top:2px;">Context Bar 0.8.9 → 0.9.0</div>
+          </div>
+        </div>
+      </div>
+      <div class="ftr"><span>4 events</span><span>⏻</span></div>
+    </div>
+  </div>
+
+  <div class="proto">
+    <div class="proto-label">7C · Actionable inbox <span>Triage UI: unread dots, filter tabs, inline action button per row. Notifications you *do* something about, then archive.</span></div>
+    <div class="frame">
+      <div class="hdr"><div class="logo"></div><span class="crumb"><b>Inbox</b></span><div class="icons"><span style="font-size:10px;">✓ all read</span></div></div>
+      <div style="display:flex;gap:5px;padding:10px 14px;border-bottom:1px solid var(--c-border);">
+        <span class="pill" style="background:var(--c-text);color:var(--c-bg);">All 3</span>
+        <span class="pill red">Errors 1</span><span class="pill amb">Warnings 1</span><span class="pill">Info 1</span>
+      </div>
+      <div class="body">
+        <div class="row" style="align-items:flex-start;padding:12px 14px;">
+          <span style="width:7px;height:7px;border-radius:50%;background:#6366f1;margin-top:5px;flex-shrink:0;"></span>
+          <div style="flex:1;">
+            <div style="font-size:12.5px;font-weight:600;">sentry MCP failing on Claude Code</div>
+            <div style="font-size:11px;color:var(--c-text-2);margin-top:2px;">Timeout after 30s — likely missing auth token.</div>
+            <div style="display:flex;gap:5px;margin-top:7px;"><span class="pill ind">Run Doctor</span><span class="pill">Archive</span></div>
+          </div>
+        </div>
+        <div class="row" style="align-items:flex-start;padding:12px 14px;">
+          <span style="width:7px;height:7px;border-radius:50%;background:#6366f1;margin-top:5px;flex-shrink:0;"></span>
+          <div style="flex:1;">
+            <div style="font-size:12.5px;font-weight:600;">settings.json edited externally</div>
+            <div style="font-size:11px;color:var(--c-text-2);margin-top:2px;">Backup taken automatically before change.</div>
+            <div style="display:flex;gap:5px;margin-top:7px;"><span class="pill ind">View diff</span><span class="pill">Restore</span><span class="pill">Archive</span></div>
+          </div>
+        </div>
+        <div class="row" style="align-items:flex-start;padding:12px 14px;opacity:.55;border-bottom:none;">
+          <span style="width:7px;height:7px;flex-shrink:0;"></span>
+          <div style="flex:1;">
+            <div style="font-size:12.5px;font-weight:600;">2 new skills detected</div>
+            <div style="font-size:11px;color:var(--c-text-2);margin-top:2px;">graphify, caveman → Claude Code</div>
+          </div>
+        </div>
+      </div>
+      <div class="ftr"><span>2 unread</span><span>⏻</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════ DOCTOR ══════════════ -->
+<h2>8 · Doctor</h2>
+<div class="grid">
+
+  <div class="proto">
+    <div class="proto-label">8A · Live checklist <span>Checks run visibly one by one — spinner → ✓/⚠. Trust through transparency; feels like CI.</span></div>
+    <div class="frame">
+      <div class="hdr"><div class="logo"></div><span class="crumb">Settings › <b>Doctor</b></span><div class="icons"><span class="pill">Re-run</span></div></div>
+      <div class="body" style="padding:14px 16px;">
+        <div class="sect-h">Environment</div>
+        <div style="margin:8px 0 14px;display:flex;flex-direction:column;gap:8px;font-size:12px;">
+          <div style="display:flex;gap:9px;align-items:center;"><span style="color:#34d399;">✓</span>Shell PATH resolves node, npx, git</div>
+          <div style="display:flex;gap:9px;align-items:center;"><span style="color:#34d399;">✓</span>node v22.4 · npm 10.9</div>
+          <div style="display:flex;gap:9px;align-items:center;"><span style="color:#34d399;">✓</span>All agent config files parse</div>
+        </div>
+        <div class="sect-h">Active MCPs · 14</div>
+        <div style="margin:8px 0;display:flex;flex-direction:column;gap:8px;font-size:12px;">
+          <div style="display:flex;gap:9px;align-items:center;"><span style="color:#34d399;">✓</span><span class="mono">posthog</span><span style="color:var(--c-text-3);font-size:10px;margin-left:auto;">1.2s</span></div>
+          <div style="display:flex;gap:9px;align-items:center;"><span style="color:#34d399;">✓</span><span class="mono">context7</span><span style="color:var(--c-text-3);font-size:10px;margin-left:auto;">0.8s</span></div>
+          <div style="display:flex;gap:9px;align-items:flex-start;">
+            <span style="color:#ef4444;">✕</span>
+            <div style="flex:1;">
+              <span class="mono">sentry</span>
+              <div style="font-size:10.5px;color:var(--c-text-2);margin-top:3px;">Timeout after 30s.</div>
+              <div style="font-size:10.5px;color:#818cf8;margin-top:2px;">Fix: set SENTRY_AUTH_TOKEN in server env →</div>
+            </div>
+          </div>
+          <div style="display:flex;gap:9px;align-items:center;"><span style="width:11px;height:11px;border:2px solid var(--c-skeleton);border-top-color:#8b5cf6;border-radius:50%;display:inline-block;animation:spin 1s linear infinite;"></span><span class="mono">linear</span><span style="color:var(--c-text-3);font-size:10px;margin-left:auto;">probing…</span></div>
+          <div style="font-size:10.5px;color:var(--c-text-3);">10 healthy MCPs hidden · show all</div>
+        </div>
+      </div>
+      <div class="ftr"><span>1 issue · 12 ok · 1 running</span><span>⏻</span></div>
+    </div>
+  </div>
+
+  <div class="proto">
+    <div class="proto-label">8B · Health score <span>Score ring hero + issue cards only. Healthy = one number and calm; broken = fix cards with buttons.</span></div>
+    <div class="frame">
+      <div class="hdr"><div class="logo"></div><span class="crumb">Settings › <b>Doctor</b></span><div class="icons"><span class="pill">Re-run</span></div></div>
+      <div class="body" style="padding:18px 16px;">
+        <div style="display:flex;flex-direction:column;align-items:center;gap:6px;">
+          <div style="position:relative;width:96px;height:96px;">
+            <svg viewBox="0 0 36 36" style="width:96px;height:96px;transform:rotate(-90deg);">
+              <circle cx="18" cy="18" r="15.5" fill="none" stroke="var(--c-skeleton)" stroke-width="3"/>
+              <circle cx="18" cy="18" r="15.5" fill="none" stroke="#f59e0b" stroke-dasharray="86 100" stroke-width="3" stroke-linecap="round"/>
+            </svg>
+            <div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;">
+              <span style="font-size:24px;font-weight:700;">86</span>
+              <span style="font-size:8.5px;color:var(--c-text-3);text-transform:uppercase;letter-spacing:.06em;">health</span>
+            </div>
+          </div>
+          <div style="font-size:12px;color:var(--c-text-2);">13 of 14 checks passing</div>
+        </div>
+        <div style="margin-top:16px;border:1px solid rgba(239,68,68,.25);background:rgba(239,68,68,.04);border-radius:12px;padding:13px;">
+          <div style="display:flex;gap:8px;align-items:center;"><span class="pill red">error</span><span class="mono" style="font-size:12.5px;font-weight:600;">sentry</span></div>
+          <div style="font-size:11px;color:var(--c-text-2);margin-top:6px;line-height:1.5;">Server timed out after 30s. Probably missing <span class="mono">SENTRY_AUTH_TOKEN</span> in env.</div>
+          <div style="display:flex;gap:6px;margin-top:9px;"><span class="pill ind">Open server config</span><span class="pill">Disable server</span><span class="pill">Ignore</span></div>
+        </div>
+        <div style="margin-top:10px;text-align:center;font-size:10.5px;color:var(--c-text-3);">Everything else healthy · show 13 passing checks</div>
+      </div>
+      <div class="ftr"><span>Last run 2m ago</span><span>⏻</span></div>
+    </div>
+  </div>
+
+  <div class="proto">
+    <div class="proto-label">8C · Terminal output <span>Doctor as CLI: mono report, exit-code aesthetic, copyable. Matches dev mental model of `brew doctor`.</span></div>
+    <div class="frame" style="background:#0c0c10;">
+      <div class="hdr" style="border-color:#1c1c22;"><div class="logo"></div><span class="crumb" style="color:#6b6b76;">Settings › <b style="color:#e4e4e7;">Doctor</b></span><div class="icons"><span class="pill" style="background:#18181d;border-color:#2a2a32;color:#a1a1aa;">Re-run</span></div></div>
+      <div class="body mono" style="padding:14px 18px;font-size:11px;line-height:2;color:#8b8b96;">
+        <div style="color:#5a5a64;">$ contextbar doctor</div>
+        <div><span style="color:#34d399;">✓</span> shell PATH <span style="color:#5a5a64;">— node 22.4, npx, git 2.47</span></div>
+        <div><span style="color:#34d399;">✓</span> configs parse <span style="color:#5a5a64;">— 4 agents, 0 errors</span></div>
+        <div><span style="color:#34d399;">✓</span> accessibility granted</div>
+        <div style="margin-top:6px;color:#c4b5fd;">▸ probing 14 active mcps…</div>
+        <div><span style="color:#34d399;">✓</span> posthog <span style="color:#5a5a64;">1.2s · 142 tools</span></div>
+        <div><span style="color:#34d399;">✓</span> context7 <span style="color:#5a5a64;">0.8s · 2 tools</span></div>
+        <div><span style="color:#ef4444;">✕</span> sentry <span style="color:#5a5a64;">timeout 30s</span></div>
+        <div style="padding-left:16px;color:#fbbf24;">fix: export SENTRY_AUTH_TOKEN → server env</div>
+        <div><span style="color:#34d399;">✓</span> 11 more ok <span style="color:#5a5a64;">(show)</span></div>
+        <div style="margin-top:6px;color:#e4e4e7;">13 passed · <span style="color:#ef4444;">1 failed</span> · 8.4s</div>
+        <div style="margin-top:2px;color:#5a5a64;">$ <span style="display:inline-block;width:7px;height:12px;background:#34d399;vertical-align:-2px;"></span></div>
+      </div>
+      <div class="ftr" style="border-color:#1c1c22;color:#5a5a64;"><span>⧉ copy report</span><span>⏻</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════ BACKUPS ══════════════ -->
+<h2>9 · Config Backups</h2>
+<div class="grid">
+
+  <div class="proto">
+    <div class="proto-label">9A · Timeline restore <span>Chronological spine across all files: every snapshot one entry with restore. "When did it break" thinking.</span></div>
+    <div class="frame">
+      <div class="hdr"><div class="logo"></div><span class="crumb">Claude Code › <b>Backups</b></span><div class="icons"><span>✕</span></div></div>
+      <div class="body" style="padding:14px 16px;">
+        <div class="sect-h">Today</div>
+        <div style="border-left:2px solid var(--c-border);margin:8px 0 12px 5px;padding-left:14px;display:flex;flex-direction:column;gap:12px;">
+          <div style="position:relative;">
+            <span style="position:absolute;left:-19px;top:3px;width:8px;height:8px;border-radius:50%;background:#8b5cf6;"></span>
+            <div style="display:flex;align-items:center;gap:7px;"><span class="mono" style="font-size:11.5px;">settings.json</span><span style="font-size:9.5px;color:var(--c-text-3);">14:22 · before mcp toggle</span></div>
+            <div style="display:flex;gap:5px;margin-top:5px;"><span class="pill">Preview</span><span class="pill ind">Restore</span></div>
+          </div>
+          <div style="position:relative;">
+            <span style="position:absolute;left:-19px;top:3px;width:8px;height:8px;border-radius:50%;background:#8b5cf6;"></span>
+            <div style="display:flex;align-items:center;gap:7px;"><span class="mono" style="font-size:11.5px;">mcp.json</span><span style="font-size:9.5px;color:var(--c-text-3);">11:03 · external edit</span></div>
+            <div style="display:flex;gap:5px;margin-top:5px;"><span class="pill">Preview</span><span class="pill ind">Restore</span></div>
+          </div>
+        </div>
+        <div class="sect-h">This week</div>
+        <div style="border-left:2px solid var(--c-border);margin:8px 0 0 5px;padding-left:14px;display:flex;flex-direction:column;gap:12px;">
+          <div style="position:relative;">
+            <span style="position:absolute;left:-19px;top:3px;width:8px;height:8px;border-radius:50%;background:var(--c-skeleton);"></span>
+            <div style="display:flex;align-items:center;gap:7px;"><span class="mono" style="font-size:11.5px;">settings.json</span><span style="font-size:9.5px;color:var(--c-text-3);">Mon 09:14 · before permission change</span></div>
+            <div style="display:flex;gap:5px;margin-top:5px;"><span class="pill">Preview</span><span class="pill ind">Restore</span></div>
+          </div>
+          <div style="position:relative;">
+            <span style="position:absolute;left:-19px;top:3px;width:8px;height:8px;border-radius:50%;background:var(--c-skeleton);"></span>
+            <div style="display:flex;align-items:center;gap:7px;"><span class="mono" style="font-size:11.5px;">CLAUDE.md</span><span style="font-size:9.5px;color:var(--c-text-3);">Sun 22:31 · before skill add</span></div>
+            <div style="display:flex;gap:5px;margin-top:5px;"><span class="pill">Preview</span><span class="pill ind">Restore</span></div>
+          </div>
+        </div>
+        <div style="font-size:10px;color:var(--c-text-3);margin-top:14px;">Backups auto-created before every write. Keeping last 20 per file.</div>
+      </div>
+      <div class="ftr"><span>6 snapshots · 3 files</span><span>⏻</span></div>
+    </div>
+  </div>
+
+  <div class="proto">
+    <div class="proto-label">9B · File tabs + diff pane <span>Pick file → snapshot list left, diff preview right-below. Git-tool mental model; diff is the star.</span></div>
+    <div class="frame">
+      <div class="hdr"><div class="logo"></div><span class="crumb">Claude Code › <b>Backups</b></span><div class="icons"><span>✕</span></div></div>
+      <div style="display:flex;gap:5px;padding:10px 14px;border-bottom:1px solid var(--c-border);">
+        <span class="pill mono" style="background:var(--c-text);color:var(--c-bg);">settings.json 3</span>
+        <span class="pill mono">mcp.json 2</span>
+        <span class="pill mono">CLAUDE.md 1</span>
+      </div>
+      <div style="padding:8px 14px;display:flex;gap:5px;overflow-x:auto;">
+        <span class="pill ind">14:22 today</span><span class="pill">Mon 09:14</span><span class="pill">last week</span>
+      </div>
+      <div class="body" style="margin:0 14px 12px;border:1px solid var(--c-border);border-radius:10px;overflow:hidden;">
+        <div style="padding:7px 12px;background:var(--c-surface);font-size:10px;color:var(--c-text-2);display:flex;justify-content:space-between;">
+          <span class="mono">settings.json · 14:22 vs current</span><span>+2 −1</span>
+        </div>
+        <div class="mono" style="font-size:10px;line-height:1.9;padding:8px 12px;">
+          <div style="color:var(--c-text-3);">&nbsp;&nbsp;"permissions": {</div>
+          <div style="background:rgba(239,68,68,.1);color:#ef4444;">− &nbsp;&nbsp;"allow": ["Bash(npm:*)"]</div>
+          <div style="background:rgba(16,185,129,.1);color:#10b981;">+ &nbsp;&nbsp;"allow": ["Bash(npm:*)",</div>
+          <div style="background:rgba(16,185,129,.1);color:#10b981;">+ &nbsp;&nbsp;&nbsp;&nbsp;"WebSearch"]</div>
+          <div style="color:var(--c-text-3);">&nbsp;&nbsp;}</div>
+        </div>
+      </div>
+      <div style="padding:0 14px 12px;display:flex;gap:8px;justify-content:flex-end;">
+        <span class="btn ghost">Open file</span><span class="btn">Restore this version</span>
+      </div>
+      <div class="ftr"><span>6 snapshots</span><span>⏻</span></div>
+    </div>
+  </div>
+
+  <div class="proto">
+    <div class="proto-label">9C · Time machine <span>Stacked version cards, newest front. Big restore per card. Spatial "going back in time" metaphor, least dev-jargon.</span></div>
+    <div class="frame">
+      <div class="hdr"><div class="logo"></div><span class="crumb">Claude Code › <b>Backups</b></span><div class="icons"><span>✕</span></div></div>
+      <div style="padding:12px 16px 4px;">
+        <div style="font-size:14px;font-weight:600;">settings.json</div>
+        <div style="font-size:10.5px;color:var(--c-text-3);margin-top:2px;">3 snapshots · switch file ▾</div>
+      </div>
+      <div class="body" style="padding:10px 16px;">
+        <div style="position:relative;">
+          <div style="position:absolute;top:22px;left:14px;right:14px;height:100%;border-radius:12px;background:var(--c-surface);border:1px solid var(--c-border-sub);"></div>
+          <div style="position:absolute;top:11px;left:7px;right:7px;height:100%;border-radius:12px;background:var(--c-surface);border:1px solid var(--c-border-sub);"></div>
+          <div style="position:relative;border-radius:12px;background:var(--c-bg);border:1px solid var(--c-border);padding:14px;box-shadow:0 6px 20px rgba(0,0,0,.08);">
+            <div style="display:flex;align-items:center;gap:8px;">
+              <span class="pill grn">current</span>
+              <span style="font-size:12px;font-weight:600;">Now</span>
+            </div>
+            <div class="mono" style="font-size:10px;color:var(--c-text-3);margin-top:8px;line-height:1.7;">14 permission rules · 8 mcps · hooks: 2<br>last write: today 14:22 by Context Bar</div>
+          </div>
+        </div>
+        <div style="margin-top:30px;border-radius:12px;border:1px solid var(--c-border);padding:14px;">
+          <div style="display:flex;align-items:center;gap:8px;">
+            <span style="font-size:12px;font-weight:600;">Today 14:22</span>
+            <span style="font-size:10px;color:var(--c-text-3);">before MCP toggle</span>
+            <span class="pill ind" style="margin-left:auto;">↩ Restore</span>
+          </div>
+          <div class="mono" style="font-size:10px;color:var(--c-text-3);margin-top:7px;">13 rules · 8 mcps · differs by 3 lines</div>
+        </div>
+        <div style="margin-top:8px;border-radius:12px;border:1px solid var(--c-border);padding:14px;">
+          <div style="display:flex;align-items:center;gap:8px;">
+            <span style="font-size:12px;font-weight:600;">Mon 09:14</span>
+            <span style="font-size:10px;color:var(--c-text-3);">before permission change</span>
+            <span class="pill ind" style="margin-left:auto;">↩ Restore</span>
+          </div>
+        </div>
+      </div>
+      <div class="ftr"><span>Auto-backup before every write</span><span>⏻</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════ PERMISSIONS ══════════════ -->
+<h2>10 · Permissions (Claude Code)</h2>
+<div class="grid">
+
+  <div class="proto">
+    <div class="proto-label">10A · Allow/Deny columns <span>Refined current: two labeled zones, chips with hover-remove, add row pinned bottom.</span></div>
+    <div class="frame">
+      <div class="hdr"><div class="logo"></div><span class="crumb">Claude Code › <b>Permissions</b></span><div class="icons"><span class="pill">14 rules</span></div></div>
+      <div class="body" style="padding:14px 16px;">
+        <div class="sect-h" style="color:#34d399;">Allow · 11</div>
+        <div style="display:flex;flex-wrap:wrap;gap:5px;margin:8px 0 16px;">
+          <span class="pill mono grn">Bash(npm:*)</span><span class="pill mono grn">Bash(git:*)</span>
+          <span class="pill mono grn">WebSearch</span><span class="pill mono grn">WebFetch(github.com)</span>
+          <span class="pill mono grn">Read(~/projects/**)</span><span class="pill mono grn">Bash(cargo:*)</span>
+          <span class="pill mono grn">mcp__posthog__*</span><span class="pill">+4 more</span>
+        </div>
+        <div class="sect-h" style="color:#ef4444;">Deny · 3</div>
+        <div style="display:flex;flex-wrap:wrap;gap:5px;margin:8px 0;">
+          <span class="pill mono red">Bash(rm -rf:*)</span><span class="pill mono red">Read(.env*)</span><span class="pill mono red">Bash(sudo:*)</span>
+        </div>
+      </div>
+      <div style="padding:10px 14px;border-top:1px solid var(--c-border);display:flex;gap:6px;">
+        <span class="pill">Allow ▾</span>
+        <div class="inp mono" style="flex:1;font-size:11px;">Bash(npm:*) or WebSearch</div>
+        <span class="btn" style="padding:5px 12px;">Add</span>
+      </div>
+      <div class="ftr"><span>Writes to settings.json · backed up</span><span>⏻</span></div>
+    </div>
+  </div>
+
+  <div class="proto">
+    <div class="proto-label">10B · Rule table <span>One list, allow/deny is a toggle on each row + scope column. Edit in place, see everything at once.</span></div>
+    <div class="frame">
+      <div class="hdr"><div class="logo"></div><span class="crumb">Claude Code › <b>Permissions</b></span><div class="icons"><span class="pill">＋ rule</span></div></div>
+      <div style="padding:9px 14px;border-bottom:1px solid var(--c-border);"><div class="search">⌕ Filter rules…</div></div>
+      <div class="body">
+        <div class="row"><span class="pill grn" style="width:46px;text-align:center;">allow</span><span class="mono" style="font-size:11px;flex:1;">Bash(npm:*)</span><span style="font-size:9px;color:var(--c-text-3);">global</span><span style="color:var(--c-text-3);">✕</span></div>
+        <div class="row"><span class="pill grn" style="width:46px;text-align:center;">allow</span><span class="mono" style="font-size:11px;flex:1;">Bash(git:*)</span><span style="font-size:9px;color:var(--c-text-3);">global</span><span style="color:var(--c-text-3);">✕</span></div>
+        <div class="row"><span class="pill grn" style="width:46px;text-align:center;">allow</span><span class="mono" style="font-size:11px;flex:1;">WebSearch</span><span style="font-size:9px;color:var(--c-text-3);">project</span><span style="color:var(--c-text-3);">✕</span></div>
+        <div class="row"><span class="pill red" style="width:46px;text-align:center;">deny</span><span class="mono" style="font-size:11px;flex:1;">Bash(sudo:*)</span><span style="font-size:9px;color:var(--c-text-3);">global</span><span style="color:var(--c-text-3);">✕</span></div>
+        <div class="row"><span class="pill red" style="width:46px;text-align:center;">deny</span><span class="mono" style="font-size:11px;flex:1;">Read(.env*)</span><span style="font-size:9px;color:var(--c-text-3);">global</span><span style="color:var(--c-text-3);">✕</span></div>
+        <div class="row" style="border-bottom:none;"><span class="pill grn" style="width:46px;text-align:center;">allow</span><span class="mono" style="font-size:11px;flex:1;">mcp__posthog__*</span><span style="font-size:9px;color:var(--c-text-3);">global</span><span style="color:var(--c-text-3);">✕</span></div>
+      </div>
+      <div class="ftr"><span>14 rules · 11 allow · 3 deny</span><span>⏻</span></div>
+    </div>
+  </div>
+
+  <div class="proto">
+    <div class="proto-label">10C · Guided builder <span>Natural-language composer: pick verb + tool + scope from menus, preview the generated rule. Plus curated suggestion chips. No syntax to memorize.</span></div>
+    <div class="frame">
+      <div class="hdr"><div class="logo"></div><span class="crumb">Claude Code › <b>Permissions</b></span><div class="icons"><span class="pill">14 rules</span></div></div>
+      <div class="body" style="padding:14px 16px;">
+        <div style="border:1px solid var(--c-border);border-radius:12px;padding:13px;background:var(--c-surface);">
+          <div class="sect-h" style="margin-bottom:8px;">New rule</div>
+          <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-size:12.5px;">
+            <span class="pill grn" style="font-size:11px;">Allow ▾</span>
+            <span>Claude to run</span>
+            <span class="pill" style="font-size:11px;">Bash ▾</span>
+            <span>commands matching</span>
+            <span class="pill mono" style="font-size:11px;">npm *</span>
+          </div>
+          <div class="mono" style="margin-top:10px;font-size:10.5px;color:var(--c-text-3);background:var(--c-bg);border:1px solid var(--c-border-sub);border-radius:7px;padding:7px 10px;">→ "Bash(npm:*)" in allow</div>
+          <div style="margin-top:9px;display:flex;justify-content:flex-end;"><span class="btn" style="padding:5px 12px;">Add rule</span></div>
+        </div>
+        <div class="sect-h" style="margin:14px 0 7px;">Suggested for you</div>
+        <div style="display:flex;flex-direction:column;gap:6px;">
+          <div style="display:flex;align-items:center;gap:8px;border:1px solid var(--c-border-sub);border-radius:9px;padding:9px 11px;font-size:11.5px;">
+            <span>You approve <b class="mono" style="font-size:10.5px;">cargo check</b> often</span>
+            <span class="pill grn" style="margin-left:auto;">Allow it</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;border:1px solid var(--c-border-sub);border-radius:9px;padding:9px 11px;font-size:11.5px;">
+            <span>Protect secrets: deny <b class="mono" style="font-size:10.5px;">Read(.env*)</b></span>
+            <span class="pill grn" style="margin-left:auto;">Added ✓</span>
+          </div>
+        </div>
+        <div class="sect-h" style="margin:14px 0 7px;">Current rules · 14</div>
+        <div style="display:flex;flex-wrap:wrap;gap:5px;">
+          <span class="pill mono grn">Bash(npm:*)</span><span class="pill mono grn">WebSearch</span><span class="pill mono red">Bash(sudo:*)</span><span class="pill">+11</span>
+        </div>
+      </div>
+      <div class="ftr"><span>Writes to settings.json</span><span>⏻</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════ ACTIVITY LOG ══════════════ -->
+<h2>11 · Activity Log</h2>
+<div class="grid">
+
+  <div class="proto">
+    <div class="proto-label">11A · Event feed <span>Refined current: typed chips, mono names, relative times. Add filter chips on top.</span></div>
+    <div class="frame">
+      <div class="hdr"><div class="logo"></div><span class="crumb">Settings › <b>Activity</b></span><div class="icons"><span class="pill">184</span></div></div>
+      <div style="display:flex;gap:5px;padding:10px 14px;border-bottom:1px solid var(--c-border);">
+        <span class="pill" style="background:var(--c-text);color:var(--c-bg);">All</span><span class="pill">Toggles</span><span class="pill">Permissions</span><span class="pill">Writes</span>
+      </div>
+      <div class="body">
+        <div class="row"><span class="pill ind">skill_toggled</span><span class="mono" style="font-size:11px;">caveman</span><span style="font-size:10px;color:var(--c-text-3);">→ on · claude</span><span style="margin-left:auto;font-size:9.5px;color:var(--c-text-3);">2m</span></div>
+        <div class="row"><span class="pill vio">mcp_toggled</span><span class="mono" style="font-size:11px;">sentry</span><span style="font-size:10px;color:var(--c-text-3);">→ off · claude</span><span style="margin-left:auto;font-size:9.5px;color:var(--c-text-3);">1h</span></div>
+        <div class="row"><span class="pill grn">permission_set</span><span class="mono" style="font-size:11px;">WebSearch</span><span style="font-size:10px;color:var(--c-text-3);">allow · claude</span><span style="margin-left:auto;font-size:9.5px;color:var(--c-text-3);">3h</span></div>
+        <div class="row"><span class="pill amb">config_written</span><span class="mono" style="font-size:11px;">settings.json</span><span style="font-size:10px;color:var(--c-text-3);">backup #6</span><span style="margin-left:auto;font-size:9.5px;color:var(--c-text-3);">3h</span></div>
+        <div class="row" style="border-bottom:none;"><span class="pill ind">skill_toggled</span><span class="mono" style="font-size:11px;">pdf</span><span style="font-size:10px;color:var(--c-text-3);">→ off · claude</span><span style="margin-left:auto;font-size:9.5px;color:var(--c-text-3);">1d</span></div>
+      </div>
+      <div class="ftr"><span>Last 200 events</span><span>⏻</span></div>
+    </div>
+  </div>
+
+  <div class="proto">
+    <div class="proto-label">11B · Grouped digest <span>Rolled up by hour/day: "3 toggles, 1 write" summaries that expand. Scannable history without 200-row noise.</span></div>
+    <div class="frame">
+      <div class="hdr"><div class="logo"></div><span class="crumb">Settings › <b>Activity</b></span><div class="icons"><span class="pill">184</span></div></div>
+      <div class="body" style="padding:12px 14px;">
+        <div style="border:1px solid var(--c-border);border-radius:10px;overflow:hidden;margin-bottom:8px;">
+          <div style="padding:10px 12px;display:flex;align-items:center;gap:8px;background:var(--c-surface);">
+            <span style="font-size:12px;font-weight:600;">Today 14:00–15:00</span>
+            <span style="font-size:10px;color:var(--c-text-3);">4 events</span>
+            <span style="margin-left:auto;color:var(--c-text-3);font-size:10px;">▾</span>
+          </div>
+          <div style="padding:8px 12px;font-size:11px;line-height:2;color:var(--c-text-2);">
+            <div>· <span class="mono">caveman</span> skill → on</div>
+            <div>· <span class="mono">sentry</span> mcp → off</div>
+            <div>· <span class="mono">WebSearch</span> permission allowed</div>
+            <div>· <span class="mono">settings.json</span> written (backup #6)</div>
+          </div>
+        </div>
+        <div style="border:1px solid var(--c-border);border-radius:10px;margin-bottom:8px;">
+          <div style="padding:10px 12px;display:flex;align-items:center;gap:8px;">
+            <span style="font-size:12px;font-weight:600;">Today 09:00–11:00</span>
+            <span style="font-size:10px;color:var(--c-text-3);">2 toggles · 1 write</span>
+            <span style="margin-left:auto;color:var(--c-text-3);font-size:10px;">▸</span>
+          </div>
+        </div>
+        <div style="border:1px solid var(--c-border);border-radius:10px;">
+          <div style="padding:10px 12px;display:flex;align-items:center;gap:8px;">
+            <span style="font-size:12px;font-weight:600;">Yesterday</span>
+            <span style="font-size:10px;color:var(--c-text-3);">11 events · mostly skills</span>
+            <span style="margin-left:auto;color:var(--c-text-3);font-size:10px;">▸</span>
+          </div>
+        </div>
+      </div>
+      <div class="ftr"><span>Rolled up · expand for detail</span><span>⏻</span></div>
+    </div>
+  </div>
+
+  <div class="proto">
+    <div class="proto-label">11C · Terminal tail <span>`tail -f` aesthetic: timestamps, live follow, filter box. Debug tool, not a feature page.</span></div>
+    <div class="frame" style="background:#0c0c10;">
+      <div class="hdr" style="border-color:#1c1c22;"><div class="logo"></div><span class="crumb" style="color:#6b6b76;">Settings › <b style="color:#e4e4e7;">Activity</b></span><div class="icons"><span class="pill" style="background:#18181d;border-color:#2a2a32;color:#34d399;">● live</span></div></div>
+      <div style="padding:9px 14px;border-bottom:1px solid #1c1c22;"><div class="search mono" style="background:#131318;border-color:#26262c;color:#5a5a64;font-size:11px;">/ filter events…</div></div>
+      <div class="body mono" style="padding:10px 16px;font-size:10px;line-height:2.1;color:#8b8b96;">
+        <div><span style="color:#5a5a64;">14:22:07</span> <span style="color:#818cf8;">skill</span> caveman → on <span style="color:#5a5a64;">claude</span></div>
+        <div><span style="color:#5a5a64;">14:22:07</span> <span style="color:#fbbf24;">write</span> settings.json <span style="color:#5a5a64;">backup=6</span></div>
+        <div><span style="color:#5a5a64;">13:04:51</span> <span style="color:#a78bfa;">mcp</span> sentry → off <span style="color:#5a5a64;">claude</span></div>
+        <div><span style="color:#5a5a64;">11:03:22</span> <span style="color:#34d399;">perm</span> allow WebSearch <span style="color:#5a5a64;">claude</span></div>
+        <div><span style="color:#5a5a64;">11:03:22</span> <span style="color:#fbbf24;">write</span> settings.json <span style="color:#5a5a64;">backup=5</span></div>
+        <div><span style="color:#5a5a64;">09:14:38</span> <span style="color:#818cf8;">skill</span> pdf → off <span style="color:#5a5a64;">claude</span></div>
+        <div><span style="color:#5a5a64;">09:12:04</span> <span style="color:#f472b6;">detect</span> +2 skills <span style="color:#5a5a64;">graphify caveman</span></div>
+        <div><span style="color:#5a5a64;">──── yesterday ────</span></div>
+        <div><span style="color:#5a5a64;">18:40:12</span> <span style="color:#a78bfa;">mcp</span> linear added <span style="color:#5a5a64;">cursor</span></div>
+        <div>▌</div>
+      </div>
+      <div class="ftr" style="border-color:#1c1c22;color:#5a5a64;"><span>⧉ export</span><span>⏻</span></div>
+    </div>
+  </div>
+</div>
+
+<script>
+  if (matchMedia('(prefers-color-scheme: dark)').matches) document.documentElement.classList.add('dark');
+</script>
+</body>
+</html>

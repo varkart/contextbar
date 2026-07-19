@@ -1,0 +1,522 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Context Bar — Popover Core Pages ×3</title>
+<style>
+  :root {
+    --c-bg:#ffffff; --c-surface:#f4f4f5; --c-hover:#f4f4f5;
+    --c-border:rgba(228,228,231,.9); --c-border-sub:rgba(228,228,231,.6);
+    --c-text:#18181b; --c-text-2:#71717a; --c-text-3:#a1a1aa;
+    --c-input:rgba(244,244,245,.9); --c-skeleton:#e4e4e7; --page-bg:#ececee;
+  }
+  .dark {
+    --c-bg:#09090b; --c-surface:#18181b; --c-hover:rgba(255,255,255,.025);
+    --c-border:rgba(39,39,42,.8); --c-border-sub:rgba(39,39,42,.5);
+    --c-text:#e4e4e7; --c-text-2:#71717a; --c-text-3:#52525b;
+    --c-input:rgba(39,39,42,.6); --c-skeleton:#27272a; --page-bg:#121214;
+  }
+  * { box-sizing:border-box; -webkit-font-smoothing:antialiased; margin:0; padding:0; }
+  body { font-family:'Geist',-apple-system,BlinkMacSystemFont,system-ui,sans-serif;
+    background:var(--page-bg); color:var(--c-text); padding:32px 24px 64px; }
+  h1 { font-size:20px; font-weight:600; letter-spacing:-.02em; }
+  h2 { font-size:16px; font-weight:600; letter-spacing:-.01em; margin:44px 0 4px; }
+  .sub { font-size:13px; color:var(--c-text-2); margin:4px 0 20px; }
+  .toggle { position:fixed; top:20px; right:24px; z-index:10; padding:6px 14px; border-radius:8px;
+    font-size:12px; font-weight:500; background:var(--c-surface); border:1px solid var(--c-border);
+    color:var(--c-text); cursor:pointer; }
+  .grid { display:flex; flex-wrap:wrap; gap:32px; align-items:flex-start; }
+  .proto { display:flex; flex-direction:column; gap:8px; }
+  .proto-label { font-size:12.5px; font-weight:600; }
+  .proto-label span { display:block; font-weight:400; font-size:11px; color:var(--c-text-2); margin-top:2px; max-width:380px; line-height:1.4; }
+  .frame { width:380px; height:520px; background:var(--c-bg); border:1px solid var(--c-border);
+    border-radius:14px; overflow:hidden; display:flex; flex-direction:column;
+    box-shadow:0 12px 32px rgba(0,0,0,.10); }
+  .mono { font-family:'Geist Mono','SF Mono',ui-monospace,monospace; }
+  .hdr { display:flex; align-items:center; gap:8px; padding:10px 14px; border-bottom:1px solid var(--c-border); flex-shrink:0; font-size:12px; color:var(--c-text-3); }
+  .hdr .logo { width:16px; height:16px; border-radius:4px; background:linear-gradient(135deg,#8b5cf6,#6366f1); flex-shrink:0; }
+  .hdr .crumb b { color:var(--c-text); font-weight:500; }
+  .hdr .icons { margin-left:auto; display:flex; gap:9px; }
+  .ftr { display:flex; align-items:center; justify-content:space-between; padding:8px 14px;
+    border-top:1px solid var(--c-border); font-size:10.5px; color:var(--c-text-3); flex-shrink:0; }
+  .body { flex:1; overflow-y:auto; scrollbar-width:none; }
+  .body::-webkit-scrollbar { display:none; }
+  .dot { width:7px; height:7px; border-radius:50%; flex-shrink:0; }
+  .dot.on { background:#10b981; } .dot.off { background:var(--c-skeleton); }
+  .avatar { width:26px; height:26px; border-radius:7px; display:flex; align-items:center; justify-content:center;
+    font-size:11px; font-weight:600; color:#fff; flex-shrink:0; }
+  .av-cl { background:#d97757; } .av-cu { background:#4f46e5; } .av-ge { background:#1a73e8; } .av-co { background:#52525b; }
+  .mini { width:16px; height:16px; border-radius:4px; font-size:8px; }
+  .pill { font-size:10px; padding:2px 8px; border-radius:99px; background:var(--c-surface);
+    color:var(--c-text-2); border:1px solid var(--c-border-sub); white-space:nowrap; }
+  .pill.ind { color:#818cf8; border-color:rgba(99,102,241,.3); background:rgba(99,102,241,.07); }
+  .pill.vio { color:#a78bfa; border-color:rgba(139,92,246,.3); background:rgba(139,92,246,.07); }
+  .pill.grn { color:#34d399; border-color:rgba(16,185,129,.3); background:rgba(16,185,129,.07); }
+  .pill.amb { color:#f59e0b; border-color:rgba(245,158,11,.3); background:rgba(245,158,11,.07); }
+  .sw { width:26px; height:15px; border-radius:99px; background:var(--c-skeleton); position:relative; flex-shrink:0; }
+  .sw.on { background:#10b981; }
+  .sw::after { content:''; position:absolute; top:2px; left:2px; width:11px; height:11px; border-radius:50%; background:#fff; }
+  .sw.on::after { left:auto; right:2px; }
+  .sect-h { font-size:10px; text-transform:uppercase; letter-spacing:.06em; color:var(--c-text-3); }
+  .search { display:flex; align-items:center; gap:7px; background:var(--c-input); border:1px solid var(--c-border);
+    border-radius:8px; padding:6px 10px; font-size:12.5px; color:var(--c-text-3); }
+  .tabbar { display:flex; border-bottom:1px solid var(--c-border); padding:0 14px; gap:16px; flex-shrink:0; }
+  .tab { padding:9px 0 8px; font-size:12px; color:var(--c-text-3); border-bottom:2px solid transparent; cursor:pointer; }
+  .tab.act { color:var(--c-text); border-color:#8b5cf6; font-weight:500; }
+</style>
+</head>
+<body>
+<button class="toggle" onclick="document.documentElement.classList.toggle('dark')">☾ / ☀︎ theme</button>
+<h1>Popover — core pages, 3 alternates each</h1>
+<p class="sub">Agent Detail · Skills catalog (=MCPs catalog, accent swap) · Skill Detail · MCP Detail. 380×520.</p>
+
+<!-- ══════════════ AGENT DETAIL ══════════════ -->
+<h2>1 · Agent Detail (Claude Code)</h2>
+<p class="sub">Current: compact header + stacked skills/MCP/permissions sections.</p>
+<div class="grid">
+
+  <div class="proto">
+    <div class="proto-label">1A · Hero + stat strip <span>Big identity header, glanceable stat strip, then sections. Confident, spacious.</span></div>
+    <div class="frame">
+      <div class="hdr"><div class="logo"></div><span class="crumb">Agents › <b>Claude Code</b></span><div class="icons"><span>⤢</span><span>⚙</span></div></div>
+      <div class="body">
+        <div style="padding:18px 16px 14px; display:flex; gap:12px; align-items:center;">
+          <div class="avatar av-cl" style="width:44px;height:44px;border-radius:12px;font-size:17px;">CC</div>
+          <div>
+            <div style="font-size:17px;font-weight:600;letter-spacing:-.02em;">Claude Code</div>
+            <div style="font-size:11px;color:var(--c-text-3);" class="mono">v2.1.3 · ~/.claude</div>
+          </div>
+          <span class="pill grn" style="margin-left:auto;">● live session</span>
+        </div>
+        <div style="display:flex; border-top:1px solid var(--c-border-sub); border-bottom:1px solid var(--c-border-sub);">
+          <div style="flex:1;text-align:center;padding:10px 0;border-right:1px solid var(--c-border-sub);"><div style="font-size:17px;font-weight:700;">21</div><div style="font-size:9.5px;color:var(--c-text-3);">SKILLS</div></div>
+          <div style="flex:1;text-align:center;padding:10px 0;border-right:1px solid var(--c-border-sub);"><div style="font-size:17px;font-weight:700;">8</div><div style="font-size:9.5px;color:var(--c-text-3);">MCPS</div></div>
+          <div style="flex:1;text-align:center;padding:10px 0;border-right:1px solid var(--c-border-sub);"><div style="font-size:17px;font-weight:700;">14</div><div style="font-size:9.5px;color:var(--c-text-3);">RULES</div></div>
+          <div style="flex:1;text-align:center;padding:10px 0;"><div style="font-size:17px;font-weight:700;">6</div><div style="font-size:9.5px;color:var(--c-text-3);">BACKUPS</div></div>
+        </div>
+        <div style="padding:14px 16px 6px;"><span class="sect-h" style="color:#818cf8;">Skills · 18 active</span></div>
+        <div style="padding:0 16px;">
+          <div style="display:flex;align-items:center;gap:9px;padding:8px 0;border-bottom:1px solid var(--c-border-sub);font-size:12.5px;"><span class="dot on"></span><span class="mono">graphify</span><span class="sw on" style="margin-left:auto;"></span></div>
+          <div style="display:flex;align-items:center;gap:9px;padding:8px 0;border-bottom:1px solid var(--c-border-sub);font-size:12.5px;"><span class="dot on"></span><span class="mono">caveman</span><span class="sw on" style="margin-left:auto;"></span></div>
+          <div style="display:flex;align-items:center;gap:9px;padding:8px 0;font-size:12.5px;opacity:.5;"><span class="dot off"></span><span class="mono">pdf</span><span class="sw" style="margin-left:auto;"></span></div>
+          <div style="font-size:11px;color:#818cf8;padding:6px 0 4px;">Show all 21 →</div>
+        </div>
+        <div style="padding:12px 16px 6px;"><span class="sect-h" style="color:#a78bfa;">MCP servers · 6 active</span></div>
+        <div style="padding:0 16px 16px;">
+          <div style="display:flex;align-items:center;gap:9px;padding:8px 0;border-bottom:1px solid var(--c-border-sub);font-size:12.5px;"><span class="dot on"></span><span class="mono">posthog</span><span style="font-size:9px;">🔒</span><span class="sw on" style="margin-left:auto;"></span></div>
+          <div style="display:flex;align-items:center;gap:9px;padding:8px 0;font-size:12.5px;"><span class="dot on"></span><span class="mono">context7</span><span class="sw on" style="margin-left:auto;"></span></div>
+          <div style="font-size:11px;color:#a78bfa;padding:6px 0;">Show all 8 →</div>
+        </div>
+      </div>
+      <div class="ftr"><span>⟳ 32s ago</span><span>⏻</span></div>
+    </div>
+  </div>
+
+  <div class="proto">
+    <div class="proto-label">1B · Tabs <span>Header + tab bar. One concern at a time, no scrolling past sections. Scales to more tabs (Config, Usage).</span></div>
+    <div class="frame">
+      <div class="hdr"><div class="logo"></div><span class="crumb">Agents › <b>Claude Code</b></span><div class="icons"><span>⤢</span><span>⚙</span></div></div>
+      <div style="padding:14px 16px 10px; display:flex; gap:10px; align-items:center;">
+        <div class="avatar av-cl" style="width:34px;height:34px;border-radius:9px;font-size:13px;">CC</div>
+        <div>
+          <div style="font-size:15px;font-weight:600;">Claude Code <span style="font-size:10px;color:var(--c-text-3);font-weight:400;" class="mono">v2.1.3</span></div>
+          <div style="font-size:10.5px;color:#10b981;">● session live · contextbar</div>
+        </div>
+      </div>
+      <div class="tabbar">
+        <div class="tab act">Skills <span style="color:var(--c-text-3);">21</span></div>
+        <div class="tab">MCPs <span style="color:var(--c-text-3);">8</span></div>
+        <div class="tab">Permissions</div>
+        <div class="tab">Backups</div>
+      </div>
+      <div style="padding:10px 14px 0;"><div class="search">⌕ Filter skills…</div></div>
+      <div class="body" style="padding:6px 14px;">
+        <div style="display:flex;align-items:center;gap:9px;padding:9px 2px;border-bottom:1px solid var(--c-border-sub);font-size:12.5px;"><span class="dot on"></span><span class="mono">graphify</span><span style="font-size:10px;color:var(--c-text-3);margin-left:auto;">used 2h ago</span><span class="sw on"></span></div>
+        <div style="display:flex;align-items:center;gap:9px;padding:9px 2px;border-bottom:1px solid var(--c-border-sub);font-size:12.5px;"><span class="dot on"></span><span class="mono">caveman</span><span style="font-size:10px;color:var(--c-text-3);margin-left:auto;">used today</span><span class="sw on"></span></div>
+        <div style="display:flex;align-items:center;gap:9px;padding:9px 2px;border-bottom:1px solid var(--c-border-sub);font-size:12.5px;"><span class="dot on"></span><span class="mono">skill-creator</span><span style="font-size:10px;color:var(--c-text-3);margin-left:auto;">3d ago</span><span class="sw on"></span></div>
+        <div style="display:flex;align-items:center;gap:9px;padding:9px 2px;border-bottom:1px solid var(--c-border-sub);font-size:12.5px;opacity:.5;"><span class="dot off"></span><span class="mono">pdf</span><span style="font-size:10px;color:var(--c-text-3);margin-left:auto;">never</span><span class="sw"></span></div>
+        <div style="display:flex;align-items:center;gap:9px;padding:9px 2px;font-size:12.5px;opacity:.5;"><span class="dot off"></span><span class="mono">docx</span><span style="font-size:10px;color:var(--c-text-3);margin-left:auto;">never</span><span class="sw"></span></div>
+      </div>
+      <div style="padding:10px 14px;border-top:1px solid var(--c-border);"><span class="pill ind">＋ Add skill</span></div>
+      <div class="ftr"><span>⟳ 32s ago</span><span>⏻</span></div>
+    </div>
+  </div>
+
+  <div class="proto">
+    <div class="proto-label">1C · Command dashboard <span>Agent as system: health ring, usage numbers, sections as cards. Detail lists live one click deeper.</span></div>
+    <div class="frame">
+      <div class="hdr"><div class="logo"></div><span class="crumb">Agents › <b>Claude Code</b></span><div class="icons"><span>⤢</span><span>⚙</span></div></div>
+      <div class="body" style="padding:14px;">
+        <div style="display:flex;gap:12px;align-items:center;background:var(--c-surface);border:1px solid var(--c-border-sub);border-radius:12px;padding:14px;">
+          <div style="position:relative;width:54px;height:54px;flex-shrink:0;">
+            <svg viewBox="0 0 36 36" style="width:54px;height:54px;transform:rotate(-90deg);">
+              <circle cx="18" cy="18" r="15" fill="none" stroke="var(--c-skeleton)" stroke-width="3.5"/>
+              <circle cx="18" cy="18" r="15" fill="none" stroke="#10b981" stroke-width="3.5" stroke-dasharray="87 100" stroke-linecap="round"/>
+            </svg>
+            <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;">92</div>
+          </div>
+          <div>
+            <div style="font-size:14px;font-weight:600;">Claude Code — healthy</div>
+            <div style="font-size:10.5px;color:var(--c-text-3);margin-top:2px;">1 MCP failing · config valid · session live</div>
+            <div style="font-size:10.5px;color:#f59e0b;margin-top:2px;">⚠ sentry server not responding → Doctor</div>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px;">
+          <div style="background:var(--c-surface);border:1px solid var(--c-border-sub);border-radius:10px;padding:12px;">
+            <div class="sect-h" style="color:#818cf8;">Skills</div>
+            <div style="font-size:20px;font-weight:700;margin-top:4px;">18<span style="font-size:11px;color:var(--c-text-3);font-weight:400;">/21 on</span></div>
+            <div style="font-size:10px;color:var(--c-text-3);margin-top:3px;">graphify most used</div>
+          </div>
+          <div style="background:var(--c-surface);border:1px solid var(--c-border-sub);border-radius:10px;padding:12px;">
+            <div class="sect-h" style="color:#a78bfa;">MCPs</div>
+            <div style="font-size:20px;font-weight:700;margin-top:4px;">6<span style="font-size:11px;color:var(--c-text-3);font-weight:400;">/8 on</span></div>
+            <div style="font-size:10px;color:#f59e0b;margin-top:3px;">1 failing</div>
+          </div>
+          <div style="background:var(--c-surface);border:1px solid var(--c-border-sub);border-radius:10px;padding:12px;">
+            <div class="sect-h">Usage · 7d</div>
+            <div style="font-size:20px;font-weight:700;margin-top:4px;">4.2M<span style="font-size:11px;color:var(--c-text-3);font-weight:400;"> tokens</span></div>
+            <div style="font-size:10px;color:var(--c-text-3);margin-top:3px;">$12.40 · 38 sessions</div>
+          </div>
+          <div style="background:var(--c-surface);border:1px solid var(--c-border-sub);border-radius:10px;padding:12px;">
+            <div class="sect-h">Permissions</div>
+            <div style="font-size:20px;font-weight:700;margin-top:4px;">14<span style="font-size:11px;color:var(--c-text-3);font-weight:400;"> rules</span></div>
+            <div style="font-size:10px;color:var(--c-text-3);margin-top:3px;">11 allow · 3 deny</div>
+          </div>
+        </div>
+        <div style="display:flex;gap:6px;margin-top:10px;">
+          <span class="pill">⌗ Backups 6</span><span class="pill">≋ Config</span><span class="pill">▶ Resume session</span>
+        </div>
+      </div>
+      <div class="ftr"><span>⟳ 32s ago</span><span>⏻</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════ SKILLS CATALOG ══════════════ -->
+<h2>2 · Skills catalog (All Skills — MCPs page = same, violet)</h2>
+<p class="sub">Current: search + agent chips + grouped rows with agent dots.</p>
+<div class="grid">
+
+  <div class="proto">
+    <div class="proto-label">2A · Grouped list+ <span>Refined current: search, chips, rows. Adds last-used + usage count per row.</span></div>
+    <div class="frame">
+      <div class="hdr"><div class="logo"></div><span class="crumb"><b>Skills</b></span><div class="icons"><span>⤢</span><span>⚙</span></div></div>
+      <div style="padding:10px 14px 8px;display:flex;gap:8px;align-items:center;">
+        <div class="search" style="flex:1;">⌕ Search 34 skills…</div>
+        <span class="pill ind">＋ Add</span>
+      </div>
+      <div style="padding:0 14px 8px;display:flex;gap:5px;">
+        <span class="pill" style="background:var(--c-text);color:var(--c-bg);">All</span>
+        <span class="pill"><span class="avatar av-cl mini" style="display:inline-flex;">C</span> 21</span>
+        <span class="pill"><span class="avatar av-cu mini" style="display:inline-flex;">C</span> 9</span>
+        <span class="pill"><span class="avatar av-ge mini" style="display:inline-flex;">G</span> 4</span>
+      </div>
+      <div class="body" style="border-top:1px solid var(--c-border);">
+        <div style="padding:10px 14px;border-bottom:1px solid var(--c-border-sub);">
+          <div style="display:flex;align-items:center;gap:8px;"><span class="mono" style="font-size:13px;">graphify</span><span style="margin-left:auto;display:flex;gap:3px;"><span class="avatar av-cl mini">C</span><span class="avatar av-cu mini">C</span></span></div>
+          <div style="font-size:11px;color:var(--c-text-3);margin-top:3px;">Any input → knowledge graph with clustered communities</div>
+          <div style="font-size:9.5px;color:var(--c-text-3);margin-top:3px;">12 runs · last used 2h ago</div>
+        </div>
+        <div style="padding:10px 14px;border-bottom:1px solid var(--c-border-sub);">
+          <div style="display:flex;align-items:center;gap:8px;"><span class="mono" style="font-size:13px;">caveman</span><span style="margin-left:auto;display:flex;gap:3px;"><span class="avatar av-cl mini">C</span></span></div>
+          <div style="font-size:11px;color:var(--c-text-3);margin-top:3px;">Ultra-compressed communication, ~75% fewer tokens</div>
+          <div style="font-size:9.5px;color:var(--c-text-3);margin-top:3px;">31 runs · last used today</div>
+        </div>
+        <div style="padding:10px 14px;border-bottom:1px solid var(--c-border-sub);">
+          <div style="display:flex;align-items:center;gap:8px;"><span class="mono" style="font-size:13px;">skill-creator</span><span style="margin-left:auto;display:flex;gap:3px;"><span class="avatar av-cl mini">C</span><span class="avatar av-ge mini">G</span></span></div>
+          <div style="font-size:11px;color:var(--c-text-3);margin-top:3px;">Guide for creating effective skills</div>
+          <div style="font-size:9.5px;color:var(--c-text-3);margin-top:3px;">4 runs · 3d ago</div>
+        </div>
+        <div style="padding:10px 14px;">
+          <div style="display:flex;align-items:center;gap:8px;"><span class="mono" style="font-size:13px;opacity:.55;">pdf</span><span style="margin-left:auto;display:flex;gap:3px;opacity:.55;"><span class="avatar av-cl mini">C</span></span></div>
+          <div style="font-size:11px;color:var(--c-text-3);margin-top:3px;opacity:.55;">Read, create, and manipulate PDF files</div>
+          <div style="font-size:9.5px;color:#f59e0b;margin-top:3px;">never used — consider removing</div>
+        </div>
+      </div>
+      <div class="ftr"><span>34 skills · 35 installs</span><span>⏻</span></div>
+    </div>
+  </div>
+
+  <div class="proto">
+    <div class="proto-label">2B · Card grid <span>2-col cards, description-forward. Browsing/discovery feel — "app store of your skills".</span></div>
+    <div class="frame">
+      <div class="hdr"><div class="logo"></div><span class="crumb"><b>Skills</b></span><div class="icons"><span>⤢</span><span>⚙</span></div></div>
+      <div style="padding:10px 14px 8px;"><div class="search">⌕ Search skills…</div></div>
+      <div class="body" style="padding:4px 14px 14px;display:grid;grid-template-columns:1fr 1fr;gap:8px;align-content:start;">
+        <div style="background:var(--c-surface);border:1px solid var(--c-border-sub);border-radius:10px;padding:11px;">
+          <div style="font-size:16px;">🕸</div>
+          <div class="mono" style="font-size:12px;font-weight:500;margin-top:6px;">graphify</div>
+          <div style="font-size:10px;color:var(--c-text-3);margin-top:3px;line-height:1.4;">Input → knowledge graph, clustered</div>
+          <div style="display:flex;gap:3px;margin-top:8px;"><span class="avatar av-cl mini">C</span><span class="avatar av-cu mini">C</span><span class="pill grn" style="margin-left:auto;">on</span></div>
+        </div>
+        <div style="background:var(--c-surface);border:1px solid var(--c-border-sub);border-radius:10px;padding:11px;">
+          <div style="font-size:16px;">🪨</div>
+          <div class="mono" style="font-size:12px;font-weight:500;margin-top:6px;">caveman</div>
+          <div style="font-size:10px;color:var(--c-text-3);margin-top:3px;line-height:1.4;">Compressed replies, 75% fewer tokens</div>
+          <div style="display:flex;gap:3px;margin-top:8px;"><span class="avatar av-cl mini">C</span><span class="pill grn" style="margin-left:auto;">on</span></div>
+        </div>
+        <div style="background:var(--c-surface);border:1px solid var(--c-border-sub);border-radius:10px;padding:11px;">
+          <div style="font-size:16px;">🛠</div>
+          <div class="mono" style="font-size:12px;font-weight:500;margin-top:6px;">skill-creator</div>
+          <div style="font-size:10px;color:var(--c-text-3);margin-top:3px;line-height:1.4;">Author new skills the right way</div>
+          <div style="display:flex;gap:3px;margin-top:8px;"><span class="avatar av-cl mini">C</span><span class="avatar av-ge mini">G</span><span class="pill grn" style="margin-left:auto;">on</span></div>
+        </div>
+        <div style="background:var(--c-surface);border:1px solid var(--c-border-sub);border-radius:10px;padding:11px;opacity:.6;">
+          <div style="font-size:16px;">📄</div>
+          <div class="mono" style="font-size:12px;font-weight:500;margin-top:6px;">pdf</div>
+          <div style="font-size:10px;color:var(--c-text-3);margin-top:3px;line-height:1.4;">Read / create / edit PDFs</div>
+          <div style="display:flex;gap:3px;margin-top:8px;"><span class="avatar av-cl mini">C</span><span class="pill" style="margin-left:auto;">off</span></div>
+        </div>
+        <div style="border:1px dashed var(--c-border);border-radius:10px;padding:11px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;color:var(--c-text-3);">
+          <div style="font-size:18px;">＋</div><div style="font-size:10.5px;">Add skill</div>
+        </div>
+      </div>
+      <div class="ftr"><span>34 skills</span><span>⏻</span></div>
+    </div>
+  </div>
+
+  <div class="proto">
+    <div class="proto-label">2C · Dense table + bulk ops <span>Power-user: sortable columns, checkboxes, bulk enable/disable/remove. Manage 50 skills fast.</span></div>
+    <div class="frame">
+      <div class="hdr"><div class="logo"></div><span class="crumb"><b>Skills</b></span><div class="icons"><span>⤢</span><span>⚙</span></div></div>
+      <div style="padding:9px 12px;display:flex;gap:6px;align-items:center;border-bottom:1px solid var(--c-border);">
+        <div class="search" style="flex:1;padding:5px 9px;">⌕ Filter…</div>
+        <span class="pill">Sort: last used ▾</span>
+      </div>
+      <div style="display:flex;padding:6px 12px;font-size:9px;color:var(--c-text-3);text-transform:uppercase;letter-spacing:.05em;border-bottom:1px solid var(--c-border-sub);">
+        <span style="width:18px;">☐</span><span style="flex:1;">Name</span><span style="width:52px;">Agents</span><span style="width:56px;">Last use</span><span style="width:30px;text-align:right;">On</span>
+      </div>
+      <div class="body">
+        <div style="display:flex;align-items:center;padding:7px 12px;font-size:11.5px;border-bottom:1px solid var(--c-border-sub);background:rgba(99,102,241,.05);"><span style="width:18px;color:#818cf8;">☑</span><span class="mono" style="flex:1;">caveman</span><span style="width:52px;display:flex;gap:2px;"><span class="avatar av-cl mini">C</span></span><span style="width:56px;color:var(--c-text-3);font-size:10px;">today</span><span style="width:30px;display:flex;justify-content:flex-end;"><span class="sw on"></span></span></div>
+        <div style="display:flex;align-items:center;padding:7px 12px;font-size:11.5px;border-bottom:1px solid var(--c-border-sub);"><span style="width:18px;color:var(--c-text-3);">☐</span><span class="mono" style="flex:1;">graphify</span><span style="width:52px;display:flex;gap:2px;"><span class="avatar av-cl mini">C</span><span class="avatar av-cu mini">C</span></span><span style="width:56px;color:var(--c-text-3);font-size:10px;">2h</span><span style="width:30px;display:flex;justify-content:flex-end;"><span class="sw on"></span></span></div>
+        <div style="display:flex;align-items:center;padding:7px 12px;font-size:11.5px;border-bottom:1px solid var(--c-border-sub);background:rgba(99,102,241,.05);"><span style="width:18px;color:#818cf8;">☑</span><span class="mono" style="flex:1;">pdf</span><span style="width:52px;display:flex;gap:2px;"><span class="avatar av-cl mini">C</span></span><span style="width:56px;color:#f59e0b;font-size:10px;">never</span><span style="width:30px;display:flex;justify-content:flex-end;"><span class="sw"></span></span></div>
+        <div style="display:flex;align-items:center;padding:7px 12px;font-size:11.5px;border-bottom:1px solid var(--c-border-sub);"><span style="width:18px;color:var(--c-text-3);">☐</span><span class="mono" style="flex:1;">docx</span><span style="width:52px;display:flex;gap:2px;"><span class="avatar av-cl mini">C</span></span><span style="width:56px;color:#f59e0b;font-size:10px;">never</span><span style="width:30px;display:flex;justify-content:flex-end;"><span class="sw"></span></span></div>
+        <div style="display:flex;align-items:center;padding:7px 12px;font-size:11.5px;border-bottom:1px solid var(--c-border-sub);"><span style="width:18px;color:var(--c-text-3);">☐</span><span class="mono" style="flex:1;">skill-creator</span><span style="width:52px;display:flex;gap:2px;"><span class="avatar av-cl mini">C</span><span class="avatar av-ge mini">G</span></span><span style="width:56px;color:var(--c-text-3);font-size:10px;">3d</span><span style="width:30px;display:flex;justify-content:flex-end;"><span class="sw on"></span></span></div>
+      </div>
+      <div style="padding:9px 12px;border-top:1px solid var(--c-border);display:flex;gap:6px;align-items:center;background:var(--c-surface);">
+        <span style="font-size:10.5px;color:var(--c-text-2);">2 selected</span>
+        <span class="pill grn" style="margin-left:auto;">Enable</span><span class="pill">Disable</span><span class="pill" style="color:#ef4444;border-color:rgba(239,68,68,.3);">Remove</span>
+      </div>
+      <div class="ftr"><span>34 skills</span><span>⏻</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════ SKILL DETAIL ══════════════ -->
+<h2>3 · Skill Detail (graphify)</h2>
+<p class="sub">Current: name + description + install toggles + file tree + overlays.</p>
+<div class="grid">
+
+  <div class="proto">
+    <div class="proto-label">3A · Document page <span>Readme-first: skill as document. Title, prose, inline files. Installs demoted to footer strip.</span></div>
+    <div class="frame">
+      <div class="hdr"><div class="logo"></div><span class="crumb">Skills › <b>graphify</b></span><div class="icons"><span>⤢</span><span>⚙</span></div></div>
+      <div class="body" style="padding:16px;">
+        <div class="mono" style="font-size:18px;font-weight:600;color:#818cf8;">graphify</div>
+        <div style="font-size:12.5px;color:var(--c-text-2);line-height:1.55;margin-top:8px;">Takes any input — code, docs, papers, images — and builds a knowledge graph with clustered communities. Outputs HTML + JSON + audit report.</div>
+        <div style="font-size:11px;color:#818cf8;margin-top:6px;">Read full SKILL.md →</div>
+        <div style="margin-top:16px;" class="sect-h">Files</div>
+        <div class="mono" style="font-size:11px;line-height:1.9;color:var(--c-text-2);margin-top:6px;">
+          <div>▾ 📁 graphify/</div>
+          <div style="padding-left:16px;">📄 SKILL.md <span style="color:var(--c-text-3);">4.2kb</span></div>
+          <div style="padding-left:16px;">📄 clustering.md <span style="color:var(--c-text-3);">2.1kb</span></div>
+          <div style="padding-left:16px;">▸ 📁 templates/ <span style="color:var(--c-text-3);">3 files</span></div>
+        </div>
+        <div style="margin-top:16px;" class="sect-h">Stats</div>
+        <div style="font-size:11.5px;color:var(--c-text-2);margin-top:6px;line-height:1.8;">12 runs total · last 2h ago · avg 40s per run</div>
+        <div class="mono" style="font-size:9.5px;color:var(--c-text-3);margin-top:14px;word-break:break-all;">~/.claude/skills/graphify</div>
+      </div>
+      <div style="padding:9px 14px;border-top:1px solid var(--c-border);display:flex;gap:8px;align-items:center;">
+        <span class="sect-h">Installed on</span>
+        <span class="pill"><span class="avatar av-cl mini" style="display:inline-flex;">C</span> on</span>
+        <span class="pill" style="opacity:.55;"><span class="avatar av-cu mini" style="display:inline-flex;">C</span> off</span>
+        <span class="pill" style="margin-left:auto;">＋ install</span>
+      </div>
+      <div class="ftr"><span>⟳ 32s ago</span><span>⏻</span></div>
+    </div>
+  </div>
+
+  <div class="proto">
+    <div class="proto-label">3B · Meta card + tabs <span>Structured: identity card up top, tabs for Readme / Files / Installs / Runs. Nothing buried in scroll.</span></div>
+    <div class="frame">
+      <div class="hdr"><div class="logo"></div><span class="crumb">Skills › <b>graphify</b></span><div class="icons"><span>⤢</span><span>⚙</span></div></div>
+      <div style="margin:12px 14px 0;background:var(--c-surface);border:1px solid var(--c-border-sub);border-radius:12px;padding:13px;">
+        <div style="display:flex;align-items:center;gap:10px;">
+          <div style="width:34px;height:34px;border-radius:9px;background:rgba(99,102,241,.12);display:flex;align-items:center;justify-content:center;font-size:15px;">🕸</div>
+          <div>
+            <div class="mono" style="font-size:14px;font-weight:600;">graphify</div>
+            <div style="font-size:10px;color:var(--c-text-3);">2 agents · 12 runs · 5 files</div>
+          </div>
+          <span class="sw on" style="margin-left:auto;"></span>
+        </div>
+        <div style="font-size:11px;color:var(--c-text-2);margin-top:9px;line-height:1.5;">Any input → knowledge graph → clustered communities → HTML + JSON + audit.</div>
+      </div>
+      <div class="tabbar" style="margin-top:4px;">
+        <div class="tab act">Readme</div><div class="tab">Files 5</div><div class="tab">Installs 2</div><div class="tab">Runs 12</div>
+      </div>
+      <div class="body" style="padding:12px 16px;">
+        <div style="font-size:12px;color:var(--c-text-2);line-height:1.65;">
+          <div style="font-weight:600;color:var(--c-text);font-size:13px;">Usage</div>
+          <p style="margin-top:6px;">Invoke with <span class="mono" style="font-size:11px;background:var(--c-surface);padding:1px 5px;border-radius:4px;">/graphify</span> and any input. The skill extracts entities, builds edges, runs community detection, and emits an interactive HTML graph.</p>
+          <div style="font-weight:600;color:var(--c-text);font-size:13px;margin-top:12px;">Outputs</div>
+          <p style="margin-top:6px;">graph.html · graph.json · audit.md — written next to the source input.</p>
+        </div>
+      </div>
+      <div class="ftr"><span>~/.claude/skills/graphify</span><span>⏻</span></div>
+    </div>
+  </div>
+
+  <div class="proto">
+    <div class="proto-label">3C · Inspector <span>Xcode-style: everything a key-value accordion. Densest, zero prose. Toggle right in header.</span></div>
+    <div class="frame">
+      <div class="hdr"><div class="logo"></div><span class="crumb">Skills › <b>graphify</b></span><div class="icons"><span>⤢</span><span>⚙</span></div></div>
+      <div style="display:flex;align-items:center;gap:9px;padding:13px 16px;border-bottom:1px solid var(--c-border);">
+        <span class="dot on"></span><span class="mono" style="font-size:15px;font-weight:600;">graphify</span>
+        <span class="sw on" style="margin-left:auto;"></span>
+      </div>
+      <div class="body">
+        <div style="padding:10px 16px;border-bottom:1px solid var(--c-border-sub);">
+          <div style="display:flex;justify-content:space-between;font-size:11.5px;"><span class="sect-h">▾ Overview</span></div>
+          <div style="margin-top:8px;font-size:11.5px;line-height:2;color:var(--c-text-2);">
+            <div style="display:flex;"><span style="width:90px;color:var(--c-text-3);">Trigger</span><span class="mono" style="font-size:10.5px;">/graphify</span></div>
+            <div style="display:flex;"><span style="width:90px;color:var(--c-text-3);">Source</span><span>local directory</span></div>
+            <div style="display:flex;"><span style="width:90px;color:var(--c-text-3);">Size</span><span>5 files · 11.4 kb</span></div>
+            <div style="display:flex;"><span style="width:90px;color:var(--c-text-3);">Runs</span><span>12 · last 2h ago</span></div>
+          </div>
+        </div>
+        <div style="padding:10px 16px;border-bottom:1px solid var(--c-border-sub);">
+          <div style="display:flex;justify-content:space-between;font-size:11.5px;"><span class="sect-h">▾ Installed on · 2</span></div>
+          <div style="margin-top:8px;display:flex;flex-direction:column;gap:6px;">
+            <div style="display:flex;align-items:center;gap:8px;font-size:11.5px;"><span class="avatar av-cl mini">C</span>Claude Code<span class="mono" style="font-size:9px;color:var(--c-text-3);margin-left:4px;">~/.claude/skills</span><span class="sw on" style="margin-left:auto;"></span></div>
+            <div style="display:flex;align-items:center;gap:8px;font-size:11.5px;"><span class="avatar av-cu mini">C</span>Cursor<span class="mono" style="font-size:9px;color:var(--c-text-3);margin-left:4px;">~/.cursor/skills</span><span class="sw" style="margin-left:auto;"></span></div>
+          </div>
+        </div>
+        <div style="padding:10px 16px;border-bottom:1px solid var(--c-border-sub);">
+          <div style="font-size:11.5px;"><span class="sect-h">▸ Files · 5</span></div>
+        </div>
+        <div style="padding:10px 16px;border-bottom:1px solid var(--c-border-sub);">
+          <div style="font-size:11.5px;"><span class="sect-h">▸ Description</span></div>
+        </div>
+        <div style="padding:10px 16px;">
+          <div style="font-size:11.5px;"><span class="sect-h" style="color:#ef4444;">▸ Danger zone</span></div>
+        </div>
+      </div>
+      <div class="ftr"><span>Open in editor ↗</span><span>⏻</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════ MCP DETAIL ══════════════ -->
+<h2>4 · MCP Detail (posthog)</h2>
+<p class="sub">Current: npm card + command + env + install toggles + live tools probe.</p>
+<div class="grid">
+
+  <div class="proto">
+    <div class="proto-label">4A · Health-first <span>Lead with live status: connected ring, latency, tool count. Config secondary. "Is it working?" answered instantly.</span></div>
+    <div class="frame">
+      <div class="hdr"><div class="logo"></div><span class="crumb">MCPs › <b>posthog</b></span><div class="icons"><span>⤢</span><span>⚙</span></div></div>
+      <div class="body">
+        <div style="margin:14px;padding:16px;border-radius:12px;background:rgba(16,185,129,.06);border:1px solid rgba(16,185,129,.25);display:flex;gap:12px;align-items:center;">
+          <div style="width:40px;height:40px;border-radius:50%;border:3px solid #10b981;display:flex;align-items:center;justify-content:center;font-size:15px;color:#10b981;">✓</div>
+          <div>
+            <div style="font-size:14px;font-weight:600;">Connected</div>
+            <div style="font-size:10.5px;color:var(--c-text-2);margin-top:2px;">142 tools · responded in 1.2s · npx v2.4.1</div>
+          </div>
+          <span class="pill" style="margin-left:auto;">Re-test</span>
+        </div>
+        <div style="padding:0 16px;">
+          <div class="mono" style="font-size:16px;font-weight:600;color:#a78bfa;">posthog</div>
+          <div class="mono" style="font-size:10.5px;color:var(--c-text-3);margin-top:4px;">npx -y @posthog/mcp-server</div>
+          <div style="display:flex;gap:5px;margin-top:8px;">
+            <span class="pill amb">🔒 POSTHOG_API_KEY</span><span class="pill">env · 1 secret</span>
+          </div>
+        </div>
+        <div style="padding:14px 16px 4px;"><span class="sect-h">Top tools · this week</span></div>
+        <div style="padding:0 16px;">
+          <div style="display:flex;align-items:center;gap:8px;padding:6px 0;font-size:11.5px;border-bottom:1px solid var(--c-border-sub);"><span class="mono">execute-sql</span><span style="margin-left:auto;color:var(--c-text-3);font-size:10px;">48 calls</span></div>
+          <div style="display:flex;align-items:center;gap:8px;padding:6px 0;font-size:11.5px;border-bottom:1px solid var(--c-border-sub);"><span class="mono">query-insights</span><span style="margin-left:auto;color:var(--c-text-3);font-size:10px;">19 calls</span></div>
+          <div style="font-size:11px;color:#a78bfa;padding:7px 0;">All 142 tools →</div>
+        </div>
+        <div style="padding:8px 16px;display:flex;gap:8px;align-items:center;border-top:1px solid var(--c-border-sub);margin-top:6px;">
+          <span class="sect-h">On</span>
+          <span class="pill"><span class="avatar av-cl mini" style="display:inline-flex;">C</span> on</span>
+          <span class="pill" style="opacity:.5;"><span class="avatar av-cu mini" style="display:inline-flex;">C</span> off</span>
+        </div>
+      </div>
+      <div class="ftr"><span>⟳ 32s ago</span><span>⏻</span></div>
+    </div>
+  </div>
+
+  <div class="proto">
+    <div class="proto-label">4B · Package page <span>npm-registry framing: version/update card, readme description, install matrix. Feels like managing a dependency.</span></div>
+    <div class="frame">
+      <div class="hdr"><div class="logo"></div><span class="crumb">MCPs › <b>posthog</b></span><div class="icons"><span>⤢</span><span>⚙</span></div></div>
+      <div class="body" style="padding:14px;">
+        <div style="display:flex;align-items:baseline;gap:8px;">
+          <span class="mono" style="font-size:17px;font-weight:600;">@posthog/mcp-server</span>
+        </div>
+        <div style="font-size:11.5px;color:var(--c-text-2);margin-top:5px;line-height:1.5;">Official PostHog MCP — analytics queries, insights, flags, experiments from any agent.</div>
+        <div style="margin-top:12px;background:var(--c-surface);border:1px solid var(--c-border-sub);border-radius:10px;padding:12px;">
+          <div style="display:flex;align-items:center;gap:8px;">
+            <span class="mono" style="font-size:12px;">v2.4.1 installed</span>
+            <span class="pill amb" style="margin-left:auto;">v2.5.0 available</span>
+          </div>
+          <div style="display:flex;gap:6px;margin-top:9px;">
+            <span class="pill vio">Update to v2.5.0</span><span class="pill">Changelog ↗</span><span class="pill">npm ↗</span>
+          </div>
+        </div>
+        <div style="margin-top:12px;" class="sect-h">Install matrix</div>
+        <div style="margin-top:6px;border:1px solid var(--c-border-sub);border-radius:10px;overflow:hidden;">
+          <div style="display:flex;align-items:center;gap:9px;padding:9px 12px;border-bottom:1px solid var(--c-border-sub);font-size:12px;"><span class="avatar av-cl mini">C</span>Claude Code<span class="mono" style="font-size:9px;color:var(--c-text-3);">global</span><span class="sw on" style="margin-left:auto;"></span></div>
+          <div style="display:flex;align-items:center;gap:9px;padding:9px 12px;border-bottom:1px solid var(--c-border-sub);font-size:12px;"><span class="avatar av-cu mini">C</span>Cursor<span class="sw" style="margin-left:auto;"></span></div>
+          <div style="display:flex;align-items:center;gap:9px;padding:9px 12px;font-size:12px;color:var(--c-text-3);">＋ Install on Gemini CLI…</div>
+        </div>
+        <div style="margin-top:12px;" class="sect-h">Environment</div>
+        <div style="margin-top:6px;display:flex;gap:5px;">
+          <span class="pill amb">🔒 POSTHOG_API_KEY · set</span>
+        </div>
+      </div>
+      <div class="ftr"><span>142 tools · connected</span><span>⏻</span></div>
+    </div>
+  </div>
+
+  <div class="proto">
+    <div class="proto-label">4C · Terminal card <span>Config-as-truth: the JSON/command is the hero, syntax-highlighted, editable. Tools + status as mono readout. For users who think in config files.</span></div>
+    <div class="frame">
+      <div class="hdr"><div class="logo"></div><span class="crumb">MCPs › <b>posthog</b></span><div class="icons"><span>⤢</span><span>⚙</span></div></div>
+      <div class="body" style="padding:14px;">
+        <div style="display:flex;align-items:center;gap:9px;">
+          <span class="dot on"></span><span class="mono" style="font-size:15px;font-weight:600;">posthog</span>
+          <span class="mono" style="font-size:9.5px;color:var(--c-text-3);margin-left:auto;">.claude/mcp.json</span>
+        </div>
+        <div class="mono" style="margin-top:10px;background:#0c0c10;border-radius:10px;padding:13px;font-size:10.5px;line-height:1.75;color:#8b8b96;">
+          <div><span style="color:#c4b5fd;">"posthog"</span>: {</div>
+          <div>&nbsp;&nbsp;<span style="color:#c4b5fd;">"command"</span>: <span style="color:#86efac;">"npx"</span>,</div>
+          <div>&nbsp;&nbsp;<span style="color:#c4b5fd;">"args"</span>: [<span style="color:#86efac;">"-y"</span>, <span style="color:#86efac;">"@posthog/mcp-server"</span>],</div>
+          <div>&nbsp;&nbsp;<span style="color:#c4b5fd;">"env"</span>: { <span style="color:#c4b5fd;">"POSTHOG_API_KEY"</span>: <span style="color:#fbbf24;">"••••••"</span> }</div>
+          <div>}</div>
+        </div>
+        <div style="display:flex;gap:6px;margin-top:8px;">
+          <span class="pill">✎ Edit JSON</span><span class="pill">⧉ Copy</span><span class="pill">Open file ↗</span>
+        </div>
+        <div class="mono" style="margin-top:12px;font-size:10.5px;line-height:2;color:var(--c-text-2);border-top:1px solid var(--c-border-sub);padding-top:10px;">
+          <div><span style="color:#34d399;">✓</span> probe ok · 1.2s · 142 tools</div>
+          <div><span style="color:#34d399;">✓</span> installed on: claude</div>
+          <div><span style="color:#f59e0b;">⚠</span> 2 tools disabled: <span style="color:var(--c-text-3);">delete-*, purge-*</span></div>
+          <div><span style="color:#34d399;">✓</span> 67 calls this week</div>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;margin-top:10px;">
+          <span class="sect-h">Enabled</span><span class="sw on"></span>
+          <span class="pill" style="margin-left:auto;color:#ef4444;border-color:rgba(239,68,68,.3);">Remove</span>
+        </div>
+      </div>
+      <div class="ftr"><span>⟳ 32s ago</span><span>⏻</span></div>
+    </div>
+  </div>
+</div>
+
+<script>
+  if (matchMedia('(prefers-color-scheme: dark)').matches) document.documentElement.classList.add('dark');
+</script>
+</body>
+</html>
