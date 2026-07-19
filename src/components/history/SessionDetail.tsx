@@ -99,6 +99,70 @@ function TagEditor({ sessionId }: { sessionId: string }) {
   )
 }
 
+/** Inline custom session name — click to edit, persisted via set_session_name.
+ *  Shows the agent's own title (inheritedTitle) until the user sets one. */
+function NameEditor({ sessionId, fallback, inheritedTitle }: { sessionId: string; fallback: string; inheritedTitle?: string | null }) {
+  const [name, setName] = useState<string | null>(null)
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState('')
+
+  useEffect(() => {
+    setEditing(false)
+    invoke<SessionMeta[]>('get_session_meta')
+      .then(rows => setName(rows.find(m => m.sessionId === sessionId)?.customName ?? null))
+      .catch(() => setName(null))
+  }, [sessionId])
+
+  const save = (raw: string) => {
+    const clean = raw.trim() || null
+    setEditing(false)
+    if (clean === name) return
+    setName(clean)
+    invoke('set_session_name', { sessionId, name: clean })
+      .then(() => window.dispatchEvent(new CustomEvent('session-meta-changed')))
+      .catch(() => {})
+  }
+
+  if (editing) {
+    return (
+      <input
+        type="text"
+        autoFocus
+        value={draft}
+        onChange={e => setDraft(e.target.value)}
+        onKeyDown={e => {
+          if (e.key === 'Enter') save(draft)
+          if (e.key === 'Escape') setEditing(false)
+        }}
+        onBlur={() => save(draft)}
+        placeholder={fallback}
+        maxLength={80}
+        className="w-full bg-[var(--c-surface-2)] border border-[var(--c-accent)]/40 rounded px-1.5 py-0.5 text-[12px] font-medium text-[var(--c-text)] outline-none"
+      />
+    )
+  }
+
+  const shown = name ?? inheritedTitle
+  return (
+    <button
+      onClick={() => { setDraft(name ?? inheritedTitle ?? ''); setEditing(true) }}
+      title={shown ? 'Rename session' : 'Name this session'}
+      className="group/name flex items-center gap-1.5 min-w-0 max-w-full text-left"
+    >
+      {shown ? (
+        <>
+          <span className="text-[12px] font-semibold text-[var(--c-text)] truncate">{shown}</span>
+          <span className="text-[10px] text-[var(--c-text-3)] opacity-50 group-hover/name:opacity-100 group-hover/name:text-[var(--c-accent)] transition-all flex-shrink-0">✎ rename</span>
+        </>
+      ) : (
+        <span className="flex items-center gap-1.5 px-2 py-1 rounded-md border border-dashed border-[var(--c-accent)]/40 text-[11px] text-[var(--c-accent)] hover:bg-[var(--c-accent)]/10 transition-colors">
+          ✎ Name this session
+        </span>
+      )}
+    </button>
+  )
+}
+
 interface SessionDetailProps {
   session: SessionEntry
 }
@@ -203,9 +267,10 @@ export default function SessionDetail({ session }: SessionDetailProps) {
         )}
       </div>
 
-      {/* First prompt */}
+      {/* Custom name + first prompt */}
       <div className="px-3 py-2 flex-shrink-0 border-b border-[var(--c-border)]">
-        <p className="text-[11px] text-[var(--c-text-3)] line-clamp-2 italic">"{session.display}"</p>
+        <NameEditor sessionId={session.sessionId} fallback={session.display} inheritedTitle={session.title} />
+        <p className="text-[11px] text-[var(--c-text-3)] line-clamp-2 italic mt-1">"{session.display}"</p>
         <TagEditor sessionId={session.sessionId} />
       </div>
 

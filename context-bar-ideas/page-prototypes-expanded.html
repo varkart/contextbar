@@ -1,0 +1,772 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Context Bar — Expanded Window Pages ×3</title>
+<style>
+  :root {
+    --c-bg:#ffffff; --c-surface:#f4f4f5; --c-hover:#f4f4f5;
+    --c-border:rgba(228,228,231,.9); --c-border-sub:rgba(228,228,231,.6);
+    --c-text:#18181b; --c-text-2:#71717a; --c-text-3:#a1a1aa;
+    --c-input:rgba(244,244,245,.9); --c-skeleton:#e4e4e7; --page-bg:#ececee;
+  }
+  .dark {
+    --c-bg:#09090b; --c-surface:#18181b; --c-hover:rgba(255,255,255,.025);
+    --c-border:rgba(39,39,42,.8); --c-border-sub:rgba(39,39,42,.5);
+    --c-text:#e4e4e7; --c-text-2:#71717a; --c-text-3:#52525b;
+    --c-input:rgba(39,39,42,.6); --c-skeleton:#27272a; --page-bg:#121214;
+  }
+  * { box-sizing:border-box; -webkit-font-smoothing:antialiased; margin:0; padding:0; }
+  body { font-family:'Geist',-apple-system,BlinkMacSystemFont,system-ui,sans-serif;
+    background:var(--page-bg); color:var(--c-text); padding:32px 24px 64px; }
+  h1 { font-size:20px; font-weight:600; letter-spacing:-.02em; }
+  h2 { font-size:16px; font-weight:600; letter-spacing:-.01em; margin:44px 0 4px; }
+  .sub { font-size:13px; color:var(--c-text-2); margin:4px 0 20px; }
+  .toggle { position:fixed; top:20px; right:24px; z-index:10; padding:6px 14px; border-radius:8px;
+    font-size:12px; font-weight:500; background:var(--c-surface); border:1px solid var(--c-border);
+    color:var(--c-text); cursor:pointer; }
+  .col { display:flex; flex-direction:column; gap:28px; }
+  .proto { display:flex; flex-direction:column; gap:8px; }
+  .proto-label { font-size:12.5px; font-weight:600; }
+  .proto-label span { display:block; font-weight:400; font-size:11px; color:var(--c-text-2); margin-top:2px; max-width:760px; line-height:1.4; }
+  .scalebox { width:760px; height:532px; overflow:hidden; border-radius:12px; box-shadow:0 12px 32px rgba(0,0,0,.10); }
+  .frame { width:1000px; height:700px; background:var(--c-bg); border:1px solid var(--c-border);
+    display:flex; transform:scale(.76); transform-origin:top left; border-radius:16px; overflow:hidden; }
+  .mono { font-family:'Geist Mono','SF Mono',ui-monospace,monospace; }
+  .avatar { width:22px; height:22px; border-radius:6px; display:flex; align-items:center; justify-content:center;
+    font-size:9px; font-weight:600; color:#fff; flex-shrink:0; }
+  .av-cl { background:#d97757; } .av-cu { background:#4f46e5; } .av-ge { background:#1a73e8; } .av-cx { background:#0ea5e9; }
+  .mini { width:16px; height:16px; border-radius:4px; font-size:7.5px; }
+  .pill { font-size:10.5px; padding:2.5px 9px; border-radius:99px; background:var(--c-surface);
+    color:var(--c-text-2); border:1px solid var(--c-border-sub); white-space:nowrap; }
+  .pill.ind { color:#818cf8; border-color:rgba(99,102,241,.3); background:rgba(99,102,241,.07); }
+  .pill.grn { color:#34d399; border-color:rgba(16,185,129,.3); background:rgba(16,185,129,.07); }
+  .pill.amb { color:#f59e0b; border-color:rgba(245,158,11,.3); background:rgba(245,158,11,.07); }
+  .pill.red { color:#ef4444; border-color:rgba(239,68,68,.3); background:rgba(239,68,68,.07); }
+  .sect-h { font-size:10.5px; text-transform:uppercase; letter-spacing:.06em; color:var(--c-text-3); }
+  .search { display:flex; align-items:center; gap:7px; background:var(--c-input); border:1px solid var(--c-border);
+    border-radius:8px; padding:7px 11px; font-size:12.5px; color:var(--c-text-3); }
+  .dot { width:7px; height:7px; border-radius:50%; flex-shrink:0; }
+  .dot.on { background:#10b981; } .dot.stale { background:#f59e0b; } .dot.dead { background:#ef4444; } .dot.off { background:var(--c-skeleton); }
+
+  /* sidebar */
+  .side { width:200px; border-right:1px solid var(--c-border); padding:14px 10px; display:flex; flex-direction:column; gap:2px; flex-shrink:0; background:var(--c-surface); }
+  .side .logo-row { display:flex; align-items:center; gap:8px; padding:4px 8px 12px; font-size:13px; font-weight:600; }
+  .side .logo { width:18px; height:18px; border-radius:5px; background:linear-gradient(135deg,#8b5cf6,#6366f1); }
+  .side .cmdk { margin:0 4px 12px; }
+  .side .grp { font-size:9px; text-transform:uppercase; letter-spacing:.07em; color:var(--c-text-3); padding:10px 8px 4px; }
+  .side .it { display:flex; align-items:center; gap:9px; padding:7px 8px; border-radius:8px; font-size:12.5px; color:var(--c-text-2); }
+  .side .it.act { background:var(--c-bg); color:var(--c-text); font-weight:500; box-shadow:inset 2px 0 0 #8b5cf6; }
+  .side .it .n { margin-left:auto; font-size:10px; color:var(--c-text-3); }
+  .side .spacer { flex:1; }
+  .main { flex:1; display:flex; flex-direction:column; overflow:hidden; }
+  .mhdr { display:flex; align-items:center; gap:10px; padding:16px 22px 12px; }
+  .mhdr h3 { font-size:18px; font-weight:600; letter-spacing:-.02em; }
+  .mbody { flex:1; overflow:hidden; padding:0 22px 20px; }
+  .card { background:var(--c-surface); border:1px solid var(--c-border-sub); border-radius:12px; }
+  .tile { flex:1; padding:12px 14px; border-right:1px solid var(--c-border-sub); }
+  .tile:last-child { border-right:none; }
+  .tile .n { font-size:20px; font-weight:700; letter-spacing:-.02em; }
+  .tile .l { font-size:9.5px; color:var(--c-text-3); text-transform:uppercase; letter-spacing:.05em; margin-top:3px; }
+</style>
+</head>
+<body>
+<button class="toggle" onclick="document.documentElement.classList.toggle('dark')">☾ / ☀︎ theme</button>
+<h1>Expanded window — 3 alternates per page</h1>
+<p class="sub">My Work · Sessions · Repos. Real size 1000×700, shown at 76%.</p>
+
+<!-- ══════════════ MY WORK ══════════════ -->
+<h2>12 · My Work</h2>
+<div class="col">
+
+  <div class="proto">
+    <div class="proto-label">12A · Bento dashboard <span>Current direction pushed harder: everything one dense grid — stats, usage meters, agent mix, momentum, needs-attention. No scroll, all glanceable.</span></div>
+    <div class="scalebox"><div class="frame">
+      <div class="side">
+        <div class="logo-row"><div class="logo"></div>Context Bar</div>
+        <div class="search cmdk" style="font-size:11px;">⌕ Jump… <span style="margin-left:auto;font-size:9px;">⌘K</span></div>
+        <div class="grp">Work</div>
+        <div class="it act">◉ My Work</div>
+        <div class="it">◷ Sessions<span class="n">1.2k</span></div>
+        <div class="it">⌥ Repos<span class="n">9</span></div>
+        <div class="grp">Configure</div>
+        <div class="it">🤖 Agents<span class="n">4</span></div>
+        <div class="it">📜 Skills<span class="n">34</span></div>
+        <div class="it">🔌 MCPs<span class="n">12</span></div>
+        <div class="spacer"></div>
+        <div class="it">🔔 Notifications</div>
+        <div class="it">⚙ Settings</div>
+      </div>
+      <div class="main">
+        <div class="mhdr">
+          <h3>My Work</h3>
+          <div style="display:flex;gap:4px;margin-left:14px;">
+            <span class="pill" style="background:var(--c-text);color:var(--c-bg);">Today</span><span class="pill">Yesterday</span><span class="pill">Week</span>
+          </div>
+          <span class="pill" style="margin-left:auto;">⟳</span>
+        </div>
+        <div class="mbody" style="display:grid;grid-template-columns:1fr 1fr 1fr;grid-template-rows:auto 1fr 1fr;gap:10px;">
+          <div class="card" style="grid-column:1/-1;display:flex;">
+            <div class="tile"><div class="n">6</div><div class="l">Sessions</div></div>
+            <div class="tile"><div class="n">42</div><div class="l">Prompts</div></div>
+            <div class="tile"><div class="n" style="color:#10b981;">1</div><div class="l">Live</div></div>
+            <div class="tile"><div class="n">3</div><div class="l">Projects</div></div>
+            <div class="tile"><div class="n">2.1M</div><div class="l">Tokens</div></div>
+            <div class="tile"><div class="n">$6.20</div><div class="l">Cost</div></div>
+          </div>
+          <div class="card" style="padding:13px;">
+            <div class="sect-h">Usage · 5h window</div>
+            <div style="margin-top:10px;display:flex;flex-direction:column;gap:9px;font-size:10.5px;">
+              <div><div style="display:flex;justify-content:space-between;"><span>Claude</span><span style="color:var(--c-text-3);">64%</span></div><div style="height:5px;border-radius:3px;background:var(--c-skeleton);margin-top:3px;"><div style="width:64%;height:100%;border-radius:3px;background:#d97757;"></div></div></div>
+              <div><div style="display:flex;justify-content:space-between;"><span>Codex</span><span style="color:var(--c-text-3);">22%</span></div><div style="height:5px;border-radius:3px;background:var(--c-skeleton);margin-top:3px;"><div style="width:22%;height:100%;border-radius:3px;background:#0ea5e9;"></div></div></div>
+              <div><div style="display:flex;justify-content:space-between;"><span>Gemini</span><span style="color:var(--c-text-3);">9%</span></div><div style="height:5px;border-radius:3px;background:var(--c-skeleton);margin-top:3px;"><div style="width:9%;height:100%;border-radius:3px;background:#1a73e8;"></div></div></div>
+            </div>
+          </div>
+          <div class="card" style="padding:13px;">
+            <div class="sect-h">Commits · 14d</div>
+            <div style="display:flex;align-items:flex-end;gap:3px;height:64px;margin-top:12px;">
+              <div style="flex:1;height:30%;background:#8b5cf6;opacity:.4;border-radius:2px;"></div><div style="flex:1;height:55%;background:#8b5cf6;opacity:.5;border-radius:2px;"></div><div style="flex:1;height:20%;background:#8b5cf6;opacity:.4;border-radius:2px;"></div><div style="flex:1;height:70%;background:#8b5cf6;opacity:.6;border-radius:2px;"></div><div style="flex:1;height:45%;background:#8b5cf6;opacity:.5;border-radius:2px;"></div><div style="flex:1;height:10%;background:#8b5cf6;opacity:.35;border-radius:2px;"></div><div style="flex:1;height:0%;"></div><div style="flex:1;height:35%;background:#8b5cf6;opacity:.45;border-radius:2px;"></div><div style="flex:1;height:60%;background:#8b5cf6;opacity:.55;border-radius:2px;"></div><div style="flex:1;height:80%;background:#8b5cf6;opacity:.7;border-radius:2px;"></div><div style="flex:1;height:50%;background:#8b5cf6;opacity:.5;border-radius:2px;"></div><div style="flex:1;height:65%;background:#8b5cf6;opacity:.6;border-radius:2px;"></div><div style="flex:1;height:90%;background:#8b5cf6;border-radius:2px;"></div><div style="flex:1;height:75%;background:#8b5cf6;opacity:.8;border-radius:2px;"></div>
+            </div>
+          </div>
+          <div class="card" style="padding:13px;">
+            <div class="sect-h" style="color:#f59e0b;">Needs attention</div>
+            <div style="margin-top:10px;display:flex;flex-direction:column;gap:8px;font-size:11px;">
+              <div style="display:flex;gap:7px;"><span>⚠</span><div><b>feature/fts-search</b> — 3 uncommitted files<div style="color:var(--c-text-3);font-size:9.5px;margin-top:1px;">contextbar · Open in Repos →</div></div></div>
+              <div style="display:flex;gap:7px;"><span>⚠</span><div><b>fix/tray-flicker</b> — merged, not deleted<div style="color:var(--c-text-3);font-size:9.5px;margin-top:1px;">contextbar · safe to remove</div></div></div>
+            </div>
+          </div>
+          <div class="card" style="grid-column:1/-1;padding:13px;">
+            <div class="sect-h">Active projects</div>
+            <div style="display:flex;gap:10px;margin-top:10px;">
+              <div style="flex:1;border:1px solid var(--c-border-sub);border-radius:10px;padding:11px;background:var(--c-bg);">
+                <div style="display:flex;align-items:center;gap:8px;"><div class="avatar" style="background:#8b5cf6;">CB</div><b style="font-size:12.5px;">contextbar</b><span class="pill grn" style="margin-left:auto;">● live</span></div>
+                <div style="font-size:10px;color:var(--c-text-3);margin-top:6px;" class="mono">feature/transcript-search · 12m ago · 4 sessions</div>
+                <div style="display:flex;gap:5px;margin-top:8px;"><span class="pill ind">▶ Resume</span><span class="pill">VS Code</span></div>
+              </div>
+              <div style="flex:1;border:1px solid var(--c-border-sub);border-radius:10px;padding:11px;background:var(--c-bg);">
+                <div style="display:flex;align-items:center;gap:8px;"><div class="avatar" style="background:#0ea5e9;">API</div><b style="font-size:12.5px;">puzzle-api</b></div>
+                <div style="font-size:10px;color:var(--c-text-3);margin-top:6px;" class="mono">main · 3h ago · 2 sessions</div>
+                <div style="display:flex;gap:5px;margin-top:8px;"><span class="pill ind">▶ Resume</span><span class="pill">VS Code</span></div>
+              </div>
+              <div style="flex:1;border:1px solid var(--c-border-sub);border-radius:10px;padding:11px;background:var(--c-bg);">
+                <div style="display:flex;align-items:center;gap:8px;"><div class="avatar" style="background:#f59e0b;">DOC</div><b style="font-size:12.5px;">docs-site</b></div>
+                <div style="font-size:10px;color:var(--c-text-3);margin-top:6px;" class="mono">main · yesterday · 1 session</div>
+                <div style="display:flex;gap:5px;margin-top:8px;"><span class="pill ind">▶ Resume</span><span class="pill">VS Code</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div></div>
+  </div>
+
+  <div class="proto">
+    <div class="proto-label">12B · Narrative day <span>Chronological story: "Your day" as a readable feed with inline stats. Less dashboard, more journal — you read it top to bottom, numbers live inside sentences.</span></div>
+    <div class="scalebox"><div class="frame">
+      <div class="side">
+        <div class="logo-row"><div class="logo"></div>Context Bar</div>
+        <div class="search cmdk" style="font-size:11px;">⌕ Jump… <span style="margin-left:auto;font-size:9px;">⌘K</span></div>
+        <div class="grp">Work</div>
+        <div class="it act">◉ My Work</div>
+        <div class="it">◷ Sessions<span class="n">1.2k</span></div>
+        <div class="it">⌥ Repos<span class="n">9</span></div>
+        <div class="grp">Configure</div>
+        <div class="it">🤖 Agents<span class="n">4</span></div>
+        <div class="it">📜 Skills<span class="n">34</span></div>
+        <div class="it">🔌 MCPs<span class="n">12</span></div>
+        <div class="spacer"></div>
+        <div class="it">🔔 Notifications</div>
+        <div class="it">⚙ Settings</div>
+      </div>
+      <div class="main">
+        <div class="mbody" style="padding:26px 60px;overflow-y:auto;">
+          <div style="font-size:22px;font-weight:700;letter-spacing:-.02em;">Thursday, July 17</div>
+          <div style="font-size:13px;color:var(--c-text-2);margin-top:6px;line-height:1.6;">Solid day so far — <b style="color:var(--c-text);">6 sessions</b> across <b style="color:var(--c-text);">3 projects</b>, mostly Claude Code on <b style="color:var(--c-text);">contextbar</b>. One session live right now.</div>
+          <div style="margin-top:24px;border-left:2px solid var(--c-border);padding-left:20px;display:flex;flex-direction:column;gap:20px;">
+            <div style="position:relative;">
+              <span style="position:absolute;left:-25px;top:4px;width:8px;height:8px;border-radius:50%;background:#10b981;"></span>
+              <div style="font-size:11px;color:var(--c-text-3);">14:10 — now · live</div>
+              <div style="font-size:14px;font-weight:600;margin-top:3px;">FTS transcript search — warm pass <span class="pill grn" style="margin-left:6px;">● running</span></div>
+              <div style="font-size:12px;color:var(--c-text-2);margin-top:3px;">Claude Code · contextbar · 18 prompts · 640k tokens so far</div>
+              <div style="display:flex;gap:6px;margin-top:8px;"><span class="pill ind">▶ Jump to terminal</span><span class="pill">View transcript</span></div>
+            </div>
+            <div style="position:relative;">
+              <span style="position:absolute;left:-25px;top:4px;width:8px;height:8px;border-radius:50%;background:var(--c-skeleton);"></span>
+              <div style="font-size:11px;color:var(--c-text-3);">11:20 — 12:40 · 1h 20m</div>
+              <div style="font-size:14px;font-weight:600;margin-top:3px;">Session list search hits UI</div>
+              <div style="font-size:12px;color:var(--c-text-2);margin-top:3px;">Claude Code · contextbar · 14 prompts · ended with 2 commits ✓</div>
+            </div>
+            <div style="position:relative;">
+              <span style="position:absolute;left:-25px;top:4px;width:8px;height:8px;border-radius:50%;background:var(--c-skeleton);"></span>
+              <div style="font-size:11px;color:var(--c-text-3);">09:35 — 10:05 · 30m</div>
+              <div style="font-size:14px;font-weight:600;margin-top:3px;">Fix rate-limit retry in puzzle-api</div>
+              <div style="font-size:12px;color:var(--c-text-2);margin-top:3px;">Codex · puzzle-api · 6 prompts · 1 commit ✓</div>
+            </div>
+            <div style="position:relative;">
+              <span style="position:absolute;left:-25px;top:4px;width:8px;height:8px;border-radius:50%;background:#f59e0b;"></span>
+              <div style="font-size:11px;color:var(--c-text-3);">morning note</div>
+              <div style="font-size:12.5px;color:var(--c-text-2);margin-top:3px;line-height:1.5;"><b style="color:#d97706;">2 worktrees need you:</b> uncommitted changes on <span class="mono" style="font-size:11px;">feature/fts-search</span>, merged branch <span class="mono" style="font-size:11px;">fix/tray-flicker</span> safe to delete. <span style="color:#818cf8;">Open Repos →</span></div>
+            </div>
+          </div>
+          <div style="margin-top:26px;display:flex;gap:24px;font-size:12px;color:var(--c-text-3);border-top:1px solid var(--c-border-sub);padding-top:14px;">
+            <span><b style="color:var(--c-text);font-size:15px;">2.1M</b> tokens</span>
+            <span><b style="color:var(--c-text);font-size:15px;">$6.20</b> cost</span>
+            <span><b style="color:var(--c-text);font-size:15px;">3</b> commits</span>
+            <span><b style="color:var(--c-text);font-size:15px;">64%</b> on contextbar</span>
+          </div>
+        </div>
+      </div>
+    </div></div>
+  </div>
+
+  <div class="proto">
+    <div class="proto-label">12C · Project board <span>Kanban by project: columns = active projects, cards = sessions/branches/attention items inside each. Spatial "where is my work" answer; drag-worthy later.</span></div>
+    <div class="scalebox"><div class="frame">
+      <div class="side">
+        <div class="logo-row"><div class="logo"></div>Context Bar</div>
+        <div class="search cmdk" style="font-size:11px;">⌕ Jump… <span style="margin-left:auto;font-size:9px;">⌘K</span></div>
+        <div class="grp">Work</div>
+        <div class="it act">◉ My Work</div>
+        <div class="it">◷ Sessions<span class="n">1.2k</span></div>
+        <div class="it">⌥ Repos<span class="n">9</span></div>
+        <div class="grp">Configure</div>
+        <div class="it">🤖 Agents<span class="n">4</span></div>
+        <div class="it">📜 Skills<span class="n">34</span></div>
+        <div class="it">🔌 MCPs<span class="n">12</span></div>
+        <div class="spacer"></div>
+        <div class="it">🔔 Notifications</div>
+        <div class="it">⚙ Settings</div>
+      </div>
+      <div class="main">
+        <div class="mhdr"><h3>My Work</h3><span class="pill" style="margin-left:auto;">This week ▾</span></div>
+        <div class="mbody" style="display:flex;gap:12px;overflow-x:auto;">
+          <div style="width:240px;flex-shrink:0;display:flex;flex-direction:column;gap:8px;">
+            <div style="display:flex;align-items:center;gap:8px;padding:0 2px;">
+              <div class="avatar" style="background:#8b5cf6;width:18px;height:18px;font-size:8px;">CB</div>
+              <b style="font-size:13px;">contextbar</b>
+              <span class="pill grn" style="margin-left:auto;">● live</span>
+            </div>
+            <div class="card" style="padding:11px;border-left:3px solid #10b981;">
+              <div style="font-size:12px;font-weight:600;">FTS warm pass</div>
+              <div style="font-size:10px;color:var(--c-text-3);margin-top:3px;">Claude · running 38m · 18 prompts</div>
+              <div style="display:flex;gap:4px;margin-top:7px;"><span class="pill ind" style="font-size:9.5px;">▶ Jump in</span></div>
+            </div>
+            <div class="card" style="padding:11px;border-left:3px solid #f59e0b;">
+              <div style="font-size:12px;font-weight:600;">feature/fts-search</div>
+              <div style="font-size:10px;color:#d97706;margin-top:3px;">3 uncommitted files</div>
+            </div>
+            <div class="card" style="padding:11px;">
+              <div style="font-size:12px;font-weight:600;">Search hits UI</div>
+              <div style="font-size:10px;color:var(--c-text-3);margin-top:3px;">done today · 2 commits ✓</div>
+            </div>
+            <div class="card" style="padding:11px;">
+              <div style="font-size:12px;font-weight:600;">fix/tray-flicker</div>
+              <div style="font-size:10px;color:#10b981;margin-top:3px;">merged · safe to delete</div>
+            </div>
+          </div>
+          <div style="width:240px;flex-shrink:0;display:flex;flex-direction:column;gap:8px;">
+            <div style="display:flex;align-items:center;gap:8px;padding:0 2px;">
+              <div class="avatar" style="background:#0ea5e9;width:18px;height:18px;font-size:8px;">API</div>
+              <b style="font-size:13px;">puzzle-api</b>
+              <span style="margin-left:auto;font-size:10px;color:var(--c-text-3);">3h ago</span>
+            </div>
+            <div class="card" style="padding:11px;">
+              <div style="font-size:12px;font-weight:600;">Rate-limit retry fix</div>
+              <div style="font-size:10px;color:var(--c-text-3);margin-top:3px;">Codex · 30m · 1 commit ✓</div>
+              <div style="display:flex;gap:4px;margin-top:7px;"><span class="pill" style="font-size:9.5px;">▶ Resume</span></div>
+            </div>
+            <div class="card" style="padding:11px;">
+              <div style="font-size:12px;font-weight:600;">main</div>
+              <div style="font-size:10px;color:var(--c-text-3);margin-top:3px;">clean · up to date</div>
+            </div>
+          </div>
+          <div style="width:240px;flex-shrink:0;display:flex;flex-direction:column;gap:8px;">
+            <div style="display:flex;align-items:center;gap:8px;padding:0 2px;">
+              <div class="avatar" style="background:#f59e0b;width:18px;height:18px;font-size:8px;">DOC</div>
+              <b style="font-size:13px;">docs-site</b>
+              <span style="margin-left:auto;font-size:10px;color:var(--c-text-3);">yesterday</span>
+            </div>
+            <div class="card" style="padding:11px;">
+              <div style="font-size:12px;font-weight:600;">Landing page copy</div>
+              <div style="font-size:10px;color:var(--c-text-3);margin-top:3px;">Gemini · 45m yesterday</div>
+              <div style="display:flex;gap:4px;margin-top:7px;"><span class="pill" style="font-size:9.5px;">▶ Resume</span></div>
+            </div>
+            <div class="card" style="padding:11px;border-style:dashed;color:var(--c-text-3);text-align:center;font-size:11px;">
+              quiet 2 days · getting stale
+            </div>
+          </div>
+        </div>
+      </div>
+    </div></div>
+  </div>
+</div>
+
+<!-- ══════════════ SESSIONS ══════════════ -->
+<h2>13 · Sessions</h2>
+<div class="col">
+
+  <div class="proto">
+    <div class="proto-label">13A · Two-pane master-detail <span>Current direction refined: list left (search + FTS snippets, time buckets), transcript right with stats bar. Mail-app model, keyboard ↑↓.</span></div>
+    <div class="scalebox"><div class="frame">
+      <div class="side">
+        <div class="logo-row"><div class="logo"></div>Context Bar</div>
+        <div class="search cmdk" style="font-size:11px;">⌕ Jump… <span style="margin-left:auto;font-size:9px;">⌘K</span></div>
+        <div class="grp">Work</div>
+        <div class="it">◉ My Work</div>
+        <div class="it act">◷ Sessions<span class="n">1.2k</span></div>
+        <div class="it">⌥ Repos<span class="n">9</span></div>
+        <div class="grp">Configure</div>
+        <div class="it">🤖 Agents<span class="n">4</span></div>
+        <div class="it">📜 Skills<span class="n">34</span></div>
+        <div class="it">🔌 MCPs<span class="n">12</span></div>
+        <div class="spacer"></div>
+        <div class="it">🔔 Notifications</div>
+        <div class="it">⚙ Settings</div>
+      </div>
+      <div class="main" style="flex-direction:row;">
+        <div style="width:300px;border-right:1px solid var(--c-border);display:flex;flex-direction:column;">
+          <div style="padding:14px 12px 8px;"><div class="search">⌕ "fts index"…</div></div>
+          <div style="padding:0 12px 8px;display:flex;gap:4px;"><span class="pill">Claude ▾</span><span class="pill">All projects ▾</span></div>
+          <div style="flex:1;overflow:hidden;">
+            <div class="sect-h" style="padding:8px 14px 4px;">Live</div>
+            <div style="padding:9px 14px;background:rgba(16,185,129,.05);border-left:2px solid #10b981;">
+              <div style="display:flex;gap:7px;align-items:center;"><span class="dot on"></span><b style="font-size:12px;">FTS warm pass</b></div>
+              <div style="font-size:10px;color:var(--c-text-3);margin-top:3px;">contextbar · 38m · 640k tok</div>
+            </div>
+            <div class="sect-h" style="padding:10px 14px 4px;">Today</div>
+            <div style="padding:9px 14px;background:var(--c-hover);border-left:2px solid #8b5cf6;">
+              <div style="display:flex;gap:7px;align-items:center;"><span class="avatar av-cl mini">C</span><b style="font-size:12px;">Search hits UI</b></div>
+              <div style="font-size:10px;color:var(--c-text-3);margin-top:3px;">contextbar · 1h 20m · 2 commits</div>
+              <div style="font-size:10px;color:var(--c-text-2);margin-top:3px;">…show <mark style="background:rgba(139,92,246,.25);color:inherit;">FTS index</mark> hits in the session list…</div>
+            </div>
+            <div style="padding:9px 14px;">
+              <div style="display:flex;gap:7px;align-items:center;"><span class="avatar av-cx mini">Cx</span><b style="font-size:12px;">Rate-limit retry</b></div>
+              <div style="font-size:10px;color:var(--c-text-3);margin-top:3px;">puzzle-api · 30m</div>
+            </div>
+            <div class="sect-h" style="padding:10px 14px 4px;">This week</div>
+            <div style="padding:9px 14px;">
+              <div style="display:flex;gap:7px;align-items:center;"><span class="avatar av-cl mini">C</span><b style="font-size:12px;">Sessions IPC command</b></div>
+              <div style="font-size:10px;color:var(--c-text-3);margin-top:3px;">contextbar · Tue · 55m</div>
+            </div>
+            <div style="padding:9px 14px;">
+              <div style="display:flex;gap:7px;align-items:center;"><span class="avatar av-ge mini">G</span><b style="font-size:12px;">Landing page copy</b></div>
+              <div style="font-size:10px;color:var(--c-text-3);margin-top:3px;">docs-site · Wed · 45m</div>
+            </div>
+          </div>
+        </div>
+        <div style="flex:1;display:flex;flex-direction:column;">
+          <div style="padding:16px 20px 10px;border-bottom:1px solid var(--c-border);">
+            <div style="display:flex;align-items:center;gap:9px;">
+              <span class="avatar av-cl">CC</span>
+              <b style="font-size:15px;">Search hits UI</b>
+              <span class="pill">contextbar</span>
+              <span style="margin-left:auto;display:flex;gap:5px;"><span class="pill ind">▶ Resume</span><span class="pill">⧉</span></span>
+            </div>
+            <div style="display:flex;gap:16px;margin-top:10px;font-size:10.5px;color:var(--c-text-3);">
+              <span><b style="color:var(--c-text);">1.1M</b> tokens</span>
+              <span><b style="color:var(--c-text);">31</b> messages</span>
+              <span><b style="color:var(--c-text);">48</b> tool calls</span>
+              <span><b style="color:var(--c-text);">1h 20m</b></span>
+            </div>
+          </div>
+          <div style="flex:1;padding:16px 20px;display:flex;flex-direction:column;gap:10px;overflow:hidden;">
+            <div style="align-self:flex-end;max-width:70%;background:#8b5cf6;color:#fff;border-radius:12px 12px 3px 12px;padding:9px 12px;font-size:12px;line-height:1.5;">Show transcript search hits in the session list with highlighted snippets</div>
+            <div style="align-self:flex-start;max-width:75%;background:var(--c-surface);border:1px solid var(--c-border-sub);border-radius:12px 12px 12px 3px;padding:9px 12px;font-size:12px;line-height:1.5;">I'll add a snippet field to the search results and render <span class="mono" style="font-size:11px;">&lt;mark&gt;</span> highlights…</div>
+            <div style="align-self:flex-start;max-width:75%;border:1px dashed var(--c-border);border-radius:10px;padding:7px 12px;font-size:11px;color:var(--c-text-3);">⚙ 12 tool calls — Read, Edit ×4, Bash… <span style="color:#818cf8;">expand</span></div>
+            <div style="align-self:flex-start;max-width:75%;background:var(--c-surface);border:1px solid var(--c-border-sub);border-radius:12px 12px 12px 3px;padding:9px 12px;font-size:12px;line-height:1.5;">Done — snippets render with highlights, tests pass ✓</div>
+          </div>
+        </div>
+      </div>
+    </div></div>
+  </div>
+
+  <div class="proto">
+    <div class="proto-label">13B · Full-width table + drawer <span>Data-grid: sortable columns (agent, project, duration, tokens, cost, commits), click opens right slide-drawer transcript. Analytics-first — compare sessions, spot heavy ones.</span></div>
+    <div class="scalebox"><div class="frame">
+      <div class="side">
+        <div class="logo-row"><div class="logo"></div>Context Bar</div>
+        <div class="search cmdk" style="font-size:11px;">⌕ Jump… <span style="margin-left:auto;font-size:9px;">⌘K</span></div>
+        <div class="grp">Work</div>
+        <div class="it">◉ My Work</div>
+        <div class="it act">◷ Sessions<span class="n">1.2k</span></div>
+        <div class="it">⌥ Repos<span class="n">9</span></div>
+        <div class="grp">Configure</div>
+        <div class="it">🤖 Agents<span class="n">4</span></div>
+        <div class="it">📜 Skills<span class="n">34</span></div>
+        <div class="it">🔌 MCPs<span class="n">12</span></div>
+        <div class="spacer"></div>
+        <div class="it">🔔 Notifications</div>
+        <div class="it">⚙ Settings</div>
+      </div>
+      <div class="main">
+        <div class="mhdr">
+          <h3>Sessions</h3>
+          <div class="search" style="width:220px;margin-left:12px;">⌕ Search transcripts…</div>
+          <span class="pill" style="margin-left:auto;">Export CSV</span>
+        </div>
+        <div class="mbody" style="overflow:hidden;">
+          <div style="display:flex;padding:8px 12px;font-size:9.5px;color:var(--c-text-3);text-transform:uppercase;letter-spacing:.05em;border-bottom:1px solid var(--c-border);">
+            <span style="flex:2.2;">Session</span><span style="flex:1;">Project</span><span style="width:60px;">Agent</span><span style="width:70px;">Duration ▾</span><span style="width:70px;text-align:right;">Tokens</span><span style="width:56px;text-align:right;">Cost</span><span style="width:60px;text-align:right;">Commits</span>
+          </div>
+          <div style="display:flex;align-items:center;padding:10px 12px;font-size:12px;border-bottom:1px solid var(--c-border-sub);background:rgba(16,185,129,.04);">
+            <span style="flex:2.2;display:flex;gap:7px;align-items:center;"><span class="dot on"></span><b>FTS warm pass</b><span class="pill grn" style="font-size:9px;">live</span></span>
+            <span style="flex:1;color:var(--c-text-2);">contextbar</span><span style="width:60px;"><span class="avatar av-cl mini">C</span></span>
+            <span style="width:70px;" class="mono">38m</span><span style="width:70px;text-align:right;" class="mono">640k</span><span style="width:56px;text-align:right;" class="mono">$1.90</span><span style="width:60px;text-align:right;" class="mono">—</span>
+          </div>
+          <div style="display:flex;align-items:center;padding:10px 12px;font-size:12px;border-bottom:1px solid var(--c-border-sub);">
+            <span style="flex:2.2;"><b>Search hits UI</b></span>
+            <span style="flex:1;color:var(--c-text-2);">contextbar</span><span style="width:60px;"><span class="avatar av-cl mini">C</span></span>
+            <span style="width:70px;" class="mono">1h 20m</span><span style="width:70px;text-align:right;" class="mono">1.1M</span><span style="width:56px;text-align:right;" class="mono">$3.20</span><span style="width:60px;text-align:right;" class="mono">2 ✓</span>
+          </div>
+          <div style="display:flex;align-items:center;padding:10px 12px;font-size:12px;border-bottom:1px solid var(--c-border-sub);">
+            <span style="flex:2.2;"><b>Rate-limit retry</b></span>
+            <span style="flex:1;color:var(--c-text-2);">puzzle-api</span><span style="width:60px;"><span class="avatar av-cx mini">Cx</span></span>
+            <span style="width:70px;" class="mono">30m</span><span style="width:70px;text-align:right;" class="mono">210k</span><span style="width:56px;text-align:right;" class="mono">$0.60</span><span style="width:60px;text-align:right;" class="mono">1 ✓</span>
+          </div>
+          <div style="display:flex;align-items:center;padding:10px 12px;font-size:12px;border-bottom:1px solid var(--c-border-sub);">
+            <span style="flex:2.2;"><b>Sessions IPC command</b></span>
+            <span style="flex:1;color:var(--c-text-2);">contextbar</span><span style="width:60px;"><span class="avatar av-cl mini">C</span></span>
+            <span style="width:70px;" class="mono">55m</span><span style="width:70px;text-align:right;" class="mono">820k</span><span style="width:56px;text-align:right;" class="mono">$2.40</span><span style="width:60px;text-align:right;" class="mono">3 ✓</span>
+          </div>
+          <div style="display:flex;align-items:center;padding:10px 12px;font-size:12px;border-bottom:1px solid var(--c-border-sub);">
+            <span style="flex:2.2;"><b>Landing page copy</b></span>
+            <span style="flex:1;color:var(--c-text-2);">docs-site</span><span style="width:60px;"><span class="avatar av-ge mini">G</span></span>
+            <span style="width:70px;" class="mono">45m</span><span style="width:70px;text-align:right;" class="mono">95k</span><span style="width:56px;text-align:right;" class="mono">$0.20</span><span style="width:60px;text-align:right;" class="mono">—</span>
+          </div>
+          <div style="margin-top:12px;display:flex;gap:14px;padding:10px 12px;background:var(--c-surface);border-radius:10px;font-size:11px;color:var(--c-text-3);">
+            <span>Week totals:</span>
+            <span><b style="color:var(--c-text);">23</b> sessions</span>
+            <span><b style="color:var(--c-text);">14.2M</b> tokens</span>
+            <span><b style="color:var(--c-text);">$41.80</b></span>
+            <span><b style="color:var(--c-text);">18</b> commits</span>
+          </div>
+        </div>
+      </div>
+    </div></div>
+  </div>
+
+  <div class="proto">
+    <div class="proto-label">13C · Calendar timeline <span>Week view, sessions as time blocks per day column, colored by agent. Answers "when do I work, how long, with what" — usage patterns visible at a glance.</span></div>
+    <div class="scalebox"><div class="frame">
+      <div class="side">
+        <div class="logo-row"><div class="logo"></div>Context Bar</div>
+        <div class="search cmdk" style="font-size:11px;">⌕ Jump… <span style="margin-left:auto;font-size:9px;">⌘K</span></div>
+        <div class="grp">Work</div>
+        <div class="it">◉ My Work</div>
+        <div class="it act">◷ Sessions<span class="n">1.2k</span></div>
+        <div class="it">⌥ Repos<span class="n">9</span></div>
+        <div class="grp">Configure</div>
+        <div class="it">🤖 Agents<span class="n">4</span></div>
+        <div class="it">📜 Skills<span class="n">34</span></div>
+        <div class="it">🔌 MCPs<span class="n">12</span></div>
+        <div class="spacer"></div>
+        <div class="it">🔔 Notifications</div>
+        <div class="it">⚙ Settings</div>
+      </div>
+      <div class="main">
+        <div class="mhdr">
+          <h3>Sessions</h3>
+          <span class="pill" style="margin-left:12px;">◂ Jul 14 – 18 ▸</span>
+          <div style="margin-left:auto;display:flex;gap:8px;font-size:10px;color:var(--c-text-3);align-items:center;">
+            <span><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:#d97757;"></span> Claude</span>
+            <span><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:#0ea5e9;"></span> Codex</span>
+            <span><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:#1a73e8;"></span> Gemini</span>
+          </div>
+        </div>
+        <div class="mbody" style="display:flex;gap:8px;">
+          <div style="width:34px;display:flex;flex-direction:column;font-size:9px;color:var(--c-text-3);padding-top:26px;" class="mono">
+            <div style="flex:1;">9a</div><div style="flex:1;">11a</div><div style="flex:1;">1p</div><div style="flex:1;">3p</div><div style="flex:1;">5p</div>
+          </div>
+          <div style="flex:1;display:flex;gap:8px;">
+            <div style="flex:1;display:flex;flex-direction:column;">
+              <div style="text-align:center;font-size:10.5px;color:var(--c-text-3);padding-bottom:6px;">Mon 14</div>
+              <div style="flex:1;position:relative;background:var(--c-surface);border-radius:8px;">
+                <div style="position:absolute;top:8%;left:4px;right:4px;height:20%;background:#d97757;border-radius:6px;padding:4px 6px;font-size:8.5px;color:#fff;overflow:hidden;">worktree scan<br><span style="opacity:.75;">1h 10m</span></div>
+                <div style="position:absolute;top:52%;left:4px;right:4px;height:12%;background:#0ea5e9;border-radius:6px;padding:4px 6px;font-size:8.5px;color:#fff;overflow:hidden;">api tests</div>
+              </div>
+            </div>
+            <div style="flex:1;display:flex;flex-direction:column;">
+              <div style="text-align:center;font-size:10.5px;color:var(--c-text-3);padding-bottom:6px;">Tue 15</div>
+              <div style="flex:1;position:relative;background:var(--c-surface);border-radius:8px;">
+                <div style="position:absolute;top:5%;left:4px;right:4px;height:28%;background:#d97757;border-radius:6px;padding:4px 6px;font-size:8.5px;color:#fff;overflow:hidden;">sessions IPC<br><span style="opacity:.75;">55m · 3✓</span></div>
+                <div style="position:absolute;top:70%;left:4px;right:4px;height:15%;background:#d97757;opacity:.75;border-radius:6px;padding:4px 6px;font-size:8.5px;color:#fff;overflow:hidden;">fts escaping</div>
+              </div>
+            </div>
+            <div style="flex:1;display:flex;flex-direction:column;">
+              <div style="text-align:center;font-size:10.5px;color:var(--c-text-3);padding-bottom:6px;">Wed 16</div>
+              <div style="flex:1;position:relative;background:var(--c-surface);border-radius:8px;">
+                <div style="position:absolute;top:15%;left:4px;right:4px;height:14%;background:#1a73e8;border-radius:6px;padding:4px 6px;font-size:8.5px;color:#fff;overflow:hidden;">landing copy</div>
+                <div style="position:absolute;top:48%;left:4px;right:4px;height:24%;background:#d97757;border-radius:6px;padding:4px 6px;font-size:8.5px;color:#fff;overflow:hidden;">smoke test<br><span style="opacity:.75;">1h 05m</span></div>
+              </div>
+            </div>
+            <div style="flex:1;display:flex;flex-direction:column;">
+              <div style="text-align:center;font-size:10.5px;font-weight:600;color:var(--c-text);padding-bottom:6px;">Thu 17 · today</div>
+              <div style="flex:1;position:relative;background:var(--c-surface);border-radius:8px;border:1px solid #8b5cf6;">
+                <div style="position:absolute;top:4%;left:4px;right:4px;height:10%;background:#0ea5e9;border-radius:6px;padding:4px 6px;font-size:8.5px;color:#fff;overflow:hidden;">retry fix · 1✓</div>
+                <div style="position:absolute;top:22%;left:4px;right:4px;height:26%;background:#d97757;border-radius:6px;padding:4px 6px;font-size:8.5px;color:#fff;overflow:hidden;">search hits UI<br><span style="opacity:.75;">1h 20m · 2✓</span></div>
+                <div style="position:absolute;top:58%;left:4px;right:4px;height:22%;background:#d97757;border-radius:6px;border:1.5px solid #10b981;padding:4px 6px;font-size:8.5px;color:#fff;overflow:hidden;">● fts warm pass<br><span style="opacity:.75;">live · 38m</span></div>
+              </div>
+            </div>
+            <div style="flex:1;display:flex;flex-direction:column;">
+              <div style="text-align:center;font-size:10.5px;color:var(--c-text-3);padding-bottom:6px;">Fri 18</div>
+              <div style="flex:1;position:relative;background:var(--c-surface);border-radius:8px;opacity:.5;"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div></div>
+  </div>
+</div>
+
+<!-- ══════════════ REPOS ══════════════ -->
+<h2>14 · Repos / Worktrees</h2>
+<div class="col">
+
+  <div class="proto">
+    <div class="proto-label">14A · Grouped repo cards <span>Current direction refined: collapsible repo groups, worktree rows with status dots + actions, cleanup banner on top.</span></div>
+    <div class="scalebox"><div class="frame">
+      <div class="side">
+        <div class="logo-row"><div class="logo"></div>Context Bar</div>
+        <div class="search cmdk" style="font-size:11px;">⌕ Jump… <span style="margin-left:auto;font-size:9px;">⌘K</span></div>
+        <div class="grp">Work</div>
+        <div class="it">◉ My Work</div>
+        <div class="it">◷ Sessions<span class="n">1.2k</span></div>
+        <div class="it act">⌥ Repos<span class="n">9</span></div>
+        <div class="grp">Configure</div>
+        <div class="it">🤖 Agents<span class="n">4</span></div>
+        <div class="it">📜 Skills<span class="n">34</span></div>
+        <div class="it">🔌 MCPs<span class="n">12</span></div>
+        <div class="spacer"></div>
+        <div class="it">🔔 Notifications</div>
+        <div class="it">⚙ Settings</div>
+      </div>
+      <div class="main">
+        <div class="mhdr">
+          <h3>Repos</h3>
+          <div class="search" style="width:200px;margin-left:12px;">⌕ branch or repo…</div>
+          <div style="margin-left:auto;display:flex;gap:4px;">
+            <span class="pill" style="background:var(--c-text);color:var(--c-bg);">All</span><span class="pill">Active</span><span class="pill">Stale</span><span class="pill">Safe to delete</span>
+          </div>
+        </div>
+        <div class="mbody" style="overflow-y:auto;">
+          <div style="display:flex;align-items:center;gap:10px;padding:11px 14px;border:1px solid rgba(16,185,129,.3);background:rgba(16,185,129,.05);border-radius:10px;margin-bottom:12px;font-size:12px;">
+            <span>🧹</span><span><b>2 worktrees</b> merged and clean — safe to delete</span>
+            <span class="pill grn" style="margin-left:auto;">Review</span>
+          </div>
+          <div class="card" style="margin-bottom:10px;overflow:hidden;">
+            <div style="display:flex;align-items:center;gap:9px;padding:11px 14px;border-bottom:1px solid var(--c-border-sub);">
+              <span style="font-size:12px;">▾</span><b style="font-size:13px;">contextbar</b>
+              <span style="font-size:10px;color:var(--c-text-3);">4 worktrees</span>
+              <span class="pill" style="margin-left:auto;font-size:9.5px;">View sessions</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:9px;padding:9px 14px;border-bottom:1px solid var(--c-border-sub);font-size:12px;background:var(--c-bg);">
+              <span class="dot on"></span><span class="mono" style="font-size:11px;">feature/transcript-search</span>
+              <span class="pill amb" style="font-size:9px;">3 uncommitted</span>
+              <span style="margin-left:auto;font-size:10px;color:var(--c-text-3);">12m ago</span>
+              <span class="pill ind" style="font-size:9.5px;">▶</span><span class="pill" style="font-size:9.5px;">VS Code</span><span style="color:var(--c-text-3);font-size:11px;">🗑</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:9px;padding:9px 14px;border-bottom:1px solid var(--c-border-sub);font-size:12px;background:var(--c-bg);">
+              <span class="dot off"></span><span class="mono" style="font-size:11px;">main</span>
+              <span class="pill" style="font-size:9px;">primary</span>
+              <span style="margin-left:auto;font-size:10px;color:var(--c-text-3);">2d ago</span>
+              <span class="pill ind" style="font-size:9.5px;">▶</span><span class="pill" style="font-size:9.5px;">VS Code</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:9px;padding:9px 14px;font-size:12px;background:var(--c-bg);">
+              <span class="dot stale"></span><span class="mono" style="font-size:11px;">fix/tray-flicker</span>
+              <span class="pill grn" style="font-size:9px;">merged · clean</span>
+              <span style="margin-left:auto;font-size:10px;color:var(--c-text-3);">9d ago</span>
+              <span class="pill red" style="font-size:9.5px;">Delete</span>
+            </div>
+          </div>
+          <div class="card" style="margin-bottom:10px;">
+            <div style="display:flex;align-items:center;gap:9px;padding:11px 14px;">
+              <span style="font-size:12px;">▸</span><b style="font-size:13px;">puzzle-api</b>
+              <span style="font-size:10px;color:var(--c-text-3);">2 worktrees · 1 stale</span>
+            </div>
+          </div>
+          <div class="card">
+            <div style="display:flex;align-items:center;gap:9px;padding:11px 14px;">
+              <span style="font-size:12px;">▸</span><b style="font-size:13px;">docs-site</b>
+              <span style="font-size:10px;color:var(--c-text-3);">1 worktree</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div></div>
+  </div>
+
+  <div class="proto">
+    <div class="proto-label">14B · Flat ops table <span>Every worktree one row, sortable, checkbox bulk-delete. Fleet management — best when many repos, zero collapsing.</span></div>
+    <div class="scalebox"><div class="frame">
+      <div class="side">
+        <div class="logo-row"><div class="logo"></div>Context Bar</div>
+        <div class="search cmdk" style="font-size:11px;">⌕ Jump… <span style="margin-left:auto;font-size:9px;">⌘K</span></div>
+        <div class="grp">Work</div>
+        <div class="it">◉ My Work</div>
+        <div class="it">◷ Sessions<span class="n">1.2k</span></div>
+        <div class="it act">⌥ Repos<span class="n">9</span></div>
+        <div class="grp">Configure</div>
+        <div class="it">🤖 Agents<span class="n">4</span></div>
+        <div class="it">📜 Skills<span class="n">34</span></div>
+        <div class="it">🔌 MCPs<span class="n">12</span></div>
+        <div class="spacer"></div>
+        <div class="it">🔔 Notifications</div>
+        <div class="it">⚙ Settings</div>
+      </div>
+      <div class="main">
+        <div class="mhdr">
+          <h3>Repos</h3>
+          <div class="search" style="width:200px;margin-left:12px;">⌕ Filter…</div>
+          <span class="pill" style="margin-left:auto;">Sort: status ▾</span>
+        </div>
+        <div class="mbody">
+          <div style="display:flex;padding:8px 12px;font-size:9.5px;color:var(--c-text-3);text-transform:uppercase;letter-spacing:.05em;border-bottom:1px solid var(--c-border);">
+            <span style="width:26px;">☐</span><span style="flex:1.4;">Branch</span><span style="flex:.8;">Repo</span><span style="width:90px;">Status</span><span style="width:90px;">Git state</span><span style="width:70px;">Last commit</span><span style="width:80px;text-align:right;">Actions</span>
+          </div>
+          <div style="display:flex;align-items:center;padding:9px 12px;font-size:12px;border-bottom:1px solid var(--c-border-sub);">
+            <span style="width:26px;color:var(--c-text-3);">☐</span>
+            <span style="flex:1.4;" class="mono">feature/transcript-search</span>
+            <span style="flex:.8;color:var(--c-text-2);">contextbar</span>
+            <span style="width:90px;"><span class="pill grn" style="font-size:9px;">● active</span></span>
+            <span style="width:90px;"><span class="pill amb" style="font-size:9px;">3 dirty</span></span>
+            <span style="width:70px;color:var(--c-text-3);font-size:10.5px;">12m</span>
+            <span style="width:80px;text-align:right;"><span class="pill ind" style="font-size:9.5px;">▶</span> <span style="color:var(--c-text-3);">🗑</span></span>
+          </div>
+          <div style="display:flex;align-items:center;padding:9px 12px;font-size:12px;border-bottom:1px solid var(--c-border-sub);">
+            <span style="width:26px;color:var(--c-text-3);">☐</span>
+            <span style="flex:1.4;" class="mono">main</span>
+            <span style="flex:.8;color:var(--c-text-2);">contextbar</span>
+            <span style="width:90px;"><span class="pill" style="font-size:9px;">primary</span></span>
+            <span style="width:90px;"><span class="pill" style="font-size:9px;">clean</span></span>
+            <span style="width:70px;color:var(--c-text-3);font-size:10.5px;">2d</span>
+            <span style="width:80px;text-align:right;"><span class="pill ind" style="font-size:9.5px;">▶</span></span>
+          </div>
+          <div style="display:flex;align-items:center;padding:9px 12px;font-size:12px;border-bottom:1px solid var(--c-border-sub);background:rgba(16,185,129,.04);">
+            <span style="width:26px;color:#10b981;">☑</span>
+            <span style="flex:1.4;" class="mono">fix/tray-flicker</span>
+            <span style="flex:.8;color:var(--c-text-2);">contextbar</span>
+            <span style="width:90px;"><span class="pill amb" style="font-size:9px;">stale 9d</span></span>
+            <span style="width:90px;"><span class="pill grn" style="font-size:9px;">merged ✓</span></span>
+            <span style="width:70px;color:var(--c-text-3);font-size:10.5px;">9d</span>
+            <span style="width:80px;text-align:right;"><span style="color:var(--c-text-3);">🗑</span></span>
+          </div>
+          <div style="display:flex;align-items:center;padding:9px 12px;font-size:12px;border-bottom:1px solid var(--c-border-sub);background:rgba(16,185,129,.04);">
+            <span style="width:26px;color:#10b981;">☑</span>
+            <span style="flex:1.4;" class="mono">chore/deps-bump</span>
+            <span style="flex:.8;color:var(--c-text-2);">puzzle-api</span>
+            <span style="width:90px;"><span class="pill red" style="font-size:9px;">abandoned</span></span>
+            <span style="width:90px;"><span class="pill grn" style="font-size:9px;">merged ✓</span></span>
+            <span style="width:70px;color:var(--c-text-3);font-size:10.5px;">24d</span>
+            <span style="width:80px;text-align:right;"><span style="color:var(--c-text-3);">🗑</span></span>
+          </div>
+          <div style="display:flex;align-items:center;padding:9px 12px;font-size:12px;border-bottom:1px solid var(--c-border-sub);">
+            <span style="width:26px;color:var(--c-text-3);">☐</span>
+            <span style="flex:1.4;" class="mono">feature/rate-limits</span>
+            <span style="flex:.8;color:var(--c-text-2);">puzzle-api</span>
+            <span style="width:90px;"><span class="pill grn" style="font-size:9px;">● active</span></span>
+            <span style="width:90px;"><span class="pill" style="font-size:9px;">clean</span></span>
+            <span style="width:70px;color:var(--c-text-3);font-size:10.5px;">3h</span>
+            <span style="width:80px;text-align:right;"><span class="pill ind" style="font-size:9.5px;">▶</span> <span style="color:var(--c-text-3);">🗑</span></span>
+          </div>
+          <div style="margin-top:10px;display:flex;gap:8px;align-items:center;padding:9px 12px;background:var(--c-surface);border-radius:10px;">
+            <span style="font-size:11px;color:var(--c-text-2);">2 selected · both merged & clean</span>
+            <span class="pill red" style="margin-left:auto;">Delete 2 worktrees</span>
+          </div>
+        </div>
+      </div>
+    </div></div>
+  </div>
+
+  <div class="proto">
+    <div class="proto-label">14C · Branch map <span>Visual tree: repo trunk → worktree branches, status-colored, session activity as glow. Health of whole forest in one look; click node → actions popover.</span></div>
+    <div class="scalebox"><div class="frame">
+      <div class="side">
+        <div class="logo-row"><div class="logo"></div>Context Bar</div>
+        <div class="search cmdk" style="font-size:11px;">⌕ Jump… <span style="margin-left:auto;font-size:9px;">⌘K</span></div>
+        <div class="grp">Work</div>
+        <div class="it">◉ My Work</div>
+        <div class="it">◷ Sessions<span class="n">1.2k</span></div>
+        <div class="it act">⌥ Repos<span class="n">9</span></div>
+        <div class="grp">Configure</div>
+        <div class="it">🤖 Agents<span class="n">4</span></div>
+        <div class="it">📜 Skills<span class="n">34</span></div>
+        <div class="it">🔌 MCPs<span class="n">12</span></div>
+        <div class="spacer"></div>
+        <div class="it">🔔 Notifications</div>
+        <div class="it">⚙ Settings</div>
+      </div>
+      <div class="main">
+        <div class="mhdr">
+          <h3>Repos</h3>
+          <div style="margin-left:auto;display:flex;gap:10px;font-size:10px;color:var(--c-text-3);align-items:center;">
+            <span><span class="dot on" style="display:inline-block;"></span> active</span>
+            <span><span class="dot stale" style="display:inline-block;"></span> stale</span>
+            <span><span class="dot dead" style="display:inline-block;"></span> abandoned</span>
+          </div>
+        </div>
+        <div class="mbody" style="display:flex;flex-direction:column;gap:20px;padding-top:10px;">
+          <div>
+            <div style="display:flex;align-items:center;gap:10px;">
+              <div style="padding:9px 16px;border-radius:10px;background:var(--c-text);color:var(--c-bg);font-size:13px;font-weight:600;">contextbar</div>
+              <div style="font-size:10px;color:var(--c-text-3);">4 worktrees · 1 live session</div>
+            </div>
+            <div style="display:flex;margin-left:26px;">
+              <div style="width:2px;background:var(--c-border);"></div>
+              <div style="flex:1;display:flex;flex-direction:column;gap:8px;padding:10px 0 0 0;">
+                <div style="display:flex;align-items:center;">
+                  <div style="width:26px;height:2px;background:var(--c-border);"></div>
+                  <div style="display:flex;align-items:center;gap:8px;padding:8px 13px;border-radius:9px;border:1.5px solid #10b981;background:rgba(16,185,129,.06);box-shadow:0 0 14px rgba(16,185,129,.15);">
+                    <span class="dot on"></span><span class="mono" style="font-size:11px;">feature/transcript-search</span>
+                    <span class="pill amb" style="font-size:8.5px;">3 dirty</span><span class="pill grn" style="font-size:8.5px;">● session</span>
+                  </div>
+                </div>
+                <div style="display:flex;align-items:center;">
+                  <div style="width:26px;height:2px;background:var(--c-border);"></div>
+                  <div style="display:flex;align-items:center;gap:8px;padding:8px 13px;border-radius:9px;border:1px solid var(--c-border);">
+                    <span class="dot off"></span><span class="mono" style="font-size:11px;">main</span><span class="pill" style="font-size:8.5px;">primary</span>
+                  </div>
+                </div>
+                <div style="display:flex;align-items:center;">
+                  <div style="width:26px;height:2px;background:var(--c-border);"></div>
+                  <div style="display:flex;align-items:center;gap:8px;padding:8px 13px;border-radius:9px;border:1px dashed var(--c-border);opacity:.7;">
+                    <span class="dot stale"></span><span class="mono" style="font-size:11px;">fix/tray-flicker</span>
+                    <span class="pill grn" style="font-size:8.5px;">merged</span><span class="pill red" style="font-size:8.5px;">delete?</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div>
+            <div style="display:flex;align-items:center;gap:10px;">
+              <div style="padding:9px 16px;border-radius:10px;background:var(--c-surface);border:1px solid var(--c-border);font-size:13px;font-weight:600;">puzzle-api</div>
+              <div style="font-size:10px;color:var(--c-text-3);">2 worktrees</div>
+            </div>
+            <div style="display:flex;margin-left:26px;">
+              <div style="width:2px;background:var(--c-border);"></div>
+              <div style="flex:1;display:flex;flex-direction:column;gap:8px;padding:10px 0 0 0;">
+                <div style="display:flex;align-items:center;">
+                  <div style="width:26px;height:2px;background:var(--c-border);"></div>
+                  <div style="display:flex;align-items:center;gap:8px;padding:8px 13px;border-radius:9px;border:1px solid var(--c-border);">
+                    <span class="dot on"></span><span class="mono" style="font-size:11px;">feature/rate-limits</span><span style="font-size:9px;color:var(--c-text-3);">3h ago</span>
+                  </div>
+                </div>
+                <div style="display:flex;align-items:center;">
+                  <div style="width:26px;height:2px;background:var(--c-border);"></div>
+                  <div style="display:flex;align-items:center;gap:8px;padding:8px 13px;border-radius:9px;border:1px dashed var(--c-border);opacity:.6;">
+                    <span class="dot dead"></span><span class="mono" style="font-size:11px;">chore/deps-bump</span><span class="pill red" style="font-size:8.5px;">abandoned 24d</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div></div>
+  </div>
+</div>
+
+<script>
+  if (matchMedia('(prefers-color-scheme: dark)').matches) document.documentElement.classList.add('dark');
+</script>
+</body>
+</html>

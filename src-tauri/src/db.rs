@@ -215,7 +215,72 @@ fn migrate(conn: &mut Connection) -> Result<(), AppError> {
         conn.pragma_update(None, "user_version", 10)?;
     }
 
+    if version < 11 {
+        // User-authored names for sessions and repos. Like session_meta,
+        // NOT a rebuildable cache — never drop in later migrations.
+        conn.execute_batch(
+            "ALTER TABLE session_meta ADD COLUMN custom_name TEXT;
+             CREATE TABLE IF NOT EXISTS repo_meta (
+                 repo_path   TEXT PRIMARY KEY,
+                 custom_name TEXT,
+                 updated_at  INTEGER NOT NULL DEFAULT 0
+             );",
+        )?;
+        conn.pragma_update(None, "user_version", 11)?;
+    }
+
+    if version < 12 {
+        // Rebuildable cache — recreate to add the title column (session titles
+        // parsed from ai-title / custom-title records). warm() repopulates.
+        conn.execute_batch(
+            "DROP TABLE IF EXISTS session_stats;
+            CREATE TABLE session_stats (
+                session_id     TEXT PRIMARY KEY,
+                agent          TEXT NOT NULL DEFAULT 'claude',
+                project        TEXT NOT NULL,
+                project_name   TEXT NOT NULL,
+                display        TEXT NOT NULL DEFAULT '',
+                title          TEXT,
+                ts             INTEGER NOT NULL,
+                model          TEXT NOT NULL DEFAULT '',
+                input_tokens   INTEGER NOT NULL DEFAULT 0,
+                output_tokens  INTEGER NOT NULL DEFAULT 0,
+                cache_read     INTEGER NOT NULL DEFAULT 0,
+                cache_creation INTEGER NOT NULL DEFAULT 0,
+                msg_count      INTEGER NOT NULL DEFAULT 0,
+                tool_calls     TEXT NOT NULL DEFAULT '{}',
+                skill_calls    TEXT NOT NULL DEFAULT '{}',
+                mtime          INTEGER NOT NULL DEFAULT 0,
+                size           INTEGER NOT NULL DEFAULT 0
+            );
+            CREATE INDEX IF NOT EXISTS idx_session_stats_ts ON session_stats(ts);",
+        )?;
+        conn.pragma_update(None, "user_version", 12)?;
+    }
+
+    if version < 13 {
+        // Free-form user notes. Rows keyed by repo path OR worktree path —
+        // repo_meta doubles as a generic per-path metadata store.
+        conn.execute_batch("ALTER TABLE repo_meta ADD COLUMN notes TEXT;")?;
+        conn.pragma_update(None, "user_version", 13)?;
+    }
+
     Ok(())
+}
+
+/// session_id → title for every session with a parsed title.
+pub fn get_session_titles(state: &DbState) -> std::collections::HashMap<String, String> {
+    let Ok(conn) = state.0.lock() else {
+        return Default::default();
+    };
+    let Ok(mut stmt) = conn.prepare(
+        "SELECT session_id, title FROM session_stats WHERE title IS NOT NULL AND title != ''",
+    ) else {
+        return Default::default();
+    };
+    stmt.query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)))
+        .map(|rows| rows.flatten().collect())
+        .unwrap_or_default()
 }
 
 // ---------------------------------------------------------------------------
@@ -228,16 +293,17 @@ pub struct SessionMeta {
     pub session_id: String,
     pub pinned: bool,
     pub tags: Vec<String>,
+    pub custom_name: Option<String>,
 }
 
-/// All rows that still carry meaning (pinned or tagged).
+/// All rows that still carry meaning (pinned, tagged, or renamed).
 pub fn get_all_session_meta(state: &DbState) -> Vec<SessionMeta> {
     let Ok(conn) = state.0.lock() else {
         return vec![];
     };
     let Ok(mut stmt) = conn.prepare(
-        "SELECT session_id, pinned, tags FROM session_meta
-         WHERE pinned != 0 OR tags != '[]'",
+        "SELECT session_id, pinned, tags, custom_name FROM session_meta
+         WHERE pinned != 0 OR tags != '[]' OR custom_name IS NOT NULL",
     ) else {
         return vec![];
     };
@@ -247,6 +313,7 @@ pub fn get_all_session_meta(state: &DbState) -> Vec<SessionMeta> {
             session_id: r.get(0)?,
             pinned: r.get::<_, i64>(1)? != 0,
             tags: serde_json::from_str(&tags_json).unwrap_or_default(),
+            custom_name: r.get(3)?,
         })
     })
     .map(|rows| rows.flatten().collect())
@@ -285,6 +352,91 @@ pub fn set_session_tags(
          ON CONFLICT(session_id) DO UPDATE SET
            tags = excluded.tags, updated_at = excluded.updated_at",
         rusqlite::params![session_id, tags_json, now_ms()],
+    )?;
+    Ok(())
+}
+
+/// Set or clear (None / empty string) a user-chosen session name.
+pub fn set_session_name(
+    state: &DbState,
+    session_id: &str,
+    name: Option<&str>,
+) -> Result<(), AppError> {
+    let clean: Option<String> = name
+        .map(|n| n.trim())
+        .filter(|n| !n.is_empty())
+        .map(|n| n.chars().take(80).collect());
+    let conn = state.0.lock().map_err(|_| AppError::MutexPoisoned)?;
+    conn.execute(
+        "INSERT INTO session_meta (session_id, custom_name, updated_at) VALUES (?1, ?2, ?3)
+         ON CONFLICT(session_id) DO UPDATE SET
+           custom_name = excluded.custom_name, updated_at = excluded.updated_at",
+        rusqlite::params![session_id, clean, now_ms()],
+    )?;
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Repo metadata (custom names)
+// ---------------------------------------------------------------------------
+
+#[derive(serde::Serialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct RepoMeta {
+    pub repo_path: String,
+    pub custom_name: Option<String>,
+    pub notes: Option<String>,
+}
+
+pub fn get_all_repo_meta(state: &DbState) -> Vec<RepoMeta> {
+    let Ok(conn) = state.0.lock() else {
+        return vec![];
+    };
+    let Ok(mut stmt) = conn.prepare(
+        "SELECT repo_path, custom_name, notes FROM repo_meta
+         WHERE custom_name IS NOT NULL OR notes IS NOT NULL",
+    ) else {
+        return vec![];
+    };
+    stmt.query_map([], |r| {
+        Ok(RepoMeta {
+            repo_path: r.get(0)?,
+            custom_name: r.get(1)?,
+            notes: r.get(2)?,
+        })
+    })
+    .map(|rows| rows.flatten().collect())
+    .unwrap_or_default()
+}
+
+/// Set or clear (None / empty) free-form notes for a repo or worktree path.
+pub fn set_repo_notes(state: &DbState, path: &str, notes: Option<&str>) -> Result<(), AppError> {
+    let clean: Option<String> = notes
+        .map(|n| n.trim())
+        .filter(|n| !n.is_empty())
+        .map(|n| n.chars().take(2000).collect());
+    let conn = state.0.lock().map_err(|_| AppError::MutexPoisoned)?;
+    conn.execute(
+        "INSERT INTO repo_meta (repo_path, notes, updated_at) VALUES (?1, ?2, ?3)
+         ON CONFLICT(repo_path) DO UPDATE SET
+           notes = excluded.notes, updated_at = excluded.updated_at",
+        rusqlite::params![path, clean, now_ms()],
+    )?;
+    Ok(())
+}
+
+/// Set or clear (None / empty string) a user-chosen repo display name.
+pub fn set_repo_name(state: &DbState, repo_path: &str, name: Option<&str>) -> Result<(), AppError> {
+    let clean: Option<String> = name
+        .map(|n| n.trim())
+        .filter(|n| !n.is_empty())
+        .map(|n| n.chars().take(80).collect());
+    let conn = state.0.lock().map_err(|_| AppError::MutexPoisoned)?;
+    conn.execute(
+        "INSERT INTO repo_meta (repo_path, custom_name, updated_at) VALUES (?1, ?2, ?3)
+         ON CONFLICT(repo_path) DO UPDATE SET
+           custom_name = excluded.custom_name, updated_at = excluded.updated_at",
+        rusqlite::params![repo_path, clean, now_ms()],
     )?;
     Ok(())
 }

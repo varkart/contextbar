@@ -135,6 +135,7 @@ pub fn list_sessions(
                         is_live,
                         error_count: 0,
                         prompt_count: 1,
+                        title: None,
                     },
                 );
             }

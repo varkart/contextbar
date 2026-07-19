@@ -44,7 +44,7 @@ describe('SkillDetailPanel', () => {
     mockInvoke.mockResolvedValue(fileTree)
     render(<SkillDetailPanel skill={skill} onBack={vi.fn()} />)
     await waitFor(() => expect(screen.getByText('SKILL.md')).toBeInTheDocument())
-    expect(screen.getByText('impeccable')).toBeInTheDocument()
+    expect(screen.getAllByText('impeccable').length).toBeGreaterThanOrEqual(1)
   })
 
   it('renders file tree after invoke resolves', async () => {

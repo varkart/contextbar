@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { invoke } from '@tauri-apps/api/core'
-import type { RepoWorktrees, WorktreeInfo, SessionEntry, SessionInsights } from '../types'
+import type { RepoWorktrees, WorktreeInfo, SessionEntry, SessionInsights, RepoMeta } from '../types'
 import { formatTokens } from '../components/history/SessionStats'
 import { Tile, TileRow } from './InsightTiles'
 import { HBar, RefreshButton, shortModel, SkeletonCards } from './InsightWidgets'
@@ -49,7 +49,79 @@ const STATUS_DOT: Record<WorktreeStatus, string> = {
   primary: 'bg-[var(--c-accent)]',
 }
 
-type Filter = 'all' | 'active' | 'stale' | 'abandoned' | 'safe'
+type Filter = 'all' | 'active' | 'stale' | 'abandoned' | 'dirty' | 'safe'
+
+/** Inline free-form note on a repo or worktree, persisted via set_repo_notes.
+ *  Repo notes and branch notes are visually distinct so they never read as
+ *  the same thing. */
+function NotesEditor({ path, notes, variant, onSaved }: {
+  path: string
+  notes: string | null
+  variant: 'repo' | 'branch'
+  onSaved: (n: string | null) => void
+}) {
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState('')
+
+  const isRepo = variant === 'repo'
+  const chip = isRepo
+    ? 'bg-indigo-500/15 text-indigo-400'
+    : 'bg-teal-500/15 text-teal-400'
+  const borderTone = isRepo ? 'border-l-indigo-400/60' : 'border-l-teal-400/60'
+  const label = isRepo ? 'REPO NOTE' : 'BRANCH NOTE'
+
+  const save = () => {
+    const clean = draft.trim() || null
+    setEditing(false)
+    if (clean === notes) return
+    onSaved(clean)
+    invoke('set_repo_notes', { path, notes: clean }).catch(() => {})
+  }
+
+  if (editing) {
+    return (
+      <div>
+        <span className={`inline-block text-[8.5px] font-semibold tracking-wider px-1.5 py-px rounded mb-1 ${chip}`}>{label}</span>
+        <textarea
+          autoFocus
+          value={draft}
+          onChange={e => setDraft(e.target.value)}
+          onKeyDown={e => {
+            if (e.key === 'Escape') setEditing(false)
+            if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) save()
+          }}
+          onBlur={save}
+          rows={3}
+          maxLength={2000}
+          placeholder={isRepo ? 'Note about this repo… (⌘↵ save, Esc cancel)' : 'Note about this branch/worktree… (⌘↵ save, Esc cancel)'}
+          className="w-full bg-[var(--c-surface-2)] border border-[var(--c-accent)]/40 rounded-lg px-2.5 py-1.5 text-[11.5px] text-[var(--c-text)] outline-none resize-y leading-relaxed"
+        />
+      </div>
+    )
+  }
+
+  if (notes) {
+    return (
+      <button
+        onClick={() => { setDraft(notes); setEditing(true) }}
+        title="Edit note"
+        className={`w-full text-left rounded-lg border border-[var(--c-border)]/60 border-l-2 ${borderTone} bg-[var(--c-surface-2)]/40 px-2.5 py-1.5 hover:border-[var(--c-text-3)]/40 transition-colors`}
+      >
+        <span className={`inline-block text-[8.5px] font-semibold tracking-wider px-1.5 py-px rounded mr-1.5 align-middle ${chip}`}>{label}</span>
+        <span className="text-[11.5px] text-[var(--c-text-2)] whitespace-pre-wrap leading-relaxed line-clamp-3 align-middle">{notes}</span>
+      </button>
+    )
+  }
+
+  return (
+    <button
+      onClick={() => { setDraft(''); setEditing(true) }}
+      className="text-[10.5px] text-[var(--c-text-3)] hover:text-[var(--c-text-2)] transition-colors"
+    >
+      📝 {isRepo ? 'Add repo note' : 'Add branch note'}
+    </button>
+  )
+}
 
 interface WorktreesSectionProps {
   repos: RepoWorktrees[]
@@ -76,10 +148,53 @@ export default function WorktreesSection({ repos, loading, sessions, onRemoved, 
   // Repo cards start collapsed; searching or filtering opens matches.
   const [repoOpen, setRepoOpen] = useState<Record<string, boolean>>({})
   const [vscodeAvailable, setVscodeAvailable] = useState(false)
+  // User-chosen repo display names + notes, keyed by repo/worktree path.
+  const [repoNames, setRepoNames] = useState<Record<string, string>>({})
+  const [pathNotes, setPathNotes] = useState<Record<string, string>>({})
+  const [renaming, setRenaming] = useState<string | null>(null)
+  const [renameDraft, setRenameDraft] = useState('')
 
   useEffect(() => {
     invoke<boolean>('is_vscode_installed').then(setVscodeAvailable).catch(() => {})
   }, [])
+
+  useEffect(() => {
+    invoke<RepoMeta[]>('get_repo_meta')
+      .then(rows => {
+        setRepoNames(Object.fromEntries(
+          rows.filter(r => r.customName).map(r => [r.repoPath, r.customName as string])
+        ))
+        setPathNotes(Object.fromEntries(
+          rows.filter(r => r.notes).map(r => [r.repoPath, r.notes as string])
+        ))
+      })
+      .catch(() => {})
+  }, [repos])
+
+  const saveNote = (path: string) => (n: string | null) =>
+    setPathNotes(prev => {
+      const out = { ...prev }
+      if (n) out[path] = n
+      else delete out[path]
+      return out
+    })
+
+  const displayName = (repo: RepoWorktrees) => repoNames[repo.repoPath] ?? repo.repoName
+
+  const saveRename = (repo: RepoWorktrees) => {
+    const clean = renameDraft.trim()
+    setRenaming(null)
+    const current = repoNames[repo.repoPath] ?? null
+    const next = clean && clean !== repo.repoName ? clean : null
+    if (next === current) return
+    setRepoNames(prev => {
+      const out = { ...prev }
+      if (next) out[repo.repoPath] = next
+      else delete out[repo.repoPath]
+      return out
+    })
+    invoke('set_repo_name', { repoPath: repo.repoPath, name: next }).catch(() => {})
+  }
 
   const forceOpen = filter !== 'all' || !!search.trim()
   const isRepoOpen = (repoPath: string) => forceOpen || !!repoOpen[repoPath]
@@ -116,10 +231,16 @@ export default function WorktreesSection({ repos, loading, sessions, onRemoved, 
   const matches = (wt: WorktreeInfo, repo: RepoWorktrees): boolean => {
     const st = worktreeStatus(wt)
     if (filter === 'safe' && !isSafeToDelete(wt)) return false
+    if (filter === 'dirty' && !wt.isDirty) return false
     if ((filter === 'active' || filter === 'stale' || filter === 'abandoned') && st !== filter) return false
     if (search.trim()) {
       const q = search.toLowerCase()
-      if (!(wt.branch ?? '').toLowerCase().includes(q) && !repo.repoName.toLowerCase().includes(q)) return false
+      const alias = repoNames[repo.repoPath]?.toLowerCase() ?? ''
+      if (
+        !(wt.branch ?? '').toLowerCase().includes(q)
+        && !repo.repoName.toLowerCase().includes(q)
+        && !alias.includes(q)
+      ) return false
     }
     return true
   }
@@ -180,8 +301,8 @@ export default function WorktreesSection({ repos, loading, sessions, onRemoved, 
       </div>
 
       <div className="flex-1 overflow-y-auto px-6 pb-6">
-        {/* Search + filter pills */}
-        <div className="flex gap-2 items-center flex-wrap mb-3">
+        {/* Search */}
+        <div className="flex gap-2 items-center mb-3">
           <input
             type="text"
             value={search}
@@ -189,25 +310,28 @@ export default function WorktreesSection({ repos, loading, sessions, onRemoved, 
             placeholder="Search by branch or repo…"
             className="flex-1 min-w-[200px] bg-[var(--c-surface-2)] border border-[var(--c-border)] rounded-lg px-3 py-1.5 text-[12px] text-[var(--c-text)] placeholder:text-[var(--c-text-3)] outline-none focus:border-[var(--c-accent)]/50 transition-colors"
           />
-          {(['all', 'active', 'stale', 'abandoned', 'safe'] as Filter[]).map(f => (
-            <button
-              key={f}
-              onClick={() => setFilter(f)}
-              className={`text-[11px] px-2.5 py-1 rounded-full border transition-colors capitalize ${filter === f ? 'border-[var(--c-accent)]/50 bg-[var(--c-accent)]/10 text-[var(--c-accent)]' : 'border-[var(--c-border)] text-[var(--c-text-3)] hover:text-[var(--c-text-2)]'}`}
-            >
-              {f === 'safe' ? 'Safe to delete' : f}
-            </button>
-          ))}
         </div>
 
-        {/* Insights */}
+        {/* Status tiles double as filters — click to scope, click again to clear */}
         <TileRow className="mb-3">
-          <Tile value={counts.repos} label="Repos" />
-          <Tile value={counts.active} label="Active" color="text-emerald-400" hint="Commits in the last 7 days" />
-          <Tile value={counts.stale} label="Stale" color="text-amber-400" hint="No commits for 7–30 days" />
-          <Tile value={counts.abandoned} label="Abandoned" color="text-rose-400" hint="No commits for 30+ days" />
-          <Tile value={counts.dirty} label="Uncommitted" color={counts.dirty > 0 ? 'text-amber-400' : 'text-[var(--c-text-3)]'} hint="Worktrees with uncommitted changes" />
-          <Tile value={counts.safe} label="Safe to delete" color={counts.safe > 0 ? 'text-emerald-400' : 'text-[var(--c-text-3)]'} hint="Merged into base and clean" />
+          {([
+            { f: 'all' as Filter, value: counts.repos, label: 'Repos', color: undefined, hint: 'Show everything' },
+            { f: 'active' as Filter, value: counts.active, label: 'Active', color: 'text-emerald-400', hint: 'Commits in the last 7 days' },
+            { f: 'stale' as Filter, value: counts.stale, label: 'Stale', color: 'text-amber-400', hint: 'No commits for 7–30 days' },
+            { f: 'abandoned' as Filter, value: counts.abandoned, label: 'Abandoned', color: 'text-rose-400', hint: 'No commits for 30+ days' },
+            { f: 'dirty' as Filter, value: counts.dirty, label: 'Uncommitted', color: counts.dirty > 0 ? 'text-amber-400' : 'text-[var(--c-text-3)]', hint: 'Worktrees with uncommitted changes' },
+            { f: 'safe' as Filter, value: counts.safe, label: 'Safe to delete', color: counts.safe > 0 ? 'text-emerald-400' : 'text-[var(--c-text-3)]', hint: 'Merged into base and clean' },
+          ]).map(t => (
+            <div key={t.f} className={filter === t.f && t.f !== 'all' ? 'ring-1 ring-[var(--c-accent)] rounded-xl' : ''}>
+              <Tile
+                value={t.value}
+                label={t.label}
+                color={t.color}
+                hint={t.hint}
+                onClick={() => setFilter(filter === t.f ? 'all' : t.f)}
+              />
+            </div>
+          ))}
         </TileRow>
 
         {/* Cleanup banner */}
@@ -252,18 +376,46 @@ export default function WorktreesSection({ repos, loading, sessions, onRemoved, 
                   className="w-7 h-7 rounded-lg flex items-center justify-center font-mono font-bold text-[12px] text-black/80 shrink-0"
                   style={{ background: repoColor(repo.repoName) }}
                 >
-                  {repo.repoName.charAt(0).toUpperCase()}
+                  {displayName(repo).charAt(0).toUpperCase()}
                 </span>
                 <span className="min-w-0">
-                  <span className="block text-[13.5px] font-semibold truncate group-hover/repo:text-[var(--c-accent)] transition-colors">
-                    {repo.repoName}
-                  </span>
+                  {renaming === repo.repoPath ? (
+                    <input
+                      type="text"
+                      autoFocus
+                      value={renameDraft}
+                      onClick={e => e.stopPropagation()}
+                      onChange={e => setRenameDraft(e.target.value)}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter') saveRename(repo)
+                        if (e.key === 'Escape') setRenaming(null)
+                      }}
+                      onBlur={() => saveRename(repo)}
+                      maxLength={80}
+                      className="block w-48 bg-[var(--c-surface-2)] border border-[var(--c-accent)]/40 rounded px-1.5 py-0.5 text-[13px] font-semibold text-[var(--c-text)] outline-none"
+                    />
+                  ) : (
+                    <span className="block text-[13.5px] font-semibold truncate group-hover/repo:text-[var(--c-accent)] transition-colors">
+                      {displayName(repo)}
+                      {repoNames[repo.repoPath] && (
+                        <span className="ml-1.5 text-[10px] font-normal font-mono text-[var(--c-text-3)]">({repo.repoName})</span>
+                      )}
+                    </span>
+                  )}
                   <span className="block text-[10.5px] text-[var(--c-text-3)]">
                     {items.length} worktree{items.length > 1 ? 's' : ''} · base {repo.baseBranch}
                   </span>
                 </span>
               </button>
               <div className="flex items-center gap-1.5 shrink-0">
+                <button
+                  onClick={() => { setRenameDraft(repoNames[repo.repoPath] ?? repo.repoName); setRenaming(repo.repoPath) }}
+                  title="Rename repo"
+                  aria-label={`Rename ${displayName(repo)}`}
+                  className="text-[10px] px-1.5 py-1 rounded-md text-[var(--c-text-3)] hover:text-[var(--c-text-2)] transition-colors"
+                >
+                  ✎
+                </button>
                 <button
                   onClick={() => onViewSessions(repo)}
                   title="View all sessions for this repo"
@@ -306,6 +458,9 @@ export default function WorktreesSection({ repos, loading, sessions, onRemoved, 
 
             {open && (
             <div className="px-3.5 pb-3">
+              <div className="mb-2">
+                <NotesEditor path={repo.repoPath} notes={pathNotes[repo.repoPath] ?? null} variant="repo" onSaved={saveNote(repo.repoPath)} />
+              </div>
               {(repo.agentFiles.length > 0 || repo.repoSkills.length > 0) && (
                 <div className="flex items-center gap-1.5 flex-wrap mb-2">
                   {repo.agentFiles.map(f => (
@@ -321,16 +476,26 @@ export default function WorktreesSection({ repos, loading, sessions, onRemoved, 
                   )}
                 </div>
               )}
-            <div className="space-y-1.5">
+            {/* Branch map: trunk line down the left, one connector per worktree */}
+            <div className="relative pl-5 space-y-1.5">
+              <div className="absolute left-[9px] top-1 bottom-5 w-px bg-[var(--c-border)]" aria-hidden="true" />
               {items.map(wt => {
                 const st = worktreeStatus(wt)
                 const isOpen = expanded === wt.path
                 const linked = sessionsFor(wt)
+                const statusBorder = isOpen
+                  ? 'border-[var(--c-accent)]/50'
+                  : st === 'active'
+                    ? 'border-emerald-500/30 hover:border-emerald-500/50 shadow-[0_0_14px_rgba(52,211,153,0.07)]'
+                    : isSafeToDelete(wt)
+                      ? 'border-dashed border-[var(--c-border)] hover:border-[var(--c-text-3)]/40'
+                      : 'border-[var(--c-border)] hover:border-[var(--c-text-3)]/40'
                 return (
-                  <div
-                    key={wt.path}
-                    className={`rounded-xl border transition-colors ${isOpen ? 'border-[var(--c-accent)]/50' : 'border-[var(--c-border)] hover:border-[var(--c-text-3)]/40'} bg-[var(--c-surface-2)]/40`}
-                  >
+                  <div key={wt.path} className="relative">
+                    <div className="absolute -left-[11px] top-[21px] w-[11px] h-px bg-[var(--c-border)]" aria-hidden="true" />
+                    <div
+                      className={`rounded-xl border transition-colors ${statusBorder} bg-[var(--c-surface-2)]/40`}
+                    >
                     <button
                       onClick={() => setExpanded(isOpen ? null : wt.path)}
                       className="w-full flex items-center justify-between gap-3 px-4 py-3 text-left"
@@ -369,6 +534,12 @@ export default function WorktreesSection({ repos, loading, sessions, onRemoved, 
                             {wt.lastCommitSubject}
                           </p>
                         )}
+                        {/* Branch notes are keyed "wt:<path>" — the primary worktree's
+                            path equals the repo path, so unprefixed keys would collide
+                            with the repo-level note. */}
+                        <div className="mb-3">
+                          <NotesEditor path={`wt:${wt.path}`} notes={pathNotes[`wt:${wt.path}`] ?? null} variant="branch" onSaved={saveNote(`wt:${wt.path}`)} />
+                        </div>
                         <div className="flex gap-2 mb-3">
                           <button
                             onClick={() => handleResume(wt)}
@@ -431,7 +602,7 @@ export default function WorktreesSection({ repos, loading, sessions, onRemoved, 
                                 title="Open transcript in Sessions"
                                 className="block w-full text-left text-[11px] border-b border-[var(--c-border)]/50 last:border-0 pb-1.5 last:pb-0 hover:text-[var(--c-accent)] transition-colors group/session"
                               >
-                                <span className="text-[var(--c-text)] font-medium line-clamp-1 group-hover/session:text-[var(--c-accent)]">{s.display}</span>
+                                <span className="text-[var(--c-text)] font-medium line-clamp-1 group-hover/session:text-[var(--c-accent)]">{s.title ?? s.display}</span>
                                 <span className="text-[var(--c-text-3)] flex items-center gap-1.5">
                                   <AgentBadge agent={s.agent} />
                                   {relativeTime(Math.floor(s.timestamp / 1000))}{s.model ? ` · ${s.model}` : ''} · view transcript →
@@ -442,6 +613,7 @@ export default function WorktreesSection({ repos, loading, sessions, onRemoved, 
                         )}
                       </div>
                     )}
+                    </div>
                   </div>
                 )
               })}

@@ -204,6 +204,7 @@ describe('App — navigation', () => {
     render(<App />)
     fireEvent.click(screen.getByText('Coding Agents'))
     fireEvent.click(screen.getByText('Claude Code'))
+    fireEvent.click(screen.getByRole('button', { name: /^MCPs/ }))
     fireEvent.click(screen.getByLabelText('Open MCPs page'))
     fireEvent.click(screen.getAllByText('github')[0])
     // mcp-detail shows the server name in both breadcrumb and panel heading

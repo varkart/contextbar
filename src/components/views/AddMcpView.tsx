@@ -1,10 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { capture, captureException } from '../../analytics';
 import { agentColor } from '../../constants/agentColors';
-import { parsePasteJson, detectNameFromPaste, buildMcpPayload, prefillTypeAndFields } from '../../utils/mcpPayload';
+import { parsePasteJson, detectNameFromPaste, buildMcpPayload } from '../../utils/mcpPayload';
 import type { McpType } from '../../utils/mcpPayload';
-import type { Agent, CachedMcp } from '../../types';
+import type { Agent } from '../../types';
 
 interface AddMcpViewProps {
   installedAgents: Agent[];
@@ -147,15 +147,6 @@ export default function AddMcpView({ installedAgents, onBack, onAdded, initialAg
   const [error, setError] = useState<string | null>(null);
   const [validationErrors, setValidationErrors] = useState<ValidationErrors>({});
   const [addedCount, setAddedCount] = useState<number | null>(null);
-  const [cachedMcps, setCachedMcps] = useState<CachedMcp[]>([]);
-
-  // Load MCPs from cache that aren't currently installed in any tool
-  useEffect(() => {
-    const currentMcpNames = new Set(installedAgents.flatMap(t => t.mcps.map(m => m.name)));
-    invoke<CachedMcp[]>('get_all_cached_mcps')
-      .then(all => setCachedMcps(all.filter(m => !currentMcpNames.has(m.name))))
-      .catch(() => {});
-  }, [installedAgents]);
 
   const setField = (key: string, val: string) => setFields(f => ({ ...f, [key]: val }));
   const agentIds = Array.from(selectedIds);
@@ -274,51 +265,6 @@ export default function AddMcpView({ installedAgents, onBack, onAdded, initialAg
   return (
     <div className="flex flex-col h-full bg-[var(--c-bg)] animate-slide-in-right">
       <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-4 space-y-4">
-        {/* Previously used MCPs from cache */}
-        {cachedMcps.length > 0 && (
-          <div>
-            <label className="block text-[12px] font-semibold text-[var(--c-text-3)] uppercase tracking-wider mb-2">
-              Previously used
-            </label>
-            <div className="flex flex-wrap gap-1.5">
-              {cachedMcps.map(cached => (
-                <div key={cached.name} className="flex items-center rounded-md border border-[var(--c-border)] overflow-hidden">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const { type, fields: f } = prefillTypeAndFields(cached);
-                      setName(cached.name);
-                      setMcpType(type);
-                      setFields(f);
-                      setError(null);
-                      setValidationErrors({});
-                    }}
-                    className="px-2.5 py-1 text-[12px] text-[var(--c-text-2)] hover:text-[var(--c-text)] hover:bg-violet-500/5 transition-colors font-mono"
-                  >
-                    {cached.name}
-                  </button>
-                  {cached.sourceUrl && (
-                    <a
-                      href={cached.sourceUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      onClick={e => e.stopPropagation()}
-                      className="px-1.5 py-1 border-l border-[var(--c-border)] text-[var(--c-text-3)] hover:text-[var(--c-text-2)] transition-colors"
-                      title={cached.sourceUrl}
-                    >
-                      <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
-                        <polyline points="15 3 21 3 21 9"/>
-                        <line x1="10" y1="14" x2="21" y2="3"/>
-                      </svg>
-                    </a>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
         {/* Multi-select tools */}
         <AgentMultiSelect tools={installedAgents} selected={selectedIds} onChange={setSelectedIds} />
 
@@ -374,11 +320,6 @@ export default function AddMcpView({ installedAgents, onBack, onAdded, initialAg
               />
               <p className="mt-1 text-[11px] text-[var(--c-text-3)]">Passed after the package name</p>
             </div>
-            {fields.package && (
-              <p className="text-[11px] text-[var(--c-text-3)] font-mono">
-                npx -y {fields.package}{fields.npxArgs ? ` ${fields.npxArgs}` : ''}
-              </p>
-            )}
           </div>
         )}
 
@@ -425,9 +366,6 @@ export default function AddMcpView({ installedAgents, onBack, onAdded, initialAg
                 className="w-full bg-[var(--c-surface)] border border-[var(--c-border)] rounded-lg px-3 py-2 text-[14px] text-[var(--c-text)] placeholder-[var(--c-text-3)] outline-none focus:border-violet-400/60 transition-colors font-mono text-[13px]"
               />
             </div>
-            {(fields.command || fields.args) && (
-              <p className="text-[11px] text-[var(--c-text-3)] font-mono">{fields.command} {fields.args}</p>
-            )}
           </div>
         )}
 
@@ -457,9 +395,6 @@ export default function AddMcpView({ installedAgents, onBack, onAdded, initialAg
                 className="w-full bg-[var(--c-surface)] border border-[var(--c-border)] rounded-lg px-3 py-2 text-[14px] text-[var(--c-text)] placeholder-[var(--c-text-3)] outline-none focus:border-violet-400/60 transition-colors font-mono text-[13px]"
               />
             </div>
-            {fields.image && (
-              <p className="text-[11px] text-[var(--c-text-3)] font-mono">docker run --rm -i {fields.image} {fields.dockerArgs}</p>
-            )}
           </div>
         )}
 
@@ -489,11 +424,6 @@ export default function AddMcpView({ installedAgents, onBack, onAdded, initialAg
               />
               {validationErrors.command && <ErrorBox message={validationErrors.command} />}
             </div>
-            {fields.path && (
-              <p className="text-[11px] text-[var(--c-text-3)] font-mono">
-                {fields.interpreter ? `${fields.interpreter} ${fields.path}` : fields.path}
-              </p>
-            )}
           </div>
         )}
 
@@ -516,11 +446,27 @@ export default function AddMcpView({ installedAgents, onBack, onAdded, initialAg
             </div>
             {(() => {
               const parsed = parsePasteJson(fields.json ?? '');
-              return parsed && (parsed.command || parsed.url) ? (
-                <p className="text-[11px] text-[var(--c-text-3)] font-mono">
-                  {parsed.url ? parsed.url : `${parsed.command}${parsed.args?.length ? ' ' + parsed.args.join(' ') : ''}`}
-                </p>
-              ) : null;
+              if (!parsed || (!parsed.command && !parsed.url)) return null;
+              const detectedName = detectNameFromPaste(fields.json ?? '');
+              return (
+                <div className="p-2.5 rounded-lg bg-emerald-500/5 border border-emerald-500/25">
+                  <p className="text-[11px] font-semibold text-emerald-400">
+                    ✓ Detected: {parsed.url ? 'HTTP / SSE server' : parsed.command === 'npx' ? 'npx package server' : 'command server'}
+                  </p>
+                  <div className="flex flex-wrap gap-1.5 mt-2">
+                    {(detectedName || name) && (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded-full border border-[var(--c-border-sub)] bg-[var(--c-surface)] text-[var(--c-text-2)]">
+                        name: <span className="font-mono text-[var(--c-text)]">{detectedName || name}</span>
+                      </span>
+                    )}
+                    <span className="text-[10px] px-1.5 py-0.5 rounded-full border border-[var(--c-border-sub)] bg-[var(--c-surface)] text-[var(--c-text-2)] max-w-full truncate">
+                      {parsed.url
+                        ? <span className="font-mono">{parsed.url}</span>
+                        : <span className="font-mono">{parsed.command}{parsed.args?.length ? ' ' + parsed.args.join(' ') : ''}</span>}
+                    </span>
+                  </div>
+                </div>
+              );
             })()}
             {validationErrors.command && <ErrorBox message={validationErrors.command} />}
             {validationErrors.url && <ErrorBox message={validationErrors.url} />}
@@ -551,6 +497,27 @@ export default function AddMcpView({ installedAgents, onBack, onAdded, initialAg
             )}
           </div>
         )}
+
+        {/* Unified command preview — what will actually be written */}
+        {mcpType !== 'paste' && mcpType !== 'plugin' && (() => {
+          const payload = buildMcpPayload(mcpType, fields);
+          const cmd = payload.url
+            ? payload.url
+            : payload.command
+              ? `${payload.command}${payload.args?.length ? ' ' + payload.args.join(' ') : ''}`.trim()
+              : '';
+          if (!cmd || cmd === 'npx -y') return null;
+          return (
+            <div>
+              <label className="block text-[12px] font-semibold text-[var(--c-text-3)] uppercase tracking-wider mb-1.5">
+                Will run
+              </label>
+              <p className="px-3 py-2 rounded-lg bg-[#0c0c10] text-emerald-300/90 text-[11.5px] font-mono break-all leading-relaxed">
+                $ {cmd}
+              </p>
+            </div>
+          );
+        })()}
 
         {error && <ErrorBox message={error} />}
 

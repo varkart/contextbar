@@ -257,6 +257,7 @@ impl SessionSource for CodexSource {
                 is_live: is_recently_modified(&path),
                 error_count: s.error_count,
                 prompt_count: s.prompt_count,
+                title: None,
             });
         }
         out
@@ -377,6 +378,7 @@ impl SessionSource for CodexSource {
             agent: "codex".to_string(),
             session_id: session_id.to_string(),
             messages,
+            title: None,
             total_tokens: usage,
             model,
             duration_ms: last_ms.checked_sub(start_ms),

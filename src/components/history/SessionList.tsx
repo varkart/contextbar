@@ -74,6 +74,11 @@ function groupByTime(entries: SessionEntry[]): { label: string; items: SessionEn
     }
   }
 
+  // Guarantee recency order inside every bucket regardless of incoming order.
+  for (const bucket of [live, today, thisWeek, older]) {
+    bucket.sort((a, b) => b.timestamp - a.timestamp)
+  }
+
   if (live.length) groups.push({ label: 'Live', items: live })
   if (today.length) groups.push({ label: 'Today', items: today })
   if (thisWeek.length) groups.push({ label: 'This Week', items: thisWeek })
@@ -102,16 +107,34 @@ interface SessionRowProps {
   snippet?: string
   pinned?: boolean
   tags?: string[]
+  customName?: string | null
+  selected?: boolean
   onTogglePin?: (s: SessionEntry, pinned: boolean) => void
 }
 
-function SessionRow({ session, onSelect, snippet, pinned, tags, onTogglePin }: SessionRowProps) {
+function SessionRow({ session, onSelect, snippet, pinned, tags, customName, selected, onTogglePin }: SessionRowProps) {
   const totalTokens = session.totalTokens
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState('')
+  const rowTone = selected
+    ? 'border-l-[var(--c-accent)] bg-[var(--c-accent)]/8'
+    : session.isLive
+      ? 'border-l-emerald-400/70 bg-emerald-500/5 hover:bg-emerald-500/10'
+      : 'border-l-transparent hover:bg-[var(--c-surface-2)]'
+
+  const saveName = (raw: string) => {
+    setEditing(false)
+    const clean = raw.trim() || null
+    if (clean === (customName ?? null)) return
+    invoke('set_session_name', { sessionId: session.sessionId, name: clean })
+      .then(() => window.dispatchEvent(new CustomEvent('session-meta-changed')))
+      .catch(() => {})
+  }
 
   return (
     <button
       onClick={() => onSelect(session)}
-      className="w-full text-left px-3 py-2.5 hover:bg-[var(--c-surface-2)] transition-colors border-b border-[var(--c-border)]/50 last:border-0 group"
+      className={`w-full text-left px-3 py-2.5 transition-colors border-b border-[var(--c-border)]/50 last:border-0 group border-l-2 ${rowTone}`}
     >
       <div className="flex items-start gap-2">
         {/* Live pulse or spacer */}
@@ -124,10 +147,31 @@ function SessionRow({ session, onSelect, snippet, pinned, tags, onTogglePin }: S
         </div>
 
         <div className="flex-1 min-w-0">
-          {/* First prompt */}
-          <p className="text-[12px] text-[var(--c-text)] line-clamp-2 leading-snug group-hover:text-[var(--c-text)]">
-            {session.display}
+          {/* Our rename, else the agent's own title, else the first prompt */}
+          {editing ? (
+            <input
+              type="text"
+              autoFocus
+              value={draft}
+              onClick={e => e.stopPropagation()}
+              onChange={e => setDraft(e.target.value)}
+              onKeyDown={e => {
+                e.stopPropagation()
+                if (e.key === 'Enter') saveName(draft)
+                if (e.key === 'Escape') setEditing(false)
+              }}
+              onBlur={() => saveName(draft)}
+              maxLength={80}
+              className="w-full bg-[var(--c-surface-2)] border border-[var(--c-accent)]/40 rounded px-1.5 py-0.5 text-[12px] font-medium text-[var(--c-text)] outline-none"
+            />
+          ) : (
+          <p
+            className={`text-[12px] text-[var(--c-text)] line-clamp-2 leading-snug group-hover:text-[var(--c-text)] ${customName || session.title ? 'font-medium' : ''}`}
+            title={customName || session.title ? session.display : undefined}
+          >
+            {customName ?? session.title ?? session.display}
           </p>
+          )}
 
           {/* Meta row */}
           <div className="flex items-center gap-2 mt-1">
@@ -171,6 +215,27 @@ function SessionRow({ session, onSelect, snippet, pinned, tags, onTogglePin }: S
           {snippet && <Snippet text={snippet} />}
         </div>
 
+        {/* Rename — span, not button: rows are already <button>s */}
+        {onTogglePin && !editing && (
+          <span
+            role="button"
+            tabIndex={0}
+            title="Rename session"
+            onClick={e => { e.stopPropagation(); setDraft(customName ?? session.title ?? ''); setEditing(true) }}
+            onKeyDown={e => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault()
+                e.stopPropagation()
+                setDraft(customName ?? session.title ?? '')
+                setEditing(true)
+              }
+            }}
+            className="flex-shrink-0 text-[11px] leading-none mt-0.5 text-[var(--c-text-3)] opacity-40 group-hover:opacity-80 hover:!opacity-100 hover:text-[var(--c-accent)] transition-all"
+          >
+            ✎
+          </span>
+        )}
+
         {/* Pin toggle — span, not button: rows are already <button>s */}
         {onTogglePin && (
           <span
@@ -209,31 +274,39 @@ interface SessionListProps {
   /** When set and hasMore, a "Load more" button appears after the last group. */
   onLoadMore?: () => void
   hasMore?: boolean
+  /** Session id currently open in the detail pane — highlighted in the list. */
+  selectedId?: string | null
+  /** Preselects the agent filter pill (e.g. entering via an agent chip). */
+  initialAgentFilter?: string | null
 }
 
-export default function SessionList({ sessions, onSelect, loading, onLoadMore, hasMore }: SessionListProps) {
+export default function SessionList({ sessions, onSelect, loading, onLoadMore, hasMore, selectedId, initialAgentFilter }: SessionListProps) {
   const [search, setSearch] = useState('')
   const [projectFilter, setProjectFilter] = useState<string | null>(null)
-  const [agentFilter, setAgentFilter] = useState<string | null>(null)
+  const [agentFilter, setAgentFilter] = useState<string | null>(initialAgentFilter ?? null)
   const [tagFilter, setTagFilter] = useState<string | null>(null)
 
-  // Pins and tags, keyed by session id.
+  // Pins, tags, and custom names, keyed by session id.
   const [meta, setMeta] = useState<Record<string, SessionMeta>>({})
   useEffect(() => {
-    invoke<SessionMeta[]>('get_session_meta')
-      .then(rows => setMeta(Object.fromEntries(rows.map(m => [m.sessionId, m]))))
-      .catch(() => {})
+    const load = () =>
+      invoke<SessionMeta[]>('get_session_meta')
+        .then(rows => setMeta(Object.fromEntries(rows.map(m => [m.sessionId, m]))))
+        .catch(() => {})
+    load()
+    window.addEventListener('session-meta-changed', load)
+    return () => window.removeEventListener('session-meta-changed', load)
   }, [sessions])
 
   const togglePin = useCallback((s: SessionEntry, pinned: boolean) => {
     setMeta(prev => ({
       ...prev,
-      [s.sessionId]: { sessionId: s.sessionId, tags: prev[s.sessionId]?.tags ?? [], pinned },
+      [s.sessionId]: { ...prev[s.sessionId], sessionId: s.sessionId, tags: prev[s.sessionId]?.tags ?? [], pinned },
     }))
     invoke('set_session_pinned', { sessionId: s.sessionId, pinned }).catch(() => {
       setMeta(prev => ({
         ...prev,
-        [s.sessionId]: { sessionId: s.sessionId, tags: prev[s.sessionId]?.tags ?? [], pinned: !pinned },
+        [s.sessionId]: { ...prev[s.sessionId], sessionId: s.sessionId, tags: prev[s.sessionId]?.tags ?? [], pinned: !pinned },
       }))
     })
   }, [])
@@ -259,19 +332,41 @@ export default function SessionList({ sessions, onSelect, loading, onLoadMore, h
     }
     if (search.trim()) {
       const q = search.toLowerCase()
-      result = result.filter(s => s.display.toLowerCase().includes(q) || s.projectName.toLowerCase().includes(q))
+      result = result.filter(s =>
+        s.display.toLowerCase().includes(q)
+        || s.projectName.toLowerCase().includes(q)
+        || (s.title ?? '').toLowerCase().includes(q)
+        || (meta[s.sessionId]?.customName ?? '').toLowerCase().includes(q)
+      )
     }
     return result
   }, [sessions, search, projectFilter, agentFilter, tagFilter, meta])
 
-  // Pinned sessions float above the time groups.
+  // Command-only noise: a bare slash command with nothing after it and no
+  // title/rename/pin carries no information — hidden behind a footer link.
+  const [showHidden, setShowHidden] = useState(false)
+  const isNoise = useCallback((s: SessionEntry) =>
+    s.display.startsWith('/')
+    && s.promptCount <= 1
+    && !s.title
+    && !meta[s.sessionId]?.customName
+    && !meta[s.sessionId]?.pinned
+    && !s.isLive,
+  [meta])
+  const visible = useMemo(
+    () => (showHidden ? filtered : filtered.filter(s => !isNoise(s))),
+    [filtered, showHidden, isNoise]
+  )
+  const hiddenCount = filtered.length - (showHidden ? filtered.length : visible.length)
+
+  // Pinned sessions float above the time groups, newest first.
   const pinned = useMemo(
-    () => filtered.filter(s => meta[s.sessionId]?.pinned),
-    [filtered, meta]
+    () => visible.filter(s => meta[s.sessionId]?.pinned).sort((a, b) => b.timestamp - a.timestamp),
+    [visible, meta]
   )
   const groups = useMemo(
-    () => groupByTime(filtered.filter(s => !meta[s.sessionId]?.pinned)),
-    [filtered, meta]
+    () => groupByTime(visible.filter(s => !meta[s.sessionId]?.pinned)),
+    [visible, meta]
   )
 
   // Deep search: debounced FTS lookup over full transcripts (all agents).
@@ -433,6 +528,8 @@ export default function SessionList({ sessions, onSelect, loading, onLoadMore, h
                 onSelect={onSelect}
                 pinned
                 tags={meta[session.sessionId]?.tags}
+                customName={meta[session.sessionId]?.customName}
+                selected={session.sessionId === selectedId}
                 onTogglePin={togglePin}
               />
             ))}
@@ -452,6 +549,8 @@ export default function SessionList({ sessions, onSelect, loading, onLoadMore, h
                 onSelect={onSelect}
                 pinned={false}
                 tags={meta[session.sessionId]?.tags}
+                customName={meta[session.sessionId]?.customName}
+                selected={session.sessionId === selectedId}
                 onTogglePin={togglePin}
               />
             ))}
@@ -473,6 +572,16 @@ export default function SessionList({ sessions, onSelect, loading, onLoadMore, h
               />
             ))}
           </div>
+        )}
+        {!loading && (hiddenCount > 0 || showHidden) && (
+          <button
+            onClick={() => setShowHidden(v => !v)}
+            className="w-full px-3 py-2 text-[10.5px] text-[var(--c-text-3)] hover:text-[var(--c-text-2)] transition-colors text-center"
+          >
+            {showHidden
+              ? 'Hide command-only sessions'
+              : `${hiddenCount} command-only session${hiddenCount === 1 ? '' : 's'} hidden · show`}
+          </button>
         )}
         {!loading && onLoadMore && hasMore && !search && !projectFilter && !agentFilter && !tagFilter && (
           <div className="p-3">

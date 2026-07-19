@@ -113,6 +113,8 @@ export interface SessionEntry {
   errorCount: number
   /** Number of prompts submitted in this session. */
   promptCount: number
+  /** Agent's own session title (user rename or AI-generated), when known. */
+  title?: string | null
 }
 
 /** User-authored session metadata (get_session_meta). */
@@ -120,6 +122,15 @@ export interface SessionMeta {
   sessionId: string
   pinned: boolean
   tags: string[]
+  customName?: string | null
+}
+
+/** User-authored repo/worktree metadata (get_repo_meta). Rows are keyed by
+ *  repo path or worktree path — same store serves both. */
+export interface RepoMeta {
+  repoPath: string
+  customName?: string | null
+  notes?: string | null
 }
 
 /** Rolling per-agent usage meters (get_usage_windows). */

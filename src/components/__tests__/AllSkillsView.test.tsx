@@ -54,9 +54,9 @@ describe('AllSkillsView — renders skills', () => {
     expect(screen.queryByText('cursor-only')).not.toBeInTheDocument()
   })
 
-  it('renders skill description when present', () => {
+  it('exposes skill description as row tooltip', () => {
     render(<AllSkillsView agents={[singleTool]} onBack={vi.fn()} onSelectSkill={vi.fn()} />)
-    expect(screen.getByText('Polish frontend UI')).toBeInTheDocument()
+    expect(screen.getByTitle('Polish frontend UI')).toBeInTheDocument()
   })
 
   it('deduplicates skills with the same name across tools', () => {

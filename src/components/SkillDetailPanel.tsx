@@ -145,7 +145,7 @@ const ChevronLeft = () => (
   </svg>
 )
 
-export default function SkillDetailPanel({ skill: initialSkill, agentId, onToggled, allAgents, variants }: SkillDetailPanelProps) {
+export default function SkillDetailPanel({ skill: initialSkill, agentId, onToggled, onBack, allAgents, variants }: SkillDetailPanelProps) {
   // Variant switcher — active skill may change if user picks a different variant
   const hasVariants = variants && variants.length > 1 &&
     new Set(variants.map(v => v.contentHash).filter(Boolean)).size > 1
@@ -253,6 +253,18 @@ export default function SkillDetailPanel({ skill: initialSkill, agentId, onToggl
 
   return (
     <div className="relative flex flex-col h-full bg-[var(--c-bg)] animate-slide-in-right">
+
+      {/* Breadcrumb */}
+      <div className="flex items-center gap-1.5 px-4 py-2 border-b border-[var(--c-border)] flex-shrink-0 min-w-0">
+        <button
+          onClick={onBack}
+          className="text-[12px] text-[var(--c-text-3)] hover:text-[var(--c-text-2)] transition-colors flex-shrink-0"
+        >
+          Skills
+        </button>
+        <span className="text-[11px] text-[var(--c-text-3)] opacity-40 flex-shrink-0">›</span>
+        <span className="text-[12.5px] font-semibold font-mono text-indigo-400 truncate">{skill.name}</span>
+      </div>
 
       {/* Variant switcher — only when multiple tools have different content */}
       {hasVariants && variants && (
