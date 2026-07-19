@@ -284,6 +284,18 @@ export default function McpDetailPanel({ mcp, onBack, agentId, onToggled, allAge
   return (
     <div className="flex flex-col h-full bg-[var(--c-bg)] animate-slide-in-right">
 
+      {/* Breadcrumb */}
+      <div className="flex items-center gap-1.5 px-4 py-2 border-b border-[var(--c-border)] flex-shrink-0 min-w-0">
+        <button
+          onClick={onBack}
+          className="text-[12px] text-[var(--c-text-3)] hover:text-[var(--c-text-2)] transition-colors flex-shrink-0"
+        >
+          MCPs
+        </button>
+        <span className="text-[11px] text-[var(--c-text-3)] opacity-40 flex-shrink-0">›</span>
+        <span className="text-[12.5px] font-semibold font-mono text-violet-400 truncate">{mcp.name}</span>
+      </div>
+
       <div className="flex-1 overflow-y-auto">
         {/* npm package card — top, only for npx MCPs */}
         <NpmInstallSection mcp={mcp} agentId={agentId} />
