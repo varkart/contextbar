@@ -137,6 +137,9 @@ where
 
     let updated =
         serde_json::to_string_pretty(&json).map_err(|e| format!("serialization error: {e}"))?;
+    if let Some(parent) = std::path::Path::new(config_path).parent() {
+        std::fs::create_dir_all(parent).map_err(|e| format!("cannot create dir: {e}"))?;
+    }
     let tmp_path = format!("{config_path}.tmp");
     std::fs::write(&tmp_path, &updated).map_err(|e| format!("cannot write temp file: {e}"))?;
     std::fs::rename(&tmp_path, config_path).map_err(|e| {

@@ -62,7 +62,24 @@ pub struct CapabilitySpec {
     /// false for features the agent ships disabled (e.g. Codex memories).
     #[serde(default = "default_true")]
     pub default_on: bool,
+    /// Enum kinds: allow a "(not set)" choice that removes the key when the
+    /// agent has no single default (e.g. Codex default_permissions).
+    #[serde(default)]
+    pub allow_unset: bool,
+    /// Enum kinds: extra values discovered at read time (merged after the
+    /// static `values` list).
+    #[serde(default)]
+    pub values_from: Option<ValuesFrom>,
     pub writer: CapabilityWriter,
+}
+
+/// Where dynamic enum values come from.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum ValuesFrom {
+    /// Names of the sub-tables under `path` in a TOML file — e.g. the user's
+    /// `[permissions.<name>]` profiles in Codex config.toml.
+    TomlTableNames { file: String, path: String },
 }
 
 fn default_kind() -> String {

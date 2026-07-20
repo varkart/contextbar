@@ -5,7 +5,7 @@
 //! Semantics: toggles only ever write the declared off-state or remove it —
 //! they never overwrite unrelated values, so hand-edited configs survive.
 
-use crate::engine::manifest::{CapabilitySpec, CapabilityWriter};
+use crate::engine::manifest::{CapabilitySpec, CapabilityWriter, ValuesFrom};
 use crate::engine::resolve::expand_home;
 
 #[derive(serde::Serialize, Clone, Debug)]
@@ -23,6 +23,8 @@ pub struct CapabilityState {
     /// Options for enum kinds.
     pub values: Vec<String>,
     pub default_value: Option<String>,
+    /// Enum kinds: whether a "(not set)" choice (empty string) is offered.
+    pub allow_unset: bool,
     /// Current value for enum kinds (None for toggles).
     pub value: Option<String>,
     pub enabled: bool,
@@ -124,6 +126,24 @@ fn read_enabled(spec: &CapabilitySpec, home: &std::path::Path) -> bool {
     }
 }
 
+/// Static values plus any dynamically discovered ones (deduped, order kept).
+fn resolve_values(spec: &CapabilitySpec, home: &std::path::Path) -> Vec<String> {
+    let mut out = spec.values.clone();
+    if let Some(ValuesFrom::TomlTableNames { file, path }) = &spec.values_from {
+        let fpath = expand_home(file, home);
+        if let Some(doc) = crate::app_state::read_toml_config(&fpath.to_string_lossy()) {
+            if let Some(table) = toml_lookup(&doc, path).and_then(|v| v.as_table()) {
+                for name in table.keys() {
+                    if !out.iter().any(|v| v == name) {
+                        out.push(name.clone());
+                    }
+                }
+            }
+        }
+    }
+    out
+}
+
 /// Current string value for enum-kind capabilities; falls back to
 /// `spec.default_value` when the key is absent.
 fn read_value(spec: &CapabilitySpec, home: &std::path::Path) -> Option<String> {
@@ -189,8 +209,9 @@ pub fn list(specs: &[CapabilitySpec], home: &std::path::Path) -> Vec<CapabilityS
                 category: s.category.clone(),
                 tokens_hint: s.tokens_hint,
                 kind: s.kind.clone(),
-                values: s.values.clone(),
+                values: if is_enum { resolve_values(s, home) } else { s.values.clone() },
                 default_value: s.default_value.clone(),
+                allow_unset: s.allow_unset,
                 value: if is_enum { read_value(s, home) } else { None },
                 enabled: if is_enum { true } else { read_enabled(s, home) },
                 writer_file,
@@ -352,13 +373,17 @@ pub fn set_value(spec: &CapabilitySpec, home: &std::path::Path, value: &str) -> 
     if spec.kind != "enum" {
         return Err(format!("capability '{}' is not an enum", spec.id));
     }
-    if !spec.values.iter().any(|v| v == value) {
-        return Err(format!(
-            "'{value}' is not a valid value for '{}' (expected one of {:?})",
-            spec.id, spec.values
-        ));
+    let unset = value.is_empty() && spec.allow_unset;
+    if !unset {
+        let valid = resolve_values(spec, home);
+        if !valid.iter().any(|v| v == value) {
+            return Err(format!(
+                "'{value}' is not a valid value for '{}' (expected one of {valid:?})",
+                spec.id
+            ));
+        }
     }
-    let is_default = spec.default_value.as_deref() == Some(value);
+    let is_default = unset || spec.default_value.as_deref() == Some(value);
     match &spec.writer {
         CapabilityWriter::JsonFlag { file, key, .. } => {
             let path = expand_home(file, home);
@@ -379,6 +404,317 @@ pub fn set_value(spec: &CapabilitySpec, home: &std::path::Path, value: &str) -> 
         CapabilityWriter::JsonListMember { .. } => {
             Err("enum capabilities cannot use json_list_member writers".to_string())
         }
+    }
+}
+
+// ── Repo-scope capability overrides ────────────────────────────────────────
+// A capability whose writer targets the agent's USER settings file can be
+// overridden per repo in `<repo>/.claude/settings.json`. Semantics differ
+// from the user scope: an absent key means "inherit", so the control is
+// tri-state (inherit / on / off) rather than a toggle. Deny-list members
+// can only be added at repo scope (a repo deny wins; there is no
+// force-allow), so those are two-state (inherit / deny).
+
+const CLAUDE_USER_SETTINGS: &str = "~/.claude/settings.json";
+
+/// The repo-scope settings file for a capability, when repo override applies.
+fn repo_override_file(spec: &CapabilitySpec, repo: &std::path::Path) -> Option<std::path::PathBuf> {
+    let file = match &spec.writer {
+        CapabilityWriter::JsonFlag { file, .. } => file,
+        CapabilityWriter::JsonListMember { file, .. } => file,
+        CapabilityWriter::TomlKey { .. } => return None, // global-only configs
+    };
+    (file == CLAUDE_USER_SETTINGS).then(|| repo.join(".claude/settings.json"))
+}
+
+#[derive(serde::Serialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct RepoCapabilityState {
+    pub id: String,
+    pub label: String,
+    pub description: Option<String>,
+    /// Full helper text (docs-derived) for the "?" expander in the repo UI.
+    pub help: Option<String>,
+    pub category: String,
+    /// "tristate" (inherit/on/off), "enum" (inherit + values), "deny" (inherit/deny).
+    pub control: String,
+    pub values: Vec<String>,
+    /// "inherit" | "on" | "off" | "deny" | enum value.
+    pub state: String,
+}
+
+pub fn repo_list(specs: &[CapabilitySpec], repo: &std::path::Path) -> Vec<RepoCapabilityState> {
+    specs
+        .iter()
+        .filter_map(|s| {
+            let file = repo_override_file(s, repo)?;
+            let json = crate::app_state::read_json_config(&file.to_string_lossy());
+            let (control, state, values) = match (&s.writer, s.kind.as_str()) {
+                (CapabilityWriter::JsonFlag { key, off_value, .. }, "toggle") => {
+                    let state = match json.as_ref().and_then(|j| lookup(j, key)) {
+                        None => "inherit",
+                        Some(v) if v == off_value => "off",
+                        Some(_) => "on",
+                    };
+                    ("tristate", state.to_string(), vec![])
+                }
+                (CapabilityWriter::JsonFlag { key, .. }, "enum") => {
+                    let state = json
+                        .as_ref()
+                        .and_then(|j| lookup(j, key))
+                        .and_then(|v| v.as_str().map(String::from))
+                        .unwrap_or_else(|| "inherit".to_string());
+                    ("enum", state, s.values.clone())
+                }
+                (CapabilityWriter::JsonListMember { path, .. }, _) => {
+                    let members = s.writer.list_members();
+                    let present = json
+                        .as_ref()
+                        .and_then(|j| lookup(j, path))
+                        .and_then(|v| v.as_array())
+                        .map(|arr| {
+                            members
+                                .iter()
+                                .any(|m| arr.iter().any(|v| v.as_str() == Some(*m)))
+                        })
+                        .unwrap_or(false);
+                    ("deny", if present { "deny" } else { "inherit" }.to_string(), vec![])
+                }
+                _ => return None,
+            };
+            Some(RepoCapabilityState {
+                id: s.id.clone(),
+                label: s.label.clone(),
+                description: s.description.clone(),
+                help: s.help.clone().or_else(|| s.description.clone()),
+                category: s.category.clone(),
+                control: control.to_string(),
+                values,
+                state,
+            })
+        })
+        .collect()
+}
+
+pub fn repo_set(
+    spec: &CapabilitySpec,
+    repo: &std::path::Path,
+    state: &str,
+) -> Result<(), String> {
+    let file = repo_override_file(spec, repo)
+        .ok_or_else(|| format!("'{}' has no repo-scope override", spec.id))?;
+    let fpath = file.to_string_lossy().into_owned();
+    match &spec.writer {
+        CapabilityWriter::JsonFlag { key, off_value, .. } if spec.kind == "toggle" => {
+            let on_value = match off_value {
+                serde_json::Value::Bool(b) => serde_json::Value::Bool(!b),
+                _ => return Err(format!("'{}' cannot be forced on at repo scope", spec.id)),
+            };
+            let key = key.clone();
+            let val = match state {
+                "inherit" => None,
+                "off" => Some(off_value.clone()),
+                "on" => Some(on_value),
+                other => return Err(format!("invalid state '{other}'")),
+            };
+            crate::app_state::update_json_config(&fpath, move |json| {
+                json_modify_key(json, &key, val)
+            })
+        }
+        CapabilityWriter::JsonFlag { key, .. } => {
+            // enum kind
+            if state != "inherit" && !spec.values.iter().any(|v| v == state) {
+                return Err(format!(
+                    "'{state}' is not a valid value for '{}' (expected inherit or one of {:?})",
+                    spec.id, spec.values
+                ));
+            }
+            let key = key.clone();
+            let val = (state != "inherit")
+                .then(|| serde_json::Value::String(state.to_string()));
+            crate::app_state::update_json_config(&fpath, move |json| {
+                json_modify_key(json, &key, val)
+            })
+        }
+        CapabilityWriter::JsonListMember { path, .. } => {
+            let dotted = path.clone();
+            let wanted: Vec<String> =
+                spec.writer.list_members().into_iter().map(String::from).collect();
+            let add = match state {
+                "deny" => true,
+                "inherit" => false,
+                other => return Err(format!("invalid state '{other}' for deny-list override")),
+            };
+            crate::app_state::update_json_config(&fpath, move |json| {
+                let segs: Vec<&str> = dotted.split('.').collect();
+                let (last, parents) = segs.split_last().ok_or("empty writer path")?;
+                let mut cur = json;
+                for seg in parents {
+                    let obj = cur.as_object_mut().ok_or("config is not a JSON object")?;
+                    cur = obj
+                        .entry(seg.to_string())
+                        .or_insert_with(|| serde_json::Value::Object(Default::default()));
+                }
+                let obj = cur
+                    .as_object_mut()
+                    .ok_or_else(|| format!("'{}' is not an object", parents.join(".")))?;
+                let arr = obj
+                    .entry(last.to_string())
+                    .or_insert_with(|| serde_json::Value::Array(vec![]))
+                    .as_array_mut()
+                    .ok_or_else(|| format!("'{dotted}' is not an array"))?;
+                if add {
+                    for m in &wanted {
+                        if !arr.iter().any(|v| v.as_str() == Some(m.as_str())) {
+                            arr.push(serde_json::Value::String(m.clone()));
+                        }
+                    }
+                } else {
+                    arr.retain(|v| {
+                        v.as_str()
+                            .map(|s| !wanted.iter().any(|m| m == s))
+                            .unwrap_or(true)
+                    });
+                }
+                Ok(())
+            })
+        }
+        CapabilityWriter::TomlKey { .. } => {
+            Err(format!("'{}' has no repo-scope override", spec.id))
+        }
+    }
+}
+
+// ── Codex permission profiles (read-only viewer) ───────────────────────────
+// Shape verified against learn.chatgpt.com/docs/permissions, 2026-07-19.
+
+#[derive(serde::Serialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct CodexProfiles {
+    /// True when legacy sandbox keys AND profiles are both configured —
+    /// a combination Codex forbids.
+    pub mixed_config: bool,
+    pub default_profile: Option<String>,
+    pub profiles: Vec<CodexProfile>,
+}
+
+#[derive(serde::Serialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct CodexProfile {
+    pub name: String,
+    pub description: Option<String>,
+    pub extends: Option<String>,
+    pub workspace_roots: Vec<String>,
+    /// Flattened path → access ("read" | "write" | "deny"); nested scoped
+    /// tables render as "<base>/<sub>".
+    pub filesystem: Vec<CodexFsRule>,
+    pub network_enabled: bool,
+    pub domains: Vec<CodexDomainRule>,
+}
+
+#[derive(serde::Serialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct CodexFsRule {
+    pub path: String,
+    pub access: String,
+}
+
+#[derive(serde::Serialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct CodexDomainRule {
+    pub pattern: String,
+    pub action: String,
+}
+
+fn flatten_fs_rules(prefix: &str, table: &toml::map::Map<String, toml::Value>, out: &mut Vec<CodexFsRule>) {
+    for (k, v) in table {
+        let path = if prefix.is_empty() {
+            k.clone()
+        } else {
+            format!("{prefix} › {k}")
+        };
+        match v {
+            toml::Value::String(access) => out.push(CodexFsRule {
+                path,
+                access: access.clone(),
+            }),
+            toml::Value::Table(sub) => flatten_fs_rules(&path, sub, out),
+            _ => {}
+        }
+    }
+}
+
+pub fn codex_profiles(home: &std::path::Path) -> CodexProfiles {
+    let cfg = home.join(".codex/config.toml");
+    let Some(doc) = crate::app_state::read_toml_config(&cfg.to_string_lossy()) else {
+        return CodexProfiles {
+            mixed_config: false,
+            default_profile: None,
+            profiles: vec![],
+        };
+    };
+
+    let legacy =
+        doc.get("sandbox_mode").is_some() || doc.get("sandbox_workspace_write").is_some();
+    let has_profiles = doc.get("default_permissions").is_some() || doc.get("permissions").is_some();
+
+    let default_profile = doc
+        .get("default_permissions")
+        .and_then(|v| v.as_str().map(String::from));
+
+    let mut profiles = vec![];
+    if let Some(table) = doc.get("permissions").and_then(|v| v.as_table()) {
+        for (name, val) in table {
+            let Some(p) = val.as_table() else { continue };
+            let workspace_roots = p
+                .get("workspace_roots")
+                .and_then(|v| v.as_table())
+                .map(|t| {
+                    t.iter()
+                        .filter(|(_, on)| on.as_bool().unwrap_or(false))
+                        .map(|(k, _)| k.clone())
+                        .collect()
+                })
+                .unwrap_or_default();
+            let mut filesystem = vec![];
+            if let Some(fs) = p.get("filesystem").and_then(|v| v.as_table()) {
+                flatten_fs_rules("", fs, &mut filesystem);
+            }
+            let network = p.get("network").and_then(|v| v.as_table());
+            let network_enabled = network
+                .and_then(|n| n.get("enabled"))
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false);
+            let domains = network
+                .and_then(|n| n.get("domains"))
+                .and_then(|v| v.as_table())
+                .map(|t| {
+                    t.iter()
+                        .filter_map(|(k, v)| {
+                            v.as_str().map(|action| CodexDomainRule {
+                                pattern: k.clone(),
+                                action: action.to_string(),
+                            })
+                        })
+                        .collect()
+                })
+                .unwrap_or_default();
+            profiles.push(CodexProfile {
+                name: name.clone(),
+                description: p.get("description").and_then(|v| v.as_str().map(String::from)),
+                extends: p.get("extends").and_then(|v| v.as_str().map(String::from)),
+                workspace_roots,
+                filesystem,
+                network_enabled,
+                domains,
+            });
+        }
+    }
+
+    CodexProfiles {
+        mixed_config: legacy && has_profiles,
+        default_profile,
+        profiles,
     }
 }
 
@@ -403,6 +739,8 @@ mod tests {
             values: vec![],
             default_value: None,
             default_on: true,
+            allow_unset: false,
+            values_from: None,
             category: "context".into(),
             tokens_hint: None,
             writer: CapabilityWriter::JsonFlag {
@@ -424,6 +762,8 @@ mod tests {
             values: vec![],
             default_value: None,
             default_on: true,
+            allow_unset: false,
+            values_from: None,
             category: "tools".into(),
             tokens_hint: None,
             writer: CapabilityWriter::JsonListMember {
@@ -661,6 +1001,151 @@ mod tests {
         spec.default_on = false;
         assert!(!read_enabled(&spec, home));
         let _ = std::fs::remove_file(&f);
+    }
+
+    // Verbatim example from learn.chatgpt.com/docs/permissions.
+    const CODEX_PROFILE_EXAMPLE: &str = r#"
+default_permissions = "project-edit"
+
+[permissions.project-edit]
+description = "Project editing with OpenAI API access."
+extends = ":workspace"
+
+[permissions.project-edit.workspace_roots]
+"~/code/app" = true
+"~/code/shared-lib" = true
+
+[permissions.project-edit.filesystem]
+":minimal" = "read"
+
+[permissions.project-edit.filesystem.":workspace_roots"]
+"." = "write"
+".devcontainer" = "read"
+"**/*.env" = "deny"
+
+[permissions.project-edit.network]
+enabled = true
+
+[permissions.project-edit.network.domains]
+"api.openai.com" = "allow"
+"tracking.example.com" = "deny"
+"#;
+
+    #[test]
+    fn codex_profiles_parse_docs_example() {
+        let home = std::env::temp_dir().join(format!("cb-codex-{}", std::process::id()));
+        std::fs::create_dir_all(home.join(".codex")).unwrap();
+        std::fs::write(home.join(".codex/config.toml"), CODEX_PROFILE_EXAMPLE).unwrap();
+
+        let out = codex_profiles(&home);
+        assert!(!out.mixed_config);
+        assert_eq!(out.default_profile.as_deref(), Some("project-edit"));
+        assert_eq!(out.profiles.len(), 1);
+        let p = &out.profiles[0];
+        assert_eq!(p.extends.as_deref(), Some(":workspace"));
+        assert_eq!(p.workspace_roots.len(), 2);
+        assert!(p.network_enabled);
+        assert_eq!(p.domains.len(), 2);
+        // flattened rules include the scoped ones
+        assert!(p.filesystem.iter().any(|r| r.path == ":minimal" && r.access == "read"));
+        assert!(p.filesystem.iter().any(|r| r.path.contains(":workspace_roots") && r.path.contains("**/*.env") && r.access == "deny"));
+
+        // mixed config detected when legacy key added
+        std::fs::write(
+            home.join(".codex/config.toml"),
+            format!("sandbox_mode = \"workspace-write\"\n{CODEX_PROFILE_EXAMPLE}"),
+        )
+        .unwrap();
+        assert!(codex_profiles(&home).mixed_config);
+        let _ = std::fs::remove_dir_all(&home);
+    }
+
+    #[test]
+    fn dynamic_enum_values_and_unset() {
+        let f = std::env::temp_dir().join(format!("cb-cap-{}-dyn.toml", std::process::id()));
+        std::fs::write(&f, CODEX_PROFILE_EXAMPLE).unwrap();
+        let home = std::path::Path::new("/");
+        let mut spec = flag_spec(&f, "unused", serde_json::json!(false));
+        spec.kind = "enum".into();
+        spec.values = vec![":read-only".into(), ":workspace".into()];
+        spec.allow_unset = true;
+        spec.values_from = Some(ValuesFrom::TomlTableNames {
+            file: f.to_string_lossy().into_owned(),
+            path: "permissions".into(),
+        });
+        spec.writer = CapabilityWriter::TomlKey {
+            file: f.to_string_lossy().into_owned(),
+            key: "default_permissions".into(),
+            off_value: None,
+        };
+
+        // dynamic values include the user profile
+        let vals = resolve_values(&spec, home);
+        assert!(vals.contains(&"project-edit".to_string()));
+        // current value read from file
+        assert_eq!(read_value(&spec, home).as_deref(), Some("project-edit"));
+        // set to built-in, then unset removes the key
+        set_value(&spec, home, ":workspace").unwrap();
+        assert_eq!(read_value(&spec, home).as_deref(), Some(":workspace"));
+        set_value(&spec, home, "").unwrap();
+        let doc = crate::app_state::read_toml_config(&f.to_string_lossy()).unwrap();
+        assert!(doc.get("default_permissions").is_none());
+        // unset rejected when allow_unset = false
+        spec.allow_unset = false;
+        assert!(set_value(&spec, home, "").is_err());
+        let _ = std::fs::remove_file(&f);
+    }
+
+    #[test]
+    fn repo_scope_tristate_roundtrip() {
+        let repo = std::env::temp_dir().join(format!("cb-repocap-{}", std::process::id()));
+        std::fs::create_dir_all(repo.join(".git")).unwrap();
+
+        let mut spec = flag_spec(std::path::Path::new("/unused"), "autoMemoryEnabled", serde_json::json!(false));
+        spec.writer = CapabilityWriter::JsonFlag {
+            file: "~/.claude/settings.json".into(),
+            key: "autoMemoryEnabled".into(),
+            off_value: serde_json::json!(false),
+        };
+
+        // absent file → inherit
+        assert_eq!(repo_list(&[spec.clone()], &repo)[0].state, "inherit");
+        // force off, then force ON writes the inverse bool
+        repo_set(&spec, &repo, "off").unwrap();
+        assert_eq!(repo_list(&[spec.clone()], &repo)[0].state, "off");
+        repo_set(&spec, &repo, "on").unwrap();
+        assert_eq!(repo_list(&[spec.clone()], &repo)[0].state, "on");
+        let json = crate::app_state::read_json_config(
+            &repo.join(".claude/settings.json").to_string_lossy(),
+        )
+        .unwrap();
+        assert_eq!(json["autoMemoryEnabled"], serde_json::json!(true));
+        // back to inherit removes the key
+        repo_set(&spec, &repo, "inherit").unwrap();
+        assert_eq!(repo_list(&[spec.clone()], &repo)[0].state, "inherit");
+
+        // deny-list override: only inherit/deny
+        let mut deny_spec = list_spec(std::path::Path::new("/unused"), "permissions.deny", "WebFetch");
+        if let CapabilityWriter::JsonListMember { file, .. } = &mut deny_spec.writer {
+            *file = "~/.claude/settings.json".into();
+        }
+        repo_set(&deny_spec, &repo, "deny").unwrap();
+        assert_eq!(repo_list(&[deny_spec.clone()], &repo)[0].state, "deny");
+        assert!(repo_set(&deny_spec, &repo, "on").is_err());
+        repo_set(&deny_spec, &repo, "inherit").unwrap();
+        assert_eq!(repo_list(&[deny_spec.clone()], &repo)[0].state, "inherit");
+
+        // toml-backed capabilities have no repo scope
+        let mut toml_spec = flag_spec(std::path::Path::new("/unused"), "x", serde_json::json!(false));
+        toml_spec.writer = CapabilityWriter::TomlKey {
+            file: "~/.codex/config.toml".into(),
+            key: "features.apps".into(),
+            off_value: Some(serde_json::json!(false)),
+        };
+        assert!(repo_list(&[toml_spec.clone()], &repo).is_empty());
+        assert!(repo_set(&toml_spec, &repo, "off").is_err());
+
+        let _ = std::fs::remove_dir_all(&repo);
     }
 
     #[test]

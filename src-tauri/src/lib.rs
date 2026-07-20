@@ -10,6 +10,7 @@ mod mcp_client;
 pub(crate) mod models;
 pub(crate) mod capabilities;
 pub(crate) mod permissions;
+pub(crate) mod repo_config;
 mod watcher;
 
 use crate::models::Agent;
@@ -2037,6 +2038,97 @@ fn set_capability_value(
 }
 
 #[tauri::command]
+fn get_repo_agent_config(repo_path: String) -> Result<repo_config::RepoAgentConfig, String> {
+    let home = dirs::home_dir().ok_or("cannot find home dir")?;
+    repo_config::read(&repo_path, &home)
+}
+
+#[tauri::command]
+fn set_repo_permission_rule(
+    db: tauri::State<'_, db::DbState>,
+    repo_path: String,
+    scope: repo_config::RepoScope,
+    rule: String,
+    section: permissions::PermissionSection,
+    add: bool,
+) -> Result<(), String> {
+    repo_config::set_rule(&repo_path, scope, &rule, section, add)?;
+    db::log_event(
+        &db,
+        "permission_set",
+        "claude",
+        &rule,
+        Some(&format!("repo scope · {}", repo_path)),
+    );
+    Ok(())
+}
+
+#[tauri::command]
+fn set_codex_repo_trust(
+    db: tauri::State<'_, db::DbState>,
+    repo_path: String,
+    trusted: bool,
+) -> Result<(), String> {
+    let home = dirs::home_dir().ok_or("cannot find home dir")?;
+    repo_config::set_codex_trust(&repo_path, &home, trusted)?;
+    db::log_event(
+        &db,
+        "permission_set",
+        "codex",
+        if trusted { "trusted" } else { "untrusted" },
+        Some(&repo_path),
+    );
+    Ok(())
+}
+
+#[tauri::command]
+fn get_repo_capabilities(
+    agent_id: String,
+    repo_path: String,
+) -> Result<Vec<capabilities::RepoCapabilityState>, String> {
+    repo_config::validate_repo_path(&repo_path)?;
+    let manifest = crate::engine::load_manifest(&agent_id)
+        .ok_or_else(|| format!("no manifest for '{agent_id}'"))?;
+    Ok(capabilities::repo_list(
+        &manifest.capabilities,
+        std::path::Path::new(&repo_path),
+    ))
+}
+
+#[tauri::command]
+fn set_repo_capability(
+    db: tauri::State<'_, db::DbState>,
+    agent_id: String,
+    repo_path: String,
+    capability_id: String,
+    state: String,
+) -> Result<(), String> {
+    repo_config::validate_repo_path(&repo_path)?;
+    let manifest = crate::engine::load_manifest(&agent_id)
+        .ok_or_else(|| format!("no manifest for '{agent_id}'"))?;
+    let spec = manifest
+        .capabilities
+        .iter()
+        .find(|c| c.id == capability_id)
+        .ok_or_else(|| format!("capability '{capability_id}' not in '{agent_id}' manifest"))?;
+    capabilities::repo_set(spec, std::path::Path::new(&repo_path), &state)?;
+    db::log_event(
+        &db,
+        "capability_toggled",
+        &agent_id,
+        &capability_id,
+        Some(&format!("{state} · repo {repo_path}")),
+    );
+    Ok(())
+}
+
+#[tauri::command]
+fn get_codex_profiles() -> Result<capabilities::CodexProfiles, String> {
+    let home = dirs::home_dir().ok_or("cannot find home dir")?;
+    Ok(capabilities::codex_profiles(&home))
+}
+
+#[tauri::command]
 fn get_permissions(agent_id: String) -> Result<permissions::AgentPermissions, String> {
     let home = dirs::home_dir().ok_or("cannot find home dir")?;
     let manifest = crate::engine::load_manifest(&agent_id)
@@ -2475,6 +2567,12 @@ pub fn run() {
             get_capabilities,
             set_capability,
             set_capability_value,
+            get_codex_profiles,
+            get_repo_agent_config,
+            set_repo_permission_rule,
+            set_codex_repo_trust,
+            get_repo_capabilities,
+            set_repo_capability,
             get_session_insights,
             get_token_activity,
             get_commit_activity,

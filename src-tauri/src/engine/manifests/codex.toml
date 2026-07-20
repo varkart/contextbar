@@ -174,3 +174,15 @@ kind = "enum"
 values = ["auto", "concise", "detailed", "none"]
 default_value = "auto"
 writer = { type = "toml_key", file = "~/.codex/config.toml", key = "model_reasoning_summary" }
+
+[[capabilities]]
+id = "default_permissions"
+label = "Permission profile"
+description = "Active permission profile (default_permissions)"
+help = "Selects Codex's active permission profile. Built-ins: :read-only keeps command execution read-only; :workspace allows writes inside workspace roots and temp dirs; :danger-full-access removes sandbox restrictions (use only when intentional). Custom profiles defined under [permissions.<name>] in config.toml appear here automatically. Profiles supersede sandbox_mode — never combine the two. Requires Codex 0.138+."
+category = "features"
+kind = "enum"
+values = [":read-only", ":workspace", ":danger-full-access"]
+allow_unset = true
+values_from = { type = "toml_table_names", file = "~/.codex/config.toml", path = "permissions" }
+writer = { type = "toml_key", file = "~/.codex/config.toml", key = "default_permissions" }
