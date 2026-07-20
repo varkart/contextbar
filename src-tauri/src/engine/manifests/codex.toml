@@ -62,12 +62,15 @@ category = "tools"
 writer = { type = "toml_key", file = "~/.codex/config.toml", key = "features.shell_tool", off_value = false }
 
 [[capabilities]]
-id = "web_search"
+id = "web_search_mode"
 label = "Web search"
-description = "tools.web_search"
-help = "Codex web search tool. Accepts a boolean in config.toml; richer forms (context size, allowed domains) can be hand-configured."
+description = "Search behavior (web_search)"
+help = "disabled: no web search. cached: search over a cached index (the default). indexed: broader indexed search. live: real-time fetching. Selecting cached removes the key."
 category = "tools"
-writer = { type = "toml_key", file = "~/.codex/config.toml", key = "tools.web_search", off_value = false }
+kind = "enum"
+values = ["disabled", "cached", "indexed", "live"]
+default_value = "cached"
+writer = { type = "toml_key", file = "~/.codex/config.toml", key = "web_search" }
 
 [[capabilities]]
 id = "memories"
@@ -107,3 +110,67 @@ kind = "enum"
 values = ["read-only", "workspace-write", "danger-full-access"]
 default_value = "workspace-write"
 writer = { type = "toml_key", file = "~/.codex/config.toml", key = "sandbox_mode" }
+
+[[capabilities]]
+id = "apps"
+label = "Apps"
+description = "Codex apps integration (features.apps)"
+help = "Codex features.apps — on by default. Disabling turns off the apps integration."
+category = "features"
+writer = { type = "toml_key", file = "~/.codex/config.toml", key = "features.apps", off_value = false }
+
+[[capabilities]]
+id = "unified_exec"
+label = "Unified exec"
+description = "Single persistent shell session (features.unified_exec)"
+help = "Codex features.unified_exec — on by default except Windows. Disabling reverts to per-command shell execution."
+category = "features"
+writer = { type = "toml_key", file = "~/.codex/config.toml", key = "features.unified_exec", off_value = false }
+
+[[capabilities]]
+id = "hooks"
+label = "Hooks"
+description = "Lifecycle hooks (features.hooks)"
+help = "Codex features.hooks — OFF by default upstream. Enable to allow lifecycle hooks; the key is removed when returning to the default."
+category = "features"
+default_on = false
+writer = { type = "toml_key", file = "~/.codex/config.toml", key = "features.hooks", off_value = false }
+
+[[capabilities]]
+id = "prevent_idle_sleep"
+label = "Prevent idle sleep"
+description = "Keep the machine awake during runs (features.prevent_idle_sleep)"
+help = "Codex features.prevent_idle_sleep — OFF by default upstream. When enabled, Codex prevents the machine from sleeping during long runs."
+category = "features"
+default_on = false
+writer = { type = "toml_key", file = "~/.codex/config.toml", key = "features.prevent_idle_sleep", off_value = false }
+
+[[capabilities]]
+id = "view_image"
+label = "View image tool"
+description = "Local image attachments (tools.view_image)"
+help = "Codex tools.view_image — lets Codex attach and inspect local images. Disabling removes the tool."
+category = "tools"
+writer = { type = "toml_key", file = "~/.codex/config.toml", key = "tools.view_image", off_value = false }
+
+[[capabilities]]
+id = "reasoning_effort"
+label = "Reasoning effort"
+description = "model_reasoning_effort"
+help = "How much reasoning the model spends per turn: minimal, low, medium (typical default), high, xhigh. Lower effort = faster and cheaper; higher = more thorough. Selecting medium removes the key."
+category = "limits"
+kind = "enum"
+values = ["minimal", "low", "medium", "high", "xhigh"]
+default_value = "medium"
+writer = { type = "toml_key", file = "~/.codex/config.toml", key = "model_reasoning_effort" }
+
+[[capabilities]]
+id = "reasoning_summary"
+label = "Reasoning summary"
+description = "model_reasoning_summary"
+help = "How reasoning is summarized in output: auto (default), concise, detailed, or none. Selecting auto removes the key."
+category = "limits"
+kind = "enum"
+values = ["auto", "concise", "detailed", "none"]
+default_value = "auto"
+writer = { type = "toml_key", file = "~/.codex/config.toml", key = "model_reasoning_summary" }
