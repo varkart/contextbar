@@ -41,3 +41,136 @@ type = "toml_key_pair"
 file = "~/.codex/config.toml"
 active_key = "mcp_servers"
 inline_toggle_field = "enabled"
+
+# ── Capability toggles (Permissions & Context tab) ─────────────────
+# Verified against learn.chatgpt.com config reference + local config.toml.
+
+[[capabilities]]
+id = "multi_agent"
+label = "Multi-agent"
+description = "Parallel subagent orchestration"
+help = "Codex features.multi_agent — on by default. Disabling prevents Codex from spawning parallel subagents."
+category = "features"
+writer = { type = "toml_key", file = "~/.codex/config.toml", key = "features.multi_agent", off_value = false }
+
+[[capabilities]]
+id = "shell_tool"
+label = "Shell tool"
+description = "Command execution (features.shell_tool)"
+help = "Codex features.shell_tool — on by default. Disabling removes Codex's ability to run shell commands entirely."
+category = "tools"
+writer = { type = "toml_key", file = "~/.codex/config.toml", key = "features.shell_tool", off_value = false }
+
+[[capabilities]]
+id = "web_search_mode"
+label = "Web search"
+description = "Search behavior (web_search)"
+help = "disabled: no web search. cached: search over a cached index (the default). indexed: broader indexed search. live: real-time fetching. Selecting cached removes the key."
+category = "tools"
+kind = "enum"
+values = ["disabled", "cached", "indexed", "live"]
+default_value = "cached"
+writer = { type = "toml_key", file = "~/.codex/config.toml", key = "web_search" }
+
+[[capabilities]]
+id = "memories"
+label = "Memories"
+description = "Cross-session memory (features.memories)"
+help = "Codex features.memories — OFF by default upstream. This toggle writes memories = false explicitly when off; Codex's own default applies when the key is absent."
+category = "context"
+default_on = false
+writer = { type = "toml_key", file = "~/.codex/config.toml", key = "features.memories", off_value = false }
+
+[[capabilities]]
+id = "agent_reasoning"
+label = "Show agent reasoning"
+description = "Reasoning events in output (hide_agent_reasoning)"
+help = "When disabled, writes hide_agent_reasoning = true — Codex suppresses chain-of-thought events, reducing output volume."
+category = "limits"
+writer = { type = "toml_key", file = "~/.codex/config.toml", key = "hide_agent_reasoning", off_value = true }
+
+[[capabilities]]
+id = "approval_policy"
+label = "Approval policy"
+description = "When Codex pauses for your approval"
+help = "untrusted: pauses before executing anything not explicitly trusted. on-request: interactive prompts (the default). never: auto-rejects approval requests in non-interactive runs. Selecting on-request removes the key."
+category = "features"
+kind = "enum"
+values = ["untrusted", "on-request", "never"]
+default_value = "on-request"
+writer = { type = "toml_key", file = "~/.codex/config.toml", key = "approval_policy" }
+
+[[capabilities]]
+id = "sandbox_mode"
+label = "Sandbox mode"
+description = "Filesystem access level for commands"
+help = "read-only: commands cannot write anywhere. workspace-write: writes allowed inside the workspace (the default). danger-full-access: no sandbox — full filesystem access, use with extreme care. LEGACY: Codex's newer permission profiles (default_permissions + [permissions.<name>]) replace this — do not use this toggle if you have profiles configured; the two must not be combined."
+category = "features"
+kind = "enum"
+values = ["read-only", "workspace-write", "danger-full-access"]
+default_value = "workspace-write"
+writer = { type = "toml_key", file = "~/.codex/config.toml", key = "sandbox_mode" }
+
+[[capabilities]]
+id = "apps"
+label = "Apps"
+description = "Codex apps integration (features.apps)"
+help = "Codex features.apps — on by default. Disabling turns off the apps integration."
+category = "features"
+writer = { type = "toml_key", file = "~/.codex/config.toml", key = "features.apps", off_value = false }
+
+[[capabilities]]
+id = "unified_exec"
+label = "Unified exec"
+description = "Single persistent shell session (features.unified_exec)"
+help = "Codex features.unified_exec — on by default except Windows. Disabling reverts to per-command shell execution."
+category = "features"
+writer = { type = "toml_key", file = "~/.codex/config.toml", key = "features.unified_exec", off_value = false }
+
+[[capabilities]]
+id = "hooks"
+label = "Hooks"
+description = "Lifecycle hooks (features.hooks)"
+help = "Codex features.hooks — OFF by default upstream. Enable to allow lifecycle hooks; the key is removed when returning to the default."
+category = "features"
+default_on = false
+writer = { type = "toml_key", file = "~/.codex/config.toml", key = "features.hooks", off_value = false }
+
+[[capabilities]]
+id = "prevent_idle_sleep"
+label = "Prevent idle sleep"
+description = "Keep the machine awake during runs (features.prevent_idle_sleep)"
+help = "Codex features.prevent_idle_sleep — OFF by default upstream. When enabled, Codex prevents the machine from sleeping during long runs."
+category = "features"
+default_on = false
+writer = { type = "toml_key", file = "~/.codex/config.toml", key = "features.prevent_idle_sleep", off_value = false }
+
+[[capabilities]]
+id = "view_image"
+label = "View image tool"
+description = "Local image attachments (tools.view_image)"
+help = "Codex tools.view_image — lets Codex attach and inspect local images. Disabling removes the tool."
+category = "tools"
+writer = { type = "toml_key", file = "~/.codex/config.toml", key = "tools.view_image", off_value = false }
+
+[[capabilities]]
+id = "reasoning_effort"
+label = "Reasoning effort"
+description = "model_reasoning_effort"
+help = "How much reasoning the model spends per turn: minimal, low, medium (typical default), high, xhigh. Lower effort = faster and cheaper; higher = more thorough. Selecting medium removes the key."
+category = "limits"
+kind = "enum"
+values = ["minimal", "low", "medium", "high", "xhigh"]
+default_value = "medium"
+writer = { type = "toml_key", file = "~/.codex/config.toml", key = "model_reasoning_effort" }
+
+[[capabilities]]
+id = "reasoning_summary"
+label = "Reasoning summary"
+description = "model_reasoning_summary"
+help = "How reasoning is summarized in output: auto (default), concise, detailed, or none. Selecting auto removes the key."
+category = "limits"
+kind = "enum"
+values = ["auto", "concise", "detailed", "none"]
+default_value = "auto"
+writer = { type = "toml_key", file = "~/.codex/config.toml", key = "model_reasoning_summary" }

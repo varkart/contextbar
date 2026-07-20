@@ -64,9 +64,11 @@ export interface CachedMcp {
 export interface ToolPermissions {
   allow: string[];
   deny: string[];
+  /** Prompt-on-match rules (Claude Code "ask"). Empty when unsupported. */
+  ask: string[];
 }
 
-export type PermissionSection = 'allow' | 'deny';
+export type PermissionSection = 'allow' | 'deny' | 'ask';
 
 export interface Notification {
   id: number;
@@ -115,6 +117,36 @@ export interface SessionEntry {
   promptCount: number
   /** Agent's own session title (user rename or AI-generated), when known. */
   title?: string | null
+}
+
+/** A feature/context toggle declared in an agent manifest (get_capabilities). */
+export interface CapabilityState {
+  id: string
+  label: string
+  description?: string | null
+  /** Longer helper text (from the agent's own docs) for hover tooltips. */
+  help?: string | null
+  /** "What to expect" markdown for the detail view. */
+  example?: string | null
+  /** "context" | "tools" | "features" | "limits" */
+  category: string
+  /** Estimated startup tokens saved when disabled. */
+  tokensHint?: number | null
+  /** "toggle" | "enum" */
+  kind: string
+  /** Options for enum kinds. */
+  values: string[]
+  defaultValue?: string | null
+  /** Current value for enum kinds (null for toggles). */
+  value?: string | null
+  enabled: boolean
+  /** Writer summary — powers the auto-generated before/after snippet. */
+  writerFile: string
+  writerKind: 'json_flag' | 'json_list_member' | 'toml_key'
+  writerKey?: string | null
+  writerOffValue?: unknown
+  writerPath?: string | null
+  writerMembers: string[]
 }
 
 /** User-authored session metadata (get_session_meta). */

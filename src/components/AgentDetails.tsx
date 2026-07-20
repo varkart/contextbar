@@ -2,7 +2,9 @@ import { useState, useEffect, useCallback } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import SkillSection from './SkillSection';
 import McpSection from './McpSection';
-import type { Agent, Skill, McpServer, ToolPermissions } from '../types';
+import Toggle from './Toggle';
+import CapabilityDetail from './CapabilityDetail';
+import type { Agent, Skill, McpServer, ToolPermissions, CapabilityState } from '../types';
 
 interface AgentDetailsProps {
   agent: Agent;
@@ -23,6 +25,188 @@ interface AgentDetailsProps {
 
 type Tab = 'skills' | 'mcps' | 'permissions';
 
+/** Per-agent reference docs for the capability toggles. */
+const CAPABILITY_DOCS: Record<string, { url: string; label: string }> = {
+  claude: { url: 'https://code.claude.com/docs/en/tools-reference', label: 'Tool reference' },
+  codex: { url: 'https://developers.openai.com/codex/config-reference', label: 'Config reference' },
+};
+
+const CATEGORY_ORDER: { key: string; label: string }[] = [
+  { key: 'context', label: 'Context' },
+  { key: 'tools', label: 'Tools' },
+  { key: 'features', label: 'Features' },
+  { key: 'limits', label: 'Limits' },
+];
+
+function CapabilityToggles({ toolId }: { toolId: string }) {
+  const [caps, setCaps] = useState<CapabilityState[] | null>(null);
+  const [toggling, setToggling] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+
+  useEffect(() => {
+    invoke<CapabilityState[]>('get_capabilities', { agentId: toolId })
+      .then(setCaps)
+      .catch(() => setCaps([]));
+  }, [toolId]);
+
+  if (!caps || caps.length === 0) return null;
+
+  const setCap = (cap: CapabilityState, enabled: boolean) => {
+    setToggling(cap.id);
+    setError(null);
+    setCaps(prev => prev!.map(c => (c.id === cap.id ? { ...c, enabled } : c)));
+    invoke('set_capability', { agentId: toolId, capabilityId: cap.id, enabled })
+      .catch(e => {
+        setError(String(e));
+        setCaps(prev => prev!.map(c => (c.id === cap.id ? { ...c, enabled: !enabled } : c)));
+      })
+      .finally(() => setToggling(null));
+  };
+
+  const setCapValue = (cap: CapabilityState, value: string) => {
+    const prevValue = cap.value;
+    setToggling(cap.id);
+    setError(null);
+    setCaps(prev => prev!.map(c => (c.id === cap.id ? { ...c, value } : c)));
+    invoke('set_capability_value', { agentId: toolId, capabilityId: cap.id, value })
+      .catch(e => {
+        setError(String(e));
+        setCaps(prev => prev!.map(c => (c.id === cap.id ? { ...c, value: prevValue } : c)));
+      })
+      .finally(() => setToggling(null));
+  };
+
+  const savedTokens = caps
+    .filter(c => !c.enabled && c.tokensHint)
+    .reduce((n, c) => n + (c.tokensHint ?? 0), 0);
+
+  // Derived so the overlay's toggle reflects live state after flips.
+  const selectedCap = selectedId ? caps.find(c => c.id === selectedId) ?? null : null;
+
+  return (
+    <div className="mb-4">
+      <div className="flex items-baseline justify-between mb-1">
+        <p className="text-[10px] font-semibold uppercase tracking-wider text-[var(--c-text-3)]">
+          Context & features
+        </p>
+        {savedTokens > 0 && (
+          <span className="text-[10px] text-emerald-400 tabular-nums">
+            ~{savedTokens.toLocaleString()} tok saved (est.)
+          </span>
+        )}
+      </div>
+      <div className="flex items-start gap-2 rounded-lg border border-sky-500/25 bg-sky-500/5 px-2.5 py-2 mb-2.5">
+        <svg className="w-3.5 h-3.5 text-sky-400 flex-shrink-0 mt-px" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+          stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>
+        </svg>
+        <p className="text-[10.5px] text-[var(--c-text-2)] leading-relaxed">
+          <span className="font-semibold text-sky-400">New sessions only.</span>{' '}
+          Sessions already running keep their loaded settings until you restart them.
+          {toolId === 'claude' && (
+            <> Verify in a fresh session with <span className="font-mono">/context</span> — denied tools disappear from the tool list.</>
+          )}
+          {CAPABILITY_DOCS[toolId] && (
+            <>{' '}
+              <button
+                onClick={() => invoke('open_url', { url: CAPABILITY_DOCS[toolId].url }).catch(() => {})}
+                className="text-indigo-400 hover:text-indigo-300 underline underline-offset-2 transition-colors"
+                title={`Official ${CAPABILITY_DOCS[toolId].label.toLowerCase()} for this agent`}
+              >
+                {CAPABILITY_DOCS[toolId].label} ↗
+              </button>
+            </>
+          )}
+        </p>
+      </div>
+      {error && (
+        <p className="text-[10.5px] text-red-400 mb-2">{error}</p>
+      )}
+      <div className="space-y-3">
+        {CATEGORY_ORDER.map(cat => {
+          const items = caps.filter(c => c.category === cat.key);
+          if (items.length === 0) return null;
+          return (
+            <div key={cat.key}>
+              <p className="text-[9.5px] font-semibold uppercase tracking-wider text-[var(--c-text-3)]/70 mb-1">
+                {cat.label}
+              </p>
+              <div className="border border-[var(--c-border-sub)] rounded-lg divide-y divide-[var(--c-border-sub)]">
+                {items.map(cap => (
+                  <div
+                    key={cap.id}
+                    title={cap.help ?? cap.description ?? cap.label}
+                    className="flex items-center gap-2.5 px-2.5 py-2 group/cap"
+                  >
+                    <button
+                      onClick={() => setSelectedId(cap.id)}
+                      className="flex-1 min-w-0 text-left"
+                      aria-label={`Details for ${cap.label}`}
+                    >
+                      <div className="flex items-center gap-1.5">
+                        <span className={`text-[12px] font-medium group-hover/cap:text-[var(--c-accent,#8b5cf6)] transition-colors ${cap.enabled ? 'text-[var(--c-text)]' : 'text-[var(--c-text-3)]'}`}>
+                          {cap.label}
+                        </span>
+                        {cap.tokensHint != null && (
+                          <span className={`text-[9px] px-1 py-px rounded tabular-nums ${cap.enabled ? 'bg-[var(--c-surface)] text-[var(--c-text-3)]' : 'bg-emerald-500/10 text-emerald-400'}`}>
+                            ~{cap.tokensHint} tok
+                          </span>
+                        )}
+                        <span className="text-[10px] text-[var(--c-text-3)] opacity-0 group-hover/cap:opacity-70 transition-opacity">
+                          details ›
+                        </span>
+                      </div>
+                      {cap.description && (
+                        <p className="text-[10px] text-[var(--c-text-3)] mt-0.5 leading-snug">{cap.description}</p>
+                      )}
+                    </button>
+                    {cap.kind === 'enum' ? (
+                      <select
+                        value={cap.value ?? cap.defaultValue ?? ''}
+                        disabled={toggling === cap.id}
+                        onChange={e => setCapValue(cap, e.target.value)}
+                        onClick={e => e.stopPropagation()}
+                        className="text-[11px] rounded-md border border-[var(--c-border)] bg-[var(--c-surface)] text-[var(--c-text-2)] px-1.5 py-1 focus:outline-none disabled:opacity-40"
+                        aria-label={`${cap.label} value`}
+                      >
+                        {cap.values.map(v => (
+                          <option key={v} value={v}>
+                            {v}{v === cap.defaultValue ? ' (default)' : ''}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <Toggle
+                        active={cap.enabled}
+                        toggling={toggling === cap.id}
+                        onChange={v => setCap(cap, v)}
+                        activeColor="bg-emerald-500"
+                        entityLabel={cap.label}
+                      />
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {selectedCap && (
+        <CapabilityDetail
+          cap={selectedCap}
+          toggling={toggling === selectedCap.id}
+          docs={CAPABILITY_DOCS[toolId]}
+          onToggle={v => setCap(selectedCap, v)}
+          onSetValue={v => setCapValue(selectedCap, v)}
+          onClose={() => setSelectedId(null)}
+        />
+      )}
+    </div>
+  );
+}
+
 function PermissionsTab({ toolId }: { toolId: string }) {
   const [perms, setPerms] = useState<ToolPermissions | null>(null);
   const [supported, setSupported] = useState(true);
@@ -41,9 +225,12 @@ function PermissionsTab({ toolId }: { toolId: string }) {
 
   if (!supported) {
     return (
-      <p className="px-4 py-6 text-[12px] text-[var(--c-text-3)] text-center">
-        This agent does not support permission rules.
-      </p>
+      <div className="px-3 py-2">
+        <CapabilityToggles toolId={toolId} />
+        <p className="py-4 text-[12px] text-[var(--c-text-3)] text-center">
+          This agent does not support permission rules.
+        </p>
+      </div>
     );
   }
   if (!perms) {
@@ -56,6 +243,7 @@ function PermissionsTab({ toolId }: { toolId: string }) {
 
   return (
     <div className="px-3 py-2 space-y-3">
+      <CapabilityToggles toolId={toolId} />
       <div>
         <p className="text-[10px] font-semibold uppercase tracking-wider text-emerald-400 mb-1.5">
           Allow · {perms.allow.length}
@@ -72,6 +260,20 @@ function PermissionsTab({ toolId }: { toolId: string }) {
           </div>
         )}
       </div>
+      {perms.ask.length > 0 && (
+        <div>
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-amber-400 mb-1.5">
+            Ask · {perms.ask.length}
+          </p>
+          <div className="flex flex-wrap gap-1">
+            {perms.ask.map(rule => (
+              <span key={rule} className="text-[10.5px] font-mono px-1.5 py-0.5 rounded-full border border-amber-500/25 bg-amber-500/5 text-amber-400 max-w-full truncate">
+                {rule}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
       <div>
         <p className="text-[10px] font-semibold uppercase tracking-wider text-red-400 mb-1.5">
           Deny · {perms.deny.length}

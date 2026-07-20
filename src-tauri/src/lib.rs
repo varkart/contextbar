@@ -8,6 +8,7 @@ pub(crate) mod error;
 pub(crate) mod installer;
 mod mcp_client;
 pub(crate) mod models;
+pub(crate) mod capabilities;
 pub(crate) mod permissions;
 mod watcher;
 
@@ -1982,6 +1983,60 @@ fn remove_mcp(
 // ---------------------------------------------------------------------------
 
 #[tauri::command]
+fn get_capabilities(agent_id: String) -> Result<Vec<capabilities::CapabilityState>, String> {
+    let home = dirs::home_dir().ok_or("cannot find home dir")?;
+    let manifest = crate::engine::load_manifest(&agent_id)
+        .ok_or_else(|| format!("no manifest for '{agent_id}'"))?;
+    Ok(capabilities::list(&manifest.capabilities, &home))
+}
+
+#[tauri::command]
+fn set_capability(
+    db: tauri::State<'_, db::DbState>,
+    agent_id: String,
+    capability_id: String,
+    enabled: bool,
+) -> Result<(), String> {
+    let home = dirs::home_dir().ok_or("cannot find home dir")?;
+    let manifest = crate::engine::load_manifest(&agent_id)
+        .ok_or_else(|| format!("no manifest for '{agent_id}'"))?;
+    let spec = manifest
+        .capabilities
+        .iter()
+        .find(|c| c.id == capability_id)
+        .ok_or_else(|| format!("capability '{capability_id}' not in '{agent_id}' manifest"))?;
+    capabilities::set(spec, &home, enabled)?;
+    db::log_event(
+        &db,
+        "capability_toggled",
+        &agent_id,
+        &capability_id,
+        Some(if enabled { "on" } else { "off" }),
+    );
+    Ok(())
+}
+
+#[tauri::command]
+fn set_capability_value(
+    db: tauri::State<'_, db::DbState>,
+    agent_id: String,
+    capability_id: String,
+    value: String,
+) -> Result<(), String> {
+    let home = dirs::home_dir().ok_or("cannot find home dir")?;
+    let manifest = crate::engine::load_manifest(&agent_id)
+        .ok_or_else(|| format!("no manifest for '{agent_id}'"))?;
+    let spec = manifest
+        .capabilities
+        .iter()
+        .find(|c| c.id == capability_id)
+        .ok_or_else(|| format!("capability '{capability_id}' not in '{agent_id}' manifest"))?;
+    capabilities::set_value(spec, &home, &value)?;
+    db::log_event(&db, "capability_toggled", &agent_id, &capability_id, Some(&value));
+    Ok(())
+}
+
+#[tauri::command]
 fn get_permissions(agent_id: String) -> Result<permissions::AgentPermissions, String> {
     let home = dirs::home_dir().ok_or("cannot find home dir")?;
     let manifest = crate::engine::load_manifest(&agent_id)
@@ -2417,6 +2472,9 @@ pub fn run() {
             get_repo_meta,
             set_repo_name,
             set_repo_notes,
+            get_capabilities,
+            set_capability,
+            set_capability_value,
             get_session_insights,
             get_token_activity,
             get_commit_activity,

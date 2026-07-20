@@ -55,6 +55,7 @@ Check at a glance which tools have MCP servers registered, which skills are disa
 - **Search** — filter across tools, skills, and MCPs in one keystroke
 - **Skill detail panel** — browse skill files directly in the app
 - **MCP detail panel** — see live tools exposed by each MCP server in real time
+- **Permissions & context toggles** — turn Claude Code features and tools off from the agent's Permissions tab (auto memory, hooks, WebFetch, plan mode, and more) to shrink startup context. Writes only the documented `settings.json` keys, with an automatic backup before every change. **Toggles apply to new agent sessions only** — sessions already running keep their loaded settings until restarted; verify in a fresh session with `/context`
 - **FSEvents watcher** — auto-refreshes when any config file changes on disk
 - **Light / dark / system theme**
 - **Global shortcut** — configurable, click-to-record UI
