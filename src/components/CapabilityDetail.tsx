@@ -135,6 +135,7 @@ export default function CapabilityDetail({ cap, toggling, docs, onToggle, onSetV
             className="text-[11px] rounded-md border border-[var(--c-border)] bg-[var(--c-surface)] text-[var(--c-text-2)] px-1.5 py-1 focus:outline-none disabled:opacity-40"
             aria-label={`${cap.label} value`}
           >
+            {cap.allowUnset && <option value="">(not set)</option>}
             {cap.values.map(v => (
               <option key={v} value={v}>
                 {v}{v === cap.defaultValue ? ' (default)' : ''}

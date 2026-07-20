@@ -5,6 +5,7 @@ import { formatTokens } from '../components/history/SessionStats'
 import { Tile, TileRow } from './InsightTiles'
 import { HBar, RefreshButton, shortModel, SkeletonCards } from './InsightWidgets'
 import AgentBadge from '../components/history/AgentBadge'
+import RepoAgentConfigView from '../components/RepoAgentConfigView'
 
 export type WorktreeStatus = 'active' | 'stale' | 'abandoned' | 'primary'
 
@@ -461,6 +462,7 @@ export default function WorktreesSection({ repos, loading, sessions, onRemoved, 
               <div className="mb-2">
                 <NotesEditor path={repo.repoPath} notes={pathNotes[repo.repoPath] ?? null} variant="repo" onSaved={saveNote(repo.repoPath)} />
               </div>
+              <RepoAgentConfigView repoPath={repo.repoPath} />
               {(repo.agentFiles.length > 0 || repo.repoSkills.length > 0) && (
                 <div className="flex items-center gap-1.5 flex-wrap mb-2">
                   {repo.agentFiles.map(f => (

@@ -4,6 +4,7 @@ import SkillSection from './SkillSection';
 import McpSection from './McpSection';
 import Toggle from './Toggle';
 import CapabilityDetail from './CapabilityDetail';
+import CodexProfilesView from './CodexProfilesView';
 import type { Agent, Skill, McpServer, ToolPermissions, CapabilityState } from '../types';
 
 interface AgentDetailsProps {
@@ -170,6 +171,7 @@ function CapabilityToggles({ toolId }: { toolId: string }) {
                         className="text-[11px] rounded-md border border-[var(--c-border)] bg-[var(--c-surface)] text-[var(--c-text-2)] px-1.5 py-1 focus:outline-none disabled:opacity-40"
                         aria-label={`${cap.label} value`}
                       >
+                        {cap.allowUnset && <option value="">(not set)</option>}
                         {cap.values.map(v => (
                           <option key={v} value={v}>
                             {v}{v === cap.defaultValue ? ' (default)' : ''}
@@ -227,6 +229,7 @@ function PermissionsTab({ toolId }: { toolId: string }) {
     return (
       <div className="px-3 py-2">
         <CapabilityToggles toolId={toolId} />
+        {toolId === 'codex' && <CodexProfilesView />}
         <p className="py-4 text-[12px] text-[var(--c-text-3)] text-center">
           This agent does not support permission rules.
         </p>
@@ -244,6 +247,7 @@ function PermissionsTab({ toolId }: { toolId: string }) {
   return (
     <div className="px-3 py-2 space-y-3">
       <CapabilityToggles toolId={toolId} />
+      {toolId === 'codex' && <CodexProfilesView />}
       <div>
         <p className="text-[10px] font-semibold uppercase tracking-wider text-emerald-400 mb-1.5">
           Allow · {perms.allow.length}

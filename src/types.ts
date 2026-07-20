@@ -137,6 +137,8 @@ export interface CapabilityState {
   /** Options for enum kinds. */
   values: string[]
   defaultValue?: string | null
+  /** Enum kinds: whether a "(not set)" option (empty string) is offered. */
+  allowUnset: boolean
   /** Current value for enum kinds (null for toggles). */
   value?: string | null
   enabled: boolean
@@ -149,12 +151,59 @@ export interface CapabilityState {
   writerMembers: string[]
 }
 
+/** Codex permission profiles (get_codex_profiles) — read-only viewer data. */
+export interface CodexProfiles {
+  mixedConfig: boolean
+  defaultProfile?: string | null
+  profiles: CodexProfile[]
+}
+export interface CodexProfile {
+  name: string
+  description?: string | null
+  extends?: string | null
+  workspaceRoots: string[]
+  filesystem: { path: string; access: string }[]
+  networkEnabled: boolean
+  domains: { pattern: string; action: string }[]
+}
+
 /** User-authored session metadata (get_session_meta). */
 export interface SessionMeta {
   sessionId: string
   pinned: boolean
   tags: string[]
   customName?: string | null
+}
+
+/** Repo-scoped agent config (get_repo_agent_config). */
+export interface RepoAgentConfig {
+  claude: {
+    project: RepoScopedPermissions
+    local: RepoScopedPermissions
+  }
+  codex: { trustLevel?: string | null }
+}
+export interface RepoScopedPermissions {
+  file: string
+  exists: boolean
+  allow: string[]
+  deny: string[]
+  ask: string[]
+}
+export type RepoScope = 'project' | 'local'
+
+/** Repo-scope capability override (get_repo_capabilities). */
+export interface RepoCapabilityState {
+  id: string
+  label: string
+  description?: string | null
+  /** Full helper text for the "?" expander. */
+  help?: string | null
+  category: string
+  /** "tristate" (inherit/on/off) | "enum" (inherit + values) | "deny" (inherit/deny). */
+  control: string
+  values: string[]
+  state: string
 }
 
 /** User-authored repo/worktree metadata (get_repo_meta). Rows are keyed by
