@@ -25,6 +25,12 @@ interface AgentDetailsProps {
 
 type Tab = 'skills' | 'mcps' | 'permissions';
 
+/** Per-agent reference docs for the capability toggles. */
+const CAPABILITY_DOCS: Record<string, { url: string; label: string }> = {
+  claude: { url: 'https://code.claude.com/docs/en/tools-reference', label: 'Tool reference' },
+  codex: { url: 'https://developers.openai.com/codex/config-reference', label: 'Config reference' },
+};
+
 const CATEGORY_ORDER: { key: string; label: string }[] = [
   { key: 'context', label: 'Context' },
   { key: 'tools', label: 'Tools' },
@@ -98,14 +104,20 @@ function CapabilityToggles({ toolId }: { toolId: string }) {
         <p className="text-[10.5px] text-[var(--c-text-2)] leading-relaxed">
           <span className="font-semibold text-sky-400">New sessions only.</span>{' '}
           Sessions already running keep their loaded settings until you restart them.
-          Verify in a fresh session with <span className="font-mono">/context</span> — denied tools disappear from the tool list.{' '}
-          <button
-            onClick={() => invoke('open_url', { url: 'https://code.claude.com/docs/en/tools-reference' }).catch(() => {})}
-            className="text-indigo-400 hover:text-indigo-300 underline underline-offset-2 transition-colors"
-            title="Official Claude Code tools reference — canonical tool names and what each does"
-          >
-            Tool reference ↗
-          </button>
+          {toolId === 'claude' && (
+            <> Verify in a fresh session with <span className="font-mono">/context</span> — denied tools disappear from the tool list.</>
+          )}
+          {CAPABILITY_DOCS[toolId] && (
+            <>{' '}
+              <button
+                onClick={() => invoke('open_url', { url: CAPABILITY_DOCS[toolId].url }).catch(() => {})}
+                className="text-indigo-400 hover:text-indigo-300 underline underline-offset-2 transition-colors"
+                title={`Official ${CAPABILITY_DOCS[toolId].label.toLowerCase()} for this agent`}
+              >
+                {CAPABILITY_DOCS[toolId].label} ↗
+              </button>
+            </>
+          )}
         </p>
       </div>
       {error && (
@@ -185,6 +197,7 @@ function CapabilityToggles({ toolId }: { toolId: string }) {
         <CapabilityDetail
           cap={selectedCap}
           toggling={toggling === selectedCap.id}
+          docs={CAPABILITY_DOCS[toolId]}
           onToggle={v => setCap(selectedCap, v)}
           onSetValue={v => setCapValue(selectedCap, v)}
           onClose={() => setSelectedId(null)}

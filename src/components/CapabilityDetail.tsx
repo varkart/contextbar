@@ -83,12 +83,14 @@ function fallbackExpectation(cap: CapabilityState): string {
 interface CapabilityDetailProps {
   cap: CapabilityState
   toggling: boolean
+  /** Agent-specific reference docs; link hidden when absent. */
+  docs?: { url: string; label: string }
   onToggle: (enabled: boolean) => void
   onSetValue?: (value: string) => void
   onClose: () => void
 }
 
-export default function CapabilityDetail({ cap, toggling, onToggle, onSetValue, onClose }: CapabilityDetailProps) {
+export default function CapabilityDetail({ cap, toggling, docs, onToggle, onSetValue, onClose }: CapabilityDetailProps) {
   // Close on Escape before the app-level escape handler fires.
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -205,12 +207,14 @@ export default function CapabilityDetail({ cap, toggling, onToggle, onSetValue, 
           </ol>
         </section>
 
-        <button
-          onClick={() => invoke('open_url', { url: 'https://code.claude.com/docs/en/tools-reference' }).catch(() => {})}
-          className="text-[11px] text-indigo-400 hover:text-indigo-300 underline underline-offset-2 transition-colors"
-        >
-          Official tool reference ↗
-        </button>
+        {docs && (
+          <button
+            onClick={() => invoke('open_url', { url: docs.url }).catch(() => {})}
+            className="text-[11px] text-indigo-400 hover:text-indigo-300 underline underline-offset-2 transition-colors"
+          >
+            Official {docs.label.toLowerCase()} ↗
+          </button>
+        )}
       </div>
     </div>
   )
