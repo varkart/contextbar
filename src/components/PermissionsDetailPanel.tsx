@@ -93,7 +93,7 @@ export default function PermissionsDetailPanel({ toolId, toolName, onBack }: Per
     }
   }, [toolId, newRule, addSection, load])
 
-  const totalCount = (perms?.allow.length ?? 0) + (perms?.deny.length ?? 0)
+  const totalCount = (perms?.allow.length ?? 0) + (perms?.deny.length ?? 0) + (perms?.ask?.length ?? 0)
 
   return (
     <div className="flex flex-col h-full bg-[var(--c-bg)] animate-slide-in-right">
@@ -146,6 +146,14 @@ export default function PermissionsDetailPanel({ toolId, toolName, onBack }: Per
                 labelClass="text-emerald-500/80"
               />
               <RuleList
+                label="Ask"
+                rules={perms.ask ?? []}
+                section="ask"
+                removingRule={removingRule}
+                onRemove={removeRule}
+                labelClass="text-amber-400/80"
+              />
+              <RuleList
                 label="Deny"
                 rules={perms.deny}
                 section="deny"
@@ -173,6 +181,7 @@ export default function PermissionsDetailPanel({ toolId, toolName, onBack }: Per
                 className="text-[12px] rounded-md border border-[var(--c-border)] bg-[var(--c-bg-sub)] text-[var(--c-text-2)] px-1.5 py-1 focus:outline-none"
               >
                 <option value="allow">Allow</option>
+                <option value="ask">Ask</option>
                 <option value="deny">Deny</option>
               </select>
               <input
