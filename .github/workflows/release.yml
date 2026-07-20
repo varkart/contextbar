@@ -89,7 +89,7 @@ jobs:
             echo "::error::No signed updater artifacts found. Set TAURI_SIGNING_PRIVATE_KEY in repo secrets."
             exit 1
           else
-            TARGZ_NAME=$(basename "$TARGZ")
+            TARGZ_NAME=$(basename "$TARGZ" | tr ' ' '.')
             cp "$TARGZ" "$TARGZ_NAME"
             cp "$SIG" "${TARGZ_NAME}.sig"
             echo "TARGZ_NAME=$TARGZ_NAME" >> $GITHUB_ENV
