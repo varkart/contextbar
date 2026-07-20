@@ -66,6 +66,58 @@ pub enum DoctorStatus {
     Error,
 }
 
+/// Codex forbids combining the legacy sandbox settings with the newer
+/// permission profiles ("Configure either default_permissions and
+/// [permissions], or sandbox_mode / sandbox_workspace_write, but not both").
+/// Returns an item only when Codex's config exists.
+fn codex_sandbox_conflict_item() -> Option<DoctorItem> {
+    let cfg = dirs::home_dir()?.join(".codex/config.toml");
+    if !cfg.exists() {
+        return None;
+    }
+    let doc = crate::app_state::read_toml_config(&cfg.to_string_lossy())?;
+    let legacy =
+        doc.get("sandbox_mode").is_some() || doc.get("sandbox_workspace_write").is_some();
+    let profiles =
+        doc.get("default_permissions").is_some() || doc.get("permissions").is_some();
+    Some(match (legacy, profiles) {
+        (true, true) => DoctorItem {
+            id: "codex_sandbox_conflict".into(),
+            label: "Codex sandbox configuration".into(),
+            status: DoctorStatus::Error,
+            detail: Some(
+                "config.toml sets BOTH legacy sandbox keys (sandbox_mode / sandbox_workspace_write) and permission profiles (default_permissions / [permissions]) — Codex forbids combining them".into(),
+            ),
+            fix_hint: Some(
+                "Remove sandbox_mode and sandbox_workspace_write, or remove default_permissions and the [permissions.*] tables — keep only one system.".into(),
+            ),
+        },
+        (false, true) => DoctorItem {
+            id: "codex_sandbox_conflict".into(),
+            label: "Codex sandbox configuration".into(),
+            status: DoctorStatus::Ok,
+            detail: Some("Using permission profiles (current system)".into()),
+            fix_hint: None,
+        },
+        (true, false) => DoctorItem {
+            id: "codex_sandbox_conflict".into(),
+            label: "Codex sandbox configuration".into(),
+            status: DoctorStatus::Ok,
+            detail: Some(
+                "Using legacy sandbox_mode — consider migrating to permission profiles".into(),
+            ),
+            fix_hint: None,
+        },
+        (false, false) => DoctorItem {
+            id: "codex_sandbox_conflict".into(),
+            label: "Codex sandbox configuration".into(),
+            status: DoctorStatus::Ok,
+            detail: Some("No sandbox settings configured — Codex defaults apply".into()),
+            fix_hint: None,
+        },
+    })
+}
+
 pub fn report(agents: &[Agent]) -> Vec<DoctorSection> {
     let shell_path = get_shell_path();
     let app_path = std::env::var("PATH").unwrap_or_default();
@@ -80,6 +132,14 @@ pub fn report(agents: &[Agent]) -> Vec<DoctorSection> {
         .filter(|m| m.active && !m.command.is_empty())
         .map(|m| m.command.clone())
         .collect();
+
+    // ── Section 0: agent config conflicts ─────────────────────────────────────
+    if let Some(item) = codex_sandbox_conflict_item() {
+        sections.push(DoctorSection {
+            title: "Agent configs".into(),
+            items: vec![item],
+        });
+    }
 
     // ── Section 1: PATH ───────────────────────────────────────────────────────
     let shell_ok = !shell_path.is_empty();
@@ -686,12 +746,16 @@ mod tests {
     // ── report() ──────────────────────────────────────────────────────────────
 
     #[test]
-    fn report_returns_three_sections() {
+    fn report_returns_expected_sections() {
+        // "Agent configs" appears only on machines with a Codex config.
         let sections = report(&[]);
-        assert_eq!(sections.len(), 3);
-        assert_eq!(sections[0].title, "Environment");
-        assert_eq!(sections[1].title, "Runtimes");
-        assert_eq!(sections[2].title, "Active MCPs");
+        let titles: Vec<&str> = sections.iter().map(|s| s.title.as_str()).collect();
+        let expected: Vec<&str> = titles
+            .iter()
+            .copied()
+            .filter(|t| *t != "Agent configs")
+            .collect();
+        assert_eq!(expected, vec!["Environment", "Runtimes", "Active MCPs"]);
     }
 
     #[test]
