@@ -1,0 +1,87 @@
+name: Watch Claude tools reference
+
+# Weekly diff of the official tools-reference page against our checked-in
+# baseline (src-tauri/src/engine/manifests/claude-tools-baseline.txt).
+# On drift it opens/updates a single tracking issue listing added and
+# removed canonical tool names, so capability toggles never go stale.
+
+on:
+  schedule:
+    - cron: '0 14 * * 1' # Mondays 14:00 UTC
+  workflow_dispatch:
+
+permissions:
+  issues: write
+  contents: read
+
+jobs:
+  diff-tools-reference:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch live page and extract canonical tool names
+        run: |
+          curl -fsSL --retry 3 https://code.claude.com/docs/en/tools-reference.md -o page.md
+          # Canonical names appear as the first cell of the tools table rows:
+          # "| `ToolName` | description | permission |". Uppercase-initial only
+          # (filters non-tool table artifacts).
+          grep -oE '^\| `[A-Z][A-Za-z]*`' page.md | tr -d '|` ' | sort -u > live.txt
+          # Sanity: a page redesign that breaks extraction must fail loudly,
+          # not report every tool as removed.
+          count=$(wc -l < live.txt)
+          echo "extracted $count tool names"
+          if [ "$count" -lt 20 ]; then
+            echo "::error::extraction found only $count names — page format likely changed"
+            exit 1
+          fi
+
+      - name: Diff against baseline
+        id: diff
+        run: |
+          grep -vE '^\s*(#|$)' src-tauri/src/engine/manifests/claude-tools-baseline.txt | sort -u > baseline.txt
+          added=$(comm -13 baseline.txt live.txt || true)
+          removed=$(comm -23 baseline.txt live.txt || true)
+          {
+            echo "added<<EOF"; echo "$added"; echo "EOF"
+            echo "removed<<EOF"; echo "$removed"; echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+          if [ -n "$added$removed" ]; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "Drift detected."; echo "Added:"; echo "$added"; echo "Removed:"; echo "$removed"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "No drift."
+          fi
+
+      - name: Open or update tracking issue
+        if: steps.diff.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ADDED: ${{ steps.diff.outputs.added }}
+          REMOVED: ${{ steps.diff.outputs.removed }}
+        run: |
+          title="Claude tools-reference drift detected"
+          body=$(cat <<BODY
+          The weekly check found the official [tools reference](https://code.claude.com/docs/en/tools-reference) no longer matches \`claude-tools-baseline.txt\`.
+
+          **Added upstream (consider new capability toggles):**
+          \`\`\`
+          ${ADDED:-none}
+          \`\`\`
+
+          **Removed upstream (toggles may reference dead tool names):**
+          \`\`\`
+          ${REMOVED:-none}
+          \`\`\`
+
+          To resolve: update the baseline, adjust \`[[capabilities]]\` entries in \`claude.toml\`, and re-run \`cargo test capabilities\`.
+          BODY
+          )
+          existing=$(gh issue list --state open --search "\"$title\" in:title" --json number -q '.[0].number')
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --body "$body"
+          else
+            gh issue create --title "$title" --label maintenance --body "$body" \
+              || gh issue create --title "$title" --body "$body"
+          fi

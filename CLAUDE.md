@@ -126,6 +126,10 @@ Defined by TOML manifests in `src-tauri/src/engine/manifests/`:
 - Never commit `~/.claude/settings.json` contents or any tool secrets
 - MCP `env` fields: detect presence, never expose values in UI
 - All IPC commands that touch the filesystem call `validate_tool_path()` first
+- Capability toggles (`[[capabilities]]` in manifests) only write their declared
+  key / deny-list member and never touch unrelated config values; every write is
+  preceded by an automatic backup. They affect **new agent sessions only** —
+  running sessions keep their loaded settings, and all UI copy must say so
 
 ---
 
