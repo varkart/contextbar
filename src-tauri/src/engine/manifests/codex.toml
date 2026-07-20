@@ -104,7 +104,7 @@ writer = { type = "toml_key", file = "~/.codex/config.toml", key = "approval_pol
 id = "sandbox_mode"
 label = "Sandbox mode"
 description = "Filesystem access level for commands"
-help = "read-only: commands cannot write anywhere. workspace-write: writes allowed inside the workspace (the default). danger-full-access: no sandbox — full filesystem access, use with extreme care."
+help = "read-only: commands cannot write anywhere. workspace-write: writes allowed inside the workspace (the default). danger-full-access: no sandbox — full filesystem access, use with extreme care. LEGACY: Codex's newer permission profiles (default_permissions + [permissions.<name>]) replace this — do not use this toggle if you have profiles configured; the two must not be combined."
 category = "features"
 kind = "enum"
 values = ["read-only", "workspace-write", "danger-full-access"]
