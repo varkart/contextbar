@@ -1,0 +1,48 @@
+# Canonical Claude Code tool names from code.claude.com/docs/en/tools-reference
+# (the exact strings valid in permissions.deny). Kept in sync two ways:
+#  - cargo test `capability_members_match_tools_baseline` checks manifest
+#    deny-members against this list
+#  - .github/workflows/tools-reference-watch.yml diffs this list against the
+#    live page weekly and opens an issue on drift
+Agent
+Artifact
+AskUserQuestion
+Bash
+CronCreate
+CronDelete
+CronList
+Edit
+EnterPlanMode
+EnterWorktree
+ExitPlanMode
+ExitWorktree
+Glob
+Grep
+ListMcpResourcesTool
+LSP
+Monitor
+NotebookEdit
+PowerShell
+PushNotification
+Read
+ReadMcpResourceTool
+RemoteTrigger
+ReportFindings
+ScheduleWakeup
+SendMessage
+SendUserFile
+ShareOnboardingGuide
+Skill
+TaskCreate
+TaskGet
+TaskList
+TaskOutput
+TaskStop
+TaskUpdate
+TodoWrite
+ToolSearch
+WaitForMcpServers
+WebFetch
+WebSearch
+Workflow
+Write

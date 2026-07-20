@@ -111,6 +111,93 @@ pub fn move_mcp_in_config(
     Ok(())
 }
 
+/// Generic guarded JSON read-modify-write used by capability toggles.
+/// Same guarantees as the MCP helpers: per-file mutex, pre-write backup,
+/// JSONC tolerated on read, atomic rename on write. A missing file starts
+/// as an empty object.
+pub fn update_json_config<F>(config_path: &str, mutate: F) -> Result<(), String>
+where
+    F: FnOnce(&mut serde_json::Value) -> Result<(), String>,
+{
+    let lock = config_lock(config_path);
+    let _guard = lock.lock().unwrap_or_else(|e| e.into_inner());
+
+    if std::path::Path::new(config_path).exists() {
+        if let Err(e) = crate::backup::snapshot(config_path) {
+            eprintln!("[backup] snapshot failed for {config_path}: {e}");
+        }
+    }
+
+    let content = std::fs::read_to_string(config_path).unwrap_or_else(|_| "{}".to_string());
+    let stripped = strip_jsonc(&content);
+    let mut json: serde_json::Value =
+        serde_json::from_str(&stripped).map_err(|e| format!("cannot parse {config_path}: {e}"))?;
+
+    mutate(&mut json)?;
+
+    let updated =
+        serde_json::to_string_pretty(&json).map_err(|e| format!("serialization error: {e}"))?;
+    let tmp_path = format!("{config_path}.tmp");
+    std::fs::write(&tmp_path, &updated).map_err(|e| format!("cannot write temp file: {e}"))?;
+    std::fs::rename(&tmp_path, config_path).map_err(|e| {
+        let _ = std::fs::remove_file(&tmp_path);
+        format!("cannot atomically replace {config_path}: {e}")
+    })?;
+    Ok(())
+}
+
+/// Read a JSON(C) config file leniently; None when missing or unparsable.
+pub fn read_json_config(config_path: &str) -> Option<serde_json::Value> {
+    let content = std::fs::read_to_string(config_path).ok()?;
+    serde_json::from_str(&strip_jsonc(&content)).ok()
+}
+
+/// TOML sibling of `update_json_config`: per-file mutex, pre-write backup,
+/// atomic rename, missing file starts as an empty table. Rewrites via
+/// `toml::to_string_pretty` (same trade-off as the Codex MCP helpers:
+/// comments are not preserved).
+pub fn update_toml_config<F>(config_path: &str, mutate: F) -> Result<(), String>
+where
+    F: FnOnce(&mut toml::Value) -> Result<(), String>,
+{
+    let lock = config_lock(config_path);
+    let _guard = lock.lock().unwrap_or_else(|e| e.into_inner());
+
+    if std::path::Path::new(config_path).exists() {
+        if let Err(e) = crate::backup::snapshot(config_path) {
+            eprintln!("[backup] snapshot failed for {config_path}: {e}");
+        }
+    }
+
+    let content = std::fs::read_to_string(config_path).unwrap_or_default();
+    let mut doc: toml::Value = if content.trim().is_empty() {
+        toml::Value::Table(toml::map::Map::new())
+    } else {
+        toml::from_str(&content).map_err(|e| format!("cannot parse {config_path}: {e}"))?
+    };
+
+    mutate(&mut doc)?;
+
+    let updated =
+        toml::to_string_pretty(&doc).map_err(|e| format!("TOML serialization error: {e}"))?;
+    if let Some(parent) = std::path::Path::new(config_path).parent() {
+        std::fs::create_dir_all(parent).map_err(|e| format!("cannot create dir: {e}"))?;
+    }
+    let tmp_path = format!("{config_path}.tmp");
+    std::fs::write(&tmp_path, &updated).map_err(|e| format!("cannot write temp file: {e}"))?;
+    std::fs::rename(&tmp_path, config_path).map_err(|e| {
+        let _ = std::fs::remove_file(&tmp_path);
+        format!("cannot atomically replace {config_path}: {e}")
+    })?;
+    Ok(())
+}
+
+/// Read a TOML config file leniently; None when missing or unparsable.
+pub fn read_toml_config(config_path: &str) -> Option<toml::Value> {
+    let content = std::fs::read_to_string(config_path).ok()?;
+    toml::from_str(&content).ok()
+}
+
 /// Set `disabled: true/false` on a specific server in a plugin's mcp_config.json.
 /// Creates the file if it doesn't exist. Used to toggle plugin-sourced MCPs.
 pub fn set_plugin_mcp_disabled(
@@ -245,6 +332,7 @@ pub fn update_permissions_file(
     permissions_key: &str,
     allow_key: &str,
     deny_key: &str,
+    ask_key: Option<&str>,
 ) -> Result<(), String> {
     let lock = config_lock(config_path);
     let _guard = lock.lock().unwrap_or_else(|e| e.into_inner());
@@ -281,14 +369,34 @@ pub fn update_permissions_file(
                     .collect()
             })
             .unwrap_or_default(),
+        ask: ask_key
+            .and_then(|k| perms_val.get(k))
+            .and_then(|v| v.as_array())
+            .map(|a| {
+                a.iter()
+                    .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                    .collect()
+            })
+            .unwrap_or_default(),
     };
 
     mutate(&mut perms);
 
-    // Write back — use Map to support dynamic key names (e.g. "allowed"/"exclude" for Gemini)
-    let mut perms_obj = serde_json::Map::new();
+    // Write back into the EXISTING permissions object — only our list keys are
+    // replaced; foreign keys (defaultMode, additionalDirectories, …) survive.
+    let mut perms_obj = match perms_val {
+        serde_json::Value::Object(m) => m,
+        _ => serde_json::Map::new(),
+    };
     perms_obj.insert(allow_key.to_string(), serde_json::json!(perms.allow));
     perms_obj.insert(deny_key.to_string(), serde_json::json!(perms.deny));
+    if let Some(k) = ask_key {
+        if perms.ask.is_empty() {
+            perms_obj.remove(k);
+        } else {
+            perms_obj.insert(k.to_string(), serde_json::json!(perms.ask));
+        }
+    }
     obj.insert(
         permissions_key.to_string(),
         serde_json::Value::Object(perms_obj),

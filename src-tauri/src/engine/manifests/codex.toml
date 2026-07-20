@@ -41,3 +41,69 @@ type = "toml_key_pair"
 file = "~/.codex/config.toml"
 active_key = "mcp_servers"
 inline_toggle_field = "enabled"
+
+# ── Capability toggles (Permissions & Context tab) ─────────────────
+# Verified against learn.chatgpt.com config reference + local config.toml.
+
+[[capabilities]]
+id = "multi_agent"
+label = "Multi-agent"
+description = "Parallel subagent orchestration"
+help = "Codex features.multi_agent — on by default. Disabling prevents Codex from spawning parallel subagents."
+category = "features"
+writer = { type = "toml_key", file = "~/.codex/config.toml", key = "features.multi_agent", off_value = false }
+
+[[capabilities]]
+id = "shell_tool"
+label = "Shell tool"
+description = "Command execution (features.shell_tool)"
+help = "Codex features.shell_tool — on by default. Disabling removes Codex's ability to run shell commands entirely."
+category = "tools"
+writer = { type = "toml_key", file = "~/.codex/config.toml", key = "features.shell_tool", off_value = false }
+
+[[capabilities]]
+id = "web_search"
+label = "Web search"
+description = "tools.web_search"
+help = "Codex web search tool. Accepts a boolean in config.toml; richer forms (context size, allowed domains) can be hand-configured."
+category = "tools"
+writer = { type = "toml_key", file = "~/.codex/config.toml", key = "tools.web_search", off_value = false }
+
+[[capabilities]]
+id = "memories"
+label = "Memories"
+description = "Cross-session memory (features.memories)"
+help = "Codex features.memories — OFF by default upstream. This toggle writes memories = false explicitly when off; Codex's own default applies when the key is absent."
+category = "context"
+default_on = false
+writer = { type = "toml_key", file = "~/.codex/config.toml", key = "features.memories", off_value = false }
+
+[[capabilities]]
+id = "agent_reasoning"
+label = "Show agent reasoning"
+description = "Reasoning events in output (hide_agent_reasoning)"
+help = "When disabled, writes hide_agent_reasoning = true — Codex suppresses chain-of-thought events, reducing output volume."
+category = "limits"
+writer = { type = "toml_key", file = "~/.codex/config.toml", key = "hide_agent_reasoning", off_value = true }
+
+[[capabilities]]
+id = "approval_policy"
+label = "Approval policy"
+description = "When Codex pauses for your approval"
+help = "untrusted: pauses before executing anything not explicitly trusted. on-request: interactive prompts (the default). never: auto-rejects approval requests in non-interactive runs. Selecting on-request removes the key."
+category = "features"
+kind = "enum"
+values = ["untrusted", "on-request", "never"]
+default_value = "on-request"
+writer = { type = "toml_key", file = "~/.codex/config.toml", key = "approval_policy" }
+
+[[capabilities]]
+id = "sandbox_mode"
+label = "Sandbox mode"
+description = "Filesystem access level for commands"
+help = "read-only: commands cannot write anywhere. workspace-write: writes allowed inside the workspace (the default). danger-full-access: no sandbox — full filesystem access, use with extreme care."
+category = "features"
+kind = "enum"
+values = ["read-only", "workspace-write", "danger-full-access"]
+default_value = "workspace-write"
+writer = { type = "toml_key", file = "~/.codex/config.toml", key = "sandbox_mode" }

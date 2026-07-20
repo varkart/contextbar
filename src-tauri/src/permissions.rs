@@ -6,6 +6,10 @@ use crate::engine::resolve::expand_home;
 pub struct AgentPermissions {
     pub allow: Vec<String>,
     pub deny: Vec<String>,
+    /// Prompt-on-match rules (Claude Code "ask"). Empty for agents whose
+    /// spec has no ask_key.
+    #[serde(default)]
+    pub ask: Vec<String>,
 }
 
 /// Read the allow/deny lists from the tool's permissions file.
@@ -25,6 +29,11 @@ pub fn read(spec: &PermissionsSpec, home: &std::path::Path) -> Result<AgentPermi
     Ok(AgentPermissions {
         allow: extract_string_list(&perms, &spec.allow_key),
         deny: extract_string_list(&perms, &spec.deny_key),
+        ask: spec
+            .ask_key
+            .as_deref()
+            .map(|k| extract_string_list(&perms, k))
+            .unwrap_or_default(),
     })
 }
 
@@ -57,6 +66,7 @@ pub fn add_rule(
             let list = match section {
                 PermissionSection::Allow => &mut perms.allow,
                 PermissionSection::Deny => &mut perms.deny,
+                PermissionSection::Ask => &mut perms.ask,
             };
             if !list.contains(&rule.to_string()) {
                 list.push(rule.to_string());
@@ -65,6 +75,7 @@ pub fn add_rule(
         &spec.key,
         &spec.allow_key,
         &spec.deny_key,
+        spec.ask_key.as_deref(),
     )
 }
 
@@ -84,12 +95,14 @@ pub fn remove_rule(
             let list = match section {
                 PermissionSection::Allow => &mut perms.allow,
                 PermissionSection::Deny => &mut perms.deny,
+                PermissionSection::Ask => &mut perms.ask,
             };
             list.retain(|r| r != rule);
         },
         &spec.key,
         &spec.allow_key,
         &spec.deny_key,
+        spec.ask_key.as_deref(),
     )
 }
 
@@ -98,6 +111,7 @@ pub fn remove_rule(
 pub enum PermissionSection {
     Allow,
     Deny,
+    Ask,
 }
 
 #[cfg(test)]
@@ -112,6 +126,7 @@ mod tests {
             key: "permissions".to_string(),
             allow_key: "allow".to_string(),
             deny_key: "deny".to_string(),
+            ask_key: Some("ask".to_string()),
         }
     }
 
@@ -121,6 +136,7 @@ mod tests {
             key: "tools".to_string(),
             allow_key: "allowed".to_string(),
             deny_key: "exclude".to_string(),
+            ask_key: None,
         }
     }
 

@@ -64,3 +64,245 @@ disabled_subdir = ".disabled"
 
 [permissions]
 file = "~/.claude/settings.json"
+ask_key = "ask"
+
+# ── Capability toggles (Permissions & Context tab) ─────────────────
+# Verified against code.claude.com/docs settings.md + permissions.md.
+# tokens_hint values are estimates; bare-name permissions.deny entries
+# remove the tool definition from Claude's context entirely.
+
+[[capabilities]]
+id = "auto_memory"
+label = "Auto memory"
+description = "Loads MEMORY.md into every session"
+category = "context"
+tokens_hint = 680
+example = """
+Claude Code loads the first ~200 lines of MEMORY.md into every session.
+
+**Before (on):** `/context` shows an "Auto memory" block (~680 tokens on a typical setup).
+
+**After (off):** the block is gone; Claude no longer recalls facts saved in earlier sessions and won't write new memories.
+
+Good first cut if you don't rely on cross-session memory.
+"""
+writer = { type = "json_flag", file = "~/.claude/settings.json", key = "autoMemoryEnabled", off_value = false }
+
+[[capabilities]]
+id = "bundled_skills"
+label = "Bundled skills listing"
+description = "Anthropic's built-in skills catalog in the system prompt"
+category = "context"
+tokens_hint = 450
+example = """
+Anthropic ships a catalog of built-in skills whose names + descriptions sit in the system prompt.
+
+**Before (on):** `/context` shows a skills block listing every bundled skill (~450 tokens).
+
+**After (off):** bundled skills vanish from the listing and can't be invoked; your own skills in `~/.claude/skills` are unaffected.
+"""
+writer = { type = "json_flag", file = "~/.claude/settings.json", key = "disableBundledSkills", off_value = true }
+
+[[capabilities]]
+id = "hooks"
+label = "Hooks"
+description = "All configured lifecycle hooks (PreToolUse, PostToolUse, …)"
+category = "features"
+example = """
+Disables every configured lifecycle hook (PreToolUse, PostToolUse, SessionStart, …).
+
+**Before (on):** each hook fires at its event and its output is injected into context.
+
+**After (off):** no hooks run at all — including formatters, guards, and notification hooks you may rely on. Session starts get quieter and cheaper, but any workflow depending on hooks silently stops.
+"""
+writer = { type = "json_flag", file = "~/.claude/settings.json", key = "disableAllHooks", off_value = true }
+
+[[capabilities]]
+id = "workflows"
+label = "Workflows"
+description = "Multi-agent workflow tool — one of the largest tool definitions"
+category = "features"
+tokens_hint = 500
+writer = { type = "json_flag", file = "~/.claude/settings.json", key = "disableWorkflows", off_value = true }
+
+[[capabilities]]
+id = "agent_view"
+label = "Subagents (Agent tool)"
+description = "Background agents and the Agent tool definition"
+help = "Agent tool: spawns a subagent with its own context window to handle a task. Disabling also blocks background agents."
+category = "tools"
+tokens_hint = 400
+writer = { type = "json_flag", file = "~/.claude/settings.json", key = "disableAgentView", off_value = true }
+
+[[capabilities]]
+id = "artifact"
+label = "Artifact tool"
+description = "Publishing pages to claude.ai artifacts"
+help = "Publishes an HTML or Markdown file as an artifact: a private, interactive page on claude.ai. You can share it with a public link, or inside your organization on Team and Enterprise plans, where public sharing requires an Owner to enable it. Requires a Pro, Max, Team, or Enterprise plan and /login authentication."
+category = "tools"
+tokens_hint = 250
+writer = { type = "json_flag", file = "~/.claude/settings.json", key = "disableArtifact", off_value = true }
+
+[[capabilities]]
+id = "claude_ai_connectors"
+label = "claude.ai connectors"
+description = "Auto-connected claude.ai MCP connectors"
+category = "features"
+writer = { type = "json_flag", file = "~/.claude/settings.json", key = "disableClaudeAiConnectors", off_value = true }
+
+[[capabilities]]
+id = "web_fetch_tool"
+label = "WebFetch tool"
+description = "Removed from context entirely while denied"
+help = "WebFetch: fetches content from a specified URL. Denying the bare tool name removes it from Claude's context entirely."
+category = "tools"
+tokens_hint = 300
+example = """
+**Before (on):** `/context` lists WebFetch under tools (~300 tokens); Claude can pull any URL's content into the conversation.
+
+**After (off):** the tool definition disappears from context. When a task needs a page, Claude answers from training data or asks you to paste the content instead.
+
+MCP-based fetchers (if any) are unaffected — this only removes the built-in tool.
+"""
+writer = { type = "json_list_member", file = "~/.claude/settings.json", path = "permissions.deny", member = "WebFetch" }
+
+[[capabilities]]
+id = "web_search_tool"
+label = "WebSearch tool"
+description = "Removed from context entirely while denied"
+help = "WebSearch: performs web searches. Denying the bare tool name removes it from Claude's context entirely."
+category = "tools"
+tokens_hint = 250
+example = """
+**Before (on):** Claude can run web searches for current information.
+
+**After (off):** the WebSearch definition is removed from context; Claude states it can't search and relies on training data.
+
+Consider keeping it if you often ask about recent library versions or news.
+"""
+writer = { type = "json_list_member", file = "~/.claude/settings.json", path = "permissions.deny", member = "WebSearch" }
+
+[[capabilities]]
+id = "plan_mode"
+label = "Plan mode"
+description = "EnterPlanMode + ExitPlanMode denied together — never deny only Exit"
+help = "EnterPlanMode switches to plan mode to design an approach before coding; ExitPlanMode presents a plan for approval and exits plan mode. Toggled together — denying only Exit would strand the model in planning."
+category = "features"
+example = """
+**Before (on):** Shift+Tab cycles into plan mode; Claude can design an approach and present a plan for approval.
+
+**After (off):** both plan-mode tools are denied — Claude cannot enter plan mode and won't pause for plan approval; it goes straight to implementation.
+
+Denied together deliberately: denying only ExitPlanMode would let Claude enter planning with no way to present the plan.
+"""
+writer = { type = "json_list_member", file = "~/.claude/settings.json", path = "permissions.deny", members = ["EnterPlanMode", "ExitPlanMode"] }
+
+[[capabilities]]
+id = "cron_tools"
+label = "Scheduled routines (Cron)"
+description = "CronCreate / CronList / CronDelete tools"
+help = "CronCreate schedules a recurring or one-shot prompt within the current session (session-scoped, restored on --resume if unexpired); CronList lists scheduled tasks; CronDelete cancels one by ID."
+category = "tools"
+example = """
+**Before (on):** Claude can schedule recurring or one-shot prompts inside a session (CronCreate/CronList/CronDelete), restored on `--resume`.
+
+**After (off):** the `Cron*` deny removes all three; scheduled-task features and `/loop`-adjacent scheduling stop working in new sessions.
+"""
+writer = { type = "json_list_member", file = "~/.claude/settings.json", path = "permissions.deny", member = "Cron*" }
+
+[[capabilities]]
+id = "background_tasks"
+label = "Background tasks"
+description = "Task* and Monitor tools for background work"
+help = "Task tools create, inspect, update, and stop background tasks; Monitor runs a command in the background and feeds each output line back to Claude so it can react to logs, file changes, or polled status mid-conversation."
+category = "tools"
+example = """
+**Before (on):** Claude can run commands in the background (Monitor) and manage a background task list (Task tools) — used for long builds, dev servers, log watching.
+
+**After (off):** `Task*` + Monitor are removed; everything runs in the foreground and long-running commands block the conversation until they finish.
+"""
+writer = { type = "json_list_member", file = "~/.claude/settings.json", path = "permissions.deny", members = ["Task*", "Monitor"] }
+
+[[capabilities]]
+id = "remote_trigger"
+label = "Remote trigger"
+description = "RemoteTrigger tool (Remote Control feature)"
+help = "Creates, updates, runs, and lists Routines on claude.ai; backs the /schedule command. Routines require a Pro, Max, Team, or Enterprise plan and are not accessible from Bedrock, Google Cloud Agent Platform, or Microsoft Foundry."
+category = "tools"
+writer = { type = "json_list_member", file = "~/.claude/settings.json", path = "permissions.deny", member = "RemoteTrigger" }
+
+[[capabilities]]
+id = "send_message"
+label = "Agent messaging"
+description = "SendMessage tool for cross-agent messages"
+help = "Sends a message to an agent-team teammate, or resumes a subagent by its agent ID or name. A receiver never treats a message from another agent as your consent or approval."
+category = "tools"
+writer = { type = "json_list_member", file = "~/.claude/settings.json", path = "permissions.deny", member = "SendMessage" }
+
+[[capabilities]]
+id = "push_notifications"
+label = "Push notifications"
+description = "PushNotification tool"
+help = "Sends a desktop notification, and a phone push when Remote Control is connected, so a long-running or scheduled task can reach you when you step away. Push delivery runs through Anthropic-hosted infrastructure."
+category = "tools"
+writer = { type = "json_list_member", file = "~/.claude/settings.json", path = "permissions.deny", member = "PushNotification" }
+
+[[capabilities]]
+id = "worktree_tools"
+label = "Git worktree tools"
+description = "EnterWorktree / ExitWorktree isolated-worktree sessions"
+help = "EnterWorktree creates an isolated git worktree and switches into it (a path outside .claude/worktrees/ prompts for approval); ExitWorktree exits the worktree session and returns to the original directory."
+category = "tools"
+writer = { type = "json_list_member", file = "~/.claude/settings.json", path = "permissions.deny", members = ["EnterWorktree", "ExitWorktree"] }
+
+[[capabilities]]
+id = "ask_user_question"
+label = "Clarifying questions"
+description = "AskUserQuestion multiple-choice prompts"
+help = "Asks multiple-choice questions to gather requirements or clarify ambiguity. Questions stay open until you answer them; an optional askUserQuestionTimeout setting can auto-continue idle dialogs. Disabling means Claude proceeds on its own judgment instead of asking."
+category = "tools"
+writer = { type = "json_list_member", file = "~/.claude/settings.json", path = "permissions.deny", member = "AskUserQuestion" }
+
+[[capabilities]]
+id = "notebook_edit"
+label = "Notebook editing"
+description = "NotebookEdit for Jupyter cells"
+help = "NotebookEdit modifies Jupyter notebook cells. Safe to disable if you never work with .ipynb files."
+category = "tools"
+tokens_hint = 150
+writer = { type = "json_list_member", file = "~/.claude/settings.json", path = "permissions.deny", member = "NotebookEdit" }
+
+[[capabilities]]
+id = "lsp"
+label = "Code intelligence (LSP)"
+description = "Language-server definitions, references, diagnostics"
+help = "Code intelligence via language servers: jump to definitions, find references, report type errors and warnings."
+category = "tools"
+writer = { type = "json_list_member", file = "~/.claude/settings.json", path = "permissions.deny", member = "LSP" }
+
+[[capabilities]]
+id = "mcp_resources"
+label = "MCP resource browsing"
+description = "ListMcpResourcesTool / ReadMcpResourceTool"
+help = "ListMcpResourcesTool lists resources exposed by connected MCP servers; ReadMcpResourceTool reads a specific MCP resource by URI. MCP tool calls themselves are unaffected."
+category = "tools"
+writer = { type = "json_list_member", file = "~/.claude/settings.json", path = "permissions.deny", members = ["ListMcpResourcesTool", "ReadMcpResourceTool"] }
+
+[[capabilities]]
+id = "send_user_file"
+label = "Send files to device"
+description = "SendUserFile delivery to your devices"
+help = "Sends files from the session to you with an optional caption, so a generated report, diagram, screenshot, or built artifact reaches your device instead of only being mentioned in the transcript. Available when a Remote Control-capable client is connected."
+category = "tools"
+writer = { type = "json_list_member", file = "~/.claude/settings.json", path = "permissions.deny", member = "SendUserFile" }
+
+[[capabilities]]
+id = "default_mode"
+label = "Default permission mode"
+description = "How new sessions handle tool approval prompts"
+help = "default: prompts per the normal permission rules. acceptEdits: file edits auto-approved, other tools still prompt. plan: sessions start in plan mode. bypassPermissions: no prompts at all — use with care. Selecting default removes the key from settings.json."
+category = "features"
+kind = "enum"
+values = ["default", "acceptEdits", "plan", "bypassPermissions"]
+default_value = "default"
+writer = { type = "json_flag", file = "~/.claude/settings.json", key = "permissions.defaultMode", off_value = "" }

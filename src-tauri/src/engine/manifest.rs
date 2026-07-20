@@ -21,6 +21,104 @@ pub struct Manifest {
     #[allow(dead_code)]
     pub skill_toggle: Option<SkillToggleSpec>,
     pub permissions: Option<PermissionsSpec>,
+    #[serde(default)]
+    pub capabilities: Vec<CapabilitySpec>,
+}
+
+/// A user-togglable feature/context switch backed by a config-file write.
+/// Adding an entry here is all it takes to surface a new toggle in the UI.
+#[derive(Debug, Clone, Deserialize)]
+pub struct CapabilitySpec {
+    pub id: String,
+    pub label: String,
+    #[serde(default)]
+    pub description: Option<String>,
+    /// Longer helper text for hover tooltips — verbatim from the agent's own
+    /// documentation where available. Falls back to `description` in the UI.
+    #[serde(default)]
+    pub help: Option<String>,
+    /// "What to expect" markdown for the capability detail view (behavioral
+    /// consequences, /context before/after). Optional; the UI auto-generates
+    /// a fallback from the writer spec when absent.
+    #[serde(default)]
+    pub example: Option<String>,
+    /// Grouping in the UI: "context" | "tools" | "features" | "limits".
+    pub category: String,
+    /// Rough startup-context tokens saved when disabled. Estimate — shown
+    /// as "~N tok (est.)" in the UI, never as a precise number.
+    #[serde(default)]
+    pub tokens_hint: Option<u32>,
+    /// Control shape: "toggle" (on/off, the default) or "enum" (value picker).
+    #[serde(default = "default_kind")]
+    pub kind: String,
+    /// Allowed values for kind = "enum".
+    #[serde(default)]
+    pub values: Vec<String>,
+    /// The value in effect when the key is absent (enum kinds). Selecting it
+    /// removes the key, restoring the agent's default.
+    #[serde(default)]
+    pub default_value: Option<String>,
+    /// Toggle state when the key is absent. Most features default on; set
+    /// false for features the agent ships disabled (e.g. Codex memories).
+    #[serde(default = "default_true")]
+    pub default_on: bool,
+    pub writer: CapabilityWriter,
+}
+
+fn default_kind() -> String {
+    "toggle".to_string()
+}
+fn default_true() -> bool {
+    true
+}
+
+/// How a capability's on/off state maps onto a config file. One arm per
+/// mechanism; new config formats extend this enum.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum CapabilityWriter {
+    /// A JSON key whose presence with `off_value` turns the feature OFF.
+    /// Turning ON removes the key (restores the agent's default).
+    JsonFlag {
+        file: String,
+        key: String,
+        off_value: serde_json::Value,
+    },
+    /// Membership in a JSON string array at a dotted `path` (e.g.
+    /// "permissions.deny"): member present = feature OFF. Use `members` when
+    /// one switch must toggle several entries atomically (e.g. plan mode =
+    /// EnterPlanMode + ExitPlanMode).
+    JsonListMember {
+        file: String,
+        path: String,
+        #[serde(default)]
+        member: Option<String>,
+        #[serde(default)]
+        members: Vec<String>,
+    },
+    /// A (dotted) key in a TOML config file — e.g. Codex `features.multi_agent`
+    /// or `approval_policy`. Toggle: OFF writes `off_value`, ON removes the
+    /// key. Enum: writes the selected string, default removes the key.
+    TomlKey {
+        file: String,
+        key: String,
+        #[serde(default)]
+        off_value: Option<serde_json::Value>,
+    },
+}
+
+impl CapabilityWriter {
+    /// Effective member list for JsonListMember (singular + plural merged).
+    pub fn list_members(&self) -> Vec<&str> {
+        match self {
+            CapabilityWriter::JsonListMember { member, members, .. } => member
+                .iter()
+                .map(|s| s.as_str())
+                .chain(members.iter().map(|s| s.as_str()))
+                .collect(),
+            _ => vec![],
+        }
+    }
 }
 
 /// Declares where this tool's allow/deny permission lists live.
@@ -39,6 +137,11 @@ pub struct PermissionsSpec {
     /// Override for tools that use different names (e.g. Gemini uses "exclude").
     #[serde(default = "default_deny_key")]
     pub deny_key: String,
+    /// Name of the ask-list field, for agents that support prompt-on-match
+    /// rules (Claude Code's "ask"). Absent = agent has no ask concept and the
+    /// key is never written.
+    #[serde(default)]
+    pub ask_key: Option<String>,
 }
 
 fn default_permissions_key() -> String {
