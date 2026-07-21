@@ -76,10 +76,8 @@ fn codex_sandbox_conflict_item() -> Option<DoctorItem> {
         return None;
     }
     let doc = crate::app_state::read_toml_config(&cfg.to_string_lossy())?;
-    let legacy =
-        doc.get("sandbox_mode").is_some() || doc.get("sandbox_workspace_write").is_some();
-    let profiles =
-        doc.get("default_permissions").is_some() || doc.get("permissions").is_some();
+    let legacy = doc.get("sandbox_mode").is_some() || doc.get("sandbox_workspace_write").is_some();
+    let profiles = doc.get("default_permissions").is_some() || doc.get("permissions").is_some();
     Some(match (legacy, profiles) {
         (true, true) => DoctorItem {
             id: "codex_sandbox_conflict".into(),

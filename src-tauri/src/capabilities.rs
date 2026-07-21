@@ -209,7 +209,11 @@ pub fn list(specs: &[CapabilitySpec], home: &std::path::Path) -> Vec<CapabilityS
                 category: s.category.clone(),
                 tokens_hint: s.tokens_hint,
                 kind: s.kind.clone(),
-                values: if is_enum { resolve_values(s, home) } else { s.values.clone() },
+                values: if is_enum {
+                    resolve_values(s, home)
+                } else {
+                    s.values.clone()
+                },
                 default_value: s.default_value.clone(),
                 allow_unset: s.allow_unset,
                 value: if is_enum { read_value(s, home) } else { None },
@@ -219,7 +223,12 @@ pub fn list(specs: &[CapabilitySpec], home: &std::path::Path) -> Vec<CapabilityS
                 writer_key,
                 writer_off_value,
                 writer_path,
-                writer_members: s.writer.list_members().into_iter().map(String::from).collect(),
+                writer_members: s
+                    .writer
+                    .list_members()
+                    .into_iter()
+                    .map(String::from)
+                    .collect(),
             }
         })
         .collect()
@@ -312,10 +321,9 @@ pub fn set(spec: &CapabilitySpec, home: &std::path::Path, enabled: bool) -> Resu
         } => {
             let path = expand_home(file, home);
             let key = key.clone();
-            let off = off_value
-                .as_ref()
-                .and_then(json_to_toml)
-                .ok_or_else(|| format!("'{}': toml_key toggle needs a scalar off_value", spec.id))?;
+            let off = off_value.as_ref().and_then(json_to_toml).ok_or_else(|| {
+                format!("'{}': toml_key toggle needs a scalar off_value", spec.id)
+            })?;
             crate::app_state::update_toml_config(&path.to_string_lossy(), move |doc| {
                 toml_modify_key(doc, &key, (!enabled).then_some(off))
             })
@@ -478,7 +486,11 @@ pub fn repo_list(specs: &[CapabilitySpec], repo: &std::path::Path) -> Vec<RepoCa
                                 .any(|m| arr.iter().any(|v| v.as_str() == Some(*m)))
                         })
                         .unwrap_or(false);
-                    ("deny", if present { "deny" } else { "inherit" }.to_string(), vec![])
+                    (
+                        "deny",
+                        if present { "deny" } else { "inherit" }.to_string(),
+                        vec![],
+                    )
                 }
                 _ => return None,
             };
@@ -496,11 +508,7 @@ pub fn repo_list(specs: &[CapabilitySpec], repo: &std::path::Path) -> Vec<RepoCa
         .collect()
 }
 
-pub fn repo_set(
-    spec: &CapabilitySpec,
-    repo: &std::path::Path,
-    state: &str,
-) -> Result<(), String> {
+pub fn repo_set(spec: &CapabilitySpec, repo: &std::path::Path, state: &str) -> Result<(), String> {
     let file = repo_override_file(spec, repo)
         .ok_or_else(|| format!("'{}' has no repo-scope override", spec.id))?;
     let fpath = file.to_string_lossy().into_owned();
@@ -530,16 +538,19 @@ pub fn repo_set(
                 ));
             }
             let key = key.clone();
-            let val = (state != "inherit")
-                .then(|| serde_json::Value::String(state.to_string()));
+            let val = (state != "inherit").then(|| serde_json::Value::String(state.to_string()));
             crate::app_state::update_json_config(&fpath, move |json| {
                 json_modify_key(json, &key, val)
             })
         }
         CapabilityWriter::JsonListMember { path, .. } => {
             let dotted = path.clone();
-            let wanted: Vec<String> =
-                spec.writer.list_members().into_iter().map(String::from).collect();
+            let wanted: Vec<String> = spec
+                .writer
+                .list_members()
+                .into_iter()
+                .map(String::from)
+                .collect();
             let add = match state {
                 "deny" => true,
                 "inherit" => false,
@@ -626,7 +637,11 @@ pub struct CodexDomainRule {
     pub action: String,
 }
 
-fn flatten_fs_rules(prefix: &str, table: &toml::map::Map<String, toml::Value>, out: &mut Vec<CodexFsRule>) {
+fn flatten_fs_rules(
+    prefix: &str,
+    table: &toml::map::Map<String, toml::Value>,
+    out: &mut Vec<CodexFsRule>,
+) {
     for (k, v) in table {
         let path = if prefix.is_empty() {
             k.clone()
@@ -654,8 +669,7 @@ pub fn codex_profiles(home: &std::path::Path) -> CodexProfiles {
         };
     };
 
-    let legacy =
-        doc.get("sandbox_mode").is_some() || doc.get("sandbox_workspace_write").is_some();
+    let legacy = doc.get("sandbox_mode").is_some() || doc.get("sandbox_workspace_write").is_some();
     let has_profiles = doc.get("default_permissions").is_some() || doc.get("permissions").is_some();
 
     let default_profile = doc
@@ -701,7 +715,9 @@ pub fn codex_profiles(home: &std::path::Path) -> CodexProfiles {
                 .unwrap_or_default();
             profiles.push(CodexProfile {
                 name: name.clone(),
-                description: p.get("description").and_then(|v| v.as_str().map(String::from)),
+                description: p
+                    .get("description")
+                    .and_then(|v| v.as_str().map(String::from)),
                 extends: p.get("extends").and_then(|v| v.as_str().map(String::from)),
                 workspace_roots,
                 filesystem,
@@ -797,7 +813,11 @@ mod tests {
 
         let mut ids = std::collections::HashSet::new();
         for cap in &manifest.capabilities {
-            assert!(ids.insert(cap.id.clone()), "duplicate capability id {}", cap.id);
+            assert!(
+                ids.insert(cap.id.clone()),
+                "duplicate capability id {}",
+                cap.id
+            );
             assert!(
                 ["context", "tools", "features", "limits"].contains(&cap.category.as_str()),
                 "unknown category '{}' on {}",
@@ -806,11 +826,19 @@ mod tests {
             );
             match &cap.writer {
                 CapabilityWriter::JsonFlag { file, key, .. } => {
-                    assert!(file.starts_with("~/"), "{}: writer file must be home-relative", cap.id);
+                    assert!(
+                        file.starts_with("~/"),
+                        "{}: writer file must be home-relative",
+                        cap.id
+                    );
                     assert!(!key.is_empty(), "{}: empty flag key", cap.id);
                 }
                 CapabilityWriter::JsonListMember { file, path, .. } => {
-                    assert!(file.starts_with("~/"), "{}: writer file must be home-relative", cap.id);
+                    assert!(
+                        file.starts_with("~/"),
+                        "{}: writer file must be home-relative",
+                        cap.id
+                    );
                     assert!(!path.is_empty(), "{}: empty list path", cap.id);
                     assert!(
                         !cap.writer.list_members().is_empty(),
@@ -818,18 +846,34 @@ mod tests {
                         cap.id
                     );
                 }
-                CapabilityWriter::TomlKey { file, key, off_value } => {
-                    assert!(file.starts_with("~/"), "{}: writer file must be home-relative", cap.id);
+                CapabilityWriter::TomlKey {
+                    file,
+                    key,
+                    off_value,
+                } => {
+                    assert!(
+                        file.starts_with("~/"),
+                        "{}: writer file must be home-relative",
+                        cap.id
+                    );
                     assert!(!key.is_empty(), "{}: empty toml key", cap.id);
                     if cap.kind == "toggle" {
-                        assert!(off_value.is_some(), "{}: toml toggle needs off_value", cap.id);
+                        assert!(
+                            off_value.is_some(),
+                            "{}: toml toggle needs off_value",
+                            cap.id
+                        );
                     }
                 }
             }
             if cap.kind == "enum" {
                 assert!(!cap.values.is_empty(), "{}: enum with no values", cap.id);
                 if let Some(dv) = &cap.default_value {
-                    assert!(cap.values.contains(dv), "{}: default_value not in values", cap.id);
+                    assert!(
+                        cap.values.contains(dv),
+                        "{}: default_value not in values",
+                        cap.id
+                    );
                 }
             }
         }
@@ -939,7 +983,11 @@ mod tests {
     #[test]
     fn toml_key_toggle_roundtrip() {
         let f = std::env::temp_dir().join(format!("cb-cap-{}-toml.toml", std::process::id()));
-        std::fs::write(&f, "model = \"gpt-5.4-mini\"\n\n[features]\njs_repl = false\n").unwrap();
+        std::fs::write(
+            &f,
+            "model = \"gpt-5.4-mini\"\n\n[features]\njs_repl = false\n",
+        )
+        .unwrap();
         let home = std::path::Path::new("/");
         let mut spec = flag_spec(&f, "unused", serde_json::json!(false));
         spec.writer = CapabilityWriter::TomlKey {
@@ -953,7 +1001,10 @@ mod tests {
         assert!(!read_enabled(&spec, home));
         // unrelated keys survive
         let doc = crate::app_state::read_toml_config(&f.to_string_lossy()).unwrap();
-        assert_eq!(doc.get("model").and_then(|v| v.as_str()), Some("gpt-5.4-mini"));
+        assert_eq!(
+            doc.get("model").and_then(|v| v.as_str()),
+            Some("gpt-5.4-mini")
+        );
         assert_eq!(
             toml_lookup(&doc, "features.js_repl").and_then(|v| v.as_bool()),
             Some(false)
@@ -1047,8 +1098,16 @@ enabled = true
         assert!(p.network_enabled);
         assert_eq!(p.domains.len(), 2);
         // flattened rules include the scoped ones
-        assert!(p.filesystem.iter().any(|r| r.path == ":minimal" && r.access == "read"));
-        assert!(p.filesystem.iter().any(|r| r.path.contains(":workspace_roots") && r.path.contains("**/*.env") && r.access == "deny"));
+        assert!(p
+            .filesystem
+            .iter()
+            .any(|r| r.path == ":minimal" && r.access == "read"));
+        assert!(p
+            .filesystem
+            .iter()
+            .any(|r| r.path.contains(":workspace_roots")
+                && r.path.contains("**/*.env")
+                && r.access == "deny"));
 
         // mixed config detected when legacy key added
         std::fs::write(
@@ -1101,7 +1160,11 @@ enabled = true
         let repo = std::env::temp_dir().join(format!("cb-repocap-{}", std::process::id()));
         std::fs::create_dir_all(repo.join(".git")).unwrap();
 
-        let mut spec = flag_spec(std::path::Path::new("/unused"), "autoMemoryEnabled", serde_json::json!(false));
+        let mut spec = flag_spec(
+            std::path::Path::new("/unused"),
+            "autoMemoryEnabled",
+            serde_json::json!(false),
+        );
         spec.writer = CapabilityWriter::JsonFlag {
             file: "~/.claude/settings.json".into(),
             key: "autoMemoryEnabled".into(),
@@ -1125,7 +1188,11 @@ enabled = true
         assert_eq!(repo_list(&[spec.clone()], &repo)[0].state, "inherit");
 
         // deny-list override: only inherit/deny
-        let mut deny_spec = list_spec(std::path::Path::new("/unused"), "permissions.deny", "WebFetch");
+        let mut deny_spec = list_spec(
+            std::path::Path::new("/unused"),
+            "permissions.deny",
+            "WebFetch",
+        );
         if let CapabilityWriter::JsonListMember { file, .. } = &mut deny_spec.writer {
             *file = "~/.claude/settings.json".into();
         }
@@ -1136,7 +1203,11 @@ enabled = true
         assert_eq!(repo_list(&[deny_spec.clone()], &repo)[0].state, "inherit");
 
         // toml-backed capabilities have no repo scope
-        let mut toml_spec = flag_spec(std::path::Path::new("/unused"), "x", serde_json::json!(false));
+        let mut toml_spec = flag_spec(
+            std::path::Path::new("/unused"),
+            "x",
+            serde_json::json!(false),
+        );
         toml_spec.writer = CapabilityWriter::TomlKey {
             file: "~/.codex/config.toml".into(),
             key: "features.apps".into(),

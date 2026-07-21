@@ -92,15 +92,14 @@ pub fn read(repo_path: &str, home: &Path) -> Result<RepoAgentConfig, String> {
     validate_repo_path(repo_path)?;
     let repo = Path::new(repo_path);
 
-    let trust_level = crate::app_state::read_toml_config(
-        &home.join(".codex/config.toml").to_string_lossy(),
-    )
-    .and_then(|doc| {
-        doc.get("projects")
-            .and_then(|t| t.get(repo_path))
-            .and_then(|p| p.get("trust_level"))
-            .and_then(|v| v.as_str().map(String::from))
-    });
+    let trust_level =
+        crate::app_state::read_toml_config(&home.join(".codex/config.toml").to_string_lossy())
+            .and_then(|doc| {
+                doc.get("projects")
+                    .and_then(|t| t.get(repo_path))
+                    .and_then(|p| p.get("trust_level"))
+                    .and_then(|v| v.as_str().map(String::from))
+            });
 
     Ok(RepoAgentConfig {
         claude: RepoClaudeConfig {
