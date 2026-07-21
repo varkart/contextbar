@@ -1,5 +1,6 @@
 mod app_state;
 pub(crate) mod backup;
+pub(crate) mod capabilities;
 pub(crate) mod db;
 pub(crate) mod detectors;
 pub(crate) mod doctor;
@@ -8,7 +9,6 @@ pub(crate) mod error;
 pub(crate) mod installer;
 mod mcp_client;
 pub(crate) mod models;
-pub(crate) mod capabilities;
 pub(crate) mod permissions;
 pub(crate) mod repo_config;
 mod watcher;
@@ -2033,7 +2033,13 @@ fn set_capability_value(
         .find(|c| c.id == capability_id)
         .ok_or_else(|| format!("capability '{capability_id}' not in '{agent_id}' manifest"))?;
     capabilities::set_value(spec, &home, &value)?;
-    db::log_event(&db, "capability_toggled", &agent_id, &capability_id, Some(&value));
+    db::log_event(
+        &db,
+        "capability_toggled",
+        &agent_id,
+        &capability_id,
+        Some(&value),
+    );
     Ok(())
 }
 

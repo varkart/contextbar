@@ -128,7 +128,9 @@ impl CapabilityWriter {
     /// Effective member list for JsonListMember (singular + plural merged).
     pub fn list_members(&self) -> Vec<&str> {
         match self {
-            CapabilityWriter::JsonListMember { member, members, .. } => member
+            CapabilityWriter::JsonListMember {
+                member, members, ..
+            } => member
                 .iter()
                 .map(|s| s.as_str())
                 .chain(members.iter().map(|s| s.as_str()))
