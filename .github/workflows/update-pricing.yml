@@ -13,13 +13,13 @@ jobs:
   update-pricing:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Refresh pricing.json from LiteLLM
         run: python3 scripts/update-pricing.py
 
       - name: Open PR if pricing changed
-        uses: peter-evans/create-pull-request@v7
+        uses: peter-evans/create-pull-request@v8
         with:
           branch: chore/update-pricing
           title: "chore: update model pricing from LiteLLM"
