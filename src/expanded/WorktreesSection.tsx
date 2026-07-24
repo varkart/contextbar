@@ -406,6 +406,9 @@ export default function WorktreesSection({ repos, loading, sessions, onRemoved, 
                   <span className="block text-[10.5px] text-[var(--c-text-3)]">
                     {items.length} worktree{items.length > 1 ? 's' : ''} · base {repo.baseBranch}
                   </span>
+                  <span className="block text-[10px] font-mono text-[var(--c-text-3)]/70 truncate" title={repo.repoPath}>
+                    {repo.repoPath}
+                  </span>
                 </span>
               </button>
               <div className="flex items-center gap-1.5 shrink-0">
@@ -512,6 +515,9 @@ export default function WorktreesSection({ repos, loading, sessions, onRemoved, 
                         <div className="text-[11px] text-[var(--c-text-3)] mt-0.5 ml-4">
                           {relativeTime(wt.lastCommitTs)}
                           {linked.length > 0 && <> · {linked.length} session{linked.length > 1 ? 's' : ''}</>}
+                        </div>
+                        <div className="text-[10px] font-mono text-[var(--c-text-3)]/70 mt-0.5 ml-4 truncate" title={wt.path}>
+                          {wt.path}
                         </div>
                       </div>
                       <div className="flex items-center gap-1.5 shrink-0">
