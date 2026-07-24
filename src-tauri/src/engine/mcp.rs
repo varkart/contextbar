@@ -71,6 +71,7 @@ fn read_source(source: &McpSourceSpec, home: &std::path::Path) -> (Vec<McpServer
             disabled_key,
             inline_toggle_field,
             jsonc,
+            ..
         } => read_json_key_pair(
             &expand_home(file, home),
             active_key,
@@ -918,6 +919,11 @@ mod tests {
             active_key: "mcpServers".to_string(),
             disabled_key: Some("disabledMcpServers".to_string()),
             inline_toggle_field: None,
+            entry_type_field: None,
+            entry_type_local_value: None,
+            entry_type_remote_value: None,
+            entry_command_as_array: false,
+            entry_env_key: None,
             jsonc: false,
         };
         let (mcps, err) = collect(&[wrap(source)], None, tmp.path());
@@ -949,6 +955,11 @@ mod tests {
             active_key: "mcp".to_string(),
             disabled_key: None,
             inline_toggle_field: Some("enabled".to_string()),
+            entry_type_field: None,
+            entry_type_local_value: None,
+            entry_type_remote_value: None,
+            entry_command_as_array: false,
+            entry_env_key: None,
             jsonc: false,
         };
         let (mcps, err) = collect(&[wrap(source)], None, tmp.path());
@@ -975,6 +986,11 @@ mod tests {
             active_key: "mcpServers".to_string(),
             disabled_key: None,
             inline_toggle_field: None,
+            entry_type_field: None,
+            entry_type_local_value: None,
+            entry_type_remote_value: None,
+            entry_command_as_array: false,
+            entry_env_key: None,
             jsonc: false,
         };
         let (mcps, err) = collect(&[wrap(source)], None, tmp.path());
@@ -992,6 +1008,11 @@ mod tests {
             active_key: "mcpServers".to_string(),
             disabled_key: None,
             inline_toggle_field: None,
+            entry_type_field: None,
+            entry_type_local_value: None,
+            entry_type_remote_value: None,
+            entry_command_as_array: false,
+            entry_env_key: None,
             jsonc: false,
         };
         let (mcps, err) = collect(&[wrap(source)], None, tmp.path());
@@ -1018,6 +1039,11 @@ mod tests {
             active_key: "mcpServers".to_string(),
             disabled_key: None,
             inline_toggle_field: None,
+            entry_type_field: None,
+            entry_type_local_value: None,
+            entry_type_remote_value: None,
+            entry_command_as_array: false,
+            entry_env_key: None,
             jsonc: true,
         };
         let (mcps, err) = collect(&[wrap(source)], None, tmp.path());
@@ -1047,6 +1073,11 @@ mod tests {
             active_key: "mcpServers".to_string(),
             disabled_key: None,
             inline_toggle_field: None,
+            entry_type_field: None,
+            entry_type_local_value: None,
+            entry_type_remote_value: None,
+            entry_command_as_array: false,
+            entry_env_key: None,
             jsonc: false,
         };
         let (mcps, _) = collect(&[wrap(source)], None, tmp.path());
@@ -1337,6 +1368,11 @@ mod tests {
                 active_key: "mcpServers".to_string(),
                 disabled_key: None,
                 inline_toggle_field: None,
+                entry_type_field: None,
+                entry_type_local_value: None,
+                entry_type_remote_value: None,
+                entry_command_as_array: false,
+                entry_env_key: None,
                 jsonc: false,
             }),
             wrap(McpSourceSpec::JsonKeyPair {
@@ -1344,6 +1380,11 @@ mod tests {
                 active_key: "mcpServers".to_string(),
                 disabled_key: None,
                 inline_toggle_field: None,
+                entry_type_field: None,
+                entry_type_local_value: None,
+                entry_type_remote_value: None,
+                entry_command_as_array: false,
+                entry_env_key: None,
                 jsonc: false,
             }),
         ];
@@ -1374,6 +1415,11 @@ mod tests {
                 active_key: "mcpServers".to_string(),
                 disabled_key: None,
                 inline_toggle_field: None,
+                entry_type_field: None,
+                entry_type_local_value: None,
+                entry_type_remote_value: None,
+                entry_command_as_array: false,
+                entry_env_key: None,
                 jsonc: false,
             }),
             wrap(McpSourceSpec::JsonKeyPair {
@@ -1381,6 +1427,11 @@ mod tests {
                 active_key: "mcpServers".to_string(),
                 disabled_key: None,
                 inline_toggle_field: None,
+                entry_type_field: None,
+                entry_type_local_value: None,
+                entry_type_remote_value: None,
+                entry_command_as_array: false,
+                entry_env_key: None,
                 jsonc: false,
             }),
         ];
@@ -1413,6 +1464,11 @@ mod tests {
                 active_key: "mcpServers".to_string(),
                 disabled_key: None,
                 inline_toggle_field: None,
+                entry_type_field: None,
+                entry_type_local_value: None,
+                entry_type_remote_value: None,
+                entry_command_as_array: false,
+                entry_env_key: None,
                 jsonc: false,
             },
         };
@@ -1445,6 +1501,11 @@ mod tests {
                 active_key: "mcpServers".to_string(),
                 disabled_key: None,
                 inline_toggle_field: None,
+                entry_type_field: None,
+                entry_type_local_value: None,
+                entry_type_remote_value: None,
+                entry_command_as_array: false,
+                entry_env_key: None,
                 jsonc: false,
             },
         };
@@ -1645,6 +1706,11 @@ mod tests {
                 active_key: "mcpServers".to_string(),
                 disabled_key: None,
                 inline_toggle_field: None,
+                entry_type_field: None,
+                entry_type_local_value: None,
+                entry_type_remote_value: None,
+                entry_command_as_array: false,
+                entry_env_key: None,
                 jsonc: false,
             },
         };
@@ -1681,6 +1747,11 @@ mod tests {
             active_key: "mcpServers".to_string(),
             disabled_key: None,
             inline_toggle_field: None,
+            entry_type_field: None,
+            entry_type_local_value: None,
+            entry_type_remote_value: None,
+            entry_command_as_array: false,
+            entry_env_key: None,
             jsonc: false,
         });
 

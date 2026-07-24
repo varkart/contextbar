@@ -1788,6 +1788,56 @@ fn validate_mcp(
     }
 }
 
+/// Builds the JSON entry for a new MCP server, honoring the manifest's
+/// `entry_*` shape overrides (e.g. OpenCode's "type" discriminator, array
+/// "command", and "environment" instead of "env"). Pure and independently
+/// testable — see `tests::build_json_mcp_entry_*` below.
+#[allow(clippy::too_many_arguments)]
+fn build_json_mcp_entry(
+    command: Option<&str>,
+    args: Option<&[String]>,
+    url: Option<&str>,
+    env: Option<&std::collections::HashMap<String, String>>,
+    entry_type_field: Option<&str>,
+    entry_type_local_value: Option<&str>,
+    entry_type_remote_value: Option<&str>,
+    entry_command_as_array: bool,
+    entry_env_key: Option<&str>,
+) -> serde_json::Value {
+    let mut entry = if let Some(u) = url {
+        serde_json::json!({ "url": u })
+    } else if entry_command_as_array {
+        let mut cmd_arr = Vec::with_capacity(1 + args.map_or(0, <[String]>::len));
+        cmd_arr.push(command.unwrap_or_default().to_string());
+        cmd_arr.extend(args.iter().flat_map(|a| a.iter()).cloned());
+        serde_json::json!({ "command": cmd_arr })
+    } else {
+        serde_json::json!({
+            "command": command.unwrap_or(""),
+            "args": args.unwrap_or(&[]),
+        })
+    };
+    if let serde_json::Value::Object(ref mut obj) = entry {
+        if let Some(field) = entry_type_field {
+            let type_value = if url.is_some() {
+                entry_type_remote_value
+            } else {
+                entry_type_local_value
+            };
+            if let Some(type_value) = type_value {
+                obj.insert(field.to_string(), serde_json::json!(type_value));
+            }
+        }
+        if let Some(env_map) = env {
+            if !env_map.is_empty() {
+                let env_key = entry_env_key.unwrap_or("env");
+                obj.insert(env_key.to_string(), serde_json::json!(env_map));
+            }
+        }
+    }
+    entry
+}
+
 #[tauri::command]
 #[allow(clippy::too_many_arguments)]
 fn add_mcp(
@@ -1810,23 +1860,27 @@ fn add_mcp(
     for source in &manifest.mcp_sources {
         let result = match &source.spec {
             McpSourceSpec::JsonKeyPair {
-                file, active_key, ..
+                file,
+                active_key,
+                entry_type_field,
+                entry_type_local_value,
+                entry_type_remote_value,
+                entry_command_as_array,
+                entry_env_key,
+                ..
             } => {
                 let path = expand_home(file, &home);
-                let mut entry = if let Some(u) = &url {
-                    serde_json::json!({ "url": u })
-                } else {
-                    serde_json::json!({
-                        "command": command.as_deref().unwrap_or(""),
-                        "args": args.as_deref().unwrap_or(&[]),
-                    })
-                };
-                if let (Some(env_map), serde_json::Value::Object(ref mut obj)) = (&env, &mut entry)
-                {
-                    if !env_map.is_empty() {
-                        obj.insert("env".to_string(), serde_json::json!(env_map));
-                    }
-                }
+                let entry = build_json_mcp_entry(
+                    command.as_deref(),
+                    args.as_deref(),
+                    url.as_deref(),
+                    env.as_ref(),
+                    entry_type_field.as_deref(),
+                    entry_type_local_value.as_deref(),
+                    entry_type_remote_value.as_deref(),
+                    *entry_command_as_array,
+                    entry_env_key.as_deref(),
+                );
                 Some(app_state::add_mcp_to_config(
                     &path.to_string_lossy(),
                     active_key,
@@ -2760,9 +2814,70 @@ fn show_expanded_window(app: &tauri::AppHandle, section: Option<&str>) {
 #[cfg(test)]
 mod tests {
     use super::{
-        github_blob_to_raw, parse_github_repo_url, percent_encode_path, validate_skill_content,
-        validate_tool_path,
+        build_json_mcp_entry, github_blob_to_raw, parse_github_repo_url, percent_encode_path,
+        validate_skill_content, validate_tool_path,
     };
+
+    #[test]
+    fn build_json_mcp_entry_default_shape_unchanged() {
+        let entry = build_json_mcp_entry(
+            Some("npx"),
+            Some(&["-y".to_string(), "my-mcp".to_string()]),
+            None,
+            None,
+            None,
+            None,
+            None,
+            false,
+            None,
+        );
+        assert_eq!(entry["command"], "npx");
+        assert_eq!(entry["args"], serde_json::json!(["-y", "my-mcp"]));
+        assert!(entry.get("type").is_none());
+    }
+
+    #[test]
+    fn build_json_mcp_entry_opencode_local_shape() {
+        let mut env = std::collections::HashMap::new();
+        env.insert("API_KEY".to_string(), "secret".to_string());
+        let entry = build_json_mcp_entry(
+            Some("npx"),
+            Some(&["-y".to_string(), "@playwright/mcp".to_string()]),
+            None,
+            Some(&env),
+            Some("type"),
+            Some("local"),
+            Some("remote"),
+            true,
+            Some("environment"),
+        );
+        assert_eq!(entry["type"], "local");
+        assert_eq!(
+            entry["command"],
+            serde_json::json!(["npx", "-y", "@playwright/mcp"])
+        );
+        assert!(entry.get("args").is_none());
+        assert_eq!(entry["environment"]["API_KEY"], "secret");
+        assert!(entry.get("env").is_none());
+    }
+
+    #[test]
+    fn build_json_mcp_entry_opencode_remote_shape() {
+        let entry = build_json_mcp_entry(
+            None,
+            None,
+            Some("https://mcp.example.com"),
+            None,
+            Some("type"),
+            Some("local"),
+            Some("remote"),
+            true,
+            Some("environment"),
+        );
+        assert_eq!(entry["type"], "remote");
+        assert_eq!(entry["url"], "https://mcp.example.com");
+        assert!(entry.get("command").is_none());
+    }
 
     #[test]
     fn percent_encode_path_escapes_spaces_and_keeps_slashes() {

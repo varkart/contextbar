@@ -20,12 +20,20 @@ parse = "last_token"
 
 # MCP servers live under the "mcp" key in opencode.json; each entry toggles
 # itself off via its own "enabled": false rather than moving to a separate section.
+# New entries need a "type" discriminator, a single "command" array (not
+# command+args split), and "environment" instead of "env" — see
+# opencode.ai/docs/mcp-servers.
 [[mcp_sources]]
 id = "opencode_json"
 type = "json_key_pair"
 file = "~/.config/opencode/opencode.json"
 active_key = "mcp"
 inline_toggle_field = "enabled"
+entry_type_field = "type"
+entry_type_local_value = "local"
+entry_type_remote_value = "remote"
+entry_command_as_array = true
+entry_env_key = "environment"
 jsonc = true
 
 # OpenCode-native skills
@@ -41,3 +49,177 @@ id = "agents_skills_dir"
 type = "directory"
 path = "~/.agents/skills"
 disabled_subdir = ".disabled"
+
+# ── Capability toggles (Permissions & Context tab) ─────────────────
+# OpenCode's "permission" key is a flat map of tool name → allow/ask/deny
+# (opencode.ai/docs/permissions), not the allow/deny/ask *list* shape most
+# other tools use — so these are modeled as enum capabilities instead of a
+# [permissions] section. Advanced per-pattern rules hand-authored in
+# opencode.json (e.g. {"*": "ask", "git push": "deny"}) aren't represented
+# here — changing a toggle replaces them with a single flat value.
+
+[[capabilities]]
+id = "permission_read"
+label = "Read files"
+description = "permission.read"
+category = "tools"
+kind = "enum"
+values = ["allow", "ask", "deny"]
+default_value = "allow"
+writer = { type = "json_flag", file = "~/.config/opencode/opencode.json", key = "permission.read", off_value = "" }
+
+[[capabilities]]
+id = "permission_edit"
+label = "Edit files"
+description = "permission.edit — also gates write and apply_patch"
+help = "Gates the write/edit/apply_patch tools. Advanced per-pattern rules hand-authored in opencode.json (e.g. per-path allow/deny) aren't represented here — changing this replaces them with a single flat value."
+category = "tools"
+kind = "enum"
+values = ["allow", "ask", "deny"]
+default_value = "allow"
+writer = { type = "json_flag", file = "~/.config/opencode/opencode.json", key = "permission.edit", off_value = "" }
+
+[[capabilities]]
+id = "permission_glob"
+label = "Glob search"
+description = "permission.glob"
+category = "tools"
+kind = "enum"
+values = ["allow", "ask", "deny"]
+default_value = "allow"
+writer = { type = "json_flag", file = "~/.config/opencode/opencode.json", key = "permission.glob", off_value = "" }
+
+[[capabilities]]
+id = "permission_grep"
+label = "Grep search"
+description = "permission.grep"
+category = "tools"
+kind = "enum"
+values = ["allow", "ask", "deny"]
+default_value = "allow"
+writer = { type = "json_flag", file = "~/.config/opencode/opencode.json", key = "permission.grep", off_value = "" }
+
+[[capabilities]]
+id = "permission_list"
+label = "List directories"
+description = "permission.list"
+category = "tools"
+kind = "enum"
+values = ["allow", "ask", "deny"]
+default_value = "allow"
+writer = { type = "json_flag", file = "~/.config/opencode/opencode.json", key = "permission.list", off_value = "" }
+
+[[capabilities]]
+id = "permission_bash"
+label = "Bash"
+description = "permission.bash — shell command execution"
+help = "Gates shell command execution. Advanced per-pattern rules hand-authored in opencode.json (e.g. {\"*\": \"ask\", \"git push\": \"deny\"}) aren't represented here — changing this replaces them with a single flat value."
+category = "tools"
+kind = "enum"
+values = ["allow", "ask", "deny"]
+default_value = "allow"
+writer = { type = "json_flag", file = "~/.config/opencode/opencode.json", key = "permission.bash", off_value = "" }
+
+[[capabilities]]
+id = "permission_task"
+label = "Subagents (Task tool)"
+description = "permission.task — spawning subagents"
+category = "tools"
+kind = "enum"
+values = ["allow", "ask", "deny"]
+default_value = "allow"
+writer = { type = "json_flag", file = "~/.config/opencode/opencode.json", key = "permission.task", off_value = "" }
+
+[[capabilities]]
+id = "permission_skill"
+label = "Skills"
+description = "permission.skill — loading a SKILL.md"
+category = "tools"
+kind = "enum"
+values = ["allow", "ask", "deny"]
+default_value = "allow"
+writer = { type = "json_flag", file = "~/.config/opencode/opencode.json", key = "permission.skill", off_value = "" }
+
+[[capabilities]]
+id = "permission_lsp"
+label = "Code intelligence (LSP)"
+description = "permission.lsp"
+category = "tools"
+kind = "enum"
+values = ["allow", "ask", "deny"]
+default_value = "allow"
+writer = { type = "json_flag", file = "~/.config/opencode/opencode.json", key = "permission.lsp", off_value = "" }
+
+[[capabilities]]
+id = "permission_question"
+label = "Clarifying questions"
+description = "permission.question"
+category = "tools"
+kind = "enum"
+values = ["allow", "ask", "deny"]
+default_value = "allow"
+writer = { type = "json_flag", file = "~/.config/opencode/opencode.json", key = "permission.question", off_value = "" }
+
+[[capabilities]]
+id = "permission_webfetch"
+label = "WebFetch"
+description = "permission.webfetch"
+category = "tools"
+kind = "enum"
+values = ["allow", "ask", "deny"]
+default_value = "allow"
+writer = { type = "json_flag", file = "~/.config/opencode/opencode.json", key = "permission.webfetch", off_value = "" }
+
+[[capabilities]]
+id = "permission_websearch"
+label = "WebSearch"
+description = "permission.websearch"
+help = "Only available on the OpenCode/Zen provider, or when OPENCODE_ENABLE_EXA=1 is set."
+category = "tools"
+kind = "enum"
+values = ["allow", "ask", "deny"]
+default_value = "allow"
+writer = { type = "json_flag", file = "~/.config/opencode/opencode.json", key = "permission.websearch", off_value = "" }
+
+[[capabilities]]
+id = "permission_todowrite"
+label = "Todo list"
+description = "permission.todowrite — also gates todoread"
+category = "tools"
+kind = "enum"
+values = ["allow", "ask", "deny"]
+default_value = "allow"
+writer = { type = "json_flag", file = "~/.config/opencode/opencode.json", key = "permission.todowrite", off_value = "" }
+
+[[capabilities]]
+id = "permission_external_directory"
+label = "Access outside the project"
+description = "permission.external_directory"
+help = "Gates any tool touching paths outside the current project worktree. Defaults to \"ask\"."
+category = "tools"
+kind = "enum"
+values = ["allow", "ask", "deny"]
+default_value = "ask"
+writer = { type = "json_flag", file = "~/.config/opencode/opencode.json", key = "permission.external_directory", off_value = "" }
+
+[[capabilities]]
+id = "permission_doom_loop"
+label = "Repeated tool call recovery"
+description = "permission.doom_loop"
+help = "Fires when the same tool call repeats 3x with identical input. Defaults to \"ask\"."
+category = "tools"
+kind = "enum"
+values = ["allow", "ask", "deny"]
+default_value = "ask"
+writer = { type = "json_flag", file = "~/.config/opencode/opencode.json", key = "permission.doom_loop", off_value = "" }
+
+[[capabilities]]
+id = "default_agent"
+label = "Default agent"
+description = "Which primary agent OpenCode launches with"
+help = "build (default): full tool access. plan: edit and bash default to \"ask\" until you approve. Selecting build removes the key."
+category = "features"
+kind = "enum"
+values = ["build", "plan"]
+default_value = "build"
+writer = { type = "json_flag", file = "~/.config/opencode/opencode.json", key = "default_agent", off_value = "" }

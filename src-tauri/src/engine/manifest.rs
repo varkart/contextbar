@@ -293,6 +293,19 @@ pub enum McpSourceSpec {
         /// Set a boolean field on the entry to disable (e.g. "enabled" → false),
         /// instead of moving it to a separate disabled_key section.
         inline_toggle_field: Option<String>,
+        /// When set, a new entry gets a "<entry_type_field>": "<local/remote value>"
+        /// discriminator (e.g. OpenCode's "type": "local"/"remote").
+        entry_type_field: Option<String>,
+        entry_type_local_value: Option<String>,
+        entry_type_remote_value: Option<String>,
+        /// When true, a new local-command entry writes `command` as a single
+        /// array (binary + args merged) instead of separate `command`
+        /// (string) + `args` (array) keys.
+        #[serde(default)]
+        entry_command_as_array: bool,
+        /// Key name for env vars on a new entry. Defaults to "env" when
+        /// absent (OpenCode uses "environment").
+        entry_env_key: Option<String>,
         #[serde(default)]
         jsonc: bool,
     },
