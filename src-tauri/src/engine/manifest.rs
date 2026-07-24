@@ -290,6 +290,9 @@ pub enum McpSourceSpec {
         #[serde(default = "default_mcp_key")]
         active_key: String,
         disabled_key: Option<String>,
+        /// Set a boolean field on the entry to disable (e.g. "enabled" → false),
+        /// instead of moving it to a separate disabled_key section.
+        inline_toggle_field: Option<String>,
         #[serde(default)]
         jsonc: bool,
     },

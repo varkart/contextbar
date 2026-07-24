@@ -108,15 +108,15 @@ pub struct McpServer {
 
 Defined by TOML manifests in `src-tauri/src/engine/manifests/`:
 
-`claude`, `cursor`, `gemini`, `copilot`, `windsurf`, `chatgpt`, `codex`, `kiro`
+`claude`, `cursor`, `gemini`, `copilot`, `windsurf`, `kiro`, `codex`, `agy`, `opencode`
 
 ---
 
 ## Adding a New Tool
 
 1. Create `src-tauri/src/engine/manifests/<name>.toml`
-2. Define `[meta]`, `[[skill_sources]]`, `[[mcp_sources]]` sections following the existing manifests
-3. No Rust code changes needed — the engine loads all manifests at startup
+2. Define `[[detection]]`, `[version]`, `[[skill_sources]]`, `[[mcp_sources]]` sections following the existing manifests
+3. Register it in `all_manifest_strs()` in `src-tauri/src/engine/mod.rs` — manifests are embedded via `include_str!` at compile time, so a file alone is not picked up
 
 ---
 

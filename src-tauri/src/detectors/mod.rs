@@ -189,12 +189,7 @@ pub fn parse_mcp_servers(
     let mut mcps = Vec::new();
     if let Some(obj) = servers_obj.as_object() {
         for (name, cfg) in obj {
-            let command = cfg
-                .get("command")
-                .and_then(|v| v.as_str())
-                .unwrap_or("")
-                .to_string();
-            let args: Vec<String> = cfg
+            let trailing_args: Vec<String> = cfg
                 .get("args")
                 .and_then(|v| v.as_array())
                 .map(|arr| {
@@ -203,13 +198,28 @@ pub fn parse_mcp_servers(
                         .collect()
                 })
                 .unwrap_or_default();
+            // Most tools store `command` (string) + `args` (array) separately.
+            // OpenCode's local MCP servers store the whole invocation as one
+            // `command` array instead — split it into binary + leading args.
+            let (command, args): (String, Vec<String>) = match cfg.get("command") {
+                Some(serde_json::Value::Array(arr)) => {
+                    let mut parts = arr.iter().filter_map(|a| a.as_str().map(|s| s.to_string()));
+                    let bin = parts.next().unwrap_or_default();
+                    (bin, parts.chain(trailing_args).collect())
+                }
+                other => (
+                    other.and_then(|v| v.as_str()).unwrap_or("").to_string(),
+                    trailing_args,
+                ),
+            };
             let description = cfg
                 .get("description")
                 .and_then(|v| v.as_str())
                 .map(|s| s.to_string())
                 .filter(|s| !s.trim().is_empty());
 
-            let env = cfg.get("env");
+            // OpenCode names this field "environment" instead of "env".
+            let env = cfg.get("env").or_else(|| cfg.get("environment"));
             let (has_secrets, secret_key_names) = match env {
                 Some(serde_json::Value::Object(env_map)) if !env_map.is_empty() => {
                     let keys: Vec<String> = env_map.keys().cloned().collect();
@@ -374,5 +384,31 @@ mod tests {
         });
         let mcps = parse_mcp_servers(&json, true);
         assert!(mcps[0].disabled_tools.is_empty());
+    }
+
+    #[test]
+    fn parse_mcp_servers_command_as_array_splits_binary_and_args() {
+        let json = serde_json::json!({
+            "playwright": {
+                "type": "local",
+                "command": ["npx", "-y", "@playwright/mcp"]
+            }
+        });
+        let mcps = parse_mcp_servers(&json, true);
+        assert_eq!(mcps[0].command, "npx");
+        assert_eq!(mcps[0].args, vec!["-y", "@playwright/mcp"]);
+    }
+
+    #[test]
+    fn parse_mcp_servers_reads_environment_key_as_env() {
+        let json = serde_json::json!({
+            "server": {
+                "command": ["node", "server.js"],
+                "environment": { "API_KEY": "secret" }
+            }
+        });
+        let mcps = parse_mcp_servers(&json, true);
+        assert!(mcps[0].has_secrets);
+        assert_eq!(mcps[0].secret_key_names, vec!["API_KEY"]);
     }
 }

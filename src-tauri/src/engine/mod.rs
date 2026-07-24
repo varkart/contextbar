@@ -29,6 +29,7 @@ fn all_manifest_strs() -> &'static [(&'static str, &'static str)] {
         ("kiro", manifest_toml!("kiro")),
         ("codex", manifest_toml!("codex")),
         ("agy", manifest_toml!("agy")),
+        ("opencode", manifest_toml!("opencode")),
     ]
 }
 
