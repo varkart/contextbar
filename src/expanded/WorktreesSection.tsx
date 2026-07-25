@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import type { RepoWorktrees, WorktreeInfo, SessionEntry, SessionInsights, RepoMeta } from '../types'
 import { formatTokens } from '../components/history/SessionStats'
@@ -132,13 +132,16 @@ interface WorktreesSectionProps {
   onRefresh: () => void | Promise<unknown>
   onOpenSession: (s: SessionEntry) => void
   onViewSessions: (repo: RepoWorktrees) => void
+  /** Worktree path to auto-expand and scroll to, e.g. from "Needs attention" on My Work. */
+  focusPath?: string | null
   showToast: (type: 'success' | 'error', message: string) => void
 }
 
-export default function WorktreesSection({ repos, loading, sessions, onRemoved, onRefresh, onOpenSession, onViewSessions, showToast }: WorktreesSectionProps) {
+export default function WorktreesSection({ repos, loading, sessions, onRemoved, onRefresh, onOpenSession, onViewSessions, focusPath, showToast }: WorktreesSectionProps) {
   const [filter, setFilter] = useState<Filter>('all')
   const [search, setSearch] = useState('')
   const [expanded, setExpanded] = useState<string | null>(null)
+  const itemRefs = useRef<Record<string, HTMLDivElement | null>>({})
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
   const [removing, setRemoving] = useState(false)
   const [removeError, setRemoveError] = useState<string | null>(null)
@@ -171,6 +174,25 @@ export default function WorktreesSection({ repos, loading, sessions, onRemoved, 
       })
       .catch(() => {})
   }, [repos])
+
+  // Deep-link entry point: expand the owning repo and this worktree, clear
+  // any filter/search that could hide it, then scroll it into view once rendered.
+  useEffect(() => {
+    if (!focusPath) return
+    const owner = repos.find(r => r.worktrees.some(w => w.path === focusPath))
+    if (!owner) return
+    setFilter('all')
+    setSearch('')
+    setRepoOpen(prev => ({ ...prev, [owner.repoPath]: true }))
+    setExpanded(focusPath)
+  }, [focusPath, repos])
+
+  useEffect(() => {
+    if (!focusPath) return
+    const el = itemRefs.current[focusPath]
+    if (!el) return
+    requestAnimationFrame(() => el.scrollIntoView({ behavior: 'smooth', block: 'center' }))
+  }, [focusPath, expanded, repoOpen])
 
   const saveNote = (path: string) => (n: string | null) =>
     setPathNotes(prev => {
@@ -406,6 +428,9 @@ export default function WorktreesSection({ repos, loading, sessions, onRemoved, 
                   <span className="block text-[10.5px] text-[var(--c-text-3)]">
                     {items.length} worktree{items.length > 1 ? 's' : ''} · base {repo.baseBranch}
                   </span>
+                  <span className="block text-[10px] font-mono text-[var(--c-text-3)]/70 truncate" title={repo.repoPath}>
+                    {repo.repoPath}
+                  </span>
                 </span>
               </button>
               <div className="flex items-center gap-1.5 shrink-0">
@@ -493,7 +518,7 @@ export default function WorktreesSection({ repos, loading, sessions, onRemoved, 
                       ? 'border-dashed border-[var(--c-border)] hover:border-[var(--c-text-3)]/40'
                       : 'border-[var(--c-border)] hover:border-[var(--c-text-3)]/40'
                 return (
-                  <div key={wt.path} className="relative">
+                  <div key={wt.path} ref={el => { itemRefs.current[wt.path] = el }} className="relative">
                     <div className="absolute -left-[11px] top-[21px] w-[11px] h-px bg-[var(--c-border)]" aria-hidden="true" />
                     <div
                       className={`rounded-xl border transition-colors ${statusBorder} bg-[var(--c-surface-2)]/40`}
@@ -512,6 +537,9 @@ export default function WorktreesSection({ repos, loading, sessions, onRemoved, 
                         <div className="text-[11px] text-[var(--c-text-3)] mt-0.5 ml-4">
                           {relativeTime(wt.lastCommitTs)}
                           {linked.length > 0 && <> · {linked.length} session{linked.length > 1 ? 's' : ''}</>}
+                        </div>
+                        <div className="text-[10px] font-mono text-[var(--c-text-3)]/70 mt-0.5 ml-4 truncate" title={wt.path}>
+                          {wt.path}
                         </div>
                       </div>
                       <div className="flex items-center gap-1.5 shrink-0">

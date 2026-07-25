@@ -221,11 +221,15 @@ export default function ExpandedApp() {
   const [sessionsScope, setSessionsScope] = useState<{ name: string; paths: string[] } | null>(null)
   // Preselected agent filter for the Sessions list (via agent chips on My Work).
   const [sessionsAgentPreset, setSessionsAgentPreset] = useState<string | null>(null)
+  // Worktree to auto-expand and scroll to on the Repos section (via "Needs
+  // attention" on My Work). Plain navigation always clears it.
+  const [worktreeFocusPath, setWorktreeFocusPath] = useState<string | null>(null)
 
-  const goTo = useCallback((s: Section, scope?: { name: string; paths: string[] }, agent?: string) => {
+  const goTo = useCallback((s: Section, scope?: { name: string; paths: string[] }, agent?: string, worktreePath?: string) => {
     setSection(s)
     setSessionsScope(scope ?? null)
     setSessionsAgentPreset(agent ?? null)
+    setWorktreeFocusPath(worktreePath ?? null)
     window.location.hash = s === 'work' ? '' : s
   }, [])
 
@@ -235,6 +239,10 @@ export default function ExpandedApp() {
 
   const viewSessionsForProject = useCallback((name: string, path: string) => {
     goTo('sessions', { name, paths: [path] })
+  }, [goTo])
+
+  const focusWorktree = useCallback((path: string) => {
+    goTo('worktrees', undefined, undefined, path)
   }, [goTo])
 
   const goHome = useCallback(() => goTo('work'), [goTo])
@@ -341,6 +349,7 @@ export default function ExpandedApp() {
             onRefresh={refreshAll}
             onOpenSession={openSession}
             onOpenSessionsForProject={viewSessionsForProject}
+            onFocusWorktree={focusWorktree}
             showToast={showToast}
           />
         )}
@@ -367,6 +376,7 @@ export default function ExpandedApp() {
             onRefresh={refreshAll}
             onOpenSession={openSession}
             onViewSessions={viewSessionsForRepo}
+            focusPath={worktreeFocusPath}
             showToast={showToast}
           />
         )}

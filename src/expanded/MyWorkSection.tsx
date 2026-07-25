@@ -75,6 +75,7 @@ interface MyWorkSectionProps {
   onRefresh: () => void | Promise<unknown>
   onOpenSession: (s: SessionEntry) => void
   onOpenSessionsForProject: (name: string, path: string) => void
+  onFocusWorktree: (path: string) => void
   showToast: (type: 'success' | 'error', message: string) => void
 }
 
@@ -82,7 +83,7 @@ function todayKey(): string {
   return `contextbar:expanded:peakbanner:${new Date().toISOString().slice(0, 10)}`
 }
 
-export default function MyWorkSection({ sessions, repos, loading, goTo, onRefresh, onOpenSession, onOpenSessionsForProject, showToast }: MyWorkSectionProps) {
+export default function MyWorkSection({ sessions, repos, loading, goTo, onRefresh, onOpenSession, onOpenSessionsForProject, onFocusWorktree, showToast }: MyWorkSectionProps) {
   const [tab, setTab] = useState<Tab>('today')
   const [copiedResume, setCopiedResume] = useState<string | null>(null)
   const [commitTs, setCommitTs] = useState<number[]>([])
@@ -191,6 +192,7 @@ export default function MyWorkSection({ sessions, repos, loading, goTo, onRefres
   const attention = useMemo(() => {
     const items: {
       key: string
+      path: string
       kind: 'uncommitted' | 'unmerged'
       title: string
       why: string
@@ -205,6 +207,7 @@ export default function MyWorkSection({ sessions, repos, loading, goTo, onRefres
         if (wt.isDirty) {
           items.push({
             key: `${wt.path}:dirty`,
+            path: wt.path,
             kind: 'uncommitted',
             title: `${wt.branch ?? wt.path}`,
             why: `Has edited files that were never committed${idleDays !== null && idleDays > 7 ? ` — sitting for ${idleDays} days, risk of losing work` : ' — commit or stash them'}`,
@@ -215,6 +218,7 @@ export default function MyWorkSection({ sessions, repos, loading, goTo, onRefres
         } else if (!wt.isMerged && wt.ahead > 0) {
           items.push({
             key: `${wt.path}:ahead`,
+            path: wt.path,
             kind: 'unmerged',
             title: `${wt.branch ?? wt.path}`,
             why: `${wt.ahead} finished commit${wt.ahead > 1 ? 's' : ''} not yet merged into ${repo.baseBranch} — merge or open a PR`,
@@ -449,7 +453,7 @@ export default function MyWorkSection({ sessions, repos, loading, goTo, onRefres
                     {attention.map(a => (
                       <button
                         key={a.key}
-                        onClick={() => goTo('worktrees')}
+                        onClick={() => onFocusWorktree(a.path)}
                         title={a.why}
                         className={`w-full text-left rounded-lg border-l-2 bg-[var(--c-surface-2)]/60 px-2.5 py-2 hover:bg-[var(--c-surface-2)] transition-colors ${a.kind === 'uncommitted' ? 'border-l-rose-400' : 'border-l-amber-400'}`}
                       >
