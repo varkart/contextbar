@@ -69,11 +69,14 @@ fn read_source(source: &McpSourceSpec, home: &std::path::Path) -> (Vec<McpServer
             file,
             active_key,
             disabled_key,
+            inline_toggle_field,
             jsonc,
+            ..
         } => read_json_key_pair(
             &expand_home(file, home),
             active_key,
             disabled_key.as_deref(),
+            inline_toggle_field.as_deref(),
             *jsonc,
         ),
         McpSourceSpec::JsonNested {
@@ -134,6 +137,7 @@ fn read_json_key_pair(
     path: &std::path::Path,
     active_key: &str,
     disabled_key: Option<&str>,
+    inline_toggle_field: Option<&str>,
     jsonc: bool,
 ) -> (Vec<McpServer>, Option<String>) {
     if !path.exists() {
@@ -146,7 +150,32 @@ fn read_json_key_pair(
 
     let mut mcps = Vec::new();
     if let Some(active) = json.get(active_key) {
-        mcps.extend(parse_mcp_servers(active, true));
+        if let Some(field) = inline_toggle_field {
+            // Split entries by their own boolean field (defaults to true when absent)
+            // instead of a separate disabled_key section (e.g. OpenCode's per-server "enabled").
+            let mut active_map = serde_json::Map::new();
+            let mut inactive_map = serde_json::Map::new();
+            if let Some(obj) = active.as_object() {
+                for (name, cfg) in obj {
+                    let is_enabled = cfg.get(field).and_then(|v| v.as_bool()).unwrap_or(true);
+                    if is_enabled {
+                        active_map.insert(name.clone(), cfg.clone());
+                    } else {
+                        inactive_map.insert(name.clone(), cfg.clone());
+                    }
+                }
+            }
+            mcps.extend(parse_mcp_servers(
+                &serde_json::Value::Object(active_map),
+                true,
+            ));
+            mcps.extend(parse_mcp_servers(
+                &serde_json::Value::Object(inactive_map),
+                false,
+            ));
+        } else {
+            mcps.extend(parse_mcp_servers(active, true));
+        }
     }
     if let Some(key) = disabled_key {
         if let Some(disabled) = json.get(key) {
@@ -889,6 +918,12 @@ mod tests {
                 .to_string(),
             active_key: "mcpServers".to_string(),
             disabled_key: Some("disabledMcpServers".to_string()),
+            inline_toggle_field: None,
+            entry_type_field: None,
+            entry_type_local_value: None,
+            entry_type_remote_value: None,
+            entry_command_as_array: false,
+            entry_env_key: None,
             jsonc: false,
         };
         let (mcps, err) = collect(&[wrap(source)], None, tmp.path());
@@ -898,6 +933,45 @@ mod tests {
         let beta = mcps.iter().find(|m| m.name == "beta").unwrap();
         assert!(alpha.active);
         assert!(!beta.active);
+    }
+
+    #[test]
+    fn json_key_pair_reads_inline_enabled_field() {
+        let tmp = TempDir::new().unwrap();
+        let settings = serde_json::json!({
+            "mcp": {
+                "playwright": { "type": "local", "command": ["npx", "-y", "@playwright/mcp"] },
+                "jira": { "type": "remote", "url": "https://jira.example.com/mcp", "enabled": false }
+            }
+        });
+        write_json(tmp.path(), "opencode.json", settings);
+
+        let source = McpSourceSpec::JsonKeyPair {
+            file: tmp
+                .path()
+                .join("opencode.json")
+                .to_string_lossy()
+                .to_string(),
+            active_key: "mcp".to_string(),
+            disabled_key: None,
+            inline_toggle_field: Some("enabled".to_string()),
+            entry_type_field: None,
+            entry_type_local_value: None,
+            entry_type_remote_value: None,
+            entry_command_as_array: false,
+            entry_env_key: None,
+            jsonc: false,
+        };
+        let (mcps, err) = collect(&[wrap(source)], None, tmp.path());
+        assert!(err.is_none());
+        assert_eq!(mcps.len(), 2);
+        let playwright = mcps.iter().find(|m| m.name == "playwright").unwrap();
+        assert!(
+            playwright.active,
+            "no enabled field should default to active"
+        );
+        let jira = mcps.iter().find(|m| m.name == "jira").unwrap();
+        assert!(!jira.active, "enabled=false should be inactive");
     }
 
     #[test]
@@ -911,6 +985,12 @@ mod tests {
                 .to_string(),
             active_key: "mcpServers".to_string(),
             disabled_key: None,
+            inline_toggle_field: None,
+            entry_type_field: None,
+            entry_type_local_value: None,
+            entry_type_remote_value: None,
+            entry_command_as_array: false,
+            entry_env_key: None,
             jsonc: false,
         };
         let (mcps, err) = collect(&[wrap(source)], None, tmp.path());
@@ -927,6 +1007,12 @@ mod tests {
             file: path.to_string_lossy().to_string(),
             active_key: "mcpServers".to_string(),
             disabled_key: None,
+            inline_toggle_field: None,
+            entry_type_field: None,
+            entry_type_local_value: None,
+            entry_type_remote_value: None,
+            entry_command_as_array: false,
+            entry_env_key: None,
             jsonc: false,
         };
         let (mcps, err) = collect(&[wrap(source)], None, tmp.path());
@@ -952,6 +1038,12 @@ mod tests {
                 .to_string(),
             active_key: "mcpServers".to_string(),
             disabled_key: None,
+            inline_toggle_field: None,
+            entry_type_field: None,
+            entry_type_local_value: None,
+            entry_type_remote_value: None,
+            entry_command_as_array: false,
+            entry_env_key: None,
             jsonc: true,
         };
         let (mcps, err) = collect(&[wrap(source)], None, tmp.path());
@@ -980,6 +1072,12 @@ mod tests {
                 .to_string(),
             active_key: "mcpServers".to_string(),
             disabled_key: None,
+            inline_toggle_field: None,
+            entry_type_field: None,
+            entry_type_local_value: None,
+            entry_type_remote_value: None,
+            entry_command_as_array: false,
+            entry_env_key: None,
             jsonc: false,
         };
         let (mcps, _) = collect(&[wrap(source)], None, tmp.path());
@@ -1269,12 +1367,24 @@ mod tests {
                 file: tmp.path().join("a.json").to_string_lossy().to_string(),
                 active_key: "mcpServers".to_string(),
                 disabled_key: None,
+                inline_toggle_field: None,
+                entry_type_field: None,
+                entry_type_local_value: None,
+                entry_type_remote_value: None,
+                entry_command_as_array: false,
+                entry_env_key: None,
                 jsonc: false,
             }),
             wrap(McpSourceSpec::JsonKeyPair {
                 file: tmp.path().join("b.json").to_string_lossy().to_string(),
                 active_key: "mcpServers".to_string(),
                 disabled_key: None,
+                inline_toggle_field: None,
+                entry_type_field: None,
+                entry_type_local_value: None,
+                entry_type_remote_value: None,
+                entry_command_as_array: false,
+                entry_env_key: None,
                 jsonc: false,
             }),
         ];
@@ -1304,12 +1414,24 @@ mod tests {
                 file: tmp.path().join("a.json").to_string_lossy().to_string(),
                 active_key: "mcpServers".to_string(),
                 disabled_key: None,
+                inline_toggle_field: None,
+                entry_type_field: None,
+                entry_type_local_value: None,
+                entry_type_remote_value: None,
+                entry_command_as_array: false,
+                entry_env_key: None,
                 jsonc: false,
             }),
             wrap(McpSourceSpec::JsonKeyPair {
                 file: tmp.path().join("b.json").to_string_lossy().to_string(),
                 active_key: "mcpServers".to_string(),
                 disabled_key: None,
+                inline_toggle_field: None,
+                entry_type_field: None,
+                entry_type_local_value: None,
+                entry_type_remote_value: None,
+                entry_command_as_array: false,
+                entry_env_key: None,
                 jsonc: false,
             }),
         ];
@@ -1341,6 +1463,12 @@ mod tests {
                     .to_string(),
                 active_key: "mcpServers".to_string(),
                 disabled_key: None,
+                inline_toggle_field: None,
+                entry_type_field: None,
+                entry_type_local_value: None,
+                entry_type_remote_value: None,
+                entry_command_as_array: false,
+                entry_env_key: None,
                 jsonc: false,
             },
         };
@@ -1372,6 +1500,12 @@ mod tests {
                     .to_string(),
                 active_key: "mcpServers".to_string(),
                 disabled_key: None,
+                inline_toggle_field: None,
+                entry_type_field: None,
+                entry_type_local_value: None,
+                entry_type_remote_value: None,
+                entry_command_as_array: false,
+                entry_env_key: None,
                 jsonc: false,
             },
         };
@@ -1571,6 +1705,12 @@ mod tests {
                     .to_string(),
                 active_key: "mcpServers".to_string(),
                 disabled_key: None,
+                inline_toggle_field: None,
+                entry_type_field: None,
+                entry_type_local_value: None,
+                entry_type_remote_value: None,
+                entry_command_as_array: false,
+                entry_env_key: None,
                 jsonc: false,
             },
         };
@@ -1606,6 +1746,12 @@ mod tests {
                 .to_string(),
             active_key: "mcpServers".to_string(),
             disabled_key: None,
+            inline_toggle_field: None,
+            entry_type_field: None,
+            entry_type_local_value: None,
+            entry_type_remote_value: None,
+            entry_command_as_array: false,
+            entry_env_key: None,
             jsonc: false,
         });
 

@@ -111,6 +111,52 @@ pub fn move_mcp_in_config(
     Ok(())
 }
 
+/// Set a boolean `toggle_field` on an MCP entry within `active_key`, in place —
+/// used for JSON sources that toggle per-entry (e.g. OpenCode's `enabled`)
+/// instead of moving the entry to a separate disabled section.
+pub fn toggle_json_mcp_enabled(
+    config_path: &str,
+    active_key: &str,
+    mcp_name: &str,
+    active: bool,
+    toggle_field: &str,
+) -> Result<(), String> {
+    let lock = config_lock(config_path);
+    let _guard = lock.lock().unwrap_or_else(|e| e.into_inner());
+
+    if let Err(e) = crate::backup::snapshot(config_path) {
+        eprintln!("[backup] snapshot failed for {config_path}: {e}");
+    }
+
+    let content = std::fs::read_to_string(config_path)
+        .map_err(|e| format!("cannot read {config_path}: {e}"))?;
+    let stripped = strip_jsonc(&content);
+    let mut json: serde_json::Value =
+        serde_json::from_str(&stripped).map_err(|e| format!("cannot parse {config_path}: {e}"))?;
+
+    let entry = json
+        .as_object_mut()
+        .and_then(|root| root.get_mut(active_key))
+        .and_then(|section| section.as_object_mut())
+        .and_then(|map| map.get_mut(mcp_name))
+        .and_then(|entry| entry.as_object_mut())
+        .ok_or_else(|| format!("MCP '{mcp_name}' not found in '{active_key}'"))?;
+
+    entry.insert(toggle_field.to_string(), serde_json::Value::Bool(active));
+
+    let updated =
+        serde_json::to_string_pretty(&json).map_err(|e| format!("serialization error: {e}"))?;
+
+    let tmp_path = format!("{config_path}.tmp");
+    std::fs::write(&tmp_path, &updated).map_err(|e| format!("cannot write temp file: {e}"))?;
+    std::fs::rename(&tmp_path, config_path).map_err(|e| {
+        let _ = std::fs::remove_file(&tmp_path);
+        format!("cannot atomically replace {config_path}: {e}")
+    })?;
+
+    Ok(())
+}
+
 /// Generic guarded JSON read-modify-write used by capability toggles.
 /// Same guarantees as the MCP helpers: per-file mutex, pre-write backup,
 /// JSONC tolerated on read, atomic rename on write. A missing file starts
