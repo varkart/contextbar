@@ -32,36 +32,36 @@ describe('useUpdateCheck', () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('offline')))
     const { result } = renderHook(() => useUpdateCheck('0.5.0'))
     await waitFor(() => {}, { timeout: 200 })
-    expect(result.current).toBeNull()
+    expect(result.current.updateInfo).toBeNull()
   })
 
   it('returns null when latest equals current', async () => {
     mockRelease('v0.5.0')
     const { result } = renderHook(() => useUpdateCheck('0.5.0'))
     await waitFor(() => {}, { timeout: 200 })
-    expect(result.current).toBeNull()
+    expect(result.current.updateInfo).toBeNull()
   })
 
   it('returns null when latest is older than current', async () => {
     mockRelease('v0.4.0')
     const { result } = renderHook(() => useUpdateCheck('0.5.0'))
     await waitFor(() => {}, { timeout: 200 })
-    expect(result.current).toBeNull()
+    expect(result.current.updateInfo).toBeNull()
   })
 
   it('returns updateInfo when newer version available', async () => {
     mockRelease('v0.6.0', 'https://example.com/release')
     const { result } = renderHook(() => useUpdateCheck('0.5.0'))
-    await waitFor(() => expect(result.current).not.toBeNull())
-    expect(result.current?.latestVersion).toBe('v0.6.0')
-    expect(result.current?.releaseUrl).toBe('https://example.com/release')
+    await waitFor(() => expect(result.current.updateInfo).not.toBeNull())
+    expect(result.current.updateInfo?.latestVersion).toBe('v0.6.0')
+    expect(result.current.updateInfo?.releaseUrl).toBe('https://example.com/release')
   })
 
   it('detects major version bump', async () => {
     mockRelease('v1.0.0')
     const { result } = renderHook(() => useUpdateCheck('0.5.0'))
-    await waitFor(() => expect(result.current).not.toBeNull())
-    expect(result.current?.latestVersion).toBe('v1.0.0')
+    await waitFor(() => expect(result.current.updateInfo).not.toBeNull())
+    expect(result.current.updateInfo?.latestVersion).toBe('v1.0.0')
   })
 
   it('returns null when response has no tag_name', async () => {
@@ -70,7 +70,7 @@ describe('useUpdateCheck', () => {
     }))
     const { result } = renderHook(() => useUpdateCheck('0.5.0'))
     await waitFor(() => {}, { timeout: 200 })
-    expect(result.current).toBeNull()
+    expect(result.current.updateInfo).toBeNull()
   })
 
   it('uses cache and skips second fetch within TTL', async () => {
@@ -86,7 +86,7 @@ describe('useUpdateCheck', () => {
     unmount()
 
     const { result } = renderHook(() => useUpdateCheck('0.5.0'))
-    await waitFor(() => expect(result.current).not.toBeNull())
+    await waitFor(() => expect(result.current.updateInfo).not.toBeNull())
     expect(mockFetch).toHaveBeenCalledTimes(1)
   })
 
@@ -95,7 +95,31 @@ describe('useUpdateCheck', () => {
     vi.stubGlobal('fetch', mockFetch)
     const { result } = renderHook(() => useUpdateCheck(''))
     await waitFor(() => {}, { timeout: 200 })
-    expect(result.current).toBeNull()
+    expect(result.current.updateInfo).toBeNull()
     expect(mockFetch).not.toHaveBeenCalled()
+  })
+
+  it('re-checks when the document becomes visible again', async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      json: () => Promise.resolve({ tag_name: 'v0.5.0', html_url: 'https://example.com' }),
+    })
+    vi.stubGlobal('fetch', mockFetch)
+
+    renderHook(() => useUpdateCheck('0.5.0'))
+    await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(1))
+
+    Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true })
+    document.dispatchEvent(new Event('visibilitychange'))
+
+    await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(2))
+  })
+
+  it('checkNow can be called manually and toggles checking state', async () => {
+    mockRelease('v0.5.0')
+    const { result } = renderHook(() => useUpdateCheck('0.5.0'))
+    await waitFor(() => expect(result.current.checking).toBe(false))
+
+    result.current.checkNow()
+    await waitFor(() => expect(result.current.checking).toBe(false))
   })
 })
