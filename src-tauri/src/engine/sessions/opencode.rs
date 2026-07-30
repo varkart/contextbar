@@ -25,7 +25,9 @@
 //!   need to fully model for a read-only view).
 
 use super::SessionSource;
-use crate::engine::history::types::{ContentBlock, Message, SessionDetail, SessionEntry, TokenUsage};
+use crate::engine::history::types::{
+    ContentBlock, Message, SessionDetail, SessionEntry, TokenUsage,
+};
 use rusqlite::{Connection, OpenFlags};
 use serde_json::Value;
 use std::path::PathBuf;
@@ -73,7 +75,9 @@ fn model_id_from_json(raw: Option<&str>) -> Option<String> {
 
 fn list_from_db(limit: usize) -> Vec<SessionEntry> {
     let Some(path) = db_path() else { return vec![] };
-    let Some(conn) = open_ro(&path) else { return vec![] };
+    let Some(conn) = open_ro(&path) else {
+        return vec![];
+    };
     let Ok(mut stmt) = conn.prepare(
         "SELECT s.id, s.title, s.directory, s.time_updated, s.tokens_input, s.tokens_output, s.model,
                 COUNT(CASE WHEN sm.type = 'user' THEN 1 END)
@@ -94,34 +98,45 @@ fn list_from_db(limit: usize) -> Vec<SessionEntry> {
         let tokens_output: i64 = row.get(5)?;
         let model: Option<String> = row.get(6)?;
         let prompt_count: i64 = row.get(7)?;
-        Ok((id, title, directory, ts, tokens_input, tokens_output, model, prompt_count))
+        Ok((
+            id,
+            title,
+            directory,
+            ts,
+            tokens_input,
+            tokens_output,
+            model,
+            prompt_count,
+        ))
     }) else {
         return vec![];
     };
 
     rows.filter_map(Result::ok)
-        .map(|(id, title, directory, ts, tokens_input, tokens_output, model, prompt_count)| {
-            let ts = ts.max(0) as u64;
-            SessionEntry {
-                agent: "opencode".to_string(),
-                session_id: id,
-                display: if title.trim().is_empty() {
-                    "(no prompt)".to_string()
-                } else {
-                    title.clone()
-                },
-                timestamp: ts,
-                project: directory.clone(),
-                project_name: project_name(&directory),
-                total_tokens: (tokens_input.max(0) + tokens_output.max(0)) as u64,
-                model: model_id_from_json(model.as_deref()),
-                duration_minutes: None,
-                is_live: now_ms().saturating_sub(ts) < 300_000,
-                error_count: 0,
-                prompt_count: prompt_count.max(0) as u32,
-                title: (!title.trim().is_empty()).then_some(title),
-            }
-        })
+        .map(
+            |(id, title, directory, ts, tokens_input, tokens_output, model, prompt_count)| {
+                let ts = ts.max(0) as u64;
+                SessionEntry {
+                    agent: "opencode".to_string(),
+                    session_id: id,
+                    display: if title.trim().is_empty() {
+                        "(no prompt)".to_string()
+                    } else {
+                        title.clone()
+                    },
+                    timestamp: ts,
+                    project: directory.clone(),
+                    project_name: project_name(&directory),
+                    total_tokens: (tokens_input.max(0) + tokens_output.max(0)) as u64,
+                    model: model_id_from_json(model.as_deref()),
+                    duration_minutes: None,
+                    is_live: now_ms().saturating_sub(ts) < 300_000,
+                    error_count: 0,
+                    prompt_count: prompt_count.max(0) as u32,
+                    title: (!title.trim().is_empty()).then_some(title),
+                }
+            },
+        )
         .collect()
 }
 
@@ -266,15 +281,18 @@ fn get_from_db(session_id: &str) -> Option<SessionDetail> {
                 let directory: String = row.get(1)?;
                 let created: i64 = row.get(2)?;
                 let updated: i64 = row.get(3)?;
-                Ok((title, directory, created.max(0) as u64, updated.max(0) as u64))
+                Ok((
+                    title,
+                    directory,
+                    created.max(0) as u64,
+                    updated.max(0) as u64,
+                ))
             },
         )
         .ok()?;
 
     let mut stmt = conn
-        .prepare(
-            "SELECT type, data FROM session_message WHERE session_id = ?1 ORDER BY seq ASC",
-        )
+        .prepare("SELECT type, data FROM session_message WHERE session_id = ?1 ORDER BY seq ASC")
         .ok()?;
     let rows = stmt
         .query_map([session_id], |row| {
@@ -379,10 +397,17 @@ mod tests {
         let msg = message_from_row("assistant", &data).unwrap();
         assert_eq!(msg.role, "assistant");
         assert_eq!(msg.content.len(), 2); // reasoning skipped
-        assert_eq!(msg.content[0].text.as_deref(), Some("Looked at the middleware."));
+        assert_eq!(
+            msg.content[0].text.as_deref(),
+            Some("Looked at the middleware.")
+        );
         assert_eq!(msg.content[1].block_type, "tool_use");
         assert_eq!(msg.content[1].tool_name.as_deref(), Some("fs_read"));
-        assert!(msg.content[1].tool_input.as_deref().unwrap().contains("x.rs"));
+        assert!(msg.content[1]
+            .tool_input
+            .as_deref()
+            .unwrap()
+            .contains("x.rs"));
         assert_eq!(msg.model.as_deref(), Some("claude-sonnet-4-5"));
         let usage = msg.usage.unwrap();
         assert_eq!(usage.input_tokens, 100);
@@ -395,7 +420,11 @@ mod tests {
     fn skips_system_and_control_messages() {
         assert!(message_from_row("system", r#"{"text":"noise"}"#).is_none());
         assert!(message_from_row("agent-switched", r#"{"agent":"build"}"#).is_none());
-        assert!(message_from_row("compaction", r#"{"reason":"auto","summary":"","recent":""}"#).is_none());
+        assert!(message_from_row(
+            "compaction",
+            r#"{"reason":"auto","summary":"","recent":""}"#
+        )
+        .is_none());
     }
 
     #[test]

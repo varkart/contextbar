@@ -36,8 +36,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 pub struct KiroSource;
 
 fn db_path() -> Option<PathBuf> {
-    let path = dirs::home_dir()?
-        .join("Library/Application Support/kiro-cli/data.sqlite3");
+    let path = dirs::home_dir()?.join("Library/Application Support/kiro-cli/data.sqlite3");
     path.is_file().then_some(path)
 }
 
@@ -81,7 +80,11 @@ fn now_ms() -> u64 {
 fn parse_ts(v: ValueRef) -> u64 {
     let as_secs_or_ms = |n: i64| -> u64 {
         let n = n.max(0) as u64;
-        if n > 10_000_000_000 { n } else { n.saturating_mul(1000) }
+        if n > 10_000_000_000 {
+            n
+        } else {
+            n.saturating_mul(1000)
+        }
     };
     match v {
         ValueRef::Integer(i) => as_secs_or_ms(i),
@@ -187,7 +190,12 @@ fn parse_transcript(lines: &[String]) -> Vec<Message> {
     messages
 }
 
-fn entry_from_row(key: String, conversation_id: String, value: &str, ts: u64) -> Option<SessionEntry> {
+fn entry_from_row(
+    key: String,
+    conversation_id: String,
+    value: &str,
+    ts: u64,
+) -> Option<SessionEntry> {
     let blob: ConversationBlob = serde_json::from_str(value).ok()?;
     let mut prompt_count = 0u32;
     let mut display = None;
@@ -195,7 +203,10 @@ fn entry_from_row(key: String, conversation_id: String, value: &str, ts: u64) ->
         if line.starts_with("> ") {
             prompt_count += 1;
             if display.is_none() {
-                let text = strip_user_prefix(line).replace('\n', " ").trim().to_string();
+                let text = strip_user_prefix(line)
+                    .replace('\n', " ")
+                    .trim()
+                    .to_string();
                 if !text.is_empty() {
                     display = Some(text);
                 }
@@ -222,7 +233,9 @@ fn entry_from_row(key: String, conversation_id: String, value: &str, ts: u64) ->
 
 fn list_from_db(limit: usize) -> Vec<SessionEntry> {
     let Some(path) = db_path() else { return vec![] };
-    let Some(conn) = open_ro(&path) else { return vec![] };
+    let Some(conn) = open_ro(&path) else {
+        return vec![];
+    };
     if !table_exists(&conn, "conversations_v2") {
         return vec![];
     }
@@ -345,7 +358,10 @@ mod tests {
         let messages = parse_transcript(&lines);
         assert_eq!(messages.len(), 4);
         assert_eq!(messages[0].role, "user");
-        assert_eq!(messages[0].content[0].text.as_deref(), Some("fix the login bug"));
+        assert_eq!(
+            messages[0].content[0].text.as_deref(),
+            Some("fix the login bug")
+        );
         assert_eq!(messages[1].role, "assistant");
         assert_eq!(messages[1].content.len(), 2); // text + tool_use
         assert_eq!(messages[1].content[1].tool_name.as_deref(), Some("fs_read"));
@@ -354,8 +370,14 @@ mod tests {
 
     #[test]
     fn parse_ts_distinguishes_seconds_from_millis() {
-        assert_eq!(parse_ts(ValueRef::Integer(1_781_000_000)), 1_781_000_000_000);
-        assert_eq!(parse_ts(ValueRef::Integer(1_781_000_000_000)), 1_781_000_000_000);
+        assert_eq!(
+            parse_ts(ValueRef::Integer(1_781_000_000)),
+            1_781_000_000_000
+        );
+        assert_eq!(
+            parse_ts(ValueRef::Integer(1_781_000_000_000)),
+            1_781_000_000_000
+        );
     }
 
     #[test]
@@ -441,7 +463,8 @@ mod tests {
             .filter_map(Result::ok)
             .collect();
         assert_eq!(rows.len(), 1);
-        let entry = entry_from_row(rows[0].0.clone(), rows[0].1.clone(), &rows[0].2, rows[0].3).unwrap();
+        let entry =
+            entry_from_row(rows[0].0.clone(), rows[0].1.clone(), &rows[0].2, rows[0].3).unwrap();
         assert_eq!(entry.session_id, "conv-1");
         assert_eq!(entry.display, "hello");
     }
