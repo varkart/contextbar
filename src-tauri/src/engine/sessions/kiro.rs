@@ -1,60 +1,34 @@
 //! Kiro CLI (`kiro-cli`) session source.
 //!
-//! Kiro CLI is AWS's rebrand of Amazon Q Developer CLI
-//! (github.com/aws/amazon-q-developer-cli, Apache-2.0). Conversations live in
-//! a SQLite database at `~/Library/Application Support/kiro-cli/data.sqlite3`,
-//! table `conversations_v2` — columns `key` (project directory path),
-//! `conversation_id`, `value` (JSON blob), `created_at`/`updated_at`. The
-//! older `conversations` table (v1, one row per directory, no id) is not
-//! read here: v1 has no way to address a single conversation for
-//! `--resume-id`, and the CLI writes new sessions to v2.
+//! Kiro CLI auto-saves every chat turn as files under
+//! `~/.kiro/sessions/cli/`, one session per directory (confirmed against
+//! real local session files — the sqlite `data.sqlite3` this module
+//! originally targeted turned out to be unrelated app state, not the
+//! conversation store). Three files per session:
 //!
-//! The `value` blob is a serialized `ConversationState`
-//! (crates/chat-cli/src/cli/chat/conversation.rs upstream). We only read its
-//! `transcript: Vec<String>` field — pre-formatted human-readable lines the
-//! CLI itself builds for `/transcript save`: user lines are prefixed `"> "`
-//! (embedded newlines become `"> \n"`), assistant lines end with
-//! `"\n[Tool uses: none]"` or `"\n[Tool uses: name1,name2]"`. That's the
-//! simplest reliably-shaped field for a read-only transcript view — the
-//! structured `history` field is a much deeper enum tree we don't need.
-//!
-//! CAVEAT: `conversations_v2` isn't in the public upstream repo (Kiro is
-//! ahead of it), so this schema is reconstructed from strings embedded in
-//! the `kiro-cli-chat` binary plus the upstream `ConversationState`/`Table`
-//! source, not confirmed against a live row. Timestamp units (seconds vs.
-//! ms) are guessed defensively by magnitude. Run `real_kiro_smoke` (ignored
-//! by default) against your own saved sessions to sanity-check field names
-//! once you have one: `cargo test real_kiro_smoke -- --ignored --nocapture`.
+//! - `{id}.json` — metadata: `cwd`, `title`, `created_at`/`updated_at`
+//!   (RFC3339), and `session_state.conversation_metadata
+//!   .user_turn_metadatas` (one entry per user turn — its length is a cheap
+//!   prompt count without touching the jsonl).
+//! - `{id}.jsonl` — the conversation, one JSON object per line tagged by
+//!   `kind`: `Prompt` (user turn, `data.content[].kind == "text"`),
+//!   `AssistantMessage` (`data.content[]` mixes `text` and `toolUse`
+//!   blocks), `ToolResults` (the tool output fed back to the model — often
+//!   huge documentation/file dumps, skipped here same as other sources drop
+//!   mechanical results and keep just the call).
+//! - `{id}.lock` — exists only while the session is actively open, so its
+//!   presence is a more accurate "live" signal than the mtime heuristic
+//!   other sources fall back to.
 
 use super::{rfc3339_to_ms, SessionSource};
 use crate::engine::history::types::{ContentBlock, Message, SessionDetail, SessionEntry};
-use rusqlite::types::ValueRef;
-use rusqlite::{Connection, OpenFlags};
 use std::path::PathBuf;
-use std::time::{SystemTime, UNIX_EPOCH};
 
 pub struct KiroSource;
 
-fn db_path() -> Option<PathBuf> {
-    let path = dirs::home_dir()?.join("Library/Application Support/kiro-cli/data.sqlite3");
-    path.is_file().then_some(path)
-}
-
-fn open_ro(path: &std::path::Path) -> Option<Connection> {
-    Connection::open_with_flags(
-        path,
-        OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
-    )
-    .ok()
-}
-
-fn table_exists(conn: &Connection, name: &str) -> bool {
-    conn.query_row(
-        "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?1",
-        [name],
-        |_| Ok(()),
-    )
-    .is_ok()
+fn sessions_root() -> Option<PathBuf> {
+    let dir = dirs::home_dir()?.join(".kiro").join("sessions").join("cli");
+    dir.is_dir().then_some(dir)
 }
 
 fn project_name(path: &str) -> String {
@@ -66,123 +40,183 @@ fn project_name(path: &str) -> String {
         .to_string()
 }
 
-fn now_ms() -> u64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_millis() as u64)
-        .unwrap_or(0)
-}
-
-/// `created_at`/`updated_at` could be unix seconds, unix ms, or an RFC3339
-/// string — the schema isn't confirmed. Guess by magnitude/type rather than
-/// assuming, so a wrong guess degrades to a wrong-but-plausible date instead
-/// of a parse failure.
-fn parse_ts(v: ValueRef) -> u64 {
-    let as_secs_or_ms = |n: i64| -> u64 {
-        let n = n.max(0) as u64;
-        if n > 10_000_000_000 {
-            n
-        } else {
-            n.saturating_mul(1000)
-        }
-    };
-    match v {
-        ValueRef::Integer(i) => as_secs_or_ms(i),
-        ValueRef::Real(f) => as_secs_or_ms(f as i64),
-        ValueRef::Text(t) => std::str::from_utf8(t)
-            .ok()
-            .and_then(rfc3339_to_ms)
-            .unwrap_or(0),
-        _ => 0,
-    }
+#[derive(serde::Deserialize, Default)]
+struct SessionMeta {
+    #[serde(default)]
+    cwd: String,
+    #[serde(default)]
+    created_at: String,
+    #[serde(default)]
+    updated_at: String,
+    #[serde(default)]
+    title: String,
+    #[serde(default)]
+    session_state: Option<SessionState>,
 }
 
 #[derive(serde::Deserialize, Default)]
-struct ConversationBlob {
+struct SessionState {
     #[serde(default)]
-    transcript: Vec<String>,
+    conversation_metadata: Option<ConversationMetadata>,
 }
 
-/// Splits a `"> "`-prefixed user transcript line back into its original
-/// text — the CLI encodes embedded newlines as `"> \n"` before prefixing
-/// the whole line with `"> "`.
-fn strip_user_prefix(line: &str) -> String {
-    line.strip_prefix("> ")
-        .unwrap_or(line)
-        .replace("> \n", "\n")
+#[derive(serde::Deserialize, Default)]
+struct ConversationMetadata {
+    #[serde(default)]
+    user_turn_metadatas: Vec<serde_json::Value>,
 }
 
-/// Splits an assistant transcript line into its text and the tool names
-/// from the trailing `"\n[Tool uses: ...]"` annotation the CLI always
-/// appends (`"none"` when no tools were used).
-fn split_tool_suffix(line: &str) -> (String, Vec<String>) {
-    const MARKER: &str = "\n[Tool uses: ";
-    if let (Some(idx), true) = (line.rfind(MARKER), line.ends_with(']')) {
-        let tools_str = &line[idx + MARKER.len()..line.len() - 1];
-        let text = line[..idx].to_string();
-        if tools_str == "none" || tools_str.is_empty() {
-            return (text, vec![]);
-        }
-        let tools = tools_str
-            .split(',')
-            .map(|t| t.trim().to_string())
-            .filter(|t| !t.is_empty())
-            .collect();
-        return (text, tools);
-    }
-    (line.to_string(), vec![])
+fn read_meta(path: &std::path::Path) -> Option<SessionMeta> {
+    let content = std::fs::read_to_string(path).ok()?;
+    serde_json::from_str(&content).ok()
 }
 
-fn parse_transcript(lines: &[String]) -> Vec<Message> {
-    let mut messages = Vec::with_capacity(lines.len());
-    for line in lines {
-        if line.starts_with("> ") {
-            messages.push(Message {
-                role: "user".to_string(),
-                content: vec![ContentBlock {
-                    block_type: "text".to_string(),
-                    text: Some(strip_user_prefix(line)),
-                    tool_name: None,
-                    tool_input: None,
+fn list_from_root(root: &std::path::Path, limit: usize) -> Vec<SessionEntry> {
+    let Ok(entries) = std::fs::read_dir(root) else {
+        return vec![];
+    };
+
+    let mut sessions: Vec<SessionEntry> = entries
+        .filter_map(Result::ok)
+        .filter_map(|entry| {
+            let path = entry.path();
+            if path.extension().and_then(|e| e.to_str()) != Some("json") {
+                return None;
+            }
+            let session_id = path.file_stem()?.to_str()?.to_string();
+            let meta = read_meta(&path)?;
+
+            let ts = rfc3339_to_ms(&meta.updated_at)
+                .or_else(|| rfc3339_to_ms(&meta.created_at))
+                .unwrap_or(0);
+            let prompt_count = meta
+                .session_state
+                .as_ref()
+                .and_then(|s| s.conversation_metadata.as_ref())
+                .map(|c| c.user_turn_metadatas.len())
+                .unwrap_or(0) as u32;
+            let is_live = root.join(format!("{session_id}.lock")).exists();
+
+            Some(SessionEntry {
+                agent: "kiro".to_string(),
+                session_id,
+                display: if meta.title.trim().is_empty() {
+                    "(no prompt)".to_string()
+                } else {
+                    meta.title.clone()
+                },
+                timestamp: ts,
+                project: meta.cwd.clone(),
+                project_name: project_name(&meta.cwd),
+                total_tokens: 0,
+                model: None,
+                duration_minutes: None,
+                is_live,
+                error_count: 0,
+                prompt_count,
+                title: (!meta.title.trim().is_empty()).then_some(meta.title),
+            })
+        })
+        .collect();
+
+    sessions.sort_by_key(|e| std::cmp::Reverse(e.timestamp));
+    sessions.truncate(limit);
+    sessions
+}
+
+#[derive(serde::Deserialize)]
+struct JsonlLine {
+    kind: String,
+    data: JsonlData,
+}
+
+#[derive(serde::Deserialize)]
+struct JsonlData {
+    #[serde(default)]
+    content: Vec<ContentItem>,
+    #[serde(default)]
+    meta: Option<TurnMeta>,
+}
+
+#[derive(serde::Deserialize)]
+struct TurnMeta {
+    #[serde(default)]
+    timestamp: Option<i64>,
+}
+
+#[derive(serde::Deserialize)]
+struct ContentItem {
+    kind: String,
+    #[serde(default)]
+    data: serde_json::Value,
+}
+
+fn parse_content(items: &[ContentItem]) -> Vec<ContentBlock> {
+    let mut out = Vec::new();
+    for item in items {
+        match item.kind.as_str() {
+            "text" => {
+                if let Some(text) = item.data.as_str().filter(|t| !t.trim().is_empty()) {
+                    out.push(ContentBlock {
+                        block_type: "text".to_string(),
+                        text: Some(text.to_string()),
+                        tool_name: None,
+                        tool_input: None,
+                        tool_result: None,
+                        is_error: false,
+                    });
+                }
+            }
+            "toolUse" => {
+                let name = item
+                    .data
+                    .get("name")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("tool")
+                    .to_string();
+                let input = item
+                    .data
+                    .get("input")
+                    .map(|v| v.to_string().chars().take(500).collect());
+                out.push(ContentBlock {
+                    block_type: "tool_use".to_string(),
+                    text: None,
+                    tool_name: Some(name),
+                    tool_input: input,
                     tool_result: None,
                     is_error: false,
-                }],
-                timestamp: None,
-                model: None,
-                usage: None,
-            });
-            continue;
+                });
+            }
+            _ => {} // other/future content kinds: skip
         }
+    }
+    out
+}
 
-        let (text, tools) = split_tool_suffix(line);
-        let mut content = Vec::new();
-        if !text.trim().is_empty() {
-            content.push(ContentBlock {
-                block_type: "text".to_string(),
-                text: Some(text),
-                tool_name: None,
-                tool_input: None,
-                tool_result: None,
-                is_error: false,
-            });
-        }
-        for tool in tools {
-            content.push(ContentBlock {
-                block_type: "tool_use".to_string(),
-                text: None,
-                tool_name: Some(tool),
-                tool_input: None,
-                tool_result: None,
-                is_error: false,
-            });
-        }
+fn parse_jsonl(content: &str) -> Vec<Message> {
+    let mut messages = Vec::new();
+    for line in content.lines() {
+        let Ok(parsed) = serde_json::from_str::<JsonlLine>(line.trim()) else {
+            continue;
+        };
+        let role = match parsed.kind.as_str() {
+            "Prompt" => "user",
+            "AssistantMessage" => "assistant",
+            _ => continue, // ToolResults and anything else: internal, skip
+        };
+        let content = parse_content(&parsed.data.content);
         if content.is_empty() {
             continue;
         }
+        let timestamp = parsed
+            .data
+            .meta
+            .and_then(|m| m.timestamp)
+            .map(|secs| (secs.max(0) as u64) * 1000);
         messages.push(Message {
-            role: "assistant".to_string(),
+            role: role.to_string(),
             content,
-            timestamp: None,
+            timestamp,
             model: None,
             usage: None,
         });
@@ -190,105 +224,29 @@ fn parse_transcript(lines: &[String]) -> Vec<Message> {
     messages
 }
 
-fn entry_from_row(
-    key: String,
-    conversation_id: String,
-    value: &str,
-    ts: u64,
-) -> Option<SessionEntry> {
-    let blob: ConversationBlob = serde_json::from_str(value).ok()?;
-    let mut prompt_count = 0u32;
-    let mut display = None;
-    for line in &blob.transcript {
-        if line.starts_with("> ") {
-            prompt_count += 1;
-            if display.is_none() {
-                let text = strip_user_prefix(line)
-                    .replace('\n', " ")
-                    .trim()
-                    .to_string();
-                if !text.is_empty() {
-                    display = Some(text);
-                }
-            }
-        }
-    }
-    let name = project_name(&key);
-    Some(SessionEntry {
-        agent: "kiro".to_string(),
-        session_id: conversation_id,
-        display: display.unwrap_or_else(|| "(no prompt)".to_string()),
-        timestamp: ts,
-        project: key,
-        project_name: name,
-        total_tokens: 0,
-        model: None,
-        duration_minutes: None,
-        is_live: now_ms().saturating_sub(ts) < 300_000,
-        error_count: 0,
-        prompt_count,
-        title: None,
-    })
-}
+fn get_from_root(root: &std::path::Path, session_id: &str) -> Option<SessionDetail> {
+    let meta = read_meta(&root.join(format!("{session_id}.json")))?;
+    let jsonl = std::fs::read_to_string(root.join(format!("{session_id}.jsonl"))).ok()?;
+    let messages = parse_jsonl(&jsonl);
 
-fn list_from_db(limit: usize) -> Vec<SessionEntry> {
-    let Some(path) = db_path() else { return vec![] };
-    let Some(conn) = open_ro(&path) else {
-        return vec![];
-    };
-    if !table_exists(&conn, "conversations_v2") {
-        return vec![];
-    }
-    let Ok(mut stmt) = conn.prepare(
-        "SELECT key, conversation_id, value, updated_at FROM conversations_v2 ORDER BY updated_at DESC LIMIT ?1",
-    ) else {
-        return vec![];
-    };
-    let Ok(rows) = stmt.query_map([limit as i64], |row| {
-        let key: String = row.get(0)?;
-        let conversation_id: String = row.get(1)?;
-        let value: String = row.get(2)?;
-        let ts = parse_ts(row.get_ref(3)?);
-        Ok((key, conversation_id, value, ts))
-    }) else {
-        return vec![];
-    };
-    rows.filter_map(Result::ok)
-        .filter_map(|(key, cid, value, ts)| entry_from_row(key, cid, &value, ts))
-        .collect()
-}
+    let created_ms = rfc3339_to_ms(&meta.created_at);
+    let updated_ms = rfc3339_to_ms(&meta.updated_at);
+    let timestamp = updated_ms.or(created_ms).unwrap_or(0);
 
-fn get_from_db(session_id: &str) -> Option<SessionDetail> {
-    let path = db_path()?;
-    let conn = open_ro(&path)?;
-    if !table_exists(&conn, "conversations_v2") {
-        return None;
-    }
-    let (key, value, ts) = conn
-        .query_row(
-            "SELECT key, value, updated_at FROM conversations_v2 WHERE conversation_id = ?1",
-            [session_id],
-            |row| {
-                let key: String = row.get(0)?;
-                let value: String = row.get(1)?;
-                let ts = parse_ts(row.get_ref(2)?);
-                Ok((key, value, ts))
-            },
-        )
-        .ok()?;
-    let blob: ConversationBlob = serde_json::from_str(&value).ok()?;
-    let messages = parse_transcript(&blob.transcript);
     Some(SessionDetail {
         agent: "kiro".to_string(),
         session_id: session_id.to_string(),
         messages,
         total_tokens: Default::default(),
         model: None,
-        duration_ms: None,
-        project: key.clone(),
-        project_name: project_name(&key),
-        timestamp: ts,
-        title: None,
+        duration_ms: match (created_ms, updated_ms) {
+            (Some(c), Some(u)) => u.checked_sub(c),
+            _ => None,
+        },
+        project: meta.cwd.clone(),
+        project_name: project_name(&meta.cwd),
+        timestamp,
+        title: (!meta.title.trim().is_empty()).then_some(meta.title),
     })
 }
 
@@ -298,11 +256,14 @@ impl SessionSource for KiroSource {
     }
 
     fn list(&self, limit: usize) -> Vec<SessionEntry> {
-        list_from_db(limit)
+        let Some(root) = sessions_root() else {
+            return vec![];
+        };
+        list_from_root(&root, limit)
     }
 
     fn get(&self, session_id: &str) -> Option<SessionDetail> {
-        get_from_db(session_id)
+        get_from_root(&sessions_root()?, session_id)
     }
 
     fn resume_command(&self, session_id: Option<&str>) -> String {
@@ -311,6 +272,10 @@ impl SessionSource for KiroSource {
             None => "kiro-cli chat".to_string(),
         }
     }
+
+    fn transcript_file(&self, entry: &SessionEntry) -> Option<PathBuf> {
+        Some(sessions_root()?.join(format!("{}.jsonl", entry.session_id)))
+    }
 }
 
 #[cfg(test)]
@@ -318,155 +283,126 @@ mod tests {
     use super::*;
 
     #[test]
-    fn strips_user_prefix_and_restores_embedded_newlines() {
-        assert_eq!(strip_user_prefix("> fix the bug"), "fix the bug");
-        assert_eq!(
-            strip_user_prefix("> first line> \nsecond line"),
-            "first line\nsecond line"
-        );
-    }
-
-    #[test]
-    fn splits_tool_suffix_with_tools() {
-        let (text, tools) = split_tool_suffix("Ran the tests.\n[Tool uses: exec_command,fs_read]");
-        assert_eq!(text, "Ran the tests.");
-        assert_eq!(tools, vec!["exec_command", "fs_read"]);
-    }
-
-    #[test]
-    fn splits_tool_suffix_none() {
-        let (text, tools) = split_tool_suffix("Just a reply.\n[Tool uses: none]");
-        assert_eq!(text, "Just a reply.");
-        assert!(tools.is_empty());
-    }
-
-    #[test]
-    fn leaves_unmarked_lines_untouched() {
-        let (text, tools) = split_tool_suffix("no marker here");
-        assert_eq!(text, "no marker here");
-        assert!(tools.is_empty());
-    }
-
-    #[test]
-    fn parses_transcript_into_alternating_messages() {
-        let lines = vec![
-            "> fix the login bug".to_string(),
-            "Looked at the middleware.\n[Tool uses: fs_read]".to_string(),
-            "> thanks".to_string(),
-            "You're welcome.\n[Tool uses: none]".to_string(),
-        ];
-        let messages = parse_transcript(&lines);
-        assert_eq!(messages.len(), 4);
-        assert_eq!(messages[0].role, "user");
-        assert_eq!(
-            messages[0].content[0].text.as_deref(),
-            Some("fix the login bug")
-        );
-        assert_eq!(messages[1].role, "assistant");
-        assert_eq!(messages[1].content.len(), 2); // text + tool_use
-        assert_eq!(messages[1].content[1].tool_name.as_deref(), Some("fs_read"));
-        assert_eq!(messages[3].content.len(), 1); // "none" produces no tool_use block
-    }
-
-    #[test]
-    fn parse_ts_distinguishes_seconds_from_millis() {
-        assert_eq!(
-            parse_ts(ValueRef::Integer(1_781_000_000)),
-            1_781_000_000_000
-        );
-        assert_eq!(
-            parse_ts(ValueRef::Integer(1_781_000_000_000)),
-            1_781_000_000_000
-        );
-    }
-
-    #[test]
-    fn parse_ts_reads_rfc3339_text() {
-        let ms = parse_ts(ValueRef::Text(b"2026-06-11T21:39:19.749Z"));
-        assert_eq!(ms % 1000, 749);
-    }
-
-    #[test]
-    fn entry_from_row_extracts_first_prompt_and_count() {
-        let value = serde_json::json!({
-            "transcript": [
-                "> fix the bug",
-                "On it.\n[Tool uses: none]",
-                "> also add a test",
-                "Added.\n[Tool uses: fs_write]",
-            ]
-        })
-        .to_string();
-        let entry = entry_from_row(
-            "/Users/test/proj/alpha".to_string(),
-            "conv-1".to_string(),
-            &value,
-            1_781_000_000_000,
-        )
-        .unwrap();
-        assert_eq!(entry.agent, "kiro");
-        assert_eq!(entry.session_id, "conv-1");
-        assert_eq!(entry.display, "fix the bug");
-        assert_eq!(entry.prompt_count, 2);
-        assert_eq!(entry.project, "/Users/test/proj/alpha");
-        assert_eq!(entry.project_name, "alpha");
-    }
-
-    #[test]
     fn resume_command_shape() {
         assert_eq!(
-            KiroSource.resume_command(Some("conv-1")),
-            "kiro-cli chat --resume-id conv-1"
+            KiroSource.resume_command(Some("abc-123")),
+            "kiro-cli chat --resume-id abc-123"
         );
         assert_eq!(KiroSource.resume_command(None), "kiro-cli chat");
     }
 
-    /// End-to-end against an in-memory DB matching our *assumed* schema.
-    /// Exercises `list_from_db`/`get_from_db`'s SQL, not the real file.
     #[test]
-    fn list_and_get_round_trip_against_assumed_schema() {
-        let conn = Connection::open_in_memory().unwrap();
-        conn.execute_batch(
-            "CREATE TABLE conversations_v2 (
-                key TEXT NOT NULL,
-                conversation_id TEXT NOT NULL,
-                value TEXT NOT NULL,
-                created_at INTEGER,
-                updated_at INTEGER,
-                PRIMARY KEY (key, conversation_id)
-            );",
+    fn parses_prompt_and_assistant_text() {
+        let jsonl = concat!(
+            r#"{"version":"v1","kind":"Prompt","data":{"message_id":"1","content":[{"kind":"text","data":"hello"}],"meta":{"timestamp":1785350924}}}"#,
+            "\n",
+            r#"{"version":"v1","kind":"AssistantMessage","data":{"message_id":"2","content":[{"kind":"text","data":"Hi there"}]}}"#,
+        );
+        let messages = parse_jsonl(jsonl);
+        assert_eq!(messages.len(), 2);
+        assert_eq!(messages[0].role, "user");
+        assert_eq!(messages[0].content[0].text.as_deref(), Some("hello"));
+        assert_eq!(messages[0].timestamp, Some(1785350924000));
+        assert_eq!(messages[1].role, "assistant");
+        assert_eq!(messages[1].timestamp, None); // assistant turns carry no meta.timestamp
+    }
+
+    #[test]
+    fn parses_tool_use_and_skips_tool_results() {
+        let jsonl = concat!(
+            r#"{"version":"v1","kind":"AssistantMessage","data":{"message_id":"1","content":[{"kind":"text","data":""},{"kind":"toolUse","data":{"toolUseId":"t1","name":"introspect","input":{"query":"x"}}}]}}"#,
+            "\n",
+            r#"{"version":"v1","kind":"ToolResults","data":{"message_id":"2","content":[{"kind":"toolResult","data":{"toolUseId":"t1","content":[{"kind":"json","data":{"documentation":"huge dump"}}]}}]}}"#,
+        );
+        let messages = parse_jsonl(jsonl);
+        // ToolResults skipped entirely; the empty text block is dropped too.
+        assert_eq!(messages.len(), 1);
+        assert_eq!(messages[0].content.len(), 1);
+        assert_eq!(messages[0].content[0].block_type, "tool_use");
+        assert_eq!(
+            messages[0].content[0].tool_name.as_deref(),
+            Some("introspect")
+        );
+        assert!(messages[0].content[0]
+            .tool_input
+            .as_deref()
+            .unwrap()
+            .contains("\"x\""));
+    }
+
+    #[test]
+    fn skips_unparseable_lines() {
+        assert!(parse_jsonl("not json\n{}\n").is_empty());
+    }
+
+    #[test]
+    fn list_and_get_round_trip_against_real_shape() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let id = "sess-1";
+
+        std::fs::write(
+            root.join(format!("{id}.json")),
+            serde_json::json!({
+                "session_id": id,
+                "cwd": "/Users/test/proj/alpha",
+                "created_at": "2026-07-29T18:48:27.458722Z",
+                "updated_at": "2026-07-29T18:48:51.842947Z",
+                "title": "fix the login bug",
+                "session_state": {
+                    "version": "v1",
+                    "conversation_metadata": {
+                        "user_turn_metadatas": [serde_json::json!({}), serde_json::json!({})]
+                    }
+                }
+            })
+            .to_string(),
         )
         .unwrap();
-        let value = serde_json::json!({
-            "transcript": ["> hello", "hi there.\n[Tool uses: none]"]
-        })
-        .to_string();
-        conn.execute(
-            "INSERT INTO conversations_v2 (key, conversation_id, value, created_at, updated_at)
-             VALUES ('/Users/test/proj', 'conv-1', ?1, 1781000000, 1781000000)",
-            [&value],
+        std::fs::write(
+            root.join(format!("{id}.jsonl")),
+            concat!(
+                r#"{"version":"v1","kind":"Prompt","data":{"message_id":"1","content":[{"kind":"text","data":"fix the login bug"}],"meta":{"timestamp":1785350924}}}"#, "\n",
+                r#"{"version":"v1","kind":"AssistantMessage","data":{"message_id":"2","content":[{"kind":"text","data":"Fixed it."}]}}"#,
+            ),
         )
         .unwrap();
 
-        let mut stmt = conn
-            .prepare("SELECT key, conversation_id, value, updated_at FROM conversations_v2 ORDER BY updated_at DESC LIMIT ?1")
-            .unwrap();
-        let rows: Vec<_> = stmt
-            .query_map([10i64], |row| {
-                let key: String = row.get(0)?;
-                let cid: String = row.get(1)?;
-                let value: String = row.get(2)?;
-                let ts = parse_ts(row.get_ref(3)?);
-                Ok((key, cid, value, ts))
+        let entries = list_from_root(root, 10);
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].session_id, "sess-1");
+        assert_eq!(entries[0].display, "fix the login bug");
+        assert_eq!(entries[0].prompt_count, 2);
+        assert_eq!(entries[0].project, "/Users/test/proj/alpha");
+        assert_eq!(entries[0].project_name, "alpha");
+        assert!(!entries[0].is_live); // no .lock file written
+
+        let detail = get_from_root(root, id).unwrap();
+        assert_eq!(detail.messages.len(), 2);
+        assert_eq!(detail.messages[0].role, "user");
+        assert_eq!(detail.messages[1].role, "assistant");
+    }
+
+    #[test]
+    fn is_live_reflects_lock_file_presence() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let id = "sess-live";
+        std::fs::write(
+            root.join(format!("{id}.json")),
+            serde_json::json!({
+                "cwd": "/Users/test/proj",
+                "created_at": "2026-07-29T18:48:27Z",
+                "updated_at": "2026-07-29T18:48:27Z",
+                "title": "t",
             })
-            .unwrap()
-            .filter_map(Result::ok)
-            .collect();
-        assert_eq!(rows.len(), 1);
-        let entry =
-            entry_from_row(rows[0].0.clone(), rows[0].1.clone(), &rows[0].2, rows[0].3).unwrap();
-        assert_eq!(entry.session_id, "conv-1");
-        assert_eq!(entry.display, "hello");
+            .to_string(),
+        )
+        .unwrap();
+        std::fs::write(root.join(format!("{id}.lock")), "").unwrap();
+
+        let entries = list_from_root(root, 10);
+        assert!(entries[0].is_live);
     }
 }
 
@@ -474,19 +410,17 @@ mod tests {
 mod smoke {
     use super::*;
 
-    /// Runs against the real local kiro-cli database, if present. Not
-    /// asserted against — this is for eyeballing whether field names in the
-    /// doc comment above still hold once you have a real saved session:
+    /// Runs against your real `~/.kiro/sessions/cli/` files:
     /// `cargo test real_kiro_smoke -- --ignored --nocapture`
     #[test]
     #[ignore]
     fn real_kiro_smoke() {
-        let Some(path) = db_path() else {
-            println!("no kiro-cli data.sqlite3 found");
+        let Some(root) = sessions_root() else {
+            println!("no ~/.kiro/sessions/cli found");
             return;
         };
-        println!("db: {}", path.display());
-        let list = list_from_db(20);
+        println!("root: {}", root.display());
+        let list = list_from_root(&root, 20);
         println!("sessions: {}", list.len());
         for e in &list {
             println!(
@@ -498,7 +432,7 @@ mod smoke {
             );
         }
         if let Some(first) = list.first() {
-            match get_from_db(&first.session_id) {
+            match get_from_root(&root, &first.session_id) {
                 Some(d) => println!("get({}) -> {} messages", first.session_id, d.messages.len()),
                 None => println!("get({}) -> not found", first.session_id),
             }
