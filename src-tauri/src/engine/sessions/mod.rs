@@ -5,6 +5,8 @@
 pub mod agy;
 pub mod codex;
 pub mod gemini;
+pub mod kiro;
+pub mod opencode;
 
 use super::history::{self, SessionDetail, SessionEntry};
 
@@ -58,6 +60,8 @@ pub fn sources() -> Vec<&'static dyn SessionSource> {
         &codex::CodexSource,
         &gemini::GeminiSource,
         &agy::AgySource,
+        &kiro::KiroSource,
+        &opencode::OpencodeSource,
     ]
 }
 

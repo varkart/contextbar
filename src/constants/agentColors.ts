@@ -7,6 +7,7 @@ export const AGENT_COLORS: Record<string, { bg: string; text: string }> = {
   windsurf: { bg: 'bg-teal-500/10',     text: 'text-teal-500'    },
   kiro:     { bg: 'bg-amber-500/10',    text: 'text-amber-500'   },
   agy:      { bg: 'bg-violet-500/10',   text: 'text-violet-500'  },
+  opencode: { bg: 'bg-lime-500/10',     text: 'text-lime-500'    },
 };
 
 const FALLBACK_PALETTES: { bg: string; text: string }[] = [

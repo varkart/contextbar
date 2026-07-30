@@ -3,6 +3,8 @@ const AGENT_STYLE: Record<string, { label: string; cls: string }> = {
   codex: { label: 'Codex', cls: 'bg-emerald-500/15 text-emerald-400' },
   gemini: { label: 'Gemini', cls: 'bg-sky-500/15 text-sky-400' },
   agy: { label: 'Antigravity', cls: 'bg-fuchsia-500/15 text-fuchsia-400' },
+  kiro: { label: 'Kiro', cls: 'bg-amber-500/15 text-amber-400' },
+  opencode: { label: 'OpenCode', cls: 'bg-lime-500/15 text-lime-400' },
 }
 
 /** Small colored chip identifying which agent recorded a session. */
