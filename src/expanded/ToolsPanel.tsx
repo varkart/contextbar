@@ -91,7 +91,7 @@ export default function ToolsPanel({
   useEffect(() => {
     invoke<string>('get_version').then(setVersion).catch(() => {})
   }, [])
-  const updateInfo = useUpdateCheck(version)
+  const { updateInfo, checking: checkingUpdate, checkNow: checkUpdateNow } = useUpdateCheck(version)
 
   // Usage insights (30d) for the contextual strips on section roots, plus a
   // longer token series (6 months) for the agent-page trend chart.
@@ -432,6 +432,8 @@ export default function ToolsPanel({
             searchResults={searchResults}
             notifications={notifications}
             updateInfo={updateInfo}
+            checkingUpdate={checkingUpdate}
+            checkUpdateNow={checkUpdateNow}
             lastUpdated={lastUpdated}
             cloudSyncing={cloudSyncing}
             handleFetchTools={handleFetchTools}

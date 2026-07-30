@@ -32,7 +32,7 @@ vi.mock('../useNotifications', () => ({
   })),
 }))
 
-vi.mock('../useUpdateCheck', () => ({ useUpdateCheck: vi.fn(() => null) }))
+vi.mock('../useUpdateCheck', () => ({ useUpdateCheck: vi.fn(() => ({ updateInfo: null, checking: false, checkNow: vi.fn() })) }))
 vi.mock('../useAgentsDiff', () => ({ useAgentsDiff: vi.fn() }))
 vi.mock('../useTheme', () => ({
   useTheme: vi.fn(() => ({ theme: 'system' as const, setTheme: vi.fn() })),

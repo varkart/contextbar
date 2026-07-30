@@ -41,6 +41,8 @@ export default function ViewManager({
   searchResults,
   notifications,
   updateInfo,
+  checkingUpdate,
+  checkUpdateNow,
   lastUpdated,
   cloudSyncing,
   handleFetchTools,
@@ -210,6 +212,8 @@ export default function ViewManager({
       <Settings
         onBack={() => goTo('main')}
         updateInfo={updateInfo}
+        checkingUpdate={checkingUpdate}
+        onCheckUpdateNow={checkUpdateNow}
         theme={theme}
         onThemeChange={(t: ThemePreference) => setTheme(t)}
         onOpenLogs={() => goTo('logs')}

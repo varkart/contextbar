@@ -71,7 +71,7 @@ export default function App() {
     }
   }, [loading, backendReady])
 
-  const updateInfo = useUpdateCheck(version)
+  const { updateInfo, checking: checkingUpdate, checkNow: checkUpdateNow } = useUpdateCheck(version)
   useAgentsDiff()
 
   useEffect(() => {
@@ -143,6 +143,8 @@ export default function App() {
           searchResults={searchResults}
           notifications={notifications}
           updateInfo={updateInfo}
+          checkingUpdate={checkingUpdate}
+          checkUpdateNow={checkUpdateNow}
           lastUpdated={lastUpdated}
           cloudSyncing={cloudSyncing}
           handleFetchTools={handleFetchTools}

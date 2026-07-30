@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import type { ThemePreference } from '../useTheme'
 import { capture } from '../analytics'
@@ -6,6 +6,8 @@ import { capture } from '../analytics'
 interface SettingsProps {
   onBack: () => void
   updateInfo?: { latestVersion: string; releaseUrl: string } | null
+  checkingUpdate?: boolean
+  onCheckUpdateNow?: () => void
   theme: ThemePreference
   onThemeChange: (t: ThemePreference) => void
   onOpenLogs?: () => void
@@ -194,7 +196,7 @@ function formatShortcut(raw: string): string {
     .replace(/\+/g, '')
 }
 
-export default function Settings({ updateInfo, theme, onThemeChange, onOpenLogs, onOpenDoctor }: SettingsProps) {
+export default function Settings({ updateInfo, checkingUpdate, onCheckUpdateNow, theme, onThemeChange, onOpenLogs, onOpenDoctor }: SettingsProps) {
   const [autostart, setAutostart] = useState(false)
   const [autostartLoading, setAutostartLoading] = useState(true)
   const [shortcut, setShortcut] = useState('CommandOrControl+Shift+Space')
@@ -207,6 +209,17 @@ export default function Settings({ updateInfo, theme, onThemeChange, onOpenLogs,
   const [installError, setInstallError] = useState<string | null>(null)
   const [terminal, setTerminal] = useState('Terminal')
   const [terminals, setTerminals] = useState<string[]>(['Terminal'])
+  const [justCheckedUpdate, setJustCheckedUpdate] = useState(false)
+  const wasCheckingUpdate = useRef(false)
+
+  useEffect(() => {
+    const finishedChecking = wasCheckingUpdate.current && !checkingUpdate
+    wasCheckingUpdate.current = !!checkingUpdate
+    if (!finishedChecking) return
+    setJustCheckedUpdate(true)
+    const t = setTimeout(() => setJustCheckedUpdate(false), 3000)
+    return () => clearTimeout(t)
+  }, [checkingUpdate])
 
   useEffect(() => {
     Promise.all([
@@ -355,7 +368,7 @@ export default function Settings({ updateInfo, theme, onThemeChange, onOpenLogs,
           <SettingRow label="Version">
             <span className="text-[14px] text-[var(--c-text-3)] font-mono tabular-nums">v{version}</span>
           </SettingRow>
-          {updateInfo && (
+          {updateInfo ? (
             <SettingRow label="Update">
               <div className="flex flex-col items-end gap-1">
                 <button
@@ -379,6 +392,22 @@ export default function Settings({ updateInfo, theme, onThemeChange, onOpenLogs,
                 )}
               </div>
             </SettingRow>
+          ) : (
+            onCheckUpdateNow && (
+              <SettingRow label="Update">
+                {justCheckedUpdate ? (
+                  <span className="text-[13px] text-[var(--c-text-3)]">Up to date</span>
+                ) : (
+                  <button
+                    onClick={onCheckUpdateNow}
+                    disabled={checkingUpdate}
+                    className="text-[13px] text-indigo-500 hover:text-indigo-400 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                  >
+                    {checkingUpdate ? 'Checking…' : 'Check for updates'}
+                  </button>
+                )}
+              </SettingRow>
+            )
           )}
           <SettingRow label="Source">
             <a href="https://github.com/varkart/contextbar" target="_blank" rel="noopener noreferrer"
