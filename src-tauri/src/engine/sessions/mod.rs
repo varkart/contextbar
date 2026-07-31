@@ -46,11 +46,7 @@ impl SessionSource for ClaudeSource {
     }
     fn transcript_file(&self, entry: &SessionEntry) -> Option<std::path::PathBuf> {
         let home = dirs::home_dir()?;
-        Some(history::session_file(
-            &home,
-            &entry.project,
-            &entry.session_id,
-        ))
+        history::session_file(&home, &entry.project, &entry.session_id)
     }
 }
 
