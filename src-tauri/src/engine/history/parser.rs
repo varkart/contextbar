@@ -1,4 +1,4 @@
-use super::index::{project_name, session_file_path};
+use super::index::{project_name, resolve_session_file};
 use super::types::{ContentBlock, Message, SessionDetail, TokenUsage};
 use serde::Deserialize;
 use serde_json::Value;
@@ -43,7 +43,7 @@ pub fn get_session(
     project: &str,
     timestamp: u64,
 ) -> Option<SessionDetail> {
-    let session_file = session_file_path(home, project, session_id);
+    let session_file = resolve_session_file(home, project, session_id)?;
     let file = std::fs::File::open(&session_file).ok()?;
     let reader = BufReader::new(file);
 

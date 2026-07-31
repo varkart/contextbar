@@ -42,6 +42,33 @@ pub fn encode_project_path(project: &str) -> String {
         .collect()
 }
 
+/// Resolves a session's transcript file, verifying it actually exists
+/// rather than trusting the formula-based path blindly. Session IDs are
+/// effectively globally unique, so when the fast encoded-path guess misses
+/// (a future Claude Code encoding change we haven't seen, an edge case in
+/// `encode_project_path`, whatever) this falls back to scanning every
+/// project directory for a file named exactly `{session_id}.jsonl` — no
+/// encoding knowledge required at all. This is what turned the dotted-
+/// username bug into a hard "session not found" instead of a slow-path
+/// fallback: `session_file_path`'s output was trusted unconditionally with
+/// no verification and no fallback.
+pub fn resolve_session_file(home: &Path, project: &str, session_id: &str) -> Option<PathBuf> {
+    let fast_path = session_file_path(home, project, session_id);
+    if fast_path.is_file() {
+        return Some(fast_path);
+    }
+
+    let projects_dir = history_dir(home).join("projects");
+    let entries = std::fs::read_dir(&projects_dir).ok()?;
+    for entry in entries.flatten() {
+        let candidate = entry.path().join(format!("{session_id}.jsonl"));
+        if candidate.is_file() {
+            return Some(candidate);
+        }
+    }
+    None
+}
+
 pub fn project_name(project: &str) -> String {
     project
         .trim_end_matches('/')
@@ -129,8 +156,8 @@ pub fn list_sessions(
             }
             None => {
                 let project_name = project_name(&project);
-                let session_file = session_file_path(home, &project, &session_id);
-                let is_live = is_file_live(&session_file);
+                let is_live = resolve_session_file(home, &project, &session_id)
+                    .is_some_and(|f| is_file_live(&f));
                 sessions.insert(
                     session_id.clone(),
                     SessionEntry {
@@ -254,8 +281,9 @@ pub fn get_history_stats(home: &Path) -> HistoryStats {
                 }
                 if live_session_id.is_none() {
                     if let Some(ref project) = h.project {
-                        let session_file = session_file_path(home, project, &sid);
-                        if is_file_live(&session_file) {
+                        if resolve_session_file(home, project, &sid)
+                            .is_some_and(|f| is_file_live(&f))
+                        {
                             live_session_id = Some(sid);
                         }
                     }
@@ -282,7 +310,49 @@ fn decode_project_path(encoded: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{encode_project_path, find_session_project, get_history_stats, list_sessions};
+    use super::{
+        encode_project_path, find_session_project, get_history_stats, list_sessions,
+        resolve_session_file,
+    };
+
+    #[test]
+    fn resolve_session_file_falls_back_to_scan_when_fast_path_is_wrong() {
+        // Simulates a future encoding drift we haven't seen yet: the fast
+        // formula-based path is simply wrong for this project, but the file
+        // still exists somewhere under projects/ — the scan fallback must
+        // find it anyway, since it needs no encoding knowledge at all.
+        let dir = tempfile::tempdir().unwrap();
+        let claude = dir.path().join(".claude");
+        let some_other_dir = claude.join("projects").join("totally-unguessable-dir-name");
+        std::fs::create_dir_all(&some_other_dir).unwrap();
+        std::fs::write(some_other_dir.join("sess-1.jsonl"), "content").unwrap();
+
+        let found = resolve_session_file(dir.path(), "/Users/whatever/proj", "sess-1");
+        assert_eq!(found, Some(some_other_dir.join("sess-1.jsonl")));
+    }
+
+    #[test]
+    fn resolve_session_file_prefers_fast_path_when_correct() {
+        let dir = tempfile::tempdir().unwrap();
+        let claude = dir.path().join(".claude");
+        let project = "/Users/jane/proj";
+        let fast_dir = claude.join("projects").join(encode_project_path(project));
+        std::fs::create_dir_all(&fast_dir).unwrap();
+        std::fs::write(fast_dir.join("sess-1.jsonl"), "content").unwrap();
+
+        let found = resolve_session_file(dir.path(), project, "sess-1");
+        assert_eq!(found, Some(fast_dir.join("sess-1.jsonl")));
+    }
+
+    #[test]
+    fn resolve_session_file_none_when_truly_missing() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(dir.path().join(".claude").join("projects")).unwrap();
+        assert_eq!(
+            resolve_session_file(dir.path(), "/x/y", "sess-missing"),
+            None
+        );
+    }
 
     #[test]
     fn encodes_dots_and_other_non_alphanumeric_chars() {
