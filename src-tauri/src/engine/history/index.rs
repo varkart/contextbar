@@ -27,8 +27,19 @@ pub fn session_file_path(home: &Path, project: &str, session_id: &str) -> PathBu
         .join(format!("{session_id}.jsonl"))
 }
 
+/// Mirrors Claude Code's own `~/.claude/projects/<encoded>/` directory
+/// naming. Confirmed against a real path containing a dot in the username
+/// (`/Users/jane.doe/dev/projects/app` → `-Users-jane-doe-dev-projects-app`):
+/// Claude Code replaces every non-alphanumeric character, not just `/` —
+/// our previous slash-only replacement left dots (and presumably spaces,
+/// underscores, parens, etc.) intact, silently 404ing the reconstructed
+/// path for any project under a dotted username even though the project
+/// lookup itself (via history.jsonl) succeeded.
 pub fn encode_project_path(project: &str) -> String {
-    project.replace('/', "-")
+    project
+        .chars()
+        .map(|c| if c.is_ascii_alphanumeric() { c } else { '-' })
+        .collect()
 }
 
 pub fn project_name(project: &str) -> String {
@@ -271,7 +282,59 @@ fn decode_project_path(encoded: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{get_history_stats, list_sessions};
+    use super::{encode_project_path, find_session_project, get_history_stats, list_sessions};
+
+    #[test]
+    fn encodes_dots_and_other_non_alphanumeric_chars() {
+        // Real case: a dotted macOS username broke session lookup because
+        // the old slash-only replacement left the dot intact while Claude
+        // Code's actual directory name has it replaced too.
+        assert_eq!(
+            encode_project_path("/Users/jane.doe/dev/projects/app"),
+            "-Users-jane-doe-dev-projects-app"
+        );
+        assert_eq!(
+            encode_project_path("/Users/jane doe/proj (2)"),
+            "-Users-jane-doe-proj--2-"
+        );
+    }
+
+    #[test]
+    fn resolves_and_reads_session_for_dotted_username_project() {
+        // Regression for the real bug: history.jsonl's *primary* lookup path
+        // (project string comes straight from the log line, no filesystem
+        // check) succeeds regardless of encoding. It's the downstream file
+        // read via session_file_path/encode_project_path that used to 404
+        // for any project path with a dot (or other non-alphanumeric char)
+        // in it — dotted usernames being the common case.
+        let dir = tempfile::tempdir().unwrap();
+        let claude = dir.path().join(".claude");
+        std::fs::create_dir_all(&claude).unwrap();
+        let project = "/Users/jane.doe/dev/projects/app";
+        std::fs::write(
+            claude.join("history.jsonl"),
+            format!(
+                r#"{{"display":"hi","timestamp":1000,"project":"{project}","sessionId":"sess-1"}}"#
+            ),
+        )
+        .unwrap();
+
+        let (resolved_project, _) = find_session_project(dir.path(), "sess-1").unwrap();
+        assert_eq!(resolved_project, project);
+
+        // The real session file lives under the *actual* Claude Code
+        // encoding (every non-alphanumeric char replaced, not just '/').
+        let real_encoded_dir = claude.join("projects").join(encode_project_path(project));
+        std::fs::create_dir_all(&real_encoded_dir).unwrap();
+        std::fs::write(real_encoded_dir.join("sess-1.jsonl"), "").unwrap();
+
+        let detail =
+            super::super::parser::get_session(dir.path(), "sess-1", &resolved_project, 1000);
+        assert!(
+            detail.is_some(),
+            "session file should be found via the corrected encoding"
+        );
+    }
 
     fn write_history(lines: &[&str]) -> tempfile::TempDir {
         let dir = tempfile::tempdir().unwrap();
