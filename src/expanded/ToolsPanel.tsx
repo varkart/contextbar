@@ -10,7 +10,7 @@ import type { Agent, SessionEntry, SessionInsights, TokenPoint } from '../types'
 import { formatTokens } from '../components/history/SessionStats'
 import ViewManager from '../components/views/ViewManager'
 import { Tile, TileRow } from './InsightTiles'
-import { Collapsible, HBar, TokenTrend, shortModel } from './InsightWidgets'
+import { Collapsible, HBar, RefreshButton, TokenTrend, shortModel } from './InsightWidgets'
 import { agentColor } from '../constants/agentColors'
 
 const MODEL_COLORS = ['#6366f1', '#e8a94a', '#d98fd9', '#2dd4bf', '#fb7185', '#8fbf6b']
@@ -201,9 +201,14 @@ export default function ToolsPanel({
     <div className="flex-1 min-w-0 flex overflow-hidden">
       <div className="w-full h-full flex flex-col overflow-hidden">
         {view === ROOT_VIEW[section] && (
-          <div className="px-6 pt-5 pb-3 flex-shrink-0">
-            <h2 className="text-[16px] font-semibold tracking-tight">{SECTION_HEADINGS[section].title}</h2>
-            <p className="text-[12px] text-[var(--c-text-3)] mt-0.5">{SECTION_HEADINGS[section].sub}</p>
+          <div className="px-6 pt-5 pb-3 flex-shrink-0 flex items-start justify-between gap-3">
+            <div>
+              <h2 className="text-[16px] font-semibold tracking-tight">{SECTION_HEADINGS[section].title}</h2>
+              <p className="text-[12px] text-[var(--c-text-3)] mt-0.5">{SECTION_HEADINGS[section].sub}</p>
+            </div>
+            {(section === 'agents' || section === 'skills' || section === 'mcps') && (
+              <RefreshButton onClick={fetchAgents} busy={loading} />
+            )}
           </div>
         )}
         {view !== ROOT_VIEW[section] && (
