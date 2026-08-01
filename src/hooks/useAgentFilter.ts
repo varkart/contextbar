@@ -3,20 +3,24 @@ import type { Agent } from '../types'
 
 export function useAgentFilter(tools: Agent[]) {
   const installedAgents = useMemo(() => tools.filter(t => t.installed), [tools])
-  const [selectedTools, setSelectedTools] = useState<Set<string>>(
-    () => new Set(tools.filter(t => t.installed).map(t => t.id))
-  )
+  // null = no explicit narrowing yet → always "all selected", however many
+  // agents have loaded so far. Agents arrive async from the backend, so a
+  // Set captured at mount (before they load) would otherwise lock in as
+  // empty forever and silently filter out everything.
+  const [selectedTools, setSelectedTools] = useState<Set<string> | null>(null)
 
   const toggleTool = (id: string) => {
     setSelectedTools(prev => {
-      const next = new Set(prev)
+      const base = prev ?? new Set(installedAgents.map(t => t.id))
+      const next = new Set(base)
       if (next.has(id)) next.delete(id)
       else next.add(id)
       return next
     })
   }
 
-  const allSelected = selectedTools.size === installedAgents.length
+  const allSelected = selectedTools === null || selectedTools.size === installedAgents.length
+  const effectiveSelected = selectedTools ?? new Set(installedAgents.map(t => t.id))
 
-  return { installedAgents, selectedTools, toggleTool, allSelected }
+  return { installedAgents, selectedTools: effectiveSelected, toggleTool, allSelected }
 }
