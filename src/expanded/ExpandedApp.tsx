@@ -449,7 +449,7 @@ function Sidebar({ section, goTo, counts, onOpenPalette, coachmarkVisible, onDis
         onClick={() => goTo(id)}
         aria-current={active ? 'page' : undefined}
         title={collapsed ? `${label}${count !== null ? ` · ${count}` : ''}` : undefined}
-        className={`group w-[calc(100%-16px)] mx-2 mb-0.5 flex items-center rounded-lg transition-colors ${collapsed ? 'justify-center px-0 py-2' : 'gap-2.5 px-2.5 py-2 text-left'} ${active ? 'bg-[var(--c-accent)]/15 text-[var(--c-accent)] font-semibold shadow-[inset_2px_0_0_var(--c-accent)]' : 'text-[var(--c-text-2)] hover:bg-[var(--c-surface-2)] hover:text-[var(--c-text)]'}`}
+        className={`group w-[calc(100%-16px)] mx-2 mb-0.5 flex items-center rounded-lg transition-colors ${collapsed ? 'justify-center px-0 py-2' : 'gap-2.5 px-2.5 py-2 text-left'} ${active ? 'bg-[var(--c-accent)]/15 text-[var(--c-accent)] font-semibold' : 'text-[var(--c-text-2)] hover:bg-[var(--c-surface-2)] hover:text-[var(--c-text)]'}`}
       >
         <span className={active ? 'text-[var(--c-accent)]' : 'text-[var(--c-text-3)] group-hover:text-[var(--c-text-2)]'}>
           <NavIcon name={id} />

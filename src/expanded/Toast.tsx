@@ -35,7 +35,7 @@ export function ToastStack({ toasts, onDismiss }: { toasts: ToastEntry[]; onDism
         <div
           key={t.id}
           role="status"
-          className={`flex items-center gap-2.5 min-w-[240px] max-w-sm bg-[var(--c-surface)] border border-[var(--c-border)] border-l-2 rounded-lg px-3.5 py-2.5 text-[12px] shadow-xl animate-toast-in ${t.type === 'success' ? 'border-l-emerald-400' : 'border-l-rose-400'}`}
+          className="flex items-center gap-2.5 min-w-[240px] max-w-sm bg-[var(--c-surface)] border border-[var(--c-border)] rounded-lg px-3.5 py-2.5 text-[12px] shadow-xl animate-toast-in"
         >
           <span className={t.type === 'success' ? 'text-emerald-400' : 'text-rose-400'}>
             {t.type === 'success' ? '✓' : '✕'}
