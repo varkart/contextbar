@@ -105,9 +105,9 @@ function ThemeSelector({ value, onChange }: { value: ThemePreference; onChange: 
         <button
           key={key}
           onClick={() => onChange(key)}
-          className={`flex-1 flex flex-col items-center gap-1.5 py-3 rounded-xl border-2 transition-all duration-150 ${
+          className={`flex-1 flex flex-col items-center gap-1.5 py-3 rounded-xl border transition-all duration-150 ${
             value === key
-              ? 'border-indigo-500 bg-indigo-500/10 text-indigo-500'
+              ? 'border-transparent ring-1 ring-indigo-500 bg-indigo-500/10 text-indigo-500'
               : 'border-[var(--c-border)] text-[var(--c-text-3)] hover:border-[var(--c-text-3)] hover:text-[var(--c-text-2)]'
           }`}
           aria-pressed={value === key}
@@ -383,7 +383,7 @@ export default function Settings({ updateInfo, checkingUpdate, onCheckUpdateNow,
                     }
                   }}
                   disabled={installing}
-                  className="text-[13px] px-2 py-0.5 rounded-md bg-indigo-500 text-white hover:bg-indigo-400 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                  className="text-[13px] px-2 py-0.5 rounded-md border border-indigo-500/40 text-indigo-400 hover:bg-indigo-500/10 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
                 >
                   {installing ? 'Installing…' : `Install ${updateInfo.latestVersion}`}
                 </button>
