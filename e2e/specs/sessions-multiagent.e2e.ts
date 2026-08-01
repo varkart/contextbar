@@ -18,17 +18,18 @@ test('rows show agent badges for all four agents', async ({ page }) => {
   await expect(page.getByText('Antigravity', { exact: true }).first()).toBeVisible()
 })
 
-test('agent filter pills narrow the list', async ({ page }) => {
-  await expect(page.getByRole('button', { name: 'All agents' })).toBeVisible()
-  await page.getByRole('button', { name: 'codex', exact: true }).click()
+test('agent filter dropdown narrows the list', async ({ page }) => {
+  const select = page.getByLabel('Filter by agent')
+  await expect(select).toBeVisible()
+  await select.selectOption('codex')
   await expect(page.getByText('refactor the payment retry logic')).toBeVisible()
   await expect(page.getByText('fix the login bug in the auth middleware')).not.toBeVisible()
-  await page.getByRole('button', { name: 'All agents' }).click()
+  await select.selectOption('')
   await expect(page.getByText('fix the login bug in the auth middleware')).toBeVisible()
 })
 
-test('agy filter pill narrows to antigravity sessions', async ({ page }) => {
-  await page.getByRole('button', { name: 'agy', exact: true }).click()
+test('agy filter narrows to antigravity sessions', async ({ page }) => {
+  await page.getByLabel('Filter by agent').selectOption('agy')
   await expect(page.getByText('add day filters and sort options to the search')).toBeVisible()
   await expect(page.getByText('refactor the payment retry logic')).not.toBeVisible()
 })
