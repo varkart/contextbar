@@ -1,0 +1,106 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-07-31T04:58:45Z",
+  "title": "Design System: Context Bar",
+  "extensions": {
+    "colorMeta": {
+      "indigo": { "role": "primary", "displayName": "Indigo", "canonical": "oklch(58% 0.22 275)", "tonalRamp": ["#1e1b4b", "#312e81", "#3730a3", "#4338ca", "#4f46e5", "#6366f1", "#818cf8", "#a5b4fc"] },
+      "violet": { "role": "secondary", "displayName": "Violet", "canonical": "oklch(61% 0.23 293)", "tonalRamp": ["#2e1065", "#4c1d95", "#5b21b6", "#6d28d9", "#7c3aed", "#8b5cf6", "#a78bfa", "#c4b5fd"] },
+      "emerald": { "role": "tertiary", "displayName": "Emerald", "canonical": "oklch(70% 0.15 165)", "tonalRamp": ["#022c22", "#064e3b", "#065f46", "#047857", "#059669", "#10b981", "#34d399", "#6ee7b7"] },
+      "amber": { "role": "tertiary", "displayName": "Amber", "canonical": "oklch(83% 0.16 85)", "tonalRamp": ["#451a03", "#78350f", "#92400e", "#b45309", "#d97706", "#f59e0b", "#fbbf24", "#fcd34d"] },
+      "red": { "role": "tertiary", "displayName": "Red", "canonical": "oklch(63% 0.21 27)", "tonalRamp": ["#450a0a", "#7f1d1d", "#991b1b", "#b91c1c", "#dc2626", "#ef4444", "#f87171", "#fca5a5"] },
+      "bg": { "role": "neutral", "displayName": "Canvas", "canonical": "oklch(100% 0 0)", "tonalRamp": ["#09090b", "#18181b", "#27272a", "#3f3f46", "#71717a", "#a1a1aa", "#e4e4e7", "#ffffff"] },
+      "surface": { "role": "neutral", "displayName": "Surface", "canonical": "oklch(97% 0 0)", "tonalRamp": ["#09090b", "#18181b", "#27272a", "#3f3f46", "#71717a", "#a1a1aa", "#e4e4e7", "#f4f4f5"] }
+    },
+    "typographyMeta": {
+      "title": { "displayName": "Title", "purpose": "Row primary labels, panel headers, active breadcrumb crumb." },
+      "body": { "displayName": "Body", "purpose": "Descriptions, list content, form values." },
+      "label": { "displayName": "Label", "purpose": "Secondary metadata: timestamps, counts, breadcrumb trail." },
+      "mono": { "displayName": "Mono/Label", "purpose": "Literal system values: paths, commands, session IDs, shortcuts." }
+    },
+    "shadows": [
+      { "name": "floating-low", "value": "shadow-sm", "purpose": "Dropdown menus and small trigger-anchored popovers." },
+      { "name": "floating-high", "value": "shadow-lg / shadow-xl", "purpose": "Command palette and larger modal-style overlays." }
+    ],
+    "motion": [
+      { "name": "state-fast", "value": "transition-colors duration-100", "purpose": "Row hover/focus color shifts." },
+      { "name": "state-standard", "value": "transition duration-150 ease-out", "purpose": "Default interactive state transitions." },
+      { "name": "toggle", "value": "transition-transform duration-200", "purpose": "Toggle thumb slide." }
+    ],
+    "breakpoints": []
+  },
+  "components": [
+    {
+      "name": "Status Dot",
+      "kind": "custom",
+      "refersTo": "status-dot",
+      "description": "7x7px filled circle reporting installed/no-config/not-installed/error state.",
+      "html": "<span class=\"ds-status-dot\" role=\"img\" aria-label=\"installed\" title=\"installed\"></span>",
+      "css": ".ds-status-dot { display: inline-block; width: 7px; height: 7px; border-radius: 9999px; flex-shrink: 0; background: #10b981; }"
+    },
+    {
+      "name": "Toggle",
+      "kind": "custom",
+      "refersTo": "toggle-track-on",
+      "description": "Pill switch for enabling/disabling a skill or MCP.",
+      "html": "<button class=\"ds-toggle ds-toggle-on\" aria-label=\"Disable skill\"><span class=\"ds-toggle-thumb\"></span></button>",
+      "css": ".ds-toggle { position: relative; width: 28px; height: 16px; border-radius: 9999px; border: none; cursor: pointer; transition: background-color 0.2s; background: rgba(228,228,231,0.9); } .ds-toggle-on { background: #6366f1; } .ds-toggle:focus-visible { outline: 2px solid #6366f1; outline-offset: 2px; } .ds-toggle-thumb { position: absolute; top: 2px; left: 2px; width: 12px; height: 12px; border-radius: 9999px; background: #ffffff; box-shadow: 0 1px 2px rgba(0,0,0,0.15); transition: transform 0.2s; } .ds-toggle-on .ds-toggle-thumb { transform: translateX(12px); }"
+    },
+    {
+      "name": "Search Input",
+      "kind": "input",
+      "refersTo": "search-input",
+      "description": "Leading-icon search field used across Skills/MCPs/Sessions.",
+      "html": "<div class=\"ds-search\"><svg class=\"ds-search-icon\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><circle cx=\"11\" cy=\"11\" r=\"8\"/><line x1=\"21\" y1=\"21\" x2=\"16.65\" y2=\"16.65\"/></svg><input class=\"ds-search-input\" type=\"text\" placeholder=\"Search\" /></div>",
+      "css": ".ds-search { position: relative; } .ds-search-icon { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); width: 14px; height: 14px; color: #a1a1aa; } .ds-search-input { width: 100%; background: #f4f4f5; border: 1px solid rgba(228,228,231,0.9); border-radius: 6px; padding: 6px 12px 6px 32px; font-size: 13px; color: #18181b; } .ds-search-input::placeholder { color: #a1a1aa; } .ds-search-input:focus { outline: none; border-color: rgba(99,102,241,0.5); }"
+    },
+    {
+      "name": "List Row",
+      "kind": "custom",
+      "refersTo": "row-hover",
+      "description": "Standard scannable row: leading status/agent glyph, title, trailing meta.",
+      "html": "<button class=\"ds-row\"><span class=\"ds-row-glyph\">C</span><span class=\"ds-row-title\">Claude Code</span><span class=\"ds-row-meta\">3 skills</span></button>",
+      "css": ".ds-row { width: 100%; display: flex; align-items: center; gap: 10px; padding: 10px 16px; text-align: left; background: transparent; border: none; cursor: pointer; transition: background-color 0.1s; } .ds-row:hover, .ds-row:focus-visible { background: rgba(244,244,245,1); outline: none; } .ds-row-glyph { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; border-radius: 6px; font-size: 12px; font-weight: 700; background: #6366f1; color: #ffffff; flex-shrink: 0; } .ds-row-title { font-size: 16px; font-weight: 600; color: #18181b; flex: 1; } .ds-row-meta { font-size: 12px; color: #a1a1aa; }"
+    },
+    {
+      "name": "Hint Banner",
+      "kind": "card",
+      "refersTo": "card",
+      "description": "Dismissible inline tip card with icon, message, and text actions.",
+      "html": "<div class=\"ds-hint\"><div class=\"ds-hint-icon\">i</div><div class=\"ds-hint-body\"><p class=\"ds-hint-title\">Tip</p><p class=\"ds-hint-text\">Tap ? next to Skills or MCPs.</p></div></div>",
+      "css": ".ds-hint { border-radius: 10px; border: 1px solid rgba(228,228,231,0.9); background: #f4f4f5; padding: 10px 12px; display: flex; align-items: flex-start; gap: 10px; } .ds-hint-icon { width: 24px; height: 24px; border-radius: 6px; background: rgba(99,102,241,0.1); color: #6366f1; display: flex; align-items: center; justify-content: center; flex-shrink: 0; font-size: 12px; font-weight: 700; } .ds-hint-title { font-size: 12px; font-weight: 600; color: #18181b; margin: 0 0 2px; } .ds-hint-text { font-size: 11px; color: #a1a1aa; line-height: 1.5; margin: 0; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Instrument Panel",
+    "overview": "Context Bar is a readout, not a showroom. Every element on screen exists to answer one question: what's the current state of this tool, skill, MCP, or session? Nothing is decorative because nothing has room to be — the tray popover is a few hundred pixels wide and has to communicate at a glance, the way a cockpit gauge does. The Expanded window relaxes the width constraint but keeps the same discipline: dense information, minimal chrome, status carried by color and typography weight rather than illustration or gradient.\n\nThis system explicitly rejects the generic SaaS dashboard (card-grid analytics, gradient hero-metric widgets, marketing sheen, upsell framing) and the cluttered system utility (Activity-Monitor-style density, enterprise-settings-panel sprawl). The bar is: precise, calm, technical. It speaks like a well-built CLI wearing a GUI, not a product trying to sell itself.",
+    "keyCharacteristics": [
+      "Two-tier neutral surface (bg / surface) in true zinc, no warm or cool tint — the palette itself doesn't editorialize",
+      "A single accent (indigo) reserved for interactive/primary state; status color (emerald/amber/red) is reserved strictly for state signaling, never decoration",
+      "Compact type scale (9–16px for 95% of UI) built for scanning many rows fast, not for touch-target spaciousness",
+      "Flat by default; shadow exists only where a layer floats above the page (popovers, dropdowns, tooltips)",
+      "Monospace (Geist Mono) marks anything that is literally a system value — a path, a command, a session ID — never used for narrative text"
+    ],
+    "rules": [
+      { "name": "The Signal Rule", "body": "Emerald/amber/red exist only to report installed/warning/error state. If a color choice isn't reporting a real state, it's wrong — reach for the neutral ramp instead.", "section": "colors" },
+      { "name": "The One Accent Rule", "body": "Indigo is the default interactive accent everywhere. Violet is the sole permitted exception, and only to disambiguate two co-visible interactive surfaces. No other view introduces a third accent.", "section": "colors" },
+      { "name": "The Literal-Value Rule", "body": "Anything that is copy-pasteable or executable — a path, a command, a session ID, a hex-ish identifier — renders in Geist Mono. Prose never does.", "section": "typography" },
+      { "name": "The Flat-By-Default Rule", "body": "Nothing at rest has a shadow. A shadow appearing on an element is the signal that it's temporarily floating above the layout, not a permanent decoration.", "section": "elevation" }
+    ],
+    "dos": [
+      "Do lead every row with its status signal (dot, badge, or icon) before any label text.",
+      "Do keep the status triad (emerald/amber/red) exclusively for real installed/warning/error state.",
+      "Do use Geist Mono for every literal system value: paths, commands, session IDs, shortcuts.",
+      "Do keep shadows exclusive to floating layers (popovers, dropdowns, the command palette); everything at rest is flat.",
+      "Do hold the type scale in the 9–16px band; reserve 19px+ for the rare page-level title."
+    ],
+    "donts": [
+      "Don't build a generic SaaS dashboard: no card-grid analytics layout, no gradient hero-metric widgets, no marketing sheen, no upsell framing anywhere in the app.",
+      "Don't let density collapse into a cluttered system utility: no Activity-Monitor-style sprawl, no enterprise-settings-panel density where a panel can't be read at a glance.",
+      "Don't introduce a third interactive accent beyond indigo (primary) and violet (secondary, disambiguation-only).",
+      "Don't use border-left/border-right as a colored accent stripe on rows or cards.",
+      "Don't add a shadow to anything that isn't a floating layer — a shadow on a resting card is a bug, not a style choice.",
+      "Don't use color for anything that isn't reporting real state; if it's not installed/active/warning/error, it stays neutral."
+    ]
+  }
+}
