@@ -6,6 +6,7 @@ import { Tile, TileRow } from './InsightTiles'
 import { HBar, RefreshButton, shortModel, SkeletonCards } from './InsightWidgets'
 import AgentBadge from '../components/history/AgentBadge'
 import RepoAgentConfigView from '../components/RepoAgentConfigView'
+import SearchInput from '../components/SearchInput'
 
 export type WorktreeStatus = 'active' | 'stale' | 'abandoned' | 'primary'
 
@@ -349,14 +350,8 @@ export default function WorktreesSection({ repos, loading, sessions, onRemoved, 
 
       <div className="flex-1 overflow-y-auto px-6 pb-6">
         {/* Search */}
-        <div className="flex gap-2 items-center mb-3">
-          <input
-            type="text"
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            placeholder="Search by branch or repo…"
-            className="flex-1 min-w-[200px] bg-[var(--c-surface-2)] border border-[var(--c-border)] rounded-lg px-3 py-1.5 text-[13px] text-[var(--c-text)] placeholder:text-[var(--c-text-3)] outline-none focus:border-[var(--c-accent)]/50 transition-colors"
-          />
+        <div className="mb-3">
+          <SearchInput value={search} onChange={setSearch} placeholder="Search by branch or repo…" accentColor="indigo" />
         </div>
 
         {/* Status tiles double as filters — click to scope, click again to clear */}

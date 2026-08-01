@@ -3,6 +3,7 @@ import { invoke } from '@tauri-apps/api/core'
 import type { SessionEntry, SessionMeta, TranscriptMatch } from '../../types'
 import { formatTokens, tokenBadgeColor } from './SessionStats'
 import AgentBadge from './AgentBadge'
+import SearchInput from '../SearchInput'
 
 // FTS snippet() wraps matched terms in \u0001…\u0002 marker bytes.
 const MARK_START = '\u0001'
@@ -415,13 +416,7 @@ export default function SessionList({ sessions, onSelect, loading, onLoadMore, h
     <div className="flex flex-col h-full">
       {/* Search */}
       <div className="px-3 pt-2 pb-1.5 flex-shrink-0">
-        <input
-          type="text"
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-          placeholder="Search sessions…"
-          className="w-full bg-[var(--c-surface-2)] border border-[var(--c-border)] rounded-lg px-2.5 py-1.5 text-[13px] text-[var(--c-text)] placeholder:text-[var(--c-text-3)] outline-none focus:border-[var(--c-accent)]/50 transition-colors"
-        />
+        <SearchInput value={search} onChange={setSearch} placeholder="Search sessions…" accentColor="indigo" />
       </div>
 
       {/* Agent filter — dropdown, only when more than one agent has sessions */}
