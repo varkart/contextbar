@@ -225,7 +225,6 @@ function ScopeBlock({
 export default function RepoAgentConfigView({ repoPath }: { repoPath: string }) {
   const [cfg, setCfg] = useState<RepoAgentConfig | null>(null)
   const [trustBusy, setTrustBusy] = useState(false)
-  const [open, setOpen] = useState(false)
 
   const load = useCallback(() => {
     invoke<RepoAgentConfig>('get_repo_agent_config', { repoPath }).then(setCfg).catch(() => {})
@@ -245,31 +244,9 @@ export default function RepoAgentConfigView({ repoPath }: { repoPath: string }) 
     }
   }
 
-  const totalRules =
-    cfg.claude.project.allow.length + cfg.claude.project.ask.length + cfg.claude.project.deny.length +
-    cfg.claude.local.allow.length + cfg.claude.local.ask.length + cfg.claude.local.deny.length
-  const summaryBits = [
-    totalRules > 0 ? `${totalRules} rule${totalRules === 1 ? '' : 's'}` : null,
-    cfg.codex.trustLevel === 'trusted' ? 'Codex trusted' : null,
-  ].filter(Boolean)
-
   return (
     <div className="mb-2">
-      <button
-        onClick={() => setOpen(v => !v)}
-        aria-expanded={open}
-        className="w-full flex items-center gap-1.5 text-left"
-      >
-        <span className="text-[9.5px] font-mono uppercase tracking-wider text-[var(--c-text-3)]">
-          Agent config — this repo
-        </span>
-        {summaryBits.length > 0 && (
-          <span className="text-[9.5px] text-[var(--c-text-3)]">· {summaryBits.join(' · ')}</span>
-        )}
-        <span className={`ml-auto text-[10px] text-[var(--c-text-3)] transition-transform ${open ? 'rotate-90' : ''}`}>›</span>
-      </button>
-      {open && (
-      <div className="space-y-1.5 mt-1.5">
+      <div className="space-y-1.5">
         <ScopeBlock
           label="Claude · Project"
           hint={SCOPE_HELP.project}
@@ -304,7 +281,6 @@ export default function RepoAgentConfigView({ repoPath }: { repoPath: string }) 
           </div>
         </div>
       </div>
-      )}
     </div>
   )
 }

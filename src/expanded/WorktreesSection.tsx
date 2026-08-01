@@ -16,8 +16,13 @@ const PALETTE = ['#6366f1', '#e8a94a', '#d98fd9', '#5fc9b8', '#7aa2e8', '#8fbf6b
 
 const DAY = 86_400_000
 
-export function worktreeStatus(wt: WorktreeInfo): WorktreeStatus {
+/** `hasRecentSession` covers work that hasn't been committed yet — a
+ *  worktree with a live or recent agent session is "active" even if its
+ *  last commit is old, otherwise mid-session work with no commits reads
+ *  as stale/abandoned. */
+export function worktreeStatus(wt: WorktreeInfo, hasRecentSession = false): WorktreeStatus {
   if (wt.isPrimary) return 'primary'
+  if (hasRecentSession) return 'active'
   const ts = (wt.lastCommitTs ?? 0) * 1000
   const age = Date.now() - ts
   if (age < 7 * DAY) return 'active'
@@ -172,6 +177,9 @@ export default function WorktreesSection({ repos, loading, sessions, onRemoved, 
   const [insightsOpen, setInsightsOpen] = useState<Record<string, boolean>>({})
   // Repo cards start collapsed; searching or filtering opens matches.
   const [repoOpen, setRepoOpen] = useState<Record<string, boolean>>({})
+  // When true, the branches/worktrees list is swapped out for the Agent
+  // permissions section instead — the two never show at once.
+  const [agentSettingsOpen, setAgentSettingsOpen] = useState<Record<string, boolean>>({})
   const [vscodeAvailable, setVscodeAvailable] = useState(false)
   // User-chosen repo display names + notes, keyed by repo/worktree path.
   const [repoNames, setRepoNames] = useState<Record<string, string>>({})
@@ -266,18 +274,24 @@ export default function WorktreesSection({ repos, loading, sessions, onRemoved, 
     }
   }
 
+  // A worktree with a live or recent session is "active" even with no
+  // recent commit — uncommitted mid-session work shouldn't read as stale.
+  const hasRecentSession = (wt: WorktreeInfo) =>
+    sessions.some(s => s.project === wt.path && (s.isLive || Date.now() - s.timestamp < 7 * DAY))
+
   const allWts = useMemo(() => repos.flatMap(r => r.worktrees), [repos])
   const counts = useMemo(() => ({
     repos: repos.length,
-    active: allWts.filter(w => worktreeStatus(w) === 'active').length,
-    stale: allWts.filter(w => worktreeStatus(w) === 'stale').length,
-    abandoned: allWts.filter(w => worktreeStatus(w) === 'abandoned').length,
+    active: allWts.filter(w => worktreeStatus(w, hasRecentSession(w)) === 'active').length,
+    stale: allWts.filter(w => worktreeStatus(w, hasRecentSession(w)) === 'stale').length,
+    abandoned: allWts.filter(w => worktreeStatus(w, hasRecentSession(w)) === 'abandoned').length,
     dirty: allWts.filter(w => w.isDirty).length,
     safe: allWts.filter(isSafeToDelete).length,
-  }), [repos, allWts])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }), [repos, allWts, sessions])
 
   const matches = (wt: WorktreeInfo, repo: RepoWorktrees): boolean => {
-    const st = worktreeStatus(wt)
+    const st = worktreeStatus(wt, hasRecentSession(wt))
     if (filter === 'safe' && !isSafeToDelete(wt)) return false
     if (filter === 'dirty' && !wt.isDirty) return false
     if ((filter === 'active' || filter === 'stale' || filter === 'abandoned') && st !== filter) return false
@@ -476,6 +490,20 @@ export default function WorktreesSection({ repos, loading, sessions, onRemoved, 
                   <span className={`text-[8px] transition-transform ${insightsOpen[repo.repoPath] ? 'rotate-90' : ''}`} aria-hidden="true">▶</span>
                   Insights
                 </button>
+                <button
+                  onClick={() => {
+                    const next = !agentSettingsOpen[repo.repoPath]
+                    setAgentSettingsOpen(prev => ({ ...prev, [repo.repoPath]: next }))
+                    // The content this button swaps in lives inside the
+                    // collapsed repo body — force the card open so the
+                    // click has a visible effect even when collapsed.
+                    if (next) setRepoOpen(prev => ({ ...prev, [repo.repoPath]: true }))
+                  }}
+                  aria-expanded={!!agentSettingsOpen[repo.repoPath]}
+                  className={`flex items-center gap-1 text-[11px] px-2.5 py-1 rounded-md border transition-colors ${agentSettingsOpen[repo.repoPath] ? 'border-[var(--c-accent)]/50 bg-[var(--c-accent)]/10 text-[var(--c-accent)]' : 'border-[var(--c-border)] text-[var(--c-text-3)] hover:text-[var(--c-text-2)] hover:border-[var(--c-text-3)]/50'}`}
+                >
+                  Agent settings
+                </button>
                 {vscodeAvailable && (
                   <button
                     onClick={() => invoke('open_in_vscode', { path: repo.repoPath }).catch(() => showToast('error', 'Could not open VS Code'))}
@@ -506,7 +534,15 @@ export default function WorktreesSection({ repos, loading, sessions, onRemoved, 
               <div className="mb-2">
                 <NotesEditor path={repo.repoPath} notes={pathNotes[repo.repoPath] ?? null} variant="repo" onSaved={saveNote(repo.repoPath)} />
               </div>
-              <RepoAgentConfigView repoPath={repo.repoPath} />
+              {agentSettingsOpen[repo.repoPath] ? (
+                <div>
+                  <p className="text-[9.5px] font-mono uppercase tracking-wider text-[var(--c-text-3)] mb-1.5">
+                    Agent permissions
+                  </p>
+                  <RepoAgentConfigView repoPath={repo.repoPath} />
+                </div>
+              ) : (
+              <>
               {(repo.agentFiles.length > 0 || repo.repoSkills.length > 0) && (
                 <div className="flex items-center gap-1.5 flex-wrap mb-2">
                   {repo.agentFiles.map(f => (
@@ -526,7 +562,7 @@ export default function WorktreesSection({ repos, loading, sessions, onRemoved, 
             <div className="relative pl-5 space-y-1.5">
               <div className="absolute left-[9px] top-1 bottom-5 w-px bg-[var(--c-border)]" aria-hidden="true" />
               {items.map(wt => {
-                const st = worktreeStatus(wt)
+                const st = worktreeStatus(wt, hasRecentSession(wt))
                 const isOpen = expanded === wt.path
                 const linked = sessionsFor(wt)
                 const statusBorder = isOpen
@@ -667,6 +703,8 @@ export default function WorktreesSection({ repos, loading, sessions, onRemoved, 
                 )
               })}
             </div>
+              </>
+              )}
             </div>
             )}
           </div>

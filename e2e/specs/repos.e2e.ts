@@ -92,6 +92,28 @@ test('clearing the repo scope chip shows all sessions again', async ({ page }) =
   await expect(page.getByText('write integration tests for the parser')).toBeVisible()
 })
 
+test('Agent settings expands a collapsed repo card and shows Agent permissions', async ({ page }) => {
+  // Repo card starts collapsed — clicking Agent settings must still work.
+  await expect(page.getByText('feature/done')).not.toBeVisible()
+  await page.getByRole('button', { name: 'Agent settings' }).click()
+  await expect(page.getByText('Agent permissions')).toBeVisible()
+})
+
+test('Agent settings swaps out branches/worktrees for Agent permissions', async ({ page }) => {
+  await page.getByRole('button', { name: /alpha/ }).first().click()
+  await expect(page.getByText('feature/done')).toBeVisible()
+  await expect(page.getByText('Agent permissions')).not.toBeVisible()
+
+  await page.getByRole('button', { name: 'Agent settings' }).click()
+  await expect(page.getByText('Agent permissions')).toBeVisible()
+  await expect(page.getByText('feature/done')).not.toBeVisible()
+  await expect(page.getByText('feature/wip')).not.toBeVisible()
+
+  await page.getByRole('button', { name: 'Agent settings' }).click()
+  await expect(page.getByText('feature/done')).toBeVisible()
+  await expect(page.getByText('Agent permissions')).not.toBeVisible()
+})
+
 test('navigating to Sessions via sidebar does not carry a stale repo scope', async ({ page }) => {
   await page.getByRole('button', { name: '◷ Sessions' }).first().click()
   await expect(page.getByText('Repo: alpha')).toBeVisible()
