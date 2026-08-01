@@ -76,7 +76,7 @@ export default function AllSkillsView({ agents, onSelectSkill, onAddSkill }: Pro
         {onAddSkill && (
           <button
             onClick={onAddSkill}
-            className="flex items-center gap-1 px-2.5 py-1.5 rounded-md bg-indigo-500 text-white hover:bg-indigo-400 transition-colors text-[12px] font-semibold flex-shrink-0 shadow-sm"
+            className="flex items-center gap-1 px-2.5 py-1.5 rounded-md border border-indigo-500/40 text-indigo-400 hover:bg-indigo-500/10 transition-colors text-[12px] font-semibold flex-shrink-0"
           >
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
               stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
@@ -110,18 +110,24 @@ export default function AllSkillsView({ agents, onSelectSkill, onAddSkill }: Pro
             <button
               key={group.name}
               onClick={() => onSelectSkill(group.primary)}
-              title={group.primary.description}
               className="w-full flex items-center px-4 py-2 text-left hover:bg-[var(--c-hover)] transition-colors border-b border-[var(--c-border-sub)] last:border-0"
             >
-              <span className={`flex-1 min-w-0 text-[13px] font-medium truncate font-mono ${allOff ? 'text-[var(--c-text-3)]' : 'text-[var(--c-text)]'}`}>
-                {group.name}
+              <span className="flex-1 min-w-0">
+                <span className={`block text-[13px] font-medium truncate font-mono ${allOff ? 'text-[var(--c-text-3)]' : 'text-[var(--c-text)]'}`}>
+                  {group.name}
+                </span>
+                {group.primary.description && (
+                  <span className="block text-[10.5px] text-[var(--c-text-3)] truncate mt-0.5">
+                    {group.primary.description}
+                  </span>
+                )}
               </span>
               <span className={`w-[72px] flex gap-1 ${allOff ? 'opacity-50' : ''}`}>
                 {group.variants.map(v => (
                   <AgentDot key={v.toolId + v.path} toolId={v.toolId} toolName={v.toolName} />
                 ))}
               </span>
-              <span className={`w-[52px] text-right text-[11px] tabular-nums ${allOff ? 'text-[var(--c-text-3)]' : 'text-emerald-400'}`}>
+              <span className={`w-[52px] text-right text-[11px] tabular-nums ${allOff ? 'text-[var(--c-text-3)]' : activeCount < group.variants.length ? 'text-amber-400' : 'text-emerald-400'}`}>
                 {allOff ? 'off' : `${activeCount}/${group.variants.length} on`}
               </span>
               <span className="w-[18px] flex justify-end">

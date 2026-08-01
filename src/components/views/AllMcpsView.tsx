@@ -73,7 +73,7 @@ export default function AllMcpsView({ agents, onSelectMcp, onAddMcp }: Props) {
         {onAddMcp && (
           <button
             onClick={onAddMcp}
-            className="flex items-center gap-1 px-2.5 py-1.5 rounded-md bg-violet-500 text-white hover:bg-violet-400 transition-colors text-[12px] font-semibold flex-shrink-0 shadow-sm"
+            className="flex items-center gap-1 px-2.5 py-1.5 rounded-md border border-violet-500/40 text-violet-400 hover:bg-violet-500/10 transition-colors text-[12px] font-semibold flex-shrink-0"
           >
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
               stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
@@ -108,16 +108,22 @@ export default function AllMcpsView({ agents, onSelectMcp, onAddMcp }: Props) {
             <button
               key={group.name}
               onClick={() => onSelectMcp(group.primary)}
-              title={group.primary.url ?? group.primary.command ?? undefined}
               className="w-full flex items-center px-4 py-2 text-left hover:bg-[var(--c-hover)] transition-colors border-b border-[var(--c-border-sub)] last:border-0"
             >
-              <span className={`flex-1 min-w-0 flex items-center gap-1.5 text-[13px] font-medium font-mono ${allOff ? 'text-[var(--c-text-3)]' : 'text-[var(--c-text)]'}`}>
-                <span className="truncate">{group.name}</span>
-                {hasSecrets && (
-                  <svg className="w-2.5 h-2.5 flex-shrink-0 text-[var(--c-text-3)]" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
-                    stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-label="Uses secret env vars">
-                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
-                  </svg>
+              <span className="flex-1 min-w-0">
+                <span className={`flex items-center gap-1.5 text-[13px] font-medium font-mono ${allOff ? 'text-[var(--c-text-3)]' : 'text-[var(--c-text)]'}`}>
+                  <span className="truncate">{group.name}</span>
+                  {hasSecrets && (
+                    <svg className="w-2.5 h-2.5 flex-shrink-0 text-[var(--c-text-3)]" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+                      stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-label="Uses secret env vars">
+                      <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                    </svg>
+                  )}
+                </span>
+                {(group.primary.url ?? group.primary.command) && (
+                  <span className="block text-[10.5px] font-mono text-[var(--c-text-3)] truncate mt-0.5">
+                    {group.primary.url ?? group.primary.command}
+                  </span>
                 )}
               </span>
               <span className={`w-[72px] flex gap-1 ${allOff ? 'opacity-50' : ''}`}>
@@ -125,7 +131,7 @@ export default function AllMcpsView({ agents, onSelectMcp, onAddMcp }: Props) {
                   <AgentDot key={v.toolId + v.name} toolId={v.toolId} toolName={v.toolName} />
                 ))}
               </span>
-              <span className={`w-[52px] text-right text-[11px] tabular-nums ${allOff ? 'text-[var(--c-text-3)]' : 'text-emerald-400'}`}>
+              <span className={`w-[52px] text-right text-[11px] tabular-nums ${allOff ? 'text-[var(--c-text-3)]' : activeCount < group.variants.length ? 'text-amber-400' : 'text-emerald-400'}`}>
                 {allOff ? 'off' : `${activeCount}/${group.variants.length} on`}
               </span>
               <span className="w-[18px] flex justify-end">
