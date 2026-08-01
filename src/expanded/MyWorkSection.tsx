@@ -5,10 +5,10 @@ import type { Section } from './ExpandedApp'
 import { Card, CommitBars, RefreshButton, SkeletonTiles, SkeletonCards } from './InsightWidgets'
 import AgentBadge from '../components/history/AgentBadge'
 import { formatTokens } from '../components/history/SessionStats'
+import { agentColor } from '../constants/agentColors'
 
 const DAY = 86_400_000
 const PALETTE = ['#6366f1', '#e8a94a', '#d98fd9', '#5fc9b8', '#7aa2e8', '#8fbf6b']
-const AGENT_COLORS: Record<string, string> = { claude: '#818cf8', codex: '#34d399', gemini: '#38bdf8', agy: '#e879f9', kiro: '#f59e0b', opencode: '#84cc16' }
 
 type Tab = 'today' | 'yesterday' | 'week' | 'last7'
 const TABS: { id: Tab; label: string }[] = [
@@ -491,19 +491,20 @@ export default function MyWorkSection({ sessions, repos, loading, goTo, onRefres
                       const pct = totalPrompts > 0
                         ? (u.prompts / totalPrompts) * 100
                         : (u.sessions / Math.max(1, totalSessions)) * 100
+                      const { label, hex } = agentColor(agent)
                       return (
                         <div key={agent}>
                           <div className="flex items-baseline justify-between mb-1">
-                            <span className="text-[12px] font-medium capitalize flex items-center gap-1.5">
-                              <span className="w-2 h-2 rounded-sm inline-block" style={{ background: AGENT_COLORS[agent] ?? '#71717a' }} />
-                              {agent}
+                            <span className="text-[12px] font-medium flex items-center gap-1.5">
+                              <span className="w-2 h-2 rounded-sm inline-block" style={{ background: hex }} />
+                              {label}
                             </span>
                             <span className="text-[11px] text-[var(--c-text-2)] tabular-nums">
                               {u.sessions} sess · {u.prompts} prompts{u.tokens > 0 ? ` · ${formatTokens(u.tokens)}` : ''}
                             </span>
                           </div>
                           <div className="h-1 rounded-full bg-[var(--c-border)] overflow-hidden">
-                            <div className="h-full rounded-full" style={{ width: `${Math.max(3, pct)}%`, background: AGENT_COLORS[agent] ?? '#71717a' }} />
+                            <div className="h-full rounded-full" style={{ width: `${Math.max(3, pct)}%`, background: hex }} />
                           </div>
                         </div>
                       )
