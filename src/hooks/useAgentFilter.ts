@@ -9,13 +9,19 @@ export function useAgentFilter(tools: Agent[]) {
   // empty forever and silently filter out everything.
   const [selectedTools, setSelectedTools] = useState<Set<string> | null>(null)
 
+  // Clicking a bubble while everything is selected solos that agent (a
+  // narrowing gesture — "just this one"). From there, clicking a different
+  // bubble adds it to the selection instead of swapping, so multiple agents
+  // can be picked; clicking an already-selected bubble removes it, and
+  // removing the last one falls back to "all selected" rather than showing
+  // nothing.
   const toggleTool = (id: string) => {
     setSelectedTools(prev => {
-      const base = prev ?? new Set(installedAgents.map(t => t.id))
-      const next = new Set(base)
+      if (prev === null) return new Set([id])
+      const next = new Set(prev)
       if (next.has(id)) next.delete(id)
       else next.add(id)
-      return next
+      return next.size === 0 ? null : next
     })
   }
 
