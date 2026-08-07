@@ -449,17 +449,17 @@ function Sidebar({ section, goTo, counts, onOpenPalette, coachmarkVisible, onDis
         onClick={() => goTo(id)}
         aria-current={active ? 'page' : undefined}
         title={collapsed ? `${label}${count !== null ? ` · ${count}` : ''}` : undefined}
-        className={`group w-[calc(100%-16px)] mx-2 mb-0.5 flex items-center rounded-lg transition-colors ${collapsed ? 'justify-center px-0 py-2' : 'gap-2.5 px-2.5 py-2 text-left'} ${active ? 'bg-[var(--c-accent)]/15 text-[var(--c-accent)] font-semibold shadow-[inset_2px_0_0_var(--c-accent)]' : 'text-[var(--c-text-2)] hover:bg-[var(--c-surface-2)] hover:text-[var(--c-text)]'}`}
+        className={`group w-[calc(100%-16px)] mx-2 mb-0.5 flex items-center rounded-lg transition-colors ${collapsed ? 'justify-center px-0 py-2' : 'gap-2.5 px-2.5 py-2 text-left'} ${active ? 'bg-[var(--c-accent)]/15 text-[var(--c-accent)] font-semibold' : 'text-[var(--c-text-2)] hover:bg-[var(--c-surface-2)] hover:text-[var(--c-text)]'}`}
       >
         <span className={active ? 'text-[var(--c-accent)]' : 'text-[var(--c-text-3)] group-hover:text-[var(--c-text-2)]'}>
           <NavIcon name={id} />
         </span>
         {!collapsed && (
           <>
-            <span className="text-[12.5px] flex-1">{label}</span>
-            {count !== null && <span className={`text-[11px] tabular-nums group-hover:hidden ${active ? 'text-[var(--c-accent)]/80' : 'text-[var(--c-text-3)]'}`}>{count}</span>}
+            <span className="text-[14.5px] flex-1">{label}</span>
+            {count !== null && <span className={`text-[12.5px] tabular-nums group-hover:hidden ${active ? 'text-[var(--c-accent)]/80' : 'text-[var(--c-text-3)]'}`}>{count}</span>}
             {hotkey !== undefined && (
-              <span className={`text-[9px] font-mono text-[var(--c-text-3)] opacity-60 ${count !== null ? 'hidden group-hover:inline' : ''}`}>⌘{hotkey}</span>
+              <span className={`text-[9.5px] font-mono text-[var(--c-text-3)] opacity-60 ${count !== null ? 'hidden group-hover:inline' : ''}`}>⌘{hotkey}</span>
             )}
           </>
         )}
@@ -470,7 +470,7 @@ function Sidebar({ section, goTo, counts, onOpenPalette, coachmarkVisible, onDis
   const group = (label: string, items: { id: Section; label: string }[], startIndex: number) => (
     <div className="mb-1">
       {!collapsed && (
-        <div className="px-4 pt-3 pb-1 text-[9.5px] font-mono uppercase tracking-wider text-[var(--c-text-3)]">
+        <div className="px-4 pt-3 pb-1.5 text-[12px] font-mono font-semibold uppercase tracking-wider text-[var(--c-text-3)]">
           {label}
         </div>
       )}
@@ -487,13 +487,13 @@ function Sidebar({ section, goTo, counts, onOpenPalette, coachmarkVisible, onDis
         title="My Work"
       >
         <span className="w-3.5 h-3.5 rounded flex-shrink-0" style={{ background: 'linear-gradient(135deg, #a5b4fc, #6366f1)' }} />
-        {!collapsed && <span className="text-[13px] font-bold tracking-tight">Context Bar</span>}
+        {!collapsed && <span className="text-[15.5px] font-bold tracking-tight">Context Bar</span>}
       </button>
       <div className="relative">
         <button
           onClick={onOpenPalette}
           title={collapsed ? 'Jump to anything (⌘K)' : undefined}
-          className={`flex items-center mx-2 mt-2 rounded-lg border border-[var(--c-border)] text-[11.5px] text-[var(--c-text-3)] hover:text-[var(--c-text-2)] hover:border-[var(--c-text-3)] transition-colors w-[calc(100%-16px)] ${collapsed ? 'justify-center py-1.5' : 'gap-2 px-2.5 py-1.5'}`}
+          className={`flex items-center mx-2 mt-2 rounded-lg border border-[var(--c-border)] text-[13.5px] text-[var(--c-text-3)] hover:text-[var(--c-text-2)] hover:border-[var(--c-text-3)] transition-colors w-[calc(100%-16px)] ${collapsed ? 'justify-center py-1.5' : 'gap-2 px-2.5 py-1.5'}`}
         >
           <svg
             xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
@@ -505,7 +505,7 @@ function Sidebar({ section, goTo, counts, onOpenPalette, coachmarkVisible, onDis
           {!collapsed && (
             <>
               <span className="flex-1 text-left">Jump to anything…</span>
-              <span className="text-[9px] font-mono opacity-70">⌘K</span>
+              <span className="text-[9.5px] font-mono opacity-70">⌘K</span>
             </>
           )}
         </button>
@@ -533,7 +533,7 @@ function Sidebar({ section, goTo, counts, onOpenPalette, coachmarkVisible, onDis
             className={`w-3.5 h-3.5 transition-transform ${collapsed ? 'rotate-180' : ''}`}>
             <polyline points="11 17 6 12 11 7" /><polyline points="18 17 13 12 18 7" />
           </svg>
-          {!collapsed && <span className="text-[12.5px]">Collapse</span>}
+          {!collapsed && <span className="text-[14.5px]">Collapse</span>}
         </button>
       </div>
     </div>
@@ -586,7 +586,6 @@ function SessionsSection({ sessions, loading, selected, onSelect, onRefresh, onL
   const insights = useMemo(() => ({
     total: scoped.length,
     live: scoped.filter(s => s.isLive).length,
-    projects: new Set(scoped.map(s => s.project)).size,
     prompts: scoped.reduce((n, s) => n + s.promptCount, 0),
   }), [scoped])
 
@@ -594,8 +593,8 @@ function SessionsSection({ sessions, loading, selected, onSelect, onRefresh, onL
     <div className="flex-1 flex flex-col overflow-hidden">
       <div className="px-6 pt-5 pb-3 flex-shrink-0 flex items-start justify-between gap-3">
         <div>
-          <h2 className="text-[16px] font-semibold tracking-tight">Sessions</h2>
-          <p className="text-[12px] text-[var(--c-text-3)] mt-0.5">
+          <h2 className="text-[17px] font-semibold tracking-tight">Sessions</h2>
+          <p className="text-[13px] text-[var(--c-text-3)] mt-0.5">
             Claude, Codex, Gemini and Antigravity conversation history across your projects
           </p>
         </div>
@@ -606,13 +605,13 @@ function SessionsSection({ sessions, loading, selected, onSelect, onRefresh, onL
           <button
             key={f.id}
             onClick={() => setTimeFilter(f.id)}
-            className={`text-[11px] px-3 py-1 rounded-full border transition-colors ${timeFilter === f.id ? 'border-[var(--c-accent)]/50 bg-[var(--c-accent)]/10 text-[var(--c-accent)]' : 'border-[var(--c-border)] text-[var(--c-text-3)] hover:text-[var(--c-text-2)]'}`}
+            className={`text-[12px] px-3 py-1 rounded-full border transition-colors ${timeFilter === f.id ? 'border-[var(--c-accent)]/50 bg-[var(--c-accent)]/10 text-[var(--c-accent)]' : 'border-[var(--c-border)] text-[var(--c-text-3)] hover:text-[var(--c-text-2)]'}`}
           >
             {f.label}
           </button>
         ))}
         {scope && (
-          <span className="inline-flex items-center gap-1.5 text-[11px] px-2.5 py-1 rounded-full border border-[var(--c-accent)]/50 bg-[var(--c-accent)]/10 text-[var(--c-accent)]">
+          <span className="inline-flex items-center gap-1.5 text-[12px] px-2.5 py-1 rounded-full border border-[var(--c-accent)]/50 bg-[var(--c-accent)]/10 text-[var(--c-accent)]">
             Repo: {scope.name}
             <button onClick={onClearScope} className="hover:text-[var(--c-text)] transition-colors" aria-label="Clear repo filter">✕</button>
           </span>
@@ -623,8 +622,7 @@ function SessionsSection({ sessions, loading, selected, onSelect, onRefresh, onL
           <TileRow>
             <Tile value={insights.total} label="Sessions" />
             <Tile value={insights.live} label="Live" color={insights.live > 0 ? 'text-emerald-400' : 'text-[var(--c-text-3)]'} />
-            <Tile value={insights.projects} label="Projects" />
-            <Tile value={insights.prompts} label="Prompts" color="text-amber-400" />
+            <Tile value={insights.prompts} label="Prompts" />
           </TileRow>
         </div>
       )}
@@ -637,7 +635,7 @@ function SessionsSection({ sessions, loading, selected, onSelect, onRefresh, onL
             <SessionDetail key={selected.sessionId} session={selected} />
           ) : (
             <div className="flex-1 flex items-center justify-center">
-              <p className="text-[12px] text-[var(--c-text-3)]">Select a session to view its transcript</p>
+              <p className="text-[13px] text-[var(--c-text-3)]">Select a session to view its transcript</p>
             </div>
           )}
         </div>

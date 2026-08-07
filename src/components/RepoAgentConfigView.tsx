@@ -35,25 +35,25 @@ function CapabilityOverrides({ repoPath }: { repoPath: string }) {
   return (
     <div className="rounded-lg border border-[var(--c-border-sub)] px-2.5 py-2">
       <button onClick={() => setOpen(v => !v)} className="w-full flex items-center gap-1.5 text-left">
-        <span className="text-[11px] font-semibold text-[var(--c-text-2)]">Claude · Feature overrides</span>
-        <span className="text-[9px] text-[var(--c-text-3)]">
+        <span className="text-[12px] font-semibold text-[var(--c-text-2)]">Claude · Feature overrides</span>
+        <span className="text-[9.5px] text-[var(--c-text-3)]">
           {overridden > 0 ? `${overridden} overridden` : 'all inherited'}
         </span>
-        <span className={`ml-auto text-[10px] text-[var(--c-text-3)] transition-transform ${open ? 'rotate-90' : ''}`}>›</span>
+        <span className={`ml-auto text-[11px] text-[var(--c-text-3)] transition-transform ${open ? 'rotate-90' : ''}`}>›</span>
       </button>
       {open && (
         <div className="mt-1.5 space-y-1">
-          {error && <p className="text-[10px] text-red-400">{error}</p>}
+          {error && <p className="text-[11px] text-red-400">{error}</p>}
           {caps.map(cap => (
             <div key={cap.id} className="flex items-center gap-1.5 flex-wrap">
-              <span className={`flex-1 min-w-0 text-[10.5px] truncate ${cap.state === 'inherit' ? 'text-[var(--c-text-3)]' : 'text-[var(--c-text)]'}`}>
+              <span className={`flex-1 min-w-0 text-[11.5px] truncate ${cap.state === 'inherit' ? 'text-[var(--c-text-3)]' : 'text-[var(--c-text)]'}`}>
                 {cap.label}
               </span>
               {cap.help && <HelpExpander text={cap.help} />}
               <select
                 value={cap.state}
                 onChange={e => setState(cap, e.target.value)}
-                className="text-[10px] rounded-md border border-[var(--c-border)] bg-[var(--c-surface)] text-[var(--c-text-2)] px-1 py-0.5 focus:outline-none"
+                className="text-[11px] rounded-md border border-[var(--c-border)] bg-[var(--c-surface)] text-[var(--c-text-2)] px-1 py-0.5 focus:outline-none"
                 aria-label={`${cap.label} override`}
               >
                 <option value="inherit">inherit</option>
@@ -63,7 +63,7 @@ function CapabilityOverrides({ repoPath }: { repoPath: string }) {
               </select>
             </div>
           ))}
-          <p className="text-[9px] text-[var(--c-text-3)] pt-0.5">
+          <p className="text-[9.5px] text-[var(--c-text-3)] pt-0.5">
             Writes to .claude/settings.json — overrides user settings for sessions in this repo; new sessions only.
           </p>
         </div>
@@ -87,12 +87,12 @@ function HelpExpander({ text }: { text: string }) {
         onClick={e => { e.stopPropagation(); setOpen(v => !v) }}
         title={open ? 'Hide details' : 'What is this?'}
         aria-expanded={open}
-        className={`flex-shrink-0 w-3.5 h-3.5 rounded-full border text-[8.5px] leading-none flex items-center justify-center transition-colors ${open ? 'border-[var(--c-accent)]/50 text-[var(--c-accent)]' : 'border-[var(--c-border)] text-[var(--c-text-3)] hover:text-[var(--c-text-2)]'}`}
+        className={`flex-shrink-0 w-3.5 h-3.5 rounded-full border text-[9px] leading-none flex items-center justify-center transition-colors ${open ? 'border-[var(--c-accent)]/50 text-[var(--c-accent)]' : 'border-[var(--c-border)] text-[var(--c-text-3)] hover:text-[var(--c-text-2)]'}`}
       >
         ?
       </button>
       {open && (
-        <p className="w-full basis-full text-[10px] text-[var(--c-text-2)] leading-relaxed bg-[var(--c-surface)]/60 rounded-md px-2 py-1.5 mt-1">
+        <p className="w-full basis-full text-[11px] text-[var(--c-text-2)] leading-relaxed bg-[var(--c-surface)]/60 rounded-md px-2 py-1.5 mt-1">
           {text}
         </p>
       )}
@@ -147,12 +147,12 @@ function ScopeBlock({
     <div className="rounded-lg border border-[var(--c-border-sub)] px-2.5 py-2">
       <div className="flex items-center gap-1.5 flex-wrap">
         <button onClick={() => setOpen(v => !v)} className="flex items-center gap-1.5 flex-1 min-w-0 text-left">
-          <span className="text-[11px] font-semibold text-[var(--c-text-2)]">{label}</span>
-          <span className="text-[9px] font-mono text-[var(--c-text-3)] truncate">{perms.file}</span>
-          <span className="text-[9px] text-[var(--c-text-3)]">
+          <span className="text-[12px] font-semibold text-[var(--c-text-2)]">{label}</span>
+          <span className="text-[9.5px] font-mono text-[var(--c-text-3)] truncate">{perms.file}</span>
+          <span className="text-[9.5px] text-[var(--c-text-3)]">
             {total > 0 ? `· ${total} rule${total === 1 ? '' : 's'}` : perms.exists ? '· no rules' : '· not created yet'}
           </span>
-          <span className={`text-[10px] text-[var(--c-text-3)] transition-transform ${open ? 'rotate-90' : ''}`}>›</span>
+          <span className={`text-[11px] text-[var(--c-text-3)] transition-transform ${open ? 'rotate-90' : ''}`}>›</span>
         </button>
         <HelpExpander text={hint} />
       </div>
@@ -163,7 +163,7 @@ function ScopeBlock({
             perms[sec].map(r => (
               <span
                 key={`${sec}:${r}`}
-                className={`group/rule flex items-center gap-1 text-[10px] font-mono px-1.5 py-0.5 rounded-full border max-w-full ${SECTION_CHIP[sec]}`}
+                className={`group/rule flex items-center gap-1 text-[11px] font-mono px-1.5 py-0.5 rounded-full border max-w-full ${SECTION_CHIP[sec]}`}
                 title={`${sec} rule`}
               >
                 <span className="truncate">{r}</span>
@@ -184,7 +184,7 @@ function ScopeBlock({
           <select
             value={section}
             onChange={e => setSection(e.target.value as PermissionSection)}
-            className="text-[10px] rounded-md border border-[var(--c-border)] bg-[var(--c-surface)] text-[var(--c-text-2)] px-1 py-0.5 focus:outline-none"
+            className="text-[11px] rounded-md border border-[var(--c-border)] bg-[var(--c-surface)] text-[var(--c-text-2)] px-1 py-0.5 focus:outline-none"
           >
             <option value="allow">Allow</option>
             <option value="ask">Ask</option>
@@ -204,18 +204,18 @@ function ScopeBlock({
               if (e.key === 'Escape') setAdding(false)
             }}
             placeholder="Bash(npm:*) or WebSearch"
-            className="flex-1 text-[10px] font-mono rounded-md border border-[var(--c-border)] bg-[var(--c-surface)] text-[var(--c-text)] px-1.5 py-0.5 focus:outline-none focus:border-[var(--c-accent)]/50"
+            className="flex-1 text-[11px] font-mono rounded-md border border-[var(--c-border)] bg-[var(--c-surface)] text-[var(--c-text)] px-1.5 py-0.5 focus:outline-none focus:border-[var(--c-accent)]/50"
           />
         </div>
       ) : (
         <button
           onClick={() => setAdding(true)}
-          className="text-[10px] text-[var(--c-text-3)] hover:text-[var(--c-text-2)] transition-colors mt-1.5"
+          className="text-[11px] text-[var(--c-text-3)] hover:text-[var(--c-text-2)] transition-colors mt-1.5"
         >
           ＋ Add rule
         </button>
       )}
-      {error && <p className="text-[10px] text-red-400 mt-1">{error}</p>}
+      {error && <p className="text-[11px] text-red-400 mt-1">{error}</p>}
       </>)}
     </div>
   )
@@ -246,9 +246,6 @@ export default function RepoAgentConfigView({ repoPath }: { repoPath: string }) 
 
   return (
     <div className="mb-2">
-      <p className="text-[9.5px] font-mono uppercase tracking-wider text-[var(--c-text-3)] mb-1.5">
-        Agent config — this repo
-      </p>
       <div className="space-y-1.5">
         <ScopeBlock
           label="Claude · Project"
@@ -268,8 +265,8 @@ export default function RepoAgentConfigView({ repoPath }: { repoPath: string }) 
         />
         <CapabilityOverrides repoPath={repoPath} />
         <div className="rounded-lg border border-[var(--c-border-sub)] px-2.5 py-2 flex items-center gap-2 flex-wrap">
-          <span className="text-[11px] font-semibold text-[var(--c-text-2)]">Codex · Trust</span>
-          <span className={`text-[9.5px] px-1.5 py-px rounded-full border ${cfg.codex.trustLevel === 'trusted' ? 'border-emerald-500/25 bg-emerald-500/5 text-emerald-400' : 'border-[var(--c-border-sub)] bg-[var(--c-surface)] text-[var(--c-text-3)]'}`}>
+          <span className="text-[12px] font-semibold text-[var(--c-text-2)]">Codex · Trust</span>
+          <span className={`text-[10.5px] px-1.5 py-px rounded-full border ${cfg.codex.trustLevel === 'trusted' ? 'border-emerald-500/25 bg-emerald-500/5 text-emerald-400' : 'border-[var(--c-border-sub)] bg-[var(--c-surface)] text-[var(--c-text-3)]'}`}>
             {cfg.codex.trustLevel ?? 'not trusted'}
           </span>
           <div className="ml-auto flex items-center gap-1.5">
@@ -277,7 +274,7 @@ export default function RepoAgentConfigView({ repoPath }: { repoPath: string }) 
             <button
               onClick={() => setTrust(cfg.codex.trustLevel !== 'trusted')}
               disabled={trustBusy}
-              className="text-[10px] px-2 py-0.5 rounded-md border border-[var(--c-border)] text-[var(--c-text-3)] hover:text-[var(--c-text-2)] transition-colors disabled:opacity-40"
+              className="text-[11px] px-2 py-0.5 rounded-md border border-[var(--c-border)] text-[var(--c-text-3)] hover:text-[var(--c-text-2)] transition-colors disabled:opacity-40"
             >
               {cfg.codex.trustLevel === 'trusted' ? 'Remove trust' : 'Mark trusted'}
             </button>

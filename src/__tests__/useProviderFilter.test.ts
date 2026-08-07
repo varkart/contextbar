@@ -39,19 +39,43 @@ describe('useAgentFilter', () => {
     expect(result.current.allSelected).toBe(false)
   })
 
-  it('toggleTool removes a selected tool', () => {
+  it('toggleTool solos the clicked tool, deselecting the rest', () => {
     const { result } = renderHook(() => useAgentFilter(makeTools(['a', 'b'])))
     act(() => result.current.toggleTool('a'))
-    expect(result.current.selectedTools.has('a')).toBe(false)
-    expect(result.current.selectedTools.has('b')).toBe(true)
+    expect(result.current.selectedTools.has('a')).toBe(true)
+    expect(result.current.selectedTools.has('b')).toBe(false)
   })
 
-  it('toggleTool adds back a deselected tool', () => {
+  it('toggleTool on the soloed tool clears the filter back to all selected', () => {
     const { result } = renderHook(() => useAgentFilter(makeTools(['a', 'b'])))
     act(() => result.current.toggleTool('a'))
     act(() => result.current.toggleTool('a'))
     expect(result.current.selectedTools.has('a')).toBe(true)
+    expect(result.current.selectedTools.has('b')).toBe(true)
     expect(result.current.allSelected).toBe(true)
+  })
+
+  it('toggleTool on a different tool adds to the selection (multi-select)', () => {
+    const { result } = renderHook(() => useAgentFilter(makeTools(['a', 'b', 'c'])))
+    act(() => result.current.toggleTool('a'))
+    act(() => result.current.toggleTool('b'))
+    expect(result.current.selectedTools).toEqual(new Set(['a', 'b']))
+  })
+
+  it('toggleTool removes just the clicked tool from a multi-selection', () => {
+    const { result } = renderHook(() => useAgentFilter(makeTools(['a', 'b', 'c'])))
+    act(() => result.current.toggleTool('a'))
+    act(() => result.current.toggleTool('b'))
+    act(() => result.current.toggleTool('a'))
+    expect(result.current.selectedTools).toEqual(new Set(['b']))
+  })
+
+  it('removing the last selected tool falls back to all selected', () => {
+    const { result } = renderHook(() => useAgentFilter(makeTools(['a', 'b'])))
+    act(() => result.current.toggleTool('a'))
+    act(() => result.current.toggleTool('a'))
+    expect(result.current.allSelected).toBe(true)
+    expect(result.current.selectedTools).toEqual(new Set(['a', 'b']))
   })
 
   it('excludes uninstalled tools from installedAgents', () => {

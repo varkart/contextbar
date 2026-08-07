@@ -636,6 +636,13 @@ async fn get_commit_activity(since_days: u32) -> Vec<u64> {
         .unwrap_or_default()
 }
 
+#[tauri::command]
+async fn get_agent_activity(since_ms: u64) -> Vec<engine::sessions::AgentActivityPoint> {
+    tokio::task::spawn_blocking(move || engine::sessions::agent_activity(since_ms))
+        .await
+        .unwrap_or_default()
+}
+
 // ---------------------------------------------------------------------------
 // Worktree commands
 // ---------------------------------------------------------------------------
@@ -654,6 +661,23 @@ async fn remove_worktree(repo_path: String, worktree_path: String) -> Result<(),
     })
     .await
     .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+async fn get_open_prs(
+    repo_path: String,
+    custom_hosts: Vec<engine::worktrees::CustomGitHost>,
+) -> Result<Vec<engine::worktrees::PullRequestInfo>, String> {
+    tokio::task::spawn_blocking(move || engine::worktrees::open_prs(&repo_path, &custom_hosts))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+async fn get_git_cli_status() -> engine::worktrees::GitCliStatus {
+    tokio::task::spawn_blocking(engine::worktrees::detect_git_cli)
+        .await
+        .unwrap_or_default()
 }
 
 // ---------------------------------------------------------------------------
@@ -2618,6 +2642,8 @@ pub fn run() {
             get_history_stats,
             list_worktrees,
             remove_worktree,
+            get_open_prs,
+            get_git_cli_status,
             resume_in_terminal,
             get_file_mtimes,
             list_terminals,
@@ -2647,6 +2673,7 @@ pub fn run() {
             get_session_insights,
             get_token_activity,
             get_commit_activity,
+            get_agent_activity,
             get_skill_full_description,
             hide_window,
             open_expanded_window,

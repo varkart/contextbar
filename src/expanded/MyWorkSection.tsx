@@ -5,10 +5,10 @@ import type { Section } from './ExpandedApp'
 import { Card, CommitBars, RefreshButton, SkeletonTiles, SkeletonCards } from './InsightWidgets'
 import AgentBadge from '../components/history/AgentBadge'
 import { formatTokens } from '../components/history/SessionStats'
+import { agentColor } from '../constants/agentColors'
 
 const DAY = 86_400_000
 const PALETTE = ['#6366f1', '#e8a94a', '#d98fd9', '#5fc9b8', '#7aa2e8', '#8fbf6b']
-const AGENT_COLORS: Record<string, string> = { claude: '#818cf8', codex: '#34d399', gemini: '#38bdf8', agy: '#e879f9', kiro: '#f59e0b', opencode: '#84cc16' }
 
 type Tab = 'today' | 'yesterday' | 'week' | 'last7'
 const TABS: { id: Tab; label: string }[] = [
@@ -174,7 +174,7 @@ export default function MyWorkSection({ sessions, repos, loading, goTo, onRefres
       let streak = 0
       for (let d = 0; d < 7 && daysActive.has(d); d++) streak++
       const errors = p.sessions.reduce((n, s) => n + s.errorCount, 0)
-      const tag = errors === 0 ? 'Smooth' : errors <= 3 ? 'Mixed' : 'Friction'
+      const tag: 'Smooth' | 'Mixed' | 'Friction' = errors === 0 ? 'Smooth' : errors <= 3 ? 'Mixed' : 'Friction'
       const activeDayLabels = [...daysActive].sort((a, b) => a - b)
         .map(d => d === 0 ? 'today' : d === 1 ? 'yesterday' : `${d}d ago`)
       const tooltip = [
@@ -184,7 +184,7 @@ export default function MyWorkSection({ sessions, repos, loading, goTo, onRefres
         streak > 1 ? `${streak}-day streak` : null,
         'click to view sessions',
       ].filter(Boolean).join('\n')
-      return { ...p, cells, streak, tag, tooltip }
+      return { ...p, cells, streak, tag, tooltip, errors, activeDayLabels }
     })
   }, [sessions])
 
@@ -239,10 +239,13 @@ export default function MyWorkSection({ sessions, repos, loading, goTo, onRefres
     return items.slice(0, 5)
   }, [repos])
 
-  // Live projects float above everything, then most recently active.
+  // "Active" means a session is genuinely live right now, not just recent —
+  // projects worked on but not currently open belong in the windowed stats
+  // above, not in this card grid.
   const orderedProjects = useMemo(() => {
-    const isLive = (p: ProjectAgg) => p.sessions.some(s => s.isLive)
-    return [...projects].sort((a, b) => Number(isLive(b)) - Number(isLive(a)) || b.lastTs - a.lastTs)
+    return projects
+      .filter(p => p.sessions.some(s => s.isLive))
+      .sort((a, b) => b.lastTs - a.lastTs)
   }, [projects])
 
   const branchFor = (project: string): string | null => {
@@ -273,8 +276,8 @@ export default function MyWorkSection({ sessions, repos, loading, goTo, onRefres
     <div className="flex-1 flex flex-col overflow-hidden">
       <div className="px-6 pt-5 pb-3 flex-shrink-0 flex items-start justify-between gap-3">
         <div>
-          <h2 className="text-[16px] font-semibold tracking-tight">My Work</h2>
-          <p className="text-[12px] text-[var(--c-text-3)] mt-0.5">
+          <h2 className="text-[17px] font-semibold tracking-tight">My Work</h2>
+          <p className="text-[14px] text-[var(--c-text-2)] mt-0.5">
             Everything happening across your projects
           </p>
         </div>
@@ -283,16 +286,15 @@ export default function MyWorkSection({ sessions, repos, loading, goTo, onRefres
 
       <div className="flex-1 overflow-y-auto px-6 pb-6">
         {!loading && peakSummary && !peakDismissed && (
-          <div className="flex items-center gap-3 rounded-xl border border-indigo-400/30 bg-gradient-to-br from-indigo-400/10 to-fuchsia-400/10 px-4 py-3 mb-4">
-            <span className="text-[19px] leading-none">🎯</span>
+          <div className="flex items-center gap-3 rounded-xl border border-[var(--c-border)] bg-[var(--c-surface-2)]/40 px-4 py-3 mb-4">
             <div className="flex-1 min-w-0">
-              <b className="text-[12.5px] font-semibold">Nice work today</b>
-              <p className="text-[11.5px] text-[var(--c-text-2)] mt-0.5">
+              <b className="text-[14.5px] font-semibold">Today's activity</b>
+              <p className="text-[13.5px] text-[var(--c-text-2)] mt-0.5">
                 {peakSummary.sessionCount} session{peakSummary.sessionCount === 1 ? '' : 's'}
                 {peakSummary.prompts > 0 && `, ${peakSummary.prompts} prompt${peakSummary.prompts === 1 ? '' : 's'}`}
                 {peakSummary.topProject && (
                   <> across {peakSummary.projectCount} project{peakSummary.projectCount === 1 ? '' : 's'} — most active on{' '}
-                    <b className="text-indigo-400">{peakSummary.topProject}</b>
+                    <b className="text-[var(--c-accent)]">{peakSummary.topProject}</b>
                   </>
                 )}
               </p>
@@ -312,7 +314,7 @@ export default function MyWorkSection({ sessions, repos, loading, goTo, onRefres
             <button
               key={t.id}
               onClick={() => setTab(t.id)}
-              className={`text-[11px] px-3 py-1 rounded-full border transition-colors ${tab === t.id ? 'border-[var(--c-accent)]/50 bg-[var(--c-accent)]/10 text-[var(--c-accent)]' : 'border-[var(--c-border)] text-[var(--c-text-3)] hover:text-[var(--c-text-2)]'}`}
+              className={`text-[13px] px-3 py-1 rounded-full border transition-colors ${tab === t.id ? 'border-[var(--c-accent)]/50 bg-[var(--c-accent)]/10 text-[var(--c-accent)]' : 'border-[var(--c-border)] text-[var(--c-text-3)] hover:text-[var(--c-text-2)]'}`}
             >
               {t.label}
             </button>
@@ -327,7 +329,7 @@ export default function MyWorkSection({ sessions, repos, loading, goTo, onRefres
         )}
 
         {!loading && sessions.length === 0 && (
-          <p className="text-[12px] text-[var(--c-text-3)] text-center py-10">
+          <p className="text-[14px] text-[var(--c-text-2)] text-center py-10">
             Nothing in progress. Start a session from any repo to see it here.
           </p>
         )}
@@ -344,10 +346,10 @@ export default function MyWorkSection({ sessions, repos, loading, goTo, onRefres
                 title="Open the Agents section"
                 className="px-3 py-3 text-center rounded-r-xl hover:bg-[var(--c-accent)]/8 transition-colors group/agents"
               >
-                <div className="text-[17px] font-semibold tabular-nums group-hover/agents:text-[var(--c-accent)] transition-colors">
+                <div className="text-[18px] font-semibold tabular-nums group-hover/agents:text-[var(--c-accent)] transition-colors">
                   {agentMix.length}
                 </div>
-                <div className="text-[10px] text-[var(--c-text-3)] uppercase tracking-wider mt-0.5">
+                <div className="text-[12px] text-[var(--c-text-2)] uppercase tracking-wider mt-0.5">
                   Agents <span className="opacity-0 group-hover/agents:opacity-100 transition-opacity">→</span>
                 </div>
               </button>
@@ -356,7 +358,7 @@ export default function MyWorkSection({ sessions, repos, loading, goTo, onRefres
             {/* Empty window — say so instead of rendering hollow cards */}
             {windowed.length === 0 && (
               <div className="rounded-xl border border-dashed border-[var(--c-border)] px-4 py-3 mb-3 text-center">
-                <p className="text-[12px] text-[var(--c-text-3)]">
+                <p className="text-[14px] text-[var(--c-text-2)]">
                   No sessions {tabLabel.toLowerCase() === 'today' ? 'yet today' : tabLabel.toLowerCase()}.
                   {(momentum.length > 0 || attention.length > 0) && (
                     <>{' '}
@@ -372,7 +374,7 @@ export default function MyWorkSection({ sessions, repos, loading, goTo, onRefres
             {orderedProjects.length > 0 && (
               <div className="mb-4">
                 <SectionLabel>
-                  Active projects — {tabLabel}{orderedProjects.length > 9 ? ` · showing 9 of ${orderedProjects.length}` : ''}
+                  Active projects{orderedProjects.length > 9 ? ` · showing 9 of ${orderedProjects.length}` : ''}
                 </SectionLabel>
                 <div className="grid grid-cols-3 gap-3">
                   {orderedProjects.slice(0, 9).map((p, i) => {
@@ -381,7 +383,7 @@ export default function MyWorkSection({ sessions, repos, loading, goTo, onRefres
                     return (
                       <div
                         key={p.project}
-                        className={`rounded-xl border bg-[var(--c-surface-2)]/40 p-3 ${live ? 'border-emerald-500/30 shadow-[0_0_14px_rgba(52,211,153,0.07)]' : 'border-[var(--c-border)]'}`}
+                        className={`rounded-xl border bg-[var(--c-surface-2)]/40 p-3 ${live ? 'border-emerald-500/30' : 'border-[var(--c-border)]'}`}
                       >
                         <button
                           onClick={() => onOpenSession(p.sessions[0])}
@@ -389,31 +391,31 @@ export default function MyWorkSection({ sessions, repos, loading, goTo, onRefres
                           className="w-full flex items-center gap-2 mb-1.5 text-left group/card"
                         >
                           <span
-                            className="w-6 h-6 rounded-md flex items-center justify-center font-mono font-bold text-[11px] text-black/80 shrink-0"
+                            className="w-6 h-6 rounded-md flex items-center justify-center font-mono font-bold text-[13px] text-black/80 shrink-0"
                             style={{ background: PALETTE[i % PALETTE.length] }}
                           >
                             {p.name.charAt(0).toUpperCase()}
                           </span>
                           <div className="min-w-0 flex-1">
-                            <div className="text-[12.5px] font-semibold truncate group-hover/card:text-[var(--c-accent)] transition-colors">{p.name}</div>
+                            <div className="text-[14.5px] font-semibold truncate group-hover/card:text-[var(--c-accent)] transition-colors">{p.name}</div>
                           </div>
                           {live && (
-                            <span className="text-[9px] font-mono px-1.5 py-px rounded-full bg-emerald-500/15 text-emerald-400 shrink-0">● live</span>
+                            <span className="text-[9.5px] font-mono px-1.5 py-px rounded-full bg-emerald-500/15 text-emerald-400 shrink-0">● live</span>
                           )}
                         </button>
-                        {branch && <div className="text-[10px] font-mono text-[var(--c-text-3)] truncate mb-1">⌥ {branch}</div>}
+                        {branch && <div className="text-[12px] font-mono text-[var(--c-text-2)] truncate mb-1">⌥ {branch}</div>}
                         <div className="flex items-center gap-1.5 mb-1.5">
                           {[...new Set(p.sessions.map(s => s.agent))].map(a => (
                             <AgentBadge key={a} agent={a} />
                           ))}
-                          <span className="text-[10px] text-[var(--c-text-3)] truncate">
-                            {relativeTime(p.lastTs)} · {p.sessions.length} sess · {p.prompts} prompts
+                          <span className="text-[12px] text-[var(--c-text-2)] truncate">
+                            {relativeTime(p.lastTs)}
                           </span>
                         </div>
                         <div className="flex gap-1.5">
                           <button
                             onClick={() => handleResume(p)}
-                            className={`text-[10.5px] px-2.5 py-1 rounded-md font-medium transition-colors ${copiedResume === p.project ? 'bg-emerald-500/20 text-emerald-400' : 'bg-[var(--c-accent)]/15 text-[var(--c-accent)] hover:bg-[var(--c-accent)]/25'}`}
+                            className={`text-[12.5px] px-2.5 py-1 rounded-md font-medium transition-colors ${copiedResume === p.project ? 'bg-emerald-500/20 text-emerald-400' : 'bg-[var(--c-accent)]/15 text-[var(--c-accent)] hover:bg-[var(--c-accent)]/25'}`}
                           >
                             {copiedResume === p.project ? '✓ Opened' : '▶ Resume'}
                           </button>
@@ -421,7 +423,7 @@ export default function MyWorkSection({ sessions, repos, loading, goTo, onRefres
                             <button
                               onClick={() => invoke('open_in_vscode', { path: p.project }).catch(() => showToast('error', 'Could not open VS Code'))}
                               title="Open project in Visual Studio Code"
-                              className="text-[10.5px] px-2.5 py-1 rounded-md border border-[var(--c-border)] text-[var(--c-text-3)] hover:text-[var(--c-text-2)] transition-colors"
+                              className="text-[12.5px] px-2.5 py-1 rounded-md border border-[var(--c-border)] text-[var(--c-text-3)] hover:text-[var(--c-text-2)] transition-colors"
                             >
                               VS Code
                             </button>
@@ -429,9 +431,14 @@ export default function MyWorkSection({ sessions, repos, loading, goTo, onRefres
                           <button
                             onClick={() => invoke('reveal_in_finder', { path: p.project }).catch(() => showToast('error', 'Could not reveal in Finder'))}
                             title="Reveal in Finder"
-                            className="text-[10.5px] px-2 py-1 rounded-md border border-[var(--c-border)] text-[var(--c-text-3)] hover:text-[var(--c-text-2)] transition-colors"
+                            aria-label="Reveal in Finder"
+                            className="px-2 py-1 rounded-md border border-[var(--c-border)] text-[var(--c-text-3)] hover:text-[var(--c-text-2)] transition-colors"
                           >
-                            ⌖
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+                              stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+                              className="w-3.5 h-3.5">
+                              <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z" />
+                            </svg>
                           </button>
                         </div>
                       </div>
@@ -442,7 +449,17 @@ export default function MyWorkSection({ sessions, repos, loading, goTo, onRefres
             )}
 
             {/* Insights — risk first, then windowed charts, then 7-day momentum */}
-            {(windowedUsage.length > 0 || windowCommits.length > 0 || attention.length > 0 || momentum.length > 0) && (
+            {(windowedUsage.length > 0 || windowCommits.length > 0 || attention.length > 0 || momentum.length > 0) && (() => {
+              const attentionShown = attention.length > 0
+              const usageShown = windowedUsage.length > 0
+              const momentumShown = momentum.length > 0
+              // Only wraps to a second row when all three row-1 cards are
+              // present — that's the one case where "Commits per day" needs
+              // to be pinned under "Usage by agent" instead of drifting to
+              // column 1 by default grid flow.
+              const rowWraps = attentionShown && usageShown && momentumShown
+              const commitsColClass = rowWraps ? 'col-start-2' : ''
+              return (
             <div>
             <SectionLabel>Insights</SectionLabel>
             <div className="grid grid-cols-3 gap-3 items-start">
@@ -454,16 +471,20 @@ export default function MyWorkSection({ sessions, repos, loading, goTo, onRefres
                       <button
                         key={a.key}
                         onClick={() => onFocusWorktree(a.path)}
-                        title={a.why}
-                        className={`w-full text-left rounded-lg border-l-2 bg-[var(--c-surface-2)]/60 px-2.5 py-2 hover:bg-[var(--c-surface-2)] transition-colors ${a.kind === 'uncommitted' ? 'border-l-rose-400' : 'border-l-amber-400'}`}
+                        className="w-full text-left rounded-lg bg-[var(--c-surface-2)]/60 px-2.5 py-2 hover:bg-[var(--c-surface-2)] transition-colors"
                       >
                         <div className="flex items-center gap-2 min-w-0">
-                          <span className="text-[11.5px] font-mono font-semibold truncate">{a.title}</span>
-                          <span className={`text-[9px] font-mono px-1.5 py-px rounded-full shrink-0 ${a.kind === 'uncommitted' ? 'bg-rose-500/15 text-rose-400' : 'bg-amber-500/15 text-amber-400'}`}>
+                          <span
+                            className={`w-[7px] h-[7px] rounded-full shrink-0 ${a.kind === 'uncommitted' ? 'bg-rose-400' : 'bg-amber-400'}`}
+                            aria-hidden="true"
+                          />
+                          <span className="text-[13.5px] font-mono font-semibold truncate">{a.title}</span>
+                          <span className={`text-[9.5px] font-mono px-1.5 py-px rounded-full shrink-0 ${a.kind === 'uncommitted' ? 'bg-rose-500/15 text-rose-400' : 'bg-amber-500/15 text-amber-400'}`}>
                             {a.kind === 'uncommitted' ? 'uncommitted' : 'not merged'}
                           </span>
                         </div>
-                        <p className="text-[10px] text-[var(--c-text-3)] mt-0.5 truncate">{a.meta}</p>
+                        <p className="text-[12px] text-[var(--c-text-2)] mt-1 pl-[15px] truncate">{a.meta}</p>
+                        <p className="text-[12px] text-[var(--c-text-2)] mt-0.5 pl-[15px] leading-snug">{a.why}</p>
                       </button>
                     ))}
                   </div>
@@ -480,19 +501,20 @@ export default function MyWorkSection({ sessions, repos, loading, goTo, onRefres
                       const pct = totalPrompts > 0
                         ? (u.prompts / totalPrompts) * 100
                         : (u.sessions / Math.max(1, totalSessions)) * 100
+                      const { label, hex } = agentColor(agent)
                       return (
                         <div key={agent}>
                           <div className="flex items-baseline justify-between mb-1">
-                            <span className="text-[11px] font-medium capitalize flex items-center gap-1.5">
-                              <span className="w-2 h-2 rounded-sm inline-block" style={{ background: AGENT_COLORS[agent] ?? '#71717a' }} />
-                              {agent}
+                            <span className="text-[13px] font-medium flex items-center gap-1.5">
+                              <span className="w-2 h-2 rounded-sm inline-block" style={{ background: hex }} />
+                              {label}
                             </span>
-                            <span className="text-[10px] text-[var(--c-text-3)] tabular-nums">
+                            <span className="text-[12px] text-[var(--c-text-2)] tabular-nums">
                               {u.sessions} sess · {u.prompts} prompts{u.tokens > 0 ? ` · ${formatTokens(u.tokens)}` : ''}
                             </span>
                           </div>
                           <div className="h-1 rounded-full bg-[var(--c-border)] overflow-hidden">
-                            <div className="h-full rounded-full" style={{ width: `${Math.max(3, pct)}%`, background: AGENT_COLORS[agent] ?? '#71717a' }} />
+                            <div className="h-full rounded-full" style={{ width: `${Math.max(3, pct)}%`, background: hex }} />
                           </div>
                         </div>
                       )
@@ -510,32 +532,43 @@ export default function MyWorkSection({ sessions, repos, loading, goTo, onRefres
                         key={m.project}
                         onClick={() => onOpenSessionsForProject(m.name, m.project)}
                         title={m.tooltip}
-                        className="w-full flex items-center gap-2 rounded-md px-1.5 py-1.5 -mx-1.5 hover:bg-[var(--c-surface-2)] transition-colors text-left group/mom"
+                        aria-label={`${m.name}: ${m.sessions.length} session${m.sessions.length === 1 ? '' : 's'}, active ${m.activeDayLabels.join(', ')}${m.errors > 0 ? `, ${m.errors} error${m.errors === 1 ? '' : 's'}` : ', no errors'}${m.streak > 1 ? `, ${m.streak}-day streak` : ''}. Click to view sessions.`}
+                        className="w-full rounded-md px-1.5 py-1.5 -mx-1.5 hover:bg-[var(--c-surface-2)] transition-colors text-left group/mom"
                       >
-                        <span className="text-[11px] font-mono font-semibold w-24 truncate group-hover/mom:text-[var(--c-accent)] transition-colors">{m.name}</span>
-                        <div className="flex-1 flex gap-0.5">
-                          {m.cells.map((filled, i) => (
-                            <span key={i} className={`flex-1 h-1.5 rounded-sm ${filled ? 'bg-emerald-400' : 'bg-[var(--c-border)]'}`} />
-                          ))}
+                        <div className="flex items-center gap-2">
+                          <span className="text-[13px] font-mono font-semibold w-24 truncate group-hover/mom:text-[var(--c-accent)] transition-colors">{m.name}</span>
+                          <div className="flex-1 flex gap-0.5">
+                            {m.cells.map((filled, i) => (
+                              <span key={i} className={`flex-1 h-1.5 rounded-sm ${filled ? 'bg-emerald-400' : 'bg-[var(--c-border)]'}`} />
+                            ))}
+                          </div>
+                          <span className={`text-[9.5px] font-mono px-1.5 py-px rounded-full shrink-0 ${m.tag === 'Smooth' ? 'bg-emerald-500/15 text-emerald-400' : m.tag === 'Mixed' ? 'bg-amber-500/15 text-amber-400' : 'bg-rose-500/15 text-rose-400'}`}>
+                            {m.tag}
+                          </span>
                         </div>
-                        <span className={`text-[9px] font-mono px-1.5 py-px rounded-full shrink-0 ${m.tag === 'Smooth' ? 'bg-emerald-500/15 text-emerald-400' : m.tag === 'Mixed' ? 'bg-amber-500/15 text-amber-400' : 'bg-rose-500/15 text-rose-400'}`}>
-                          {m.tag}
-                        </span>
+                        <p className="text-[9.5px] text-[var(--c-text-2)] mt-0.5 pl-0">
+                          {m.sessions.length} session{m.sessions.length === 1 ? '' : 's'}
+                          {m.errors > 0 && ` · ${m.errors} error${m.errors === 1 ? '' : 's'}`}
+                          {m.streak > 1 && ` · ${m.streak}-day streak`}
+                        </p>
                       </button>
                     ))}
-                    <p className="text-[9px] text-[var(--c-text-3)] pt-1">← today · 6d ago →</p>
+                    <p className="text-[9.5px] text-[var(--c-text-2)] pt-1">← today · 6d ago →</p>
                   </div>
                 </BentoCard>
               )}
 
               {windowCommits.length > 0 && (
-                <Card title={`Commits per day — ${tabLabel}`} sub="All branches, all repos">
-                  <CommitBars commitSecs={windowCommits} daysBack={windowDays} />
-                </Card>
+                <div className={commitsColClass}>
+                  <Card title={`Commits per day — ${tabLabel}`} sub="All branches, all repos">
+                    <CommitBars commitSecs={windowCommits} daysBack={windowDays} />
+                  </Card>
+                </div>
               )}
             </div>
             </div>
-            )}
+              )
+            })()}
 
 
           </>
@@ -548,16 +581,19 @@ export default function MyWorkSection({ sessions, repos, loading, goTo, onRefres
 function Stat({ n, lbl, color }: { n: string; lbl: string; color?: string }) {
   return (
     <div className="px-3 py-3 text-center">
-      <div className={`text-[17px] font-semibold tabular-nums ${color ?? ''}`}>{n}</div>
-      <div className="text-[10px] text-[var(--c-text-3)] uppercase tracking-wider mt-0.5">{lbl}</div>
+      <div className={`text-[18px] font-semibold tabular-nums ${color ?? ''}`}>{n}</div>
+      <div className="text-[12px] text-[var(--c-text-2)] uppercase tracking-wider mt-0.5">{lbl}</div>
     </div>
   )
 }
 
+// Plain semibold titles, not eyebrows — this screen already has two
+// top-level SectionLabel eyebrows; a third style of label per bento card
+// was scaffolding, not hierarchy.
 function BentoCard({ label, accent, children }: { label: string; accent?: string; children: React.ReactNode }) {
   return (
     <div className="rounded-xl border border-[var(--c-border)] bg-[var(--c-surface-2)]/40 p-3.5">
-      <p className={`text-[10px] font-mono uppercase tracking-wider mb-2.5 ${accent ?? 'text-[var(--c-text-3)]'}`}>{label}</p>
+      <p className={`text-[14px] font-semibold mb-2.5 ${accent ?? 'text-[var(--c-text)]'}`}>{label}</p>
       {children}
     </div>
   )
@@ -565,6 +601,6 @@ function BentoCard({ label, accent, children }: { label: string; accent?: string
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
-    <p className="text-[10px] font-mono text-[var(--c-text-3)] uppercase tracking-wider mb-2">{children}</p>
+    <p className="text-[12px] font-mono text-[var(--c-text-2)] uppercase tracking-wider mb-2">{children}</p>
   )
 }

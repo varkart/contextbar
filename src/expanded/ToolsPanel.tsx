@@ -10,7 +10,8 @@ import type { Agent, SessionEntry, SessionInsights, TokenPoint } from '../types'
 import { formatTokens } from '../components/history/SessionStats'
 import ViewManager from '../components/views/ViewManager'
 import { Tile, TileRow } from './InsightTiles'
-import { Collapsible, HBar, TokenTrend, shortModel } from './InsightWidgets'
+import { Collapsible, HBar, RefreshButton, TokenTrend, shortModel } from './InsightWidgets'
+import AgentActivityChart from './AgentActivityChart'
 import { agentColor } from '../constants/agentColors'
 
 const MODEL_COLORS = ['#6366f1', '#e8a94a', '#d98fd9', '#2dd4bf', '#fb7185', '#8fbf6b']
@@ -201,16 +202,21 @@ export default function ToolsPanel({
     <div className="flex-1 min-w-0 flex overflow-hidden">
       <div className="w-full h-full flex flex-col overflow-hidden">
         {view === ROOT_VIEW[section] && (
-          <div className="px-6 pt-5 pb-3 flex-shrink-0">
-            <h2 className="text-[16px] font-semibold tracking-tight">{SECTION_HEADINGS[section].title}</h2>
-            <p className="text-[12px] text-[var(--c-text-3)] mt-0.5">{SECTION_HEADINGS[section].sub}</p>
+          <div className="px-6 pt-5 pb-3 flex-shrink-0 flex items-start justify-between gap-3">
+            <div>
+              <h2 className="text-[17px] font-semibold tracking-tight">{SECTION_HEADINGS[section].title}</h2>
+              <p className="text-[13px] text-[var(--c-text-3)] mt-0.5">{SECTION_HEADINGS[section].sub}</p>
+            </div>
+            {(section === 'agents' || section === 'skills' || section === 'mcps') && (
+              <RefreshButton onClick={fetchAgents} busy={loading} />
+            )}
           </div>
         )}
         {view !== ROOT_VIEW[section] && (
           <div className="px-6 pt-3 pb-2 flex-shrink-0">
             <button
               onClick={() => resetTo(ROOT_VIEW[section])}
-              className="text-[11px] text-[var(--c-text-3)] hover:text-[var(--c-text-2)] transition-colors"
+              className="text-[12px] text-[var(--c-text-3)] hover:text-[var(--c-text-2)] transition-colors"
             >
               ← {SECTION_HEADINGS[section].title}
             </button>
@@ -228,7 +234,7 @@ export default function ToolsPanel({
               <Tile
                 value={`${agentInsights.mcpsActive}/${agentInsights.mcpsTotal}`}
                 label="MCPs active"
-                color="text-[var(--c-accent)]"
+                color="text-emerald-400"
               />
               <Tile
                 value={agentInsights.configErrors}
@@ -248,7 +254,7 @@ export default function ToolsPanel({
                       />
                     ))}
                   </div>
-                  <div className="flex gap-3 flex-wrap text-[10.5px] text-[var(--c-text-3)]">
+                  <div className="flex gap-3 flex-wrap text-[11.5px] text-[var(--c-text-3)]">
                     {usage.perModel.map((m, i) => (
                       <span key={m.model} className="flex items-center gap-1">
                         <span className="w-2 h-2 rounded-sm" style={{ background: MODEL_COLORS[i % MODEL_COLORS.length] }} />
@@ -257,7 +263,7 @@ export default function ToolsPanel({
                     ))}
                   </div>
                   <div className="mt-3 pt-2.5 border-t border-[var(--c-border)]/60">
-                    <p className="text-[10px] font-mono text-[var(--c-text-3)] uppercase tracking-wider mb-1.5">
+                    <p className="text-[11px] font-mono text-[var(--c-text-3)] uppercase tracking-wider mb-1.5">
                       Agent activity
                     </p>
                     {agentActivity.map(a => {
@@ -270,20 +276,25 @@ export default function ToolsPanel({
                           ? `config updated ${relativeDays(a.lastTouch)}`
                           : 'no activity signal'
                       return (
-                        <div key={a.id} className="flex items-center gap-2 py-1 text-[11px] max-w-md">
+                        <div key={a.id} className="flex items-center gap-2 py-1 text-[12px] max-w-md">
                           <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${dot}`} />
                           <span className="font-medium text-[var(--c-text-2)] w-28 truncate">{a.name}</span>
                           <span className="text-[var(--c-text-3)] font-mono">{signal}</span>
                         </div>
                       )
                     })}
-                    <p className="text-[9.5px] text-[var(--c-text-3)] opacity-60 mt-1">
+                    <p className="text-[10.5px] text-[var(--c-text-3)] opacity-60 mt-1">
                       Session counts for Claude Code, Codex and Gemini; other agents show config file activity as best available signal
                     </p>
                   </div>
                 </Collapsible>
               </div>
             )}
+            <div className="mt-2">
+              <Collapsible id="agents-activity-chart" label="Time spent per agent — estimated, daily">
+                <AgentActivityChart />
+              </Collapsible>
+            </div>
           </div>
         )}
         {view === 'all-skills-list' && usage && (
@@ -293,7 +304,6 @@ export default function ToolsPanel({
                 <Tile
                   value={usage.skillCounts.reduce((n, s) => n + s.count, 0)}
                   label="Skill runs"
-                  color="text-[var(--c-accent)]"
                   hint="Skill tool invocations in Claude Code sessions"
                 />
                 <Tile value={usage.skillCounts.length} label="Skills used" />
@@ -307,7 +317,7 @@ export default function ToolsPanel({
               </TileRow>
               {usage.skillCounts.length > 0 && (
                 <>
-                  <p className="text-[10px] font-mono text-[var(--c-text-3)] uppercase tracking-wider mb-1.5">Most used skills</p>
+                  <p className="text-[11px] font-mono text-[var(--c-text-3)] uppercase tracking-wider mb-1.5">Most used skills</p>
                   {usage.skillCounts.slice(0, 5).map(s => (
                     <HBar
                       key={s.name}
@@ -324,12 +334,12 @@ export default function ToolsPanel({
         )}
         {detailAgent && (
           <div className="flex items-center gap-3 px-4 pt-4 pb-1 flex-shrink-0">
-            <span className={`inline-flex items-center justify-center w-9 h-9 rounded-lg text-[16px] font-bold flex-shrink-0 ${agentColor(detailAgent.id).bg} ${agentColor(detailAgent.id).text}`}>
+            <span className={`inline-flex items-center justify-center w-9 h-9 rounded-lg text-[17px] font-bold flex-shrink-0 ${agentColor(detailAgent.id).bg} ${agentColor(detailAgent.id).text}`}>
               {detailAgent.name[0].toUpperCase()}
             </span>
             <div className="min-w-0">
-              <h1 className="text-[20px] font-bold tracking-tight leading-tight truncate">{detailAgent.name}</h1>
-              <p className="text-[11px] text-[var(--c-text-3)]">
+              <h1 className="text-[21px] font-bold tracking-tight leading-tight truncate">{detailAgent.name}</h1>
+              <p className="text-[12px] text-[var(--c-text-3)]">
                 {[
                   detailAgent.version && `v${detailAgent.version.replace(/^v/, '')}`,
                   detailAgent.skills.length > 0 && `${detailAgent.skills.length} skills`,
@@ -341,7 +351,7 @@ export default function ToolsPanel({
               <button
                 onClick={() => goTo('config-backup')}
                 title="Config backups"
-                className="ml-auto text-[11px] px-2.5 py-1 rounded-md border border-[var(--c-border)] text-[var(--c-text-3)] hover:text-[var(--c-text-2)] transition-colors flex-shrink-0"
+                className="ml-auto text-[12px] px-2.5 py-1 rounded-md border border-[var(--c-border)] text-[var(--c-text-3)] hover:text-[var(--c-text-2)] transition-colors flex-shrink-0"
               >
                 Backups
               </button>
@@ -352,11 +362,11 @@ export default function ToolsPanel({
           <div className="px-3 pt-2 flex-shrink-0">
             <Collapsible id="agent-claude-usage" label="Usage insights — tokens, cost and tools, last 30 days">
               <TileRow className="mb-2">
-                <Tile value={formatTokens(usage.inputTokens + usage.outputTokens)} label="Tokens" color="text-[var(--c-accent)]" />
-                <Tile value={`$${usage.estCostUsd.toFixed(2)}`} label="Est. cost" color="text-amber-400" hint="Approximate — public API list prices; cache reads discounted" />
+                <Tile value={formatTokens(usage.inputTokens + usage.outputTokens)} label="Tokens" />
+                <Tile value={`$${usage.estCostUsd.toFixed(2)}`} label="Est. cost" hint="Approximate — public API list prices; cache reads discounted" />
                 <Tile value={usage.perModel[0] ? shortModel(usage.perModel[0].model) : '—'} label="Top model" />
                 <Tile value={usage.perProject.length} label="Projects" />
-                <Tile value={usage.mcpToolCounts.reduce((n, m) => n + m.count, 0)} label="MCP calls" color="text-emerald-400" />
+                <Tile value={usage.mcpToolCounts.reduce((n, m) => n + m.count, 0)} label="MCP calls" />
                 <Tile
                   value={usage.heaviest ? formatTokens(usage.heaviest.tokens) : '—'}
                   label="Heaviest session"
@@ -366,11 +376,11 @@ export default function ToolsPanel({
               </TileRow>
               <div className="grid grid-cols-2 gap-3">
                 <div className="min-w-0">
-                  <p className="text-[10px] font-mono text-[var(--c-text-3)] uppercase tracking-wider mb-1.5">Token trend</p>
+                  <p className="text-[11px] font-mono text-[var(--c-text-3)] uppercase tracking-wider mb-1.5">Token trend</p>
                   <TokenTrend points={tokenPoints} />
                 </div>
                 <div className="min-w-0">
-                  <p className="text-[10px] font-mono text-[var(--c-text-3)] uppercase tracking-wider mb-1.5">Top tools</p>
+                  <p className="text-[11px] font-mono text-[var(--c-text-3)] uppercase tracking-wider mb-1.5">Top tools</p>
                   {usage.toolCounts.slice(0, 4).map(t => (
                     <HBar
                       key={t.name}
@@ -380,9 +390,9 @@ export default function ToolsPanel({
                       color="var(--c-accent)"
                     />
                   ))}
-                  <p className="text-[10px] font-mono text-[var(--c-text-3)] uppercase tracking-wider mt-2 mb-1">Cost by model</p>
+                  <p className="text-[11px] font-mono text-[var(--c-text-3)] uppercase tracking-wider mt-2 mb-1">Cost by model</p>
                   {usage.perModel.slice(0, 3).map(m => (
-                    <div key={m.model} className="flex justify-between text-[10.5px] py-0.5">
+                    <div key={m.model} className="flex justify-between text-[11.5px] py-0.5">
                       <span className="text-[var(--c-text-2)]">{shortModel(m.model)} · {m.sessions} sessions</span>
                       <span className="font-mono text-[var(--c-text-3)]">{m.estCostUsd != null ? `$${m.estCostUsd.toFixed(2)}` : '—'}</span>
                     </div>
@@ -397,16 +407,15 @@ export default function ToolsPanel({
             <Collapsible id="mcps-usage" label="Usage insights — which servers get called, last 30 days">
               <TileRow className="mb-2">
                 <Tile value={agentInsights.mcpsTotal} label="Configured" />
-                <Tile value={usage.mcpToolCounts.length} label="Servers called" color="text-[var(--c-accent)]" />
+                <Tile value={usage.mcpToolCounts.length} label="Servers called" />
                 <Tile
                   value={usage.mcpToolCounts.reduce((n, m) => n + m.count, 0)}
                   label="Total calls"
-                  color="text-emerald-400"
                 />
               </TileRow>
               {usage.mcpToolCounts.length > 0 && (
                 <>
-                  <p className="text-[10px] font-mono text-[var(--c-text-3)] uppercase tracking-wider mb-1.5">Most called servers</p>
+                  <p className="text-[11px] font-mono text-[var(--c-text-3)] uppercase tracking-wider mb-1.5">Most called servers</p>
                   {usage.mcpToolCounts.slice(0, 5).map(m => (
                     <HBar
                       key={m.name}

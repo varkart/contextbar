@@ -314,6 +314,13 @@ export interface TokenPoint {
   tokens: number
 }
 
+export interface AgentActivityPoint {
+  tsMs: number
+  agent: string
+  /** Estimated active duration (last prompt - first prompt, capped at 4h). 0 when unknown. */
+  minutes: number
+}
+
 export interface SessionInsights {
   sessionsAnalyzed: number
   inputTokens: number
@@ -345,6 +352,31 @@ export interface WorktreeInfo {
   /** Unix seconds of the last commit in this worktree. */
   lastCommitTs?: number
   lastCommitSubject?: string
+}
+
+export interface PullRequestInfo {
+  number: number
+  title: string
+  url: string
+  author: string
+  isDraft: boolean
+}
+
+export interface CustomGitHost {
+  domain: string
+  kind: 'github' | 'gitlab'
+}
+
+export interface GitCliInfo {
+  installed: boolean
+  version?: string
+  authenticated: boolean
+  account?: string
+}
+
+export interface GitCliStatus {
+  gh: GitCliInfo
+  glab: GitCliInfo
 }
 
 export interface RepoWorktrees {

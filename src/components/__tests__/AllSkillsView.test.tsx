@@ -1,4 +1,4 @@
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen, fireEvent, within } from '@testing-library/react'
 import { describe, it, expect, vi } from 'vitest'
 import AllSkillsView from '../views/AllSkillsView'
 import type { Agent, Skill } from '../../types'
@@ -54,9 +54,9 @@ describe('AllSkillsView — renders skills', () => {
     expect(screen.queryByText('cursor-only')).not.toBeInTheDocument()
   })
 
-  it('exposes skill description as row tooltip', () => {
+  it('shows skill description inline under the name', () => {
     render(<AllSkillsView agents={[singleTool]} onBack={vi.fn()} onSelectSkill={vi.fn()} />)
-    expect(screen.getByTitle('Polish frontend UI')).toBeInTheDocument()
+    expect(screen.getByText('Polish frontend UI')).toBeInTheDocument()
   })
 
   it('deduplicates skills with the same name across tools', () => {
@@ -110,8 +110,9 @@ describe('AllSkillsView — provider chips', () => {
 
   it('renders provider chips when multiple installed tools', () => {
     render(<AllSkillsView agents={[claudeTool, cursorTool]} onBack={vi.fn()} onSelectSkill={vi.fn()} />)
-    expect(screen.getByText('Claude Code')).toBeInTheDocument()
-    expect(screen.getByText('Cursor')).toBeInTheDocument()
+    const filterBar = within(screen.getByTestId('agent-filter-chips'))
+    expect(filterBar.getByText('Claude Code')).toBeInTheDocument()
+    expect(filterBar.getByText('Cursor')).toBeInTheDocument()
   })
 })
 
@@ -126,16 +127,17 @@ describe('AllSkillsView — interaction', () => {
     )
   })
 
-  it('deselecting a provider chip hides that provider\'s exclusive skills', () => {
-    // cursor-review only exists in Cursor; clicking Cursor chip should hide it
+  it('clicking a provider chip solos that provider, hiding the others\' exclusive skills', () => {
+    // graphify only exists in Claude; clicking the Cursor chip should solo Cursor and hide it
     render(<AllSkillsView agents={[claudeTool, cursorTool]} onBack={vi.fn()} onSelectSkill={vi.fn()} />)
-    // Initially cursor-review is visible
+    // Initially both are visible
     expect(screen.getByText('cursor-review')).toBeInTheDocument()
-    // Deselect Cursor chip
-    fireEvent.click(screen.getByText('Cursor').closest('button')!)
-    // cursor-review should be hidden
-    expect(screen.queryByText('cursor-review')).not.toBeInTheDocument()
-    // claude-only skills remain visible
     expect(screen.getByText('graphify')).toBeInTheDocument()
+    // Solo the Cursor filter chip
+    fireEvent.click(within(screen.getByTestId('agent-filter-chips')).getByText('Cursor').closest('button')!)
+    // Claude-exclusive skill should be hidden
+    expect(screen.queryByText('graphify')).not.toBeInTheDocument()
+    // Cursor-exclusive skill remains visible
+    expect(screen.getByText('cursor-review')).toBeInTheDocument()
   })
 })

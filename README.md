@@ -20,6 +20,8 @@ If you use multiple AI coding tools, you probably have skills scattered across `
 
 Context Bar sits in your menu bar and gives you one place to see all of it — every agent, skill, server, and session — instantly, with no configuration. The tray popover is the quick glance; a full Expanded window (⌘K to search, ⌘1–6 to jump sections) is one click away for anything that needs more room.
 
+Agentic coding means one engineer can now run several agents across several repos at once — Claude in one worktree, Codex reviewing another, Cursor mid-refactor in a third. Context Bar tracks that sprawl: progress per repo, usage per agent, and a single place to control what each one is allowed to do.
+
 ---
 
 ## Use cases

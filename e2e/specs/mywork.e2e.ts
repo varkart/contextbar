@@ -60,11 +60,11 @@ test('refresh button shows spin-then-checkmark feedback on click', async ({ page
 })
 
 test('peak-end banner summarizes today and can be dismissed for the day', async ({ page }) => {
-  await expect(page.getByText('Nice work today')).toBeVisible()
+  await expect(page.getByText("Today's activity")).toBeVisible()
   await page.getByRole('button', { name: 'Dismiss' }).click()
-  await expect(page.getByText('Nice work today')).not.toBeVisible()
+  await expect(page.getByText("Today's activity")).not.toBeVisible()
   // Stays dismissed on reload within the same day
   await page.reload()
   await page.waitForSelector('text=Overview — Today', { timeout: 8000 })
-  await expect(page.getByText('Nice work today')).not.toBeVisible()
+  await expect(page.getByText("Today's activity")).not.toBeVisible()
 })

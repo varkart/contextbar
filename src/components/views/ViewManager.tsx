@@ -50,6 +50,7 @@ export default function ViewManager({
   setTheme,
   fetchNotifications,
   hideAgentHeader,
+  compact,
 }: any) {
   if (view === 'doctor') {
     return <DoctorView onBack={() => goTo('settings')} />
@@ -122,6 +123,8 @@ export default function ViewManager({
         onBack={() => escape()}
         onSelectSkill={skill => selectSkill(skill, 'all-skills-list')}
         onAddSkill={openAddSkill}
+        onInstalled={handleFetchTools}
+        compact={compact}
       />
     )
   }
@@ -132,6 +135,8 @@ export default function ViewManager({
         onBack={() => escape()}
         onSelectMcp={mcp => selectMcp(mcp, 'all-mcps-list')}
         onAddMcp={openAddMcp}
+        onInstalled={handleFetchTools}
+        compact={compact}
       />
     )
   }

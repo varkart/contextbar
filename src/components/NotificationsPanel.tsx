@@ -143,11 +143,11 @@ export default function NotificationsPanel({ notifications, onChanged }: Notific
                       </span>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-baseline gap-2">
-                          <p className="text-[13px] font-medium text-[var(--c-text)] leading-snug flex-1 min-w-0">{n.title}</p>
+                          <p className="text-[13px] font-medium text-[var(--c-text)] leading-snug flex-1 min-w-0 break-words">{n.title}</p>
                           <span className="text-[10px] text-[var(--c-text-3)] tabular-nums shrink-0">{timeLabel(n.tsMs)}</span>
                         </div>
                         {n.body && (
-                          <p className="text-[12px] text-[var(--c-text-2)] mt-0.5 leading-relaxed">{n.body}</p>
+                          <p className="text-[12px] text-[var(--c-text-2)] mt-0.5 leading-relaxed break-words">{n.body}</p>
                         )}
                       </div>
                       <button

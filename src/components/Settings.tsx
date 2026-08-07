@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import type { ThemePreference } from '../useTheme'
+import type { GitCliStatus, GitCliInfo, CustomGitHost } from '../types'
+import { getCustomGitHosts, setCustomGitHosts } from '../gitHosts'
 import { capture } from '../analytics'
 
 interface SettingsProps {
@@ -105,9 +107,9 @@ function ThemeSelector({ value, onChange }: { value: ThemePreference; onChange: 
         <button
           key={key}
           onClick={() => onChange(key)}
-          className={`flex-1 flex flex-col items-center gap-1.5 py-3 rounded-xl border-2 transition-all duration-150 ${
+          className={`flex-1 flex flex-col items-center gap-1.5 py-3 rounded-xl border transition-all duration-150 ${
             value === key
-              ? 'border-indigo-500 bg-indigo-500/10 text-indigo-500'
+              ? 'border-transparent ring-1 ring-indigo-500 bg-indigo-500/10 text-indigo-500'
               : 'border-[var(--c-border)] text-[var(--c-text-3)] hover:border-[var(--c-text-3)] hover:text-[var(--c-text-2)]'
           }`}
           aria-pressed={value === key}
@@ -194,6 +196,150 @@ function formatShortcut(raw: string): string {
     .replace('Shift', '⇧')
     .replace('Alt', '⌥')
     .replace(/\+/g, '')
+}
+
+const EMPTY_CLI_INFO: GitCliInfo = { installed: false, authenticated: false }
+
+function CliRow({ name, icon, info, onRecheck }: { name: string; icon: string; info: GitCliInfo; onRecheck: () => Promise<void> }) {
+  const [rechecking, setRechecking] = useState(false)
+  return (
+    <div className={`flex items-center gap-2.5 px-3 py-2 rounded-lg border ${info.installed ? 'border-[var(--c-border)]' : 'border-amber-500/35 bg-amber-500/5'}`}>
+      <span className="w-6 h-6 rounded-md flex items-center justify-center text-[10px] font-bold text-white bg-[var(--c-text-3)] shrink-0">{icon}</span>
+      <div className="min-w-0">
+        <p className="text-[13px] font-medium">{name}</p>
+        <p className="text-[11px] text-[var(--c-text-3)]">
+          {info.installed
+            ? `Detected — v${info.version ?? '?'}${info.authenticated ? `, authenticated${info.account ? ` as ${info.account}` : ''}` : ', not authenticated'}`
+            : 'Not found on PATH'}
+        </p>
+      </div>
+      <div className="ml-auto flex items-center gap-1.5 shrink-0">
+        <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${info.installed ? 'bg-emerald-500/15 text-emerald-500' : 'bg-amber-500/15 text-amber-600'}`}>
+          {info.installed ? 'Installed' : 'Not found'}
+        </span>
+        <button
+          onClick={async () => { setRechecking(true); await onRecheck(); setRechecking(false) }}
+          disabled={rechecking}
+          className="text-[11px] px-2 py-1 rounded-md border border-[var(--c-border)] text-[var(--c-text-3)] hover:text-[var(--c-text-2)] transition-colors disabled:opacity-50"
+        >
+          {rechecking ? 'Checking…' : 'Recheck'}
+        </button>
+      </div>
+    </div>
+  )
+}
+
+function GitHostsSection() {
+  const [cli, setCli] = useState<GitCliStatus | null>(null)
+  const [hosts, setHosts] = useState<CustomGitHost[]>(() => getCustomGitHosts())
+  const [addOpen, setAddOpen] = useState(false)
+  const [newDomain, setNewDomain] = useState('')
+  const [newKind, setNewKind] = useState<'github' | 'gitlab'>('gitlab')
+
+  const fetchStatus = () => invoke<GitCliStatus>('get_git_cli_status').then(setCli).catch(() => {})
+
+  useEffect(() => { fetchStatus() }, [])
+
+  const addHost = () => {
+    const domain = newDomain.trim()
+    if (!domain) return
+    const next = [...hosts, { domain, kind: newKind }]
+    setHosts(next)
+    setCustomGitHosts(next)
+    setNewDomain('')
+    setAddOpen(false)
+  }
+
+  const removeHost = (i: number) => {
+    const next = hosts.filter((_, idx) => idx !== i)
+    setHosts(next)
+    setCustomGitHosts(next)
+  }
+
+  const gh = cli?.gh ?? EMPTY_CLI_INFO
+  const glab = cli?.glab ?? EMPTY_CLI_INFO
+  const anyGitlabHost = hosts.some(h => h.kind === 'gitlab')
+
+  let warning: string | null = null
+  if (cli !== null) {
+    if (!gh.installed && !glab.installed) {
+      warning = 'Neither gh nor glab is installed — PR/MR tracking is off for every repo until at least one is set up.'
+    } else if (!glab.installed) {
+      const suffix = anyGitlabHost ? ` — including ${hosts.find(h => h.kind === 'gitlab')!.domain}, which you've configured below` : ''
+      warning = `glab isn't installed, so GitLab repos won't show their open MRs${suffix}. Install glab, or ignore this if you don't use GitLab.`
+    } else if (!gh.installed) {
+      warning = "gh isn't installed, so GitHub repos won't show their open PRs. Install gh."
+    }
+  }
+
+  return (
+    <>
+      <div className="space-y-2">
+        <CliRow name="GitHub CLI" icon="gh" info={gh} onRecheck={fetchStatus} />
+        <CliRow name="GitLab CLI" icon="gl" info={glab} onRecheck={fetchStatus} />
+      </div>
+      {warning && (
+        <div className="mt-2 flex items-start gap-2 px-3 py-2 rounded-lg bg-amber-500/8 border border-amber-500/25 text-[12px] text-amber-600 leading-relaxed">
+          <span className="shrink-0">⚠</span>
+          <span>{warning}</span>
+        </div>
+      )}
+
+      <p className="text-[12px] text-[var(--c-text-3)] mt-4 mb-2">
+        github.com and gitlab.com work automatically. Add a domain if your team runs GitHub Enterprise or self-managed GitLab.
+      </p>
+      {hosts.length === 0 ? (
+        <p className="text-[12px] text-[var(--c-text-3)]">No self-hosted instances configured.</p>
+      ) : (
+        <div className="space-y-1.5">
+          {hosts.map((h, i) => {
+            const cliMissing = cli !== null && ((h.kind === 'gitlab' && !glab.installed) || (h.kind === 'github' && !gh.installed))
+            return (
+              <div key={`${h.kind}:${h.domain}`} className="flex items-center gap-2.5 px-2.5 py-1.5 rounded-md border border-[var(--c-border)]">
+                <span className={`text-[9px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded ${h.kind === 'github' ? 'bg-zinc-500/15 text-zinc-500' : 'bg-orange-500/15 text-orange-500'}`}>
+                  {h.kind === 'github' ? 'GH Enterprise' : 'GitLab'}
+                </span>
+                <span className="text-[12.5px] font-mono flex-1 min-w-0 truncate">{h.domain}</span>
+                {cliMissing && <span className="text-[10px] text-amber-600 shrink-0">⚠ {h.kind === 'gitlab' ? 'glab' : 'gh'} missing</span>}
+                <button onClick={() => removeHost(i)} aria-label={`Remove ${h.domain}`} className="text-[13px] text-[var(--c-text-3)] hover:text-rose-400 transition-colors px-1">✕</button>
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+      {addOpen ? (
+        <div className="flex items-center gap-2 mt-2 p-2.5 rounded-lg border border-dashed border-[var(--c-border)]">
+          <select
+            value={newKind}
+            onChange={e => setNewKind(e.target.value as 'github' | 'gitlab')}
+            className="text-[12.5px] px-2 py-1.5 rounded-md border border-[var(--c-border)] bg-[var(--c-bg)] text-[var(--c-text)]"
+          >
+            <option value="github">GitHub Enterprise</option>
+            <option value="gitlab">GitLab self-managed</option>
+          </select>
+          <input
+            type="text"
+            value={newDomain}
+            onChange={e => setNewDomain(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') addHost(); if (e.key === 'Escape') setAddOpen(false) }}
+            placeholder="git.mycompany.com"
+            autoFocus
+            className="flex-1 min-w-0 text-[12.5px] font-mono px-2 py-1.5 rounded-md border border-[var(--c-border)] bg-[var(--c-bg)] text-[var(--c-text)] outline-none focus:border-indigo-400/50"
+          />
+          <button onClick={addHost} className="text-[11px] font-semibold px-2.5 py-1.5 rounded-md bg-indigo-500 text-white">Add</button>
+          <button onClick={() => { setAddOpen(false); setNewDomain('') }} className="text-[11px] px-2.5 py-1.5 rounded-md border border-[var(--c-border)] text-[var(--c-text-3)]">Cancel</button>
+        </div>
+      ) : (
+        <button
+          onClick={() => setAddOpen(true)}
+          className="mt-2 text-[11.5px] font-medium px-2.5 py-1.5 rounded-md border border-[var(--c-border)] text-[var(--c-text-2)] hover:border-[var(--c-text-3)] transition-colors"
+        >
+          + Add self-hosted instance
+        </button>
+      )}
+    </>
+  )
 }
 
 export default function Settings({ updateInfo, checkingUpdate, onCheckUpdateNow, theme, onThemeChange, onOpenLogs, onOpenDoctor }: SettingsProps) {
@@ -329,6 +475,9 @@ export default function Settings({ updateInfo, checkingUpdate, onCheckUpdateNow,
           )}
         </div>
 
+        <SectionLabel>Source control</SectionLabel>
+        <GitHostsSection />
+
         {(onOpenLogs || onOpenDoctor) && (
           <>
             <SectionLabel>Developer</SectionLabel>
@@ -383,7 +532,7 @@ export default function Settings({ updateInfo, checkingUpdate, onCheckUpdateNow,
                     }
                   }}
                   disabled={installing}
-                  className="text-[13px] px-2 py-0.5 rounded-md bg-indigo-500 text-white hover:bg-indigo-400 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                  className="text-[13px] px-2 py-0.5 rounded-md border border-indigo-500/40 text-indigo-400 hover:bg-indigo-500/10 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
                 >
                   {installing ? 'Installing…' : `Install ${updateInfo.latestVersion}`}
                 </button>

@@ -1,4 +1,4 @@
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen, fireEvent, within } from '@testing-library/react'
 import { describe, it, expect, vi } from 'vitest'
 import AllMcpsView from '../views/AllMcpsView'
 import type { Agent, McpServer } from '../../types'
@@ -100,8 +100,9 @@ describe('AllMcpsView — provider chips', () => {
 
   it('renders provider chips when multiple installed tools', () => {
     render(<AllMcpsView agents={[claudeTool, cursorTool]} onBack={vi.fn()} onSelectMcp={vi.fn()} />)
-    expect(screen.getByText('Claude Code')).toBeInTheDocument()
-    expect(screen.getByText('Cursor')).toBeInTheDocument()
+    const filterBar = within(screen.getByTestId('agent-filter-chips'))
+    expect(filterBar.getByText('Claude Code')).toBeInTheDocument()
+    expect(filterBar.getByText('Cursor')).toBeInTheDocument()
   })
 })
 
@@ -116,13 +117,14 @@ describe('AllMcpsView — interaction', () => {
     )
   })
 
-  it('deselecting a provider chip hides that provider\'s exclusive MCPs', () => {
-    // cursor-db only exists in Cursor; deselecting Cursor chip should hide it
+  it('clicking a provider chip solos that provider, hiding the others\' exclusive MCPs', () => {
+    // netlify only exists in Claude; soloing Cursor should hide it
     render(<AllMcpsView agents={[claudeTool, cursorTool]} onBack={vi.fn()} onSelectMcp={vi.fn()} />)
     expect(screen.getByText('cursor-db')).toBeInTheDocument()
-    fireEvent.click(screen.getByText('Cursor').closest('button')!)
-    expect(screen.queryByText('cursor-db')).not.toBeInTheDocument()
-    // Claude's exclusive MCPs still visible
     expect(screen.getByText('netlify')).toBeInTheDocument()
+    fireEvent.click(within(screen.getByTestId('agent-filter-chips')).getByText('Cursor').closest('button')!)
+    // Claude-exclusive MCP hidden, Cursor-exclusive MCP remains
+    expect(screen.queryByText('netlify')).not.toBeInTheDocument()
+    expect(screen.getByText('cursor-db')).toBeInTheDocument()
   })
 })

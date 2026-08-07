@@ -10,7 +10,7 @@ interface Props {
 export default function AgentChips({ installedAgents, selectedTools, onToggle }: Props) {
   if (installedAgents.length <= 1) return null
   return (
-    <div className="px-3 py-1.5 border-b border-[var(--c-border)] flex gap-1.5 flex-wrap flex-shrink-0">
+    <div data-testid="agent-filter-chips" className="px-3 py-1.5 border-b border-[var(--c-border)] flex gap-1.5 flex-wrap flex-shrink-0">
       {installedAgents.map(tool => {
         const colors = agentColor(tool.id)
         const selected = selectedTools.has(tool.id)

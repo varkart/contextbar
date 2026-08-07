@@ -44,29 +44,39 @@
 :root {
   --c-bg:         #ffffff;
   --c-surface:    #f4f4f5;
+  --c-surface-1:  #f4f4f5;
+  --c-surface-2:  #e4e4e7;
+  --c-bg-sub:     #f4f4f5;
   --c-hover:      #f4f4f5;
   --c-border:     rgba(228,228,231,0.9);
   --c-border-sub: rgba(228,228,231,0.6);
   --c-text:       #18181b;
+  --c-text-1:     #18181b;
   --c-text-2:     #71717a;
   --c-text-3:     #a1a1aa;
   --c-input:      rgba(244,244,245,0.9);
   --c-track:      #d4d4d8;
   --c-skeleton:   #e4e4e7;
+  --c-accent:     #6366f1;
 }
 
 .dark {
   --c-bg:         #09090b;
   --c-surface:    #18181b;
+  --c-surface-1:  #18181b;
+  --c-surface-2:  #27272a;
+  --c-bg-sub:     #18181b;
   --c-hover:      rgba(255,255,255,0.025);
   --c-border:     rgba(39,39,42,0.8);
   --c-border-sub: rgba(39,39,42,0.5);
   --c-text:       #e4e4e7;
+  --c-text-1:     #e4e4e7;
   --c-text-2:     #71717a;
   --c-text-3:     #52525b;
   --c-input:      rgba(39,39,42,0.6);
   --c-track:      #3f3f46;
   --c-skeleton:   #27272a;
+  --c-accent:     #6366f1;
 }
 
 * {

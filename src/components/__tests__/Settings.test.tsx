@@ -16,6 +16,7 @@ const defaultProps = {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  localStorage.clear()
   mockInvoke.mockImplementation((cmd: string) => {
     switch (cmd) {
       case 'get_autostart': return Promise.resolve(false)
@@ -24,6 +25,10 @@ beforeEach(() => {
       case 'get_vibrancy':  return Promise.resolve(true)
       case 'get_terminal':  return Promise.resolve('Terminal')
       case 'list_terminals': return Promise.resolve(['Terminal', 'iTerm2', 'Warp'])
+      case 'get_git_cli_status': return Promise.resolve({
+        gh: { installed: true, version: '2.63.0', authenticated: true, account: 'varkart' },
+        glab: { installed: false, authenticated: false },
+      })
       default:              return Promise.resolve(null)
     }
   })
@@ -310,5 +315,56 @@ describe('Settings — ShortcutRecorder', () => {
     await waitFor(() =>
       expect(screen.getByRole('button', { name: 'Terminal' })).toHaveClass('border-indigo-400/60')
     )
+  })
+})
+
+describe('Settings — Source control (git hosts)', () => {
+  it('shows CLI install/auth status once loaded', async () => {
+    render(<Settings {...defaultProps} />)
+    await waitFor(() => expect(screen.getByText(/Detected — v2\.63\.0, authenticated as varkart/)).toBeInTheDocument())
+    expect(screen.getByText('Not found on PATH')).toBeInTheDocument()
+    expect(screen.getByText('Installed')).toBeInTheDocument()
+    expect(screen.getByText('Not found')).toBeInTheDocument()
+  })
+
+  it('shows a warning naming the missing CLI', async () => {
+    render(<Settings {...defaultProps} />)
+    await waitFor(() => expect(screen.getByText(/glab.*isn.t installed/)).toBeInTheDocument())
+  })
+
+  it('adding a self-hosted instance persists it and shows it in the list', async () => {
+    render(<Settings {...defaultProps} />)
+    await waitFor(() => expect(screen.getByText('+ Add self-hosted instance')).toBeInTheDocument())
+    fireEvent.click(screen.getByText('+ Add self-hosted instance'))
+    fireEvent.change(screen.getByPlaceholderText('git.mycompany.com'), { target: { value: 'gitlab.mycompany.com' } })
+    fireEvent.click(screen.getByText('Add'))
+    expect(screen.getByText('gitlab.mycompany.com')).toBeInTheDocument()
+    expect(JSON.parse(localStorage.getItem('contextbar:git-hosts')!)).toEqual([
+      { domain: 'gitlab.mycompany.com', kind: 'gitlab' },
+    ])
+  })
+
+  it('flags a configured host whose CLI is missing', async () => {
+    localStorage.setItem('contextbar:git-hosts', JSON.stringify([{ domain: 'gitlab.mycompany.com', kind: 'gitlab' }]))
+    render(<Settings {...defaultProps} />)
+    await waitFor(() => expect(screen.getByText('gitlab.mycompany.com')).toBeInTheDocument())
+    expect(screen.getByText('⚠ glab missing')).toBeInTheDocument()
+  })
+
+  it('removing a host clears it from the list and storage', async () => {
+    localStorage.setItem('contextbar:git-hosts', JSON.stringify([{ domain: 'gitlab.mycompany.com', kind: 'gitlab' }]))
+    render(<Settings {...defaultProps} />)
+    await waitFor(() => expect(screen.getByText('gitlab.mycompany.com')).toBeInTheDocument())
+    fireEvent.click(screen.getByLabelText('Remove gitlab.mycompany.com'))
+    expect(screen.queryByText('gitlab.mycompany.com')).not.toBeInTheDocument()
+    expect(JSON.parse(localStorage.getItem('contextbar:git-hosts')!)).toEqual([])
+  })
+
+  it('recheck button re-fetches CLI status', async () => {
+    render(<Settings {...defaultProps} />)
+    await waitFor(() => expect(screen.getAllByText('Recheck')).toHaveLength(2))
+    mockInvoke.mockClear()
+    fireEvent.click(screen.getAllByText('Recheck')[0])
+    await waitFor(() => expect(mockInvoke).toHaveBeenCalledWith('get_git_cli_status'))
   })
 })
