@@ -117,6 +117,7 @@ export type MockOverrides = {
   set_skill_active?: 'success' | 'error' | 'slow'
   set_mcp_active?:   'success' | 'error' | 'slow'
   notifications?:    Notification[]
+  gitCliStatus?:      unknown
 }
 
 export type ExpandedMockData = {
@@ -127,6 +128,8 @@ export type ExpandedMockData = {
   tokenPoints?: unknown[]
   promptTimestamps?: number[]
   commitTimestamps?: number[]
+  openPrs?: unknown[]
+  agentActivity?: unknown[]
 }
 
 export async function injectTauriMock(
@@ -219,6 +222,17 @@ export async function injectTauriMock(
           }
           case 'list_worktrees':
             return Promise.resolve(JSON.parse(JSON.stringify(expanded.repos ?? [])))
+          case 'get_open_prs':
+            return Promise.resolve(JSON.parse(JSON.stringify(expanded.openPrs ?? [])))
+          case 'get_git_cli_status':
+            return Promise.resolve(JSON.parse(JSON.stringify(
+              overrides.gitCliStatus ?? {
+                gh: { installed: true, version: '2.63.0', authenticated: true, account: 'testuser' },
+                glab: { installed: false, authenticated: false },
+              }
+            )))
+          case 'get_agent_activity':
+            return Promise.resolve(JSON.parse(JSON.stringify(expanded.agentActivity ?? [])))
           case 'get_session_insights':
             return Promise.resolve(JSON.parse(JSON.stringify(
               expanded.insights ?? {

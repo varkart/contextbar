@@ -201,4 +201,13 @@ export const expandedFixture: ExpandedMockData = {
   })),
   promptTimestamps: Array.from({ length: 40 }, (_, i) => now - i * 5 * HOUR),
   commitTimestamps: Array.from({ length: 20 }, (_, i) => Math.floor((now - i * 12 * HOUR) / 1000)),
+  openPrs: [
+    { number: 42, title: 'Fix retry backoff jitter', url: 'https://github.com/test/alpha/pull/42', author: 'varkart', isDraft: false },
+    { number: 41, title: 'WIP: payment provider abstraction', url: 'https://github.com/test/alpha/pull/41', author: 'varkart', isDraft: true },
+  ],
+  agentActivity: Array.from({ length: 20 }, (_, i) => ({
+    tsMs: now - i * 18 * HOUR,
+    agent: i % 3 === 0 ? 'claude' : i % 3 === 1 ? 'cursor' : 'claude',
+    minutes: 20 + (i % 5) * 15,
+  })),
 }

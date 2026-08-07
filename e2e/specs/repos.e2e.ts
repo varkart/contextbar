@@ -25,9 +25,23 @@ test('expanding a repo reveals worktrees and chips', async ({ page }) => {
 })
 
 test('insight tiles show status counts', async ({ page }) => {
-  // Tiles carry explanatory hover hints — unambiguous vs filter pills
+  // Stale/Abandoned/Uncommitted consolidate into one "Needs attention" tile
+  await expect(page.getByText('Needs attention')).toBeVisible()
   await expect(page.getByTitle('Merged into base and clean')).toBeVisible()
-  await expect(page.getByTitle('Worktrees with uncommitted changes')).toBeVisible()
+})
+
+test('PRs button loads and lists open PRs for the repo', async ({ page }) => {
+  await page.getByRole('button', { name: 'PRs' }).click()
+  await expect(page.getByText('Fix retry backoff jitter')).toBeVisible()
+  await expect(page.getByText('WIP: payment provider abstraction')).toBeVisible()
+  await expect(page.getByText('Draft')).toBeVisible()
+})
+
+test('needs attention tile shows a breakdown on hover', async ({ page }) => {
+  await page.getByText('Needs attention').hover()
+  await expect(page.getByText('Abandoned')).toBeVisible()
+  await expect(page.getByText('Uncommitted')).toBeVisible()
+  await expect(page.getByText('Stale')).toBeVisible()
 })
 
 test('filter pill auto-expands and narrows to safe worktrees', async ({ page }) => {
