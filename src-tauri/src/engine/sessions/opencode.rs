@@ -116,7 +116,17 @@ fn list_from_db(limit: usize) -> Vec<SessionEntry> {
 
     rows.filter_map(Result::ok)
         .map(
-            |(id, title, directory, created, ts, tokens_input, tokens_output, model, prompt_count)| {
+            |(
+                id,
+                title,
+                directory,
+                created,
+                ts,
+                tokens_input,
+                tokens_output,
+                model,
+                prompt_count,
+            )| {
                 let ts = ts.max(0) as u64;
                 let created = created.max(0) as u64;
                 SessionEntry {

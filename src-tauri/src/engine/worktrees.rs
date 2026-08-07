@@ -697,7 +697,10 @@ mod tests {
             parse_gitlab_slug("https://gitlab.com/group/subgroup/project.git"),
             Some("group/subgroup/project".to_string())
         );
-        assert_eq!(parse_gitlab_slug("https://github.com/varkart/contextbar"), None);
+        assert_eq!(
+            parse_gitlab_slug("https://github.com/varkart/contextbar"),
+            None
+        );
         // Self-hosted GitLab (custom domain) isn't matched — no fixed hostname to key off.
         assert_eq!(
             parse_gitlab_slug("https://gitlab.mycompany.com/group/project"),
@@ -712,7 +715,10 @@ mod tests {
             Some("team/svc".to_string())
         );
         assert_eq!(
-            parse_slug_for_host("https://git.corp.internal/team/svc.git", "git.corp.internal"),
+            parse_slug_for_host(
+                "https://git.corp.internal/team/svc.git",
+                "git.corp.internal"
+            ),
             Some("team/svc".to_string())
         );
         // Doesn't match a different host.
