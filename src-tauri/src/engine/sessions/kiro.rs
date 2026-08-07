@@ -89,6 +89,8 @@ fn list_from_root(root: &std::path::Path, limit: usize) -> Vec<SessionEntry> {
             let ts = rfc3339_to_ms(&meta.updated_at)
                 .or_else(|| rfc3339_to_ms(&meta.created_at))
                 .unwrap_or(0);
+            let duration_minutes = rfc3339_to_ms(&meta.created_at)
+                .and_then(|created| super::session_duration_minutes(created, ts));
             let prompt_count = meta
                 .session_state
                 .as_ref()
@@ -110,7 +112,7 @@ fn list_from_root(root: &std::path::Path, limit: usize) -> Vec<SessionEntry> {
                 project_name: project_name(&meta.cwd),
                 total_tokens: 0,
                 model: None,
-                duration_minutes: None,
+                duration_minutes,
                 is_live,
                 error_count: 0,
                 prompt_count,

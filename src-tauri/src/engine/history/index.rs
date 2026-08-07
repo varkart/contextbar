@@ -117,6 +117,8 @@ pub fn list_sessions(
     // group by sessionId: display = first prompt, timestamp = last activity.
     let mut sessions: std::collections::HashMap<String, SessionEntry> =
         std::collections::HashMap::new();
+    // First-prompt timestamp per session, for an estimated duration (last - first).
+    let mut first_ts: std::collections::HashMap<String, u64> = std::collections::HashMap::new();
     // A search matches a session if ANY of its prompts matches.
     let mut search_matched: std::collections::HashSet<String> = std::collections::HashSet::new();
 
@@ -155,6 +157,7 @@ pub fn list_sessions(
                 entry.prompt_count += 1;
             }
             None => {
+                first_ts.insert(session_id.clone(), timestamp);
                 let project_name = project_name(&project);
                 let is_live = resolve_session_file(home, &project, &session_id)
                     .is_some_and(|f| is_file_live(&f));
@@ -177,6 +180,13 @@ pub fn list_sessions(
                     },
                 );
             }
+        }
+    }
+
+    for entry in sessions.values_mut() {
+        if let Some(&first) = first_ts.get(&entry.session_id) {
+            entry.duration_minutes =
+                crate::engine::sessions::session_duration_minutes(first, entry.timestamp);
         }
     }
 

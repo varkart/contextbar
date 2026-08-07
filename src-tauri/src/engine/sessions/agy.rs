@@ -76,6 +76,7 @@ fn list_from_root(root: &std::path::Path, limit: usize) -> Vec<SessionEntry> {
 
     let mut sessions: std::collections::HashMap<String, SessionEntry> =
         std::collections::HashMap::new();
+    let mut first_ts: std::collections::HashMap<String, u64> = std::collections::HashMap::new();
     for line in content.lines() {
         let Ok(h) = serde_json::from_str::<Line>(line.trim()) else {
             continue;
@@ -93,6 +94,7 @@ fn list_from_root(root: &std::path::Path, limit: usize) -> Vec<SessionEntry> {
                 entry.prompt_count += 1;
             }
             None => {
+                first_ts.insert(id.clone(), timestamp);
                 sessions.insert(
                     id.clone(),
                     SessionEntry {
@@ -112,6 +114,12 @@ fn list_from_root(root: &std::path::Path, limit: usize) -> Vec<SessionEntry> {
                     },
                 );
             }
+        }
+    }
+
+    for entry in sessions.values_mut() {
+        if let Some(&first) = first_ts.get(&entry.session_id) {
+            entry.duration_minutes = super::session_duration_minutes(first, entry.timestamp);
         }
     }
 

@@ -79,7 +79,7 @@ fn list_from_db(limit: usize) -> Vec<SessionEntry> {
         return vec![];
     };
     let Ok(mut stmt) = conn.prepare(
-        "SELECT s.id, s.title, s.directory, s.time_updated, s.tokens_input, s.tokens_output, s.model,
+        "SELECT s.id, s.title, s.directory, s.time_created, s.time_updated, s.tokens_input, s.tokens_output, s.model,
                 COUNT(CASE WHEN sm.type = 'user' THEN 1 END)
          FROM session s
          LEFT JOIN session_message sm ON sm.session_id = s.id
@@ -93,15 +93,17 @@ fn list_from_db(limit: usize) -> Vec<SessionEntry> {
         let id: String = row.get(0)?;
         let title: String = row.get(1)?;
         let directory: String = row.get(2)?;
-        let ts: i64 = row.get(3)?;
-        let tokens_input: i64 = row.get(4)?;
-        let tokens_output: i64 = row.get(5)?;
-        let model: Option<String> = row.get(6)?;
-        let prompt_count: i64 = row.get(7)?;
+        let created: i64 = row.get(3)?;
+        let ts: i64 = row.get(4)?;
+        let tokens_input: i64 = row.get(5)?;
+        let tokens_output: i64 = row.get(6)?;
+        let model: Option<String> = row.get(7)?;
+        let prompt_count: i64 = row.get(8)?;
         Ok((
             id,
             title,
             directory,
+            created,
             ts,
             tokens_input,
             tokens_output,
@@ -114,8 +116,9 @@ fn list_from_db(limit: usize) -> Vec<SessionEntry> {
 
     rows.filter_map(Result::ok)
         .map(
-            |(id, title, directory, ts, tokens_input, tokens_output, model, prompt_count)| {
+            |(id, title, directory, created, ts, tokens_input, tokens_output, model, prompt_count)| {
                 let ts = ts.max(0) as u64;
+                let created = created.max(0) as u64;
                 SessionEntry {
                     agent: "opencode".to_string(),
                     session_id: id,
@@ -129,7 +132,7 @@ fn list_from_db(limit: usize) -> Vec<SessionEntry> {
                     project_name: project_name(&directory),
                     total_tokens: (tokens_input.max(0) + tokens_output.max(0)) as u64,
                     model: model_id_from_json(model.as_deref()),
-                    duration_minutes: None,
+                    duration_minutes: super::session_duration_minutes(created, ts),
                     is_live: now_ms().saturating_sub(ts) < 300_000,
                     error_count: 0,
                     prompt_count: prompt_count.max(0) as u32,

@@ -223,6 +223,7 @@ fn list_from_tmp(tmp: &Path) -> Vec<SessionEntry> {
         // Group prompts by sessionId: first = display, last = activity time.
         let mut sessions: std::collections::HashMap<String, SessionEntry> =
             std::collections::HashMap::new();
+        let mut first_ts: std::collections::HashMap<String, u64> = std::collections::HashMap::new();
         for e in &entries {
             if e.get("type").and_then(|t| t.as_str()) != Some("user") {
                 continue;
@@ -242,6 +243,7 @@ fn list_from_tmp(tmp: &Path) -> Vec<SessionEntry> {
                     entry.prompt_count += 1;
                 }
                 None => {
+                    first_ts.insert(id.to_string(), ts);
                     sessions.insert(
                         id.to_string(),
                         SessionEntry {
@@ -268,6 +270,9 @@ fn list_from_tmp(tmp: &Path) -> Vec<SessionEntry> {
         // chat-file mtime lookup, so keep it bounded.
         let chats = dir.join("chats");
         for entry in sessions.values_mut() {
+            if let Some(&first) = first_ts.get(&entry.session_id) {
+                entry.duration_minutes = super::session_duration_minutes(first, entry.timestamp);
+            }
             if now.saturating_sub(entry.timestamp) > 3_600_000 {
                 continue;
             }

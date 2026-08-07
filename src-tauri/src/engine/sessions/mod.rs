@@ -96,6 +96,33 @@ pub fn list_all(
     all.into_iter().skip(offset).take(limit).collect()
 }
 
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentActivityPoint {
+    pub ts_ms: u64,
+    pub agent: String,
+    pub minutes: u64,
+}
+
+/// Every session's (last-activity timestamp, agent, estimated duration)
+/// since `since_ms`, across all sources — the frontend buckets these into
+/// calendar days itself (local timezone, no date-library dependency here).
+/// A generous per-source cap keeps a year of history bounded without needing
+/// per-source "since" support.
+pub fn agent_activity(since_ms: u64) -> Vec<AgentActivityPoint> {
+    const PER_SOURCE_CAP: usize = 4000;
+    sources()
+        .into_iter()
+        .flat_map(|s| s.list(PER_SOURCE_CAP))
+        .filter(|e| e.timestamp >= since_ms)
+        .map(|e| AgentActivityPoint {
+            ts_ms: e.timestamp,
+            agent: e.agent,
+            minutes: e.duration_minutes.unwrap_or(0),
+        })
+        .collect()
+}
+
 /// Fetch a session, trying the hinted agent's source first, then the rest.
 pub fn get_any(agent: Option<&str>, session_id: &str) -> Result<SessionDetail, String> {
     if let Some(a) = agent {
@@ -174,9 +201,27 @@ pub(crate) fn file_mtime_ms(path: &std::path::Path) -> Option<u64> {
         .map(|d| d.as_millis() as u64)
 }
 
+/// Estimated active duration from a session's first and last known activity
+/// timestamps (ms). This is a span, not tracked wall-clock time — it counts
+/// idle gaps between turns as "active" — so it's capped at a plausible
+/// single-sitting ceiling to keep an overnight-idle session from reporting
+/// as 10 hours of work.
+pub(crate) const MAX_SESSION_SPAN_MIN: u64 = 240;
+
+pub(crate) fn session_duration_minutes(first_ms: u64, last_ms: u64) -> Option<u64> {
+    if first_ms == 0 || last_ms <= first_ms {
+        return None;
+    }
+    let minutes = (last_ms - first_ms) / 60_000;
+    if minutes == 0 {
+        return None;
+    }
+    Some(minutes.min(MAX_SESSION_SPAN_MIN))
+}
+
 #[cfg(test)]
 mod tests {
-    use super::rfc3339_to_ms;
+    use super::{rfc3339_to_ms, session_duration_minutes, MAX_SESSION_SPAN_MIN};
 
     #[test]
     fn parses_rfc3339_timestamps() {
@@ -189,6 +234,30 @@ mod tests {
             1_577_836_800_000
         );
         assert!(rfc3339_to_ms("garbage").is_none());
+    }
+
+    #[test]
+    fn session_duration_spans_first_to_last() {
+        let first = 1_000_000_000_000u64;
+        let last = first + 45 * 60_000; // +45 min
+        assert_eq!(session_duration_minutes(first, last), Some(45));
+    }
+
+    #[test]
+    fn session_duration_caps_at_max_span() {
+        let first = 1_000_000_000_000u64;
+        let last = first + 10 * 60 * 60_000; // +10h, an overnight-idle session
+        assert_eq!(
+            session_duration_minutes(first, last),
+            Some(MAX_SESSION_SPAN_MIN)
+        );
+    }
+
+    #[test]
+    fn session_duration_none_for_missing_or_backwards_timestamps() {
+        assert_eq!(session_duration_minutes(0, 1_000_000), None);
+        assert_eq!(session_duration_minutes(2_000_000, 1_000_000), None);
+        assert_eq!(session_duration_minutes(1_000_000, 1_000_000), None);
     }
 }
 
@@ -206,12 +275,13 @@ mod smoke {
         println!("agents in top 30: {counts:?}");
         for e in entries.iter().take(8) {
             println!(
-                "[{}] {} | {} | prompts:{} tokens:{}",
+                "[{}] {} | {} | prompts:{} tokens:{} duration_min:{:?}",
                 e.agent,
                 e.project_name,
                 e.display.chars().take(40).collect::<String>(),
                 e.prompt_count,
-                e.total_tokens
+                e.total_tokens,
+                e.duration_minutes
             );
         }
         for agent in ["gemini", "codex"] {

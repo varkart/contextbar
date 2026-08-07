@@ -244,6 +244,7 @@ impl SessionSource for CodexSource {
             };
             // Last activity = file mtime (rollout is append-only).
             let timestamp = file_mtime_ms(&path).unwrap_or(s.ts_ms);
+            let duration_minutes = super::session_duration_minutes(s.ts_ms, timestamp);
             out.push(SessionEntry {
                 agent: "codex".to_string(),
                 session_id: s.id,
@@ -253,7 +254,7 @@ impl SessionSource for CodexSource {
                 project: s.cwd,
                 total_tokens: s.total_tokens,
                 model: s.model,
-                duration_minutes: None,
+                duration_minutes,
                 is_live: is_recently_modified(&path),
                 error_count: s.error_count,
                 prompt_count: s.prompt_count,
