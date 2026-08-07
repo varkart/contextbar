@@ -151,6 +151,7 @@ export default function App() {
           theme={theme}
           setTheme={setTheme}
           fetchNotifications={fetchNotifications}
+          compact={true}
         />
       </div>
       <Footer

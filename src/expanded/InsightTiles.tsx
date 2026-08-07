@@ -21,8 +21,8 @@ export function Tile({ value, label, color, hint, onClick, selected }: {
   const cls = `w-full rounded-xl border border-[var(--c-border)] bg-[var(--c-surface-2)]/40 px-3 py-2.5 text-center ${onClick ? 'hover:border-[var(--c-accent)]/40 hover:bg-[var(--c-surface-2)] transition-colors cursor-pointer' : ''} ${selected ? 'ring-1 ring-[var(--c-accent)]' : ''}`
   const inner = (
     <>
-      <div className={`text-[16px] font-semibold tabular-nums ${color ?? 'text-[var(--c-text)]'}`}>{value}</div>
-      <div className="text-[9.5px] text-[var(--c-text-3)] uppercase tracking-wider mt-0.5">{label}</div>
+      <div className={`text-[17px] font-semibold tabular-nums ${color ?? 'text-[var(--c-text)]'}`}>{value}</div>
+      <div className="text-[10.5px] text-[var(--c-text-3)] uppercase tracking-wider mt-0.5">{label}</div>
     </>
   )
   if (onClick) {

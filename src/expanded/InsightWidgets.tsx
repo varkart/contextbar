@@ -67,8 +67,8 @@ export function SkeletonCards({ count = 3 }: { count?: number }) {
 export function Card({ title, sub, children }: { title: string; sub?: string; children: React.ReactNode }) {
   return (
     <div className="rounded-xl border border-[var(--c-border)] bg-[var(--c-surface-2)]/40 p-4">
-      <h3 className="text-[13px] font-semibold mb-0.5">{title}</h3>
-      {sub && <p className="text-[11px] text-[var(--c-text-3)] mb-3">{sub}</p>}
+      <h3 className="text-[14px] font-semibold mb-0.5">{title}</h3>
+      {sub && <p className="text-[12px] text-[var(--c-text-3)] mb-3">{sub}</p>}
       {children}
     </div>
   )
@@ -86,7 +86,7 @@ export function HBar({ name, value, pct, color, hint }: {
 }) {
   return (
     <div className="mb-2 min-w-0 max-w-md" title={hint}>
-      <div className="flex items-baseline justify-between gap-2 text-[11px] mb-0.5">
+      <div className="flex items-baseline justify-between gap-2 text-[12px] mb-0.5">
         <span className="font-medium text-[var(--c-text-2)] truncate">{name}</span>
         <span className="font-mono text-[var(--c-text-3)] shrink-0">{value}</span>
       </div>
@@ -172,9 +172,9 @@ export function Collapsible({ id, label, children }: {
         className="w-full flex items-center gap-2 px-3.5 py-2 text-left hover:bg-[var(--c-surface-2)]/80 transition-colors"
         aria-expanded={open}
       >
-        <span className={`text-[10px] text-[var(--c-text-3)] transition-transform ${open ? 'rotate-90' : ''}`} aria-hidden="true">▶</span>
-        <span className="text-[11.5px] font-semibold text-[var(--c-text-2)]">{label}</span>
-        {!open && <span className="text-[10px] text-[var(--c-text-3)] ml-auto">click to expand</span>}
+        <span className={`text-[11px] text-[var(--c-text-3)] transition-transform ${open ? 'rotate-90' : ''}`} aria-hidden="true">▶</span>
+        <span className="text-[12.5px] font-semibold text-[var(--c-text-2)]">{label}</span>
+        {!open && <span className="text-[11px] text-[var(--c-text-3)] ml-auto">click to expand</span>}
       </button>
       {open && <div className="px-3.5 pb-3">{children}</div>}
     </div>
@@ -185,7 +185,7 @@ export function Collapsible({ id, label, children }: {
 function HoverReadout({ text, placeholder }: { text: string | null; placeholder: string }) {
   return (
     <div className="h-4 mb-1 text-right">
-      <span className={`text-[10.5px] font-mono ${text ? 'text-[var(--c-text-2)]' : 'text-[var(--c-text-3)] opacity-50'}`}>
+      <span className={`text-[11.5px] font-mono ${text ? 'text-[var(--c-text-2)]' : 'text-[var(--c-text-3)] opacity-50'}`}>
         {text ?? placeholder}
       </span>
     </div>
@@ -249,7 +249,7 @@ export function TokenTrend({ points }: { points: TokenPoint[] }) {
           <button
             key={b}
             onClick={() => setBucket(b)}
-            className={`text-[10px] px-2 py-0.5 rounded-full border capitalize transition-colors ${bucket === b ? 'border-[var(--c-accent)]/50 bg-[var(--c-accent)]/10 text-[var(--c-accent)]' : 'border-[var(--c-border)] text-[var(--c-text-3)] hover:text-[var(--c-text-2)]'}`}
+            className={`text-[11px] px-2 py-0.5 rounded-full border capitalize transition-colors ${bucket === b ? 'border-[var(--c-accent)]/50 bg-[var(--c-accent)]/10 text-[var(--c-accent)]' : 'border-[var(--c-border)] text-[var(--c-text-3)] hover:text-[var(--c-text-2)]'}`}
           >
             {b}
           </button>
@@ -271,7 +271,7 @@ export function TokenTrend({ points }: { points: TokenPoint[] }) {
           />
         ))}
       </div>
-      <div className="flex justify-between text-[9px] font-mono text-[var(--c-text-3)] mt-1">
+      <div className="flex justify-between text-[9.5px] font-mono text-[var(--c-text-3)] mt-1">
         <span>{fmtLabel(0)}</span><span>{fmtLabel(count - 1)}</span>
       </div>
     </div>
@@ -312,7 +312,7 @@ export function CommitBars({ commitSecs, daysBack = 14 }: { commitSecs: number[]
           />
         ))}
       </div>
-      <div className="flex justify-between text-[9px] font-mono text-[var(--c-text-3)] mt-1">
+      <div className="flex justify-between text-[9.5px] font-mono text-[var(--c-text-3)] mt-1">
         <span>{daysBack - 1}d ago</span><span>today · {total} total</span>
       </div>
     </div>

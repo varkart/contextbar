@@ -13,7 +13,7 @@ function Snippet({ text }: { text: string }) {
   const parts = text.split(/([\u0001\u0002])/)
   let inMark = false
   return (
-    <p className="text-[12px] text-[var(--c-text-3)] line-clamp-2 leading-snug mt-1">
+    <p className="text-[13px] text-[var(--c-text-3)] line-clamp-2 leading-snug mt-1">
       {parts.map((p, i) => {
         if (p === MARK_START) { inMark = true; return null }
         if (p === MARK_END) { inMark = false; return null }
@@ -163,22 +163,25 @@ function SessionRow({ session, onSelect, snippet, pinned, tags, customName, sele
               }}
               onBlur={() => saveName(draft)}
               maxLength={80}
-              className="w-full bg-[var(--c-surface-2)] border border-[var(--c-accent)]/40 rounded px-1.5 py-0.5 text-[13px] font-medium text-[var(--c-text)] outline-none"
+              className="w-full bg-[var(--c-surface-2)] border border-[var(--c-accent)]/40 rounded px-1.5 py-0.5 text-[14px] font-medium text-[var(--c-text)] outline-none"
             />
           ) : (
           <p
-            className={`text-[13px] text-[var(--c-text)] line-clamp-2 leading-snug group-hover:text-[var(--c-text)] ${customName || session.title ? 'font-medium' : ''}`}
+            className={`text-[14px] text-[var(--c-text)] line-clamp-2 leading-snug group-hover:text-[var(--c-text)] ${customName || session.title ? 'font-medium' : ''}`}
             title={customName || session.title ? session.display : undefined}
           >
             {customName ?? session.title ?? session.display}
           </p>
           )}
 
-          {/* Meta row */}
+          {/* Meta row — kept compact on purpose: this row packs a badge,
+              project name, timestamp and prompt count into a fixed 320px
+              column, so it doesn't get the general readability bump (that
+              made "alpha"/"beta" truncate to a single character here). */}
           <div className="flex items-center gap-2 mt-1">
             <AgentBadge agent={session.agent} />
             <span
-              className="text-[11px] text-[var(--c-text-3)] truncate max-w-[120px]"
+              className="text-[11px] text-[var(--c-text-3)] truncate max-w-[170px]"
               title={session.project}
             >
               {session.projectName}
@@ -206,7 +209,7 @@ function SessionRow({ session, onSelect, snippet, pinned, tags, customName, sele
             {tags?.map(t => (
               <span
                 key={t}
-                className="text-[9px] px-1.5 py-px rounded-full bg-[var(--c-accent)]/10 text-[var(--c-accent)] flex-shrink-0"
+                className="text-[9.5px] px-1.5 py-px rounded-full bg-[var(--c-accent)]/10 text-[var(--c-accent)] flex-shrink-0"
               >
                 {t}
               </span>
@@ -231,7 +234,7 @@ function SessionRow({ session, onSelect, snippet, pinned, tags, customName, sele
                 setEditing(true)
               }
             }}
-            className="flex-shrink-0 text-[12px] leading-none mt-0.5 text-[var(--c-text-3)] opacity-40 group-hover:opacity-80 hover:!opacity-100 hover:text-[var(--c-accent)] transition-all"
+            className="flex-shrink-0 text-[13px] leading-none mt-0.5 text-[var(--c-text-3)] opacity-40 group-hover:opacity-80 hover:!opacity-100 hover:text-[var(--c-accent)] transition-all"
           >
             ✎
           </span>
@@ -251,7 +254,7 @@ function SessionRow({ session, onSelect, snippet, pinned, tags, customName, sele
                 onTogglePin(session, !pinned)
               }
             }}
-            className={`flex-shrink-0 text-[13px] leading-none mt-0.5 transition-opacity ${pinned ? 'text-amber-400' : 'text-[var(--c-text-3)] opacity-0 group-hover:opacity-60 hover:!opacity-100 focus-visible:!opacity-100'}`}
+            className={`flex-shrink-0 text-[14px] leading-none mt-0.5 transition-opacity ${pinned ? 'text-amber-400' : 'text-[var(--c-text-3)] opacity-0 group-hover:opacity-60 hover:!opacity-100 focus-visible:!opacity-100'}`}
           >
             {pinned ? '★' : '☆'}
           </span>
@@ -259,7 +262,7 @@ function SessionRow({ session, onSelect, snippet, pinned, tags, customName, sele
 
         {/* Token badge */}
         {totalTokens > 0 && (
-          <div className={`flex-shrink-0 text-[11px] px-1.5 py-0.5 rounded-full font-medium tabular-nums ${tokenBadgeColor(totalTokens)}`}>
+          <div className={`flex-shrink-0 text-[12px] px-1.5 py-0.5 rounded-full font-medium tabular-nums ${tokenBadgeColor(totalTokens)}`}>
             {formatTokens(totalTokens)}
           </div>
         )}
@@ -426,7 +429,7 @@ export default function SessionList({ sessions, onSelect, loading, onLoadMore, h
             value={agentFilter ?? ''}
             onChange={e => setAgentFilter(e.target.value || null)}
             aria-label="Filter by agent"
-            className="w-full text-[11px] px-2 py-1 rounded-md border border-[var(--c-border)] bg-[var(--c-surface-2)] text-[var(--c-text-2)] outline-none focus:border-[var(--c-accent)]/50 transition-colors capitalize"
+            className="w-full text-[12px] px-2 py-1 rounded-md border border-[var(--c-border)] bg-[var(--c-surface-2)] text-[var(--c-text-2)] outline-none focus:border-[var(--c-accent)]/50 transition-colors capitalize"
           >
             <option value="">All agents</option>
             {agents.map(a => (
@@ -443,7 +446,7 @@ export default function SessionList({ sessions, onSelect, loading, onLoadMore, h
             value={projectFilter ?? ''}
             onChange={e => setProjectFilter(e.target.value || null)}
             aria-label="Filter by repo"
-            className="w-full text-[11px] px-2 py-1 rounded-md border border-[var(--c-border)] bg-[var(--c-surface-2)] text-[var(--c-text-2)] outline-none focus:border-[var(--c-accent)]/50 transition-colors"
+            className="w-full text-[12px] px-2 py-1 rounded-md border border-[var(--c-border)] bg-[var(--c-surface-2)] text-[var(--c-text-2)] outline-none focus:border-[var(--c-accent)]/50 transition-colors"
           >
             <option value="">All repos</option>
             {projects.map(p => (
@@ -458,11 +461,11 @@ export default function SessionList({ sessions, onSelect, loading, onLoadMore, h
         {loading && <SkeletonRows count={6} />}
         {!loading && groups.length === 0 && pinned.length === 0 && deepHits.length === 0 && (
           <div className="px-3 py-8 text-center">
-            <p className="text-[13px] text-[var(--c-text-3)]">
+            <p className="text-[14px] text-[var(--c-text-3)]">
               {search || projectFilter ? 'No sessions match' : 'No Claude sessions found'}
             </p>
             {!search && !projectFilter && (
-              <p className="text-[12px] text-[var(--c-text-3)] opacity-60 mt-1">
+              <p className="text-[13px] text-[var(--c-text-3)] opacity-60 mt-1">
                 Start a session with <code className="font-mono">claude</code> in your terminal
               </p>
             )}
@@ -471,7 +474,7 @@ export default function SessionList({ sessions, onSelect, loading, onLoadMore, h
         {pinned.length > 0 && (
           <div>
             <div className="px-3 py-1 bg-[var(--c-surface-2)]/50">
-              <span className="text-[11px] font-semibold text-[var(--c-text-3)] uppercase tracking-wider">
+              <span className="text-[12px] font-semibold text-[var(--c-text-3)] uppercase tracking-wider">
                 Pinned
               </span>
             </div>
@@ -492,7 +495,7 @@ export default function SessionList({ sessions, onSelect, loading, onLoadMore, h
         {groups.map(group => (
           <div key={group.label}>
             <div className="px-3 py-1 bg-[var(--c-surface-2)]/50">
-              <span className="text-[11px] font-semibold text-[var(--c-text-3)] uppercase tracking-wider">
+              <span className="text-[12px] font-semibold text-[var(--c-text-3)] uppercase tracking-wider">
                 {group.label}
               </span>
             </div>
@@ -513,7 +516,7 @@ export default function SessionList({ sessions, onSelect, loading, onLoadMore, h
         {deepHits.length > 0 && (
           <div>
             <div className="px-3 py-1 bg-[var(--c-surface-2)]/50">
-              <span className="text-[11px] font-semibold text-[var(--c-text-3)] uppercase tracking-wider">
+              <span className="text-[12px] font-semibold text-[var(--c-text-3)] uppercase tracking-wider">
                 In transcripts
               </span>
             </div>
@@ -530,7 +533,7 @@ export default function SessionList({ sessions, onSelect, loading, onLoadMore, h
         {!loading && (hiddenCount > 0 || showHidden) && (
           <button
             onClick={() => setShowHidden(v => !v)}
-            className="w-full px-3 py-2 text-[11.5px] text-[var(--c-text-3)] hover:text-[var(--c-text-2)] transition-colors text-center"
+            className="w-full px-3 py-2 text-[12.5px] text-[var(--c-text-3)] hover:text-[var(--c-text-2)] transition-colors text-center"
           >
             {showHidden
               ? 'Hide command-only sessions'
@@ -541,7 +544,7 @@ export default function SessionList({ sessions, onSelect, loading, onLoadMore, h
           <div className="p-3">
             <button
               onClick={onLoadMore}
-              className="w-full text-[12px] py-1.5 rounded-lg border border-[var(--c-border)] text-[var(--c-text-3)] hover:text-[var(--c-text-2)] hover:border-[var(--c-text-3)]/50 transition-colors"
+              className="w-full text-[13px] py-1.5 rounded-lg border border-[var(--c-border)] text-[var(--c-text-3)] hover:text-[var(--c-text-2)] hover:border-[var(--c-text-3)]/50 transition-colors"
             >
               Load 300 more
             </button>

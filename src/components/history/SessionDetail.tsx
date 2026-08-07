@@ -74,7 +74,7 @@ function TagEditor({ sessionId }: { sessionId: string }) {
       {tags.map(t => (
         <span
           key={t}
-          className="text-[9px] px-1.5 py-px rounded-full bg-[var(--c-accent)]/10 text-[var(--c-accent)] flex items-center gap-1"
+          className="text-[9.5px] px-1.5 py-px rounded-full bg-[var(--c-accent)]/10 text-[var(--c-accent)] flex items-center gap-1"
         >
           {t}
           <button
@@ -93,7 +93,7 @@ function TagEditor({ sessionId }: { sessionId: string }) {
         onKeyDown={e => { if (e.key === 'Enter') addDraft() }}
         onBlur={addDraft}
         placeholder="+ tag"
-        className="w-16 bg-transparent text-[11px] text-[var(--c-text-2)] placeholder:text-[var(--c-text-3)] outline-none border-b border-transparent focus:border-[var(--c-accent)]/40"
+        className="w-16 bg-transparent text-[12px] text-[var(--c-text-2)] placeholder:text-[var(--c-text-3)] outline-none border-b border-transparent focus:border-[var(--c-accent)]/40"
       />
     </div>
   )
@@ -137,7 +137,7 @@ function NameEditor({ sessionId, fallback, inheritedTitle }: { sessionId: string
         onBlur={() => save(draft)}
         placeholder={fallback}
         maxLength={80}
-        className="w-full bg-[var(--c-surface-2)] border border-[var(--c-accent)]/40 rounded px-1.5 py-0.5 text-[13px] font-medium text-[var(--c-text)] outline-none"
+        className="w-full bg-[var(--c-surface-2)] border border-[var(--c-accent)]/40 rounded px-1.5 py-0.5 text-[14px] font-medium text-[var(--c-text)] outline-none"
       />
     )
   }
@@ -151,11 +151,11 @@ function NameEditor({ sessionId, fallback, inheritedTitle }: { sessionId: string
     >
       {shown ? (
         <>
-          <span className="text-[13px] font-semibold text-[var(--c-text)] truncate">{shown}</span>
-          <span className="text-[11px] text-[var(--c-text-3)] opacity-50 group-hover/name:opacity-100 group-hover/name:text-[var(--c-accent)] transition-all flex-shrink-0">✎ rename</span>
+          <span className="text-[14px] font-semibold text-[var(--c-text)] truncate">{shown}</span>
+          <span className="text-[12px] text-[var(--c-text-3)] opacity-50 group-hover/name:opacity-100 group-hover/name:text-[var(--c-accent)] transition-all flex-shrink-0">✎ rename</span>
         </>
       ) : (
-        <span className="flex items-center gap-1.5 px-2 py-1 rounded-md border border-dashed border-[var(--c-accent)]/40 text-[12px] text-[var(--c-accent)] hover:bg-[var(--c-accent)]/10 transition-colors">
+        <span className="flex items-center gap-1.5 px-2 py-1 rounded-md border border-dashed border-[var(--c-accent)]/40 text-[13px] text-[var(--c-accent)] hover:bg-[var(--c-accent)]/10 transition-colors">
           ✎ Name this session
         </span>
       )}
@@ -233,24 +233,24 @@ export default function SessionDetail({ session }: SessionDetailProps) {
               <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse flex-shrink-0" />
             )}
             <AgentBadge agent={session.agent} className="flex-shrink-0" />
-            <span className="text-[12px] text-[var(--c-text-3)] truncate">
+            <span className="text-[13px] text-[var(--c-text-3)] truncate">
               {session.projectName}
             </span>
-            <span className="text-[11px] text-[var(--c-text-3)] opacity-50 flex-shrink-0">·</span>
-            <span className="text-[11px] text-[var(--c-text-3)] flex-shrink-0">{dateStr} {timeStr}</span>
+            <span className="text-[12px] text-[var(--c-text-3)] opacity-50 flex-shrink-0">·</span>
+            <span className="text-[12px] text-[var(--c-text-3)] flex-shrink-0">{dateStr} {timeStr}</span>
           </div>
           <div className="flex items-center gap-1 flex-shrink-0">
             <button
               onClick={handleResume}
               title="Resume this session in Terminal"
-              className={`text-[11px] px-2 py-0.5 rounded-md border transition-colors ${opened ? 'border-emerald-500/40 bg-emerald-500/15 text-emerald-400' : 'border-[var(--c-border)] text-[var(--c-text-3)] hover:text-[var(--c-text-2)] hover:border-[var(--c-accent)]/40'}`}
+              className={`text-[12px] px-2 py-0.5 rounded-md border transition-colors ${opened ? 'border-emerald-500/40 bg-emerald-500/15 text-emerald-400' : 'border-[var(--c-border)] text-[var(--c-text-3)] hover:text-[var(--c-text-2)] hover:border-[var(--c-accent)]/40'}`}
             >
               {opened ? '✓ Opened' : '▶ Resume'}
             </button>
             <button
               onClick={handleCopy}
               title="Copy resume command"
-              className={`text-[11px] px-2 py-0.5 rounded-md border transition-colors ${copied ? 'border-emerald-500/40 bg-emerald-500/15 text-emerald-400' : 'border-[var(--c-border)] text-[var(--c-text-3)] hover:text-[var(--c-text-2)] hover:border-[var(--c-accent)]/40'}`}
+              className={`text-[12px] px-2 py-0.5 rounded-md border transition-colors ${copied ? 'border-emerald-500/40 bg-emerald-500/15 text-emerald-400' : 'border-[var(--c-border)] text-[var(--c-text-3)] hover:text-[var(--c-text-2)] hover:border-[var(--c-accent)]/40'}`}
             >
               {copied ? '✓' : '⧉'}
             </button>
@@ -270,7 +270,7 @@ export default function SessionDetail({ session }: SessionDetailProps) {
       {/* Custom name + first prompt */}
       <div className="px-3 py-2 flex-shrink-0 border-b border-[var(--c-border)]">
         <NameEditor sessionId={session.sessionId} fallback={session.display} inheritedTitle={session.title} />
-        <p className="text-[12px] text-[var(--c-text-3)] line-clamp-2 italic mt-1">"{session.display}"</p>
+        <p className="text-[13px] text-[var(--c-text-3)] line-clamp-2 italic mt-1">"{session.display}"</p>
         <TagEditor sessionId={session.sessionId} />
       </div>
 
@@ -282,7 +282,7 @@ export default function SessionDetail({ session }: SessionDetailProps) {
           </div>
         )}
         {error && (
-          <div className="text-[12px] text-rose-400 bg-rose-500/10 rounded-lg px-3 py-2">
+          <div className="text-[13px] text-rose-400 bg-rose-500/10 rounded-lg px-3 py-2">
             {error}
           </div>
         )}
@@ -292,7 +292,7 @@ export default function SessionDetail({ session }: SessionDetailProps) {
             : <MessageBubble key={unit.key} message={unit.message} />
         )}
         {detail && detail.messages.length === 0 && (
-          <p className="text-[12px] text-[var(--c-text-3)] text-center py-6">No messages found</p>
+          <p className="text-[13px] text-[var(--c-text-3)] text-center py-6">No messages found</p>
         )}
       </div>
     </div>

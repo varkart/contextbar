@@ -276,8 +276,8 @@ export default function MyWorkSection({ sessions, repos, loading, goTo, onRefres
     <div className="flex-1 flex flex-col overflow-hidden">
       <div className="px-6 pt-5 pb-3 flex-shrink-0 flex items-start justify-between gap-3">
         <div>
-          <h2 className="text-[16px] font-semibold tracking-tight">My Work</h2>
-          <p className="text-[13px] text-[var(--c-text-2)] mt-0.5">
+          <h2 className="text-[17px] font-semibold tracking-tight">My Work</h2>
+          <p className="text-[14px] text-[var(--c-text-2)] mt-0.5">
             Everything happening across your projects
           </p>
         </div>
@@ -288,8 +288,8 @@ export default function MyWorkSection({ sessions, repos, loading, goTo, onRefres
         {!loading && peakSummary && !peakDismissed && (
           <div className="flex items-center gap-3 rounded-xl border border-[var(--c-border)] bg-[var(--c-surface-2)]/40 px-4 py-3 mb-4">
             <div className="flex-1 min-w-0">
-              <b className="text-[13.5px] font-semibold">Today's activity</b>
-              <p className="text-[12.5px] text-[var(--c-text-2)] mt-0.5">
+              <b className="text-[14.5px] font-semibold">Today's activity</b>
+              <p className="text-[13.5px] text-[var(--c-text-2)] mt-0.5">
                 {peakSummary.sessionCount} session{peakSummary.sessionCount === 1 ? '' : 's'}
                 {peakSummary.prompts > 0 && `, ${peakSummary.prompts} prompt${peakSummary.prompts === 1 ? '' : 's'}`}
                 {peakSummary.topProject && (
@@ -314,7 +314,7 @@ export default function MyWorkSection({ sessions, repos, loading, goTo, onRefres
             <button
               key={t.id}
               onClick={() => setTab(t.id)}
-              className={`text-[12px] px-3 py-1 rounded-full border transition-colors ${tab === t.id ? 'border-[var(--c-accent)]/50 bg-[var(--c-accent)]/10 text-[var(--c-accent)]' : 'border-[var(--c-border)] text-[var(--c-text-3)] hover:text-[var(--c-text-2)]'}`}
+              className={`text-[13px] px-3 py-1 rounded-full border transition-colors ${tab === t.id ? 'border-[var(--c-accent)]/50 bg-[var(--c-accent)]/10 text-[var(--c-accent)]' : 'border-[var(--c-border)] text-[var(--c-text-3)] hover:text-[var(--c-text-2)]'}`}
             >
               {t.label}
             </button>
@@ -329,7 +329,7 @@ export default function MyWorkSection({ sessions, repos, loading, goTo, onRefres
         )}
 
         {!loading && sessions.length === 0 && (
-          <p className="text-[13px] text-[var(--c-text-2)] text-center py-10">
+          <p className="text-[14px] text-[var(--c-text-2)] text-center py-10">
             Nothing in progress. Start a session from any repo to see it here.
           </p>
         )}
@@ -346,10 +346,10 @@ export default function MyWorkSection({ sessions, repos, loading, goTo, onRefres
                 title="Open the Agents section"
                 className="px-3 py-3 text-center rounded-r-xl hover:bg-[var(--c-accent)]/8 transition-colors group/agents"
               >
-                <div className="text-[17px] font-semibold tabular-nums group-hover/agents:text-[var(--c-accent)] transition-colors">
+                <div className="text-[18px] font-semibold tabular-nums group-hover/agents:text-[var(--c-accent)] transition-colors">
                   {agentMix.length}
                 </div>
-                <div className="text-[11px] text-[var(--c-text-2)] uppercase tracking-wider mt-0.5">
+                <div className="text-[12px] text-[var(--c-text-2)] uppercase tracking-wider mt-0.5">
                   Agents <span className="opacity-0 group-hover/agents:opacity-100 transition-opacity">→</span>
                 </div>
               </button>
@@ -358,7 +358,7 @@ export default function MyWorkSection({ sessions, repos, loading, goTo, onRefres
             {/* Empty window — say so instead of rendering hollow cards */}
             {windowed.length === 0 && (
               <div className="rounded-xl border border-dashed border-[var(--c-border)] px-4 py-3 mb-3 text-center">
-                <p className="text-[13px] text-[var(--c-text-2)]">
+                <p className="text-[14px] text-[var(--c-text-2)]">
                   No sessions {tabLabel.toLowerCase() === 'today' ? 'yet today' : tabLabel.toLowerCase()}.
                   {(momentum.length > 0 || attention.length > 0) && (
                     <>{' '}
@@ -391,31 +391,31 @@ export default function MyWorkSection({ sessions, repos, loading, goTo, onRefres
                           className="w-full flex items-center gap-2 mb-1.5 text-left group/card"
                         >
                           <span
-                            className="w-6 h-6 rounded-md flex items-center justify-center font-mono font-bold text-[12px] text-black/80 shrink-0"
+                            className="w-6 h-6 rounded-md flex items-center justify-center font-mono font-bold text-[13px] text-black/80 shrink-0"
                             style={{ background: PALETTE[i % PALETTE.length] }}
                           >
                             {p.name.charAt(0).toUpperCase()}
                           </span>
                           <div className="min-w-0 flex-1">
-                            <div className="text-[13.5px] font-semibold truncate group-hover/card:text-[var(--c-accent)] transition-colors">{p.name}</div>
+                            <div className="text-[14.5px] font-semibold truncate group-hover/card:text-[var(--c-accent)] transition-colors">{p.name}</div>
                           </div>
                           {live && (
-                            <span className="text-[9px] font-mono px-1.5 py-px rounded-full bg-emerald-500/15 text-emerald-400 shrink-0">● live</span>
+                            <span className="text-[9.5px] font-mono px-1.5 py-px rounded-full bg-emerald-500/15 text-emerald-400 shrink-0">● live</span>
                           )}
                         </button>
-                        {branch && <div className="text-[11px] font-mono text-[var(--c-text-2)] truncate mb-1">⌥ {branch}</div>}
+                        {branch && <div className="text-[12px] font-mono text-[var(--c-text-2)] truncate mb-1">⌥ {branch}</div>}
                         <div className="flex items-center gap-1.5 mb-1.5">
                           {[...new Set(p.sessions.map(s => s.agent))].map(a => (
                             <AgentBadge key={a} agent={a} />
                           ))}
-                          <span className="text-[11px] text-[var(--c-text-2)] truncate">
+                          <span className="text-[12px] text-[var(--c-text-2)] truncate">
                             {relativeTime(p.lastTs)}
                           </span>
                         </div>
                         <div className="flex gap-1.5">
                           <button
                             onClick={() => handleResume(p)}
-                            className={`text-[11.5px] px-2.5 py-1 rounded-md font-medium transition-colors ${copiedResume === p.project ? 'bg-emerald-500/20 text-emerald-400' : 'bg-[var(--c-accent)]/15 text-[var(--c-accent)] hover:bg-[var(--c-accent)]/25'}`}
+                            className={`text-[12.5px] px-2.5 py-1 rounded-md font-medium transition-colors ${copiedResume === p.project ? 'bg-emerald-500/20 text-emerald-400' : 'bg-[var(--c-accent)]/15 text-[var(--c-accent)] hover:bg-[var(--c-accent)]/25'}`}
                           >
                             {copiedResume === p.project ? '✓ Opened' : '▶ Resume'}
                           </button>
@@ -423,7 +423,7 @@ export default function MyWorkSection({ sessions, repos, loading, goTo, onRefres
                             <button
                               onClick={() => invoke('open_in_vscode', { path: p.project }).catch(() => showToast('error', 'Could not open VS Code'))}
                               title="Open project in Visual Studio Code"
-                              className="text-[11.5px] px-2.5 py-1 rounded-md border border-[var(--c-border)] text-[var(--c-text-3)] hover:text-[var(--c-text-2)] transition-colors"
+                              className="text-[12.5px] px-2.5 py-1 rounded-md border border-[var(--c-border)] text-[var(--c-text-3)] hover:text-[var(--c-text-2)] transition-colors"
                             >
                               VS Code
                             </button>
@@ -449,7 +449,17 @@ export default function MyWorkSection({ sessions, repos, loading, goTo, onRefres
             )}
 
             {/* Insights — risk first, then windowed charts, then 7-day momentum */}
-            {(windowedUsage.length > 0 || windowCommits.length > 0 || attention.length > 0 || momentum.length > 0) && (
+            {(windowedUsage.length > 0 || windowCommits.length > 0 || attention.length > 0 || momentum.length > 0) && (() => {
+              const attentionShown = attention.length > 0
+              const usageShown = windowedUsage.length > 0
+              const momentumShown = momentum.length > 0
+              // Only wraps to a second row when all three row-1 cards are
+              // present — that's the one case where "Commits per day" needs
+              // to be pinned under "Usage by agent" instead of drifting to
+              // column 1 by default grid flow.
+              const rowWraps = attentionShown && usageShown && momentumShown
+              const commitsColClass = rowWraps ? 'col-start-2' : ''
+              return (
             <div>
             <SectionLabel>Insights</SectionLabel>
             <div className="grid grid-cols-3 gap-3 items-start">
@@ -468,13 +478,13 @@ export default function MyWorkSection({ sessions, repos, loading, goTo, onRefres
                             className={`w-[7px] h-[7px] rounded-full shrink-0 ${a.kind === 'uncommitted' ? 'bg-rose-400' : 'bg-amber-400'}`}
                             aria-hidden="true"
                           />
-                          <span className="text-[12.5px] font-mono font-semibold truncate">{a.title}</span>
-                          <span className={`text-[9px] font-mono px-1.5 py-px rounded-full shrink-0 ${a.kind === 'uncommitted' ? 'bg-rose-500/15 text-rose-400' : 'bg-amber-500/15 text-amber-400'}`}>
+                          <span className="text-[13.5px] font-mono font-semibold truncate">{a.title}</span>
+                          <span className={`text-[9.5px] font-mono px-1.5 py-px rounded-full shrink-0 ${a.kind === 'uncommitted' ? 'bg-rose-500/15 text-rose-400' : 'bg-amber-500/15 text-amber-400'}`}>
                             {a.kind === 'uncommitted' ? 'uncommitted' : 'not merged'}
                           </span>
                         </div>
-                        <p className="text-[11px] text-[var(--c-text-2)] mt-1 pl-[15px] truncate">{a.meta}</p>
-                        <p className="text-[11px] text-[var(--c-text-2)] mt-0.5 pl-[15px] leading-snug">{a.why}</p>
+                        <p className="text-[12px] text-[var(--c-text-2)] mt-1 pl-[15px] truncate">{a.meta}</p>
+                        <p className="text-[12px] text-[var(--c-text-2)] mt-0.5 pl-[15px] leading-snug">{a.why}</p>
                       </button>
                     ))}
                   </div>
@@ -495,11 +505,11 @@ export default function MyWorkSection({ sessions, repos, loading, goTo, onRefres
                       return (
                         <div key={agent}>
                           <div className="flex items-baseline justify-between mb-1">
-                            <span className="text-[12px] font-medium flex items-center gap-1.5">
+                            <span className="text-[13px] font-medium flex items-center gap-1.5">
                               <span className="w-2 h-2 rounded-sm inline-block" style={{ background: hex }} />
                               {label}
                             </span>
-                            <span className="text-[11px] text-[var(--c-text-2)] tabular-nums">
+                            <span className="text-[12px] text-[var(--c-text-2)] tabular-nums">
                               {u.sessions} sess · {u.prompts} prompts{u.tokens > 0 ? ` · ${formatTokens(u.tokens)}` : ''}
                             </span>
                           </div>
@@ -526,36 +536,39 @@ export default function MyWorkSection({ sessions, repos, loading, goTo, onRefres
                         className="w-full rounded-md px-1.5 py-1.5 -mx-1.5 hover:bg-[var(--c-surface-2)] transition-colors text-left group/mom"
                       >
                         <div className="flex items-center gap-2">
-                          <span className="text-[12px] font-mono font-semibold w-24 truncate group-hover/mom:text-[var(--c-accent)] transition-colors">{m.name}</span>
+                          <span className="text-[13px] font-mono font-semibold w-24 truncate group-hover/mom:text-[var(--c-accent)] transition-colors">{m.name}</span>
                           <div className="flex-1 flex gap-0.5">
                             {m.cells.map((filled, i) => (
                               <span key={i} className={`flex-1 h-1.5 rounded-sm ${filled ? 'bg-emerald-400' : 'bg-[var(--c-border)]'}`} />
                             ))}
                           </div>
-                          <span className={`text-[9px] font-mono px-1.5 py-px rounded-full shrink-0 ${m.tag === 'Smooth' ? 'bg-emerald-500/15 text-emerald-400' : m.tag === 'Mixed' ? 'bg-amber-500/15 text-amber-400' : 'bg-rose-500/15 text-rose-400'}`}>
+                          <span className={`text-[9.5px] font-mono px-1.5 py-px rounded-full shrink-0 ${m.tag === 'Smooth' ? 'bg-emerald-500/15 text-emerald-400' : m.tag === 'Mixed' ? 'bg-amber-500/15 text-amber-400' : 'bg-rose-500/15 text-rose-400'}`}>
                             {m.tag}
                           </span>
                         </div>
-                        <p className="text-[9px] text-[var(--c-text-2)] mt-0.5 pl-0">
+                        <p className="text-[9.5px] text-[var(--c-text-2)] mt-0.5 pl-0">
                           {m.sessions.length} session{m.sessions.length === 1 ? '' : 's'}
                           {m.errors > 0 && ` · ${m.errors} error${m.errors === 1 ? '' : 's'}`}
                           {m.streak > 1 && ` · ${m.streak}-day streak`}
                         </p>
                       </button>
                     ))}
-                    <p className="text-[9px] text-[var(--c-text-2)] pt-1">← today · 6d ago →</p>
+                    <p className="text-[9.5px] text-[var(--c-text-2)] pt-1">← today · 6d ago →</p>
                   </div>
                 </BentoCard>
               )}
 
               {windowCommits.length > 0 && (
-                <Card title={`Commits per day — ${tabLabel}`} sub="All branches, all repos">
-                  <CommitBars commitSecs={windowCommits} daysBack={windowDays} />
-                </Card>
+                <div className={commitsColClass}>
+                  <Card title={`Commits per day — ${tabLabel}`} sub="All branches, all repos">
+                    <CommitBars commitSecs={windowCommits} daysBack={windowDays} />
+                  </Card>
+                </div>
               )}
             </div>
             </div>
-            )}
+              )
+            })()}
 
 
           </>
@@ -568,8 +581,8 @@ export default function MyWorkSection({ sessions, repos, loading, goTo, onRefres
 function Stat({ n, lbl, color }: { n: string; lbl: string; color?: string }) {
   return (
     <div className="px-3 py-3 text-center">
-      <div className={`text-[17px] font-semibold tabular-nums ${color ?? ''}`}>{n}</div>
-      <div className="text-[11px] text-[var(--c-text-2)] uppercase tracking-wider mt-0.5">{lbl}</div>
+      <div className={`text-[18px] font-semibold tabular-nums ${color ?? ''}`}>{n}</div>
+      <div className="text-[12px] text-[var(--c-text-2)] uppercase tracking-wider mt-0.5">{lbl}</div>
     </div>
   )
 }
@@ -580,7 +593,7 @@ function Stat({ n, lbl, color }: { n: string; lbl: string; color?: string }) {
 function BentoCard({ label, accent, children }: { label: string; accent?: string; children: React.ReactNode }) {
   return (
     <div className="rounded-xl border border-[var(--c-border)] bg-[var(--c-surface-2)]/40 p-3.5">
-      <p className={`text-[13px] font-semibold mb-2.5 ${accent ?? 'text-[var(--c-text)]'}`}>{label}</p>
+      <p className={`text-[14px] font-semibold mb-2.5 ${accent ?? 'text-[var(--c-text)]'}`}>{label}</p>
       {children}
     </div>
   )
@@ -588,6 +601,6 @@ function BentoCard({ label, accent, children }: { label: string; accent?: string
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
-    <p className="text-[11px] font-mono text-[var(--c-text-2)] uppercase tracking-wider mb-2">{children}</p>
+    <p className="text-[12px] font-mono text-[var(--c-text-2)] uppercase tracking-wider mb-2">{children}</p>
   )
 }
