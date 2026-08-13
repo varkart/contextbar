@@ -186,8 +186,8 @@ export async function injectTauriMock(
       invoke: (cmd: string, args?: Record<string, unknown>) => {
         if (
           cmd === 'resume_in_terminal' || cmd === 'open_in_vscode' ||
-          cmd === 'remove_worktree' || cmd === 'open_expanded_window' ||
-          cmd === 'set_terminal'
+          cmd === 'remove_worktree' || cmd === 'delete_branch' ||
+          cmd === 'open_expanded_window' || cmd === 'set_terminal'
         ) {
           invokeLog.push({ cmd, args: args ?? {} })
         }
@@ -271,6 +271,7 @@ export async function injectTauriMock(
           case 'open_expanded_window':
             return Promise.resolve(null)
           case 'remove_worktree':
+          case 'delete_branch':
             return Promise.resolve(null)
           case 'read_markdown_file':
             return Promise.resolve('# Mock heading\n\nMock markdown body.')

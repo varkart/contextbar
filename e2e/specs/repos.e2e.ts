@@ -12,7 +12,7 @@ test.beforeEach(async ({ page }) => {
 })
 
 test('repo cards start collapsed', async ({ page }) => {
-  await expect(page.getByText('3 worktrees · base main')).toBeVisible()
+  await expect(page.getByText('3 worktrees · 2 branches · base main')).toBeVisible()
   await expect(page.getByText('feature/done')).not.toBeVisible()
 })
 
@@ -53,19 +53,60 @@ test('filter pill auto-expands and narrows to safe worktrees', async ({ page }) 
 test('delete flow: only safe worktrees offer delete, confirm invokes backend', async ({ page }) => {
   await page.getByRole('button', { name: /alpha/ }).first().click()
   // dirty worktree: no delete button
-  await page.getByText('feature/wip').click()
-  await expect(page.getByRole('button', { name: 'Delete', exact: true })).not.toBeVisible()
-  await page.getByText('feature/wip').click() // collapse
+  const wipCard = page.getByTestId('wt-card-/Users/test/proj/alpha-wt-dirty')
+  await wipCard.click()
+  await expect(wipCard.getByRole('button', { name: 'Delete', exact: true })).not.toBeVisible()
+  await wipCard.click() // collapse
   // safe worktree: delete → confirm
-  await page.getByText('feature/done').click()
-  await page.getByRole('button', { name: 'Delete', exact: true }).click()
-  await page.getByRole('button', { name: 'Confirm delete' }).click()
+  const doneCard = page.getByTestId('wt-card-/Users/test/proj/alpha-wt-merged')
+  await doneCard.click()
+  await doneCard.getByRole('button', { name: 'Delete', exact: true }).click()
+  await doneCard.getByRole('button', { name: 'Confirm delete' }).click()
   const log = await page.evaluate(() =>
     (globalThis as unknown as { __invokeLog: { cmd: string; args: Record<string, unknown> }[] }).__invokeLog
   )
   const removal = log.find(l => l.cmd === 'remove_worktree')
   expect(removal).toBeTruthy()
   expect(removal!.args.worktreePath).toBe('/Users/test/proj/alpha-wt-merged')
+})
+
+test('branches subsection lists not-checked-out branches separately from worktrees', async ({ page }) => {
+  await page.getByRole('button', { name: /alpha/ }).first().click()
+  await expect(page.getByText('Worktrees', { exact: true })).toBeVisible()
+  await expect(page.getByText('Branches · not checked out')).toBeVisible()
+  await expect(page.getByText('feature/old-experiment')).toBeVisible()
+  await expect(page.getByText('feature/queued')).toBeVisible()
+  await expect(page.getByText('merged · safe to delete')).toBeVisible()
+})
+
+test('branch delete flow: merged bare branch can be deleted, unmerged cannot', async ({ page }) => {
+  await page.getByRole('button', { name: /alpha/ }).first().click()
+  const repoPath = '/Users/test/proj/alpha'
+  const queuedCard = page.getByTestId(`branch-card-${repoPath}:feature/queued`)
+  await expect(queuedCard.getByRole('button', { name: 'Delete', exact: true })).not.toBeVisible()
+
+  const mergedCard = page.getByTestId(`branch-card-${repoPath}:feature/old-experiment`)
+  await mergedCard.getByRole('button', { name: 'Delete', exact: true }).click()
+  await mergedCard.getByRole('button', { name: 'Confirm delete' }).click()
+  const log = await page.evaluate(() =>
+    (globalThis as unknown as { __invokeLog: { cmd: string; args: Record<string, unknown> }[] }).__invokeLog
+  )
+  const deletion = log.find(l => l.cmd === 'delete_branch')
+  expect(deletion).toBeTruthy()
+  expect(deletion!.args.branchName).toBe('feature/old-experiment')
+})
+
+test('remote toggle shows branches that exist upstream but have no local copy', async ({ page }) => {
+  await expect(page.getByText('feature/teammate-spike')).not.toBeVisible()
+  await page.getByRole('button', { name: 'Remote' }).click()
+  await expect(page.getByText('feature/teammate-spike')).toBeVisible()
+  await expect(page.getByText('origin', { exact: true })).toBeVisible()
+})
+
+test('local-only badge appears on branches with no remote-tracking ref', async ({ page }) => {
+  await page.getByRole('button', { name: /alpha/ }).first().click()
+  // feature/wip (worktree) and feature/queued (bare branch) are local-only in the fixture.
+  await expect(page.getByText('local only')).toHaveCount(2)
 })
 
 test('vs code button opens the repo path', async ({ page }) => {
