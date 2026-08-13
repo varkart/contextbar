@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef, Fragment } from 'react'
 import { invoke } from '@tauri-apps/api/core'
-import type { RepoWorktrees, WorktreeInfo, SessionEntry, SessionInsights, RepoMeta, PullRequestInfo } from '../types'
+import type { RepoWorktrees, WorktreeInfo, BranchInfo, RemoteBranchInfo, SessionEntry, SessionInsights, RepoMeta, PullRequestInfo } from '../types'
 import { formatTokens } from '../components/history/SessionStats'
 import { Tile, TileRow } from './InsightTiles'
 import { HBar, RefreshButton, shortModel, SkeletonCards } from './InsightWidgets'
@@ -172,6 +172,11 @@ export default function WorktreesSection({ repos, loading, sessions, onRemoved, 
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
   const [removing, setRemoving] = useState(false)
   const [removeError, setRemoveError] = useState<string | null>(null)
+  // Branch (no worktree) deletion — keyed by "<repoPath>:<branchName>", separate
+  // from worktree deletion above since it operates on a name, not a path.
+  const [confirmDeleteBranch, setConfirmDeleteBranch] = useState<string | null>(null)
+  const [deletingBranch, setDeletingBranch] = useState(false)
+  const [deleteBranchError, setDeleteBranchError] = useState<string | null>(null)
   const [copied, setCopied] = useState<string | null>(null)
   // Per-repo usage insights, fetched lazily on first toggle. 'loading' while in flight.
   const [repoInsights, setRepoInsights] = useState<Record<string, SessionInsights | 'loading'>>({})
@@ -179,6 +184,9 @@ export default function WorktreesSection({ repos, loading, sessions, onRemoved, 
   // Per-repo open PRs (via `gh`), fetched lazily on first toggle.
   const [repoPrs, setRepoPrs] = useState<Record<string, PullRequestInfo[] | 'loading'>>({})
   const [prsOpen, setPrsOpen] = useState<Record<string, boolean>>({})
+  // Remote-only branches come bundled with list_worktrees already — this
+  // toggle is pure display state, no separate fetch needed.
+  const [remoteOpen, setRemoteOpen] = useState<Record<string, boolean>>({})
   // Repo cards start collapsed; searching or filtering opens matches.
   const [repoOpen, setRepoOpen] = useState<Record<string, boolean>>({})
   // When true, the branches/worktrees list is swapped out for the Agent
@@ -332,6 +340,24 @@ export default function WorktreesSection({ repos, loading, sessions, onRemoved, 
     return true
   }
 
+  // Worktree status filters (active/stale/abandoned/dirty/attention) don't
+  // apply to a branch with no worktree — only "safe" (== merged, since a
+  // bare branch can never be dirty) and search carry over.
+  const matchesBareBranch = (b: BranchInfo, repo: RepoWorktrees): boolean => {
+    if (filter !== 'all' && filter !== 'safe') return false
+    if (filter === 'safe' && !b.isMerged) return false
+    if (search.trim()) {
+      const q = search.toLowerCase()
+      const alias = repoNames[repo.repoPath]?.toLowerCase() ?? ''
+      if (
+        !b.name.toLowerCase().includes(q)
+        && !repo.repoName.toLowerCase().includes(q)
+        && !alias.includes(q)
+      ) return false
+    }
+    return true
+  }
+
   const sessionsFor = (wt: WorktreeInfo) =>
     sessions.filter(s => s.project === wt.path).slice(0, 3)
 
@@ -371,6 +397,20 @@ export default function WorktreesSection({ repos, loading, sessions, onRemoved, 
     }
   }
 
+  const handleDeleteBranch = async (repo: RepoWorktrees, branch: BranchInfo) => {
+    setDeletingBranch(true)
+    setDeleteBranchError(null)
+    try {
+      await invoke('delete_branch', { repoPath: repo.repoPath, branchName: branch.name })
+      setConfirmDeleteBranch(null)
+      onRemoved()
+    } catch (e) {
+      setDeleteBranchError(String(e))
+    } finally {
+      setDeletingBranch(false)
+    }
+  }
+
   const lastTouchedTs = (repo: RepoWorktrees): number =>
     Math.max(0, ...repo.worktrees.map(w => w.lastCommitTs ?? 0))
 
@@ -385,8 +425,12 @@ export default function WorktreesSection({ repos, loading, sessions, onRemoved, 
   const BUCKET_LABEL: Record<TimeBucket, string> = { today: 'Today', week: 'This week', older: 'Older' }
 
   const visibleRepos = repos
-    .map(r => ({ repo: r, items: r.worktrees.filter(w => matches(w, r)) }))
-    .filter(g => g.items.length > 0)
+    .map(r => ({
+      repo: r,
+      items: r.worktrees.filter(w => matches(w, r)),
+      bareItems: r.bareBranches.filter(b => matchesBareBranch(b, r)),
+    }))
+    .filter(g => g.items.length > 0 || g.bareItems.length > 0)
     .sort((a, b) => lastTouchedTs(b.repo) - lastTouchedTs(a.repo))
 
   return (
@@ -487,7 +531,7 @@ export default function WorktreesSection({ repos, loading, sessions, onRemoved, 
         )}
 
         {/* Repo groups — sorted by last touched, sectioned into a Today / This week / Older rail */}
-        {visibleRepos.map(({ repo, items }, repoIndex) => {
+        {visibleRepos.map(({ repo, items, bareItems }, repoIndex) => {
           const open = isRepoOpen(repo.repoPath)
           const bucket = timeBucket(lastTouchedTs(repo))
           const prevBucket = repoIndex > 0 ? timeBucket(lastTouchedTs(visibleRepos[repoIndex - 1].repo)) : null
@@ -563,7 +607,9 @@ export default function WorktreesSection({ repos, loading, sessions, onRemoved, 
                     </span>
                   )}
                   <span className="block text-[12.5px] text-[var(--c-text-3)]">
-                    {items.length} worktree{items.length > 1 ? 's' : ''} · base {repo.baseBranch}
+                    {items.length} worktree{items.length > 1 ? 's' : ''}
+                    {bareItems.length > 0 && <> · {bareItems.length} branch{bareItems.length > 1 ? 'es' : ''}</>}
+                    {' '}· base {repo.baseBranch}
                   </span>
                   <span className="block text-[12px] font-mono text-[var(--c-text-3)]/70 truncate" title={repo.repoPath}>
                     {repo.repoPath}
@@ -595,6 +641,18 @@ export default function WorktreesSection({ repos, loading, sessions, onRemoved, 
                   PRs
                   {Array.isArray(repoPrs[repo.repoPath]) && (repoPrs[repo.repoPath] as PullRequestInfo[]).length > 0 && (
                     <span className="text-[var(--c-text-3)]">{(repoPrs[repo.repoPath] as PullRequestInfo[]).length}</span>
+                  )}
+                </button>
+                <button
+                  onClick={() => setRemoteOpen(prev => ({ ...prev, [repo.repoPath]: !prev[repo.repoPath] }))}
+                  aria-expanded={!!remoteOpen[repo.repoPath]}
+                  title="Remote branches with no local copy checked out or pulled down"
+                  className={`flex items-center gap-1 text-[12px] px-2.5 py-1 rounded-md border transition-colors ${remoteOpen[repo.repoPath] ? 'border-[var(--c-accent)]/50 bg-[var(--c-accent)]/10 text-[var(--c-accent)]' : 'border-[var(--c-border)] text-[var(--c-text-3)] hover:text-[var(--c-text-2)] hover:border-[var(--c-text-3)]/50'}`}
+                >
+                  <span className={`text-[8.5px] transition-transform ${remoteOpen[repo.repoPath] ? 'rotate-90' : ''}`} aria-hidden="true">▶</span>
+                  Remote
+                  {repo.remoteBranches.length > 0 && (
+                    <span className="text-[var(--c-text-3)]">{repo.remoteBranches.length}</span>
                   )}
                 </button>
                 <button
@@ -642,6 +700,12 @@ export default function WorktreesSection({ repos, loading, sessions, onRemoved, 
               </div>
             )}
 
+            {remoteOpen[repo.repoPath] && (
+              <div className="px-3.5">
+                <RemoteBranches data={repo.remoteBranches} />
+              </div>
+            )}
+
             {open && (
             <div className="px-3.5 pb-3">
               <div className="mb-2">
@@ -677,6 +741,9 @@ export default function WorktreesSection({ repos, loading, sessions, onRemoved, 
                   )}
                 </div>
               )}
+            {items.length > 0 && (
+            <>
+            <SectionHeading label="Worktrees" count={items.length} accent="var(--c-accent)" />
             {/* Branch map: trunk line down the left, one connector per worktree */}
             <div className="relative pl-5 space-y-1.5">
               <div className="absolute left-[9px] top-1 bottom-5 w-px bg-[var(--c-border)]" aria-hidden="true" />
@@ -695,6 +762,7 @@ export default function WorktreesSection({ repos, loading, sessions, onRemoved, 
                   <div key={wt.path} ref={el => { itemRefs.current[wt.path] = el }} className="relative">
                     <div className="absolute -left-[11px] top-[21px] w-[11px] h-px bg-[var(--c-border)]" aria-hidden="true" />
                     <div
+                      data-testid={`wt-card-${wt.path}`}
                       className={`rounded-xl border transition-colors ${statusBorder} bg-[var(--c-surface-2)]/40`}
                     >
                     <button
@@ -722,6 +790,7 @@ export default function WorktreesSection({ repos, loading, sessions, onRemoved, 
                         {wt.isDirty && <Badge tone="warn">uncommitted</Badge>}
                         {!wt.isPrimary && !wt.isMerged && wt.ahead > 0 && <Badge tone="accent">↑{wt.ahead}</Badge>}
                         {wt.behind > 0 && <Badge tone="muted">↓{wt.behind}</Badge>}
+                        {!wt.hasRemote && <Badge tone="muted">local only</Badge>}
                         <span className={`text-[var(--c-text-3)] text-[14px] transition-transform ${isOpen ? 'rotate-90' : ''}`}>›</span>
                       </div>
                     </button>
@@ -822,6 +891,74 @@ export default function WorktreesSection({ repos, loading, sessions, onRemoved, 
                 )
               })}
             </div>
+            </>
+            )}
+
+            {bareItems.length > 0 && (
+              <div className={items.length > 0 ? 'mt-3' : ''}>
+                <SectionHeading label="Branches" hint="not checked out" count={bareItems.length} accent="var(--c-text-3)" />
+                <div className="space-y-1.5">
+                  {bareItems.map(b => {
+                    const key = `${repo.repoPath}:${b.name}`
+                    return (
+                      <div
+                        key={key}
+                        data-testid={`branch-card-${key}`}
+                        className="rounded-xl border border-dashed border-[var(--c-border)] bg-[var(--c-surface-2)]/25 px-4 py-3"
+                      >
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2">
+                              <span className="w-2 h-2 rounded-full shrink-0 bg-[var(--c-text-3)]/40" />
+                              <span className="text-[15px] font-mono font-semibold truncate">{b.name}</span>
+                            </div>
+                            <div className="text-[13px] text-[var(--c-text-3)] mt-0.5 ml-4">
+                              not checked out · {relativeTime(b.lastCommitTs)}
+                              {b.lastCommitSubject && <> · {b.lastCommitSubject}</>}
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            {b.isMerged
+                              ? <Badge tone="ok">merged · safe to delete</Badge>
+                              : b.ahead > 0 && <Badge tone="accent">↑{b.ahead}</Badge>}
+                            {!b.hasRemote && <Badge tone="muted">local only</Badge>}
+                            {b.isMerged && confirmDeleteBranch !== key && (
+                              <button
+                                onClick={() => { setConfirmDeleteBranch(key); setDeleteBranchError(null) }}
+                                className="text-[13px] px-3 py-1.5 rounded-md border border-[var(--c-border)] text-rose-400/80 hover:text-rose-400 hover:border-rose-400/40 transition-colors"
+                              >
+                                Delete
+                              </button>
+                            )}
+                            {confirmDeleteBranch === key && (
+                              <>
+                                <button
+                                  disabled={deletingBranch}
+                                  onClick={() => handleDeleteBranch(repo, b)}
+                                  className="text-[13px] px-3 py-1.5 rounded-md bg-rose-500/20 text-rose-400 hover:bg-rose-500/30 transition-colors font-medium disabled:opacity-50"
+                                >
+                                  {deletingBranch ? 'Deleting…' : 'Confirm delete'}
+                                </button>
+                                <button
+                                  disabled={deletingBranch}
+                                  onClick={() => setConfirmDeleteBranch(null)}
+                                  className="text-[13px] px-3 py-1.5 rounded-md border border-[var(--c-border)] text-[var(--c-text-3)] hover:text-[var(--c-text-2)] transition-colors"
+                                >
+                                  Cancel
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                        {deleteBranchError && confirmDeleteBranch === key && (
+                          <p className="text-[13px] text-rose-400 bg-rose-500/10 rounded-lg px-3 py-2 mt-2">{deleteBranchError}</p>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
               </>
               )}
             </div>
@@ -900,6 +1037,41 @@ function RepoPrs({ data }: { data: PullRequestInfo[] | 'loading' | undefined }) 
           {pr.isDraft && <Badge tone="muted">Draft</Badge>}
           <span className="text-[12px] text-[var(--c-text-3)] flex-shrink-0">{pr.author}</span>
         </button>
+      ))}
+    </div>
+  )
+}
+
+/** Subsection label inside a repo card — a colored rail ties it to its
+ *  cards' border color (solid accent for worktrees, dashed muted for bare
+ *  branches) so which group is which reads at a glance while scrolling. */
+function SectionHeading({ label, hint, count, accent }: { label: string; hint?: string; count: number; accent: string }) {
+  return (
+    <div className="flex items-center gap-2 mb-2">
+      <span className="w-[3px] h-[13px] rounded-full" style={{ background: accent }} aria-hidden="true" />
+      <span className="text-[13.5px] font-semibold text-[var(--c-text-2)]">
+        {label}
+        {hint && <span className="text-[11.5px] font-normal text-[var(--c-text-3)]"> · {hint}</span>}
+      </span>
+      <span className="text-[11px] font-mono text-[var(--c-text-3)]">{count}</span>
+    </div>
+  )
+}
+
+/** Branches that exist on a remote but were never pulled/checked out locally
+ *  — read-only, no actions, since there's no local ref yet to act on. */
+function RemoteBranches({ data }: { data: RemoteBranchInfo[] }) {
+  if (data.length === 0) {
+    return <p className="text-[13px] text-[var(--c-text-3)] mb-2 px-1">No remote-only branches — everything on the remote has a local copy</p>
+  }
+  return (
+    <div className="rounded-xl border border-[var(--c-border)] bg-[var(--c-surface-2)]/40 px-3.5 py-2.5 mb-2 flex flex-col gap-1.5">
+      {data.map(b => (
+        <div key={`${b.remote}/${b.name}`} className="flex items-center gap-2 px-2 py-1.5">
+          <span className="font-mono text-[10px] px-1.5 py-px rounded-full border border-[var(--c-border)] text-[var(--c-text-3)] flex-shrink-0">{b.remote}</span>
+          <span className="flex-1 min-w-0 text-[13.5px] font-mono truncate">{b.name}</span>
+          <span className="text-[12px] text-[var(--c-text-3)] flex-shrink-0">{b.lastCommitSubject ?? '—'}</span>
+        </div>
       ))}
     </div>
   )
