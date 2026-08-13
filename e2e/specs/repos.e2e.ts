@@ -50,6 +50,20 @@ test('filter pill auto-expands and narrows to safe worktrees', async ({ page }) 
   await expect(page.getByText('feature/wip')).not.toBeVisible()
 })
 
+test('safe-to-delete count includes merged bare branches, not just worktrees', async ({ page }) => {
+  // Fixture has 1 safe worktree (feature/done) + 1 safe bare branch
+  // (feature/old-experiment) — the tile/banner must count both, matching
+  // what the "safe" filter itself reveals.
+  await expect(page.getByRole('button', { name: /Safe to delete: 2\./ })).toBeVisible()
+  await expect(page.getByText(/2 branches are merged and clean/)).toBeVisible()
+  // The "safe" filter auto-expands matching repos — no extra click needed.
+  await page.getByRole('button', { name: 'Safe to delete' }).click()
+  await expect(page.getByText('feature/done')).toBeVisible()
+  await expect(page.getByText('feature/old-experiment')).toBeVisible()
+  await expect(page.getByText('feature/wip')).not.toBeVisible()
+  await expect(page.getByText('feature/queued')).not.toBeVisible()
+})
+
 test('delete flow: only safe worktrees offer delete, confirm invokes backend', async ({ page }) => {
   await page.getByRole('button', { name: /alpha/ }).first().click()
   // dirty worktree: no delete button

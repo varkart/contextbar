@@ -453,6 +453,31 @@ fn parse_worktree_list(output: &str) -> Vec<(PathBuf, Option<String>, bool)> {
     result
 }
 
+/// Commits `branch` is ahead/behind `base`, and whether it's fully merged
+/// (0 commits ahead and not the base branch itself). `root` is where the
+/// comparison runs — the repo's primary checkout, so this works whether
+/// `branch` has its own worktree or not.
+fn ahead_behind(root: &Path, base: &str, branch: &str) -> (u32, u32) {
+    if branch == base {
+        return (0, 0);
+    }
+    let Some(counts) = git(
+        root,
+        &[
+            "rev-list",
+            "--left-right",
+            "--count",
+            &format!("{base}...{branch}"),
+        ],
+    ) else {
+        return (0, 0);
+    };
+    let mut parts = counts.split_whitespace();
+    let behind = parts.next().and_then(|s| s.parse().ok()).unwrap_or(0);
+    let ahead = parts.next().and_then(|s| s.parse().ok()).unwrap_or(0);
+    (ahead, behind)
+}
+
 fn inspect_worktree(
     root: &Path,
     base: &str,
@@ -465,24 +490,10 @@ fn inspect_worktree(
         .map(|s| !s.is_empty())
         .unwrap_or(false);
 
-    let (mut ahead, mut behind) = (0u32, 0u32);
-    if let Some(b) = &branch {
-        if b != base {
-            if let Some(counts) = git(
-                root,
-                &[
-                    "rev-list",
-                    "--left-right",
-                    "--count",
-                    &format!("{base}...{b}"),
-                ],
-            ) {
-                let mut parts = counts.split_whitespace();
-                behind = parts.next().and_then(|s| s.parse().ok()).unwrap_or(0);
-                ahead = parts.next().and_then(|s| s.parse().ok()).unwrap_or(0);
-            }
-        }
-    }
+    let (ahead, behind) = branch
+        .as_deref()
+        .map(|b| ahead_behind(root, base, b))
+        .unwrap_or((0, 0));
     let is_merged = branch.as_deref().map(|b| b != base).unwrap_or(false) && ahead == 0;
 
     let last_commit_ts = git(path, &["log", "-1", "--format=%ct"]).and_then(|s| s.parse().ok());
@@ -507,70 +518,85 @@ fn inspect_worktree(
 /// `list_worktrees`'s per-repo `worktrees`, so plain (not checked out)
 /// branches are still visible instead of silently missing from the UI.
 fn list_bare_branches(root: &Path, base: &str, checked_out: &HashSet<String>) -> Vec<BranchInfo> {
+    // One for-each-ref call for name + timestamp + subject of every local
+    // branch, instead of two `git log` spawns per branch — matters once a
+    // repo has dozens of stale branches.
     let Some(listing) = git(
         root,
-        &["for-each-ref", "refs/heads", "--format=%(refname:short)"],
+        &[
+            "for-each-ref",
+            "refs/heads",
+            "--format=%(refname:short)%09%(committerdate:unix)%09%(subject)",
+        ],
     ) else {
         return Vec::new();
     };
     let mut out: Vec<BranchInfo> = listing
         .lines()
-        .filter(|name| !name.is_empty() && !checked_out.contains(*name))
-        .map(|name| {
-            let mut ahead = 0u32;
-            if name != base {
-                if let Some(counts) = git(
-                    root,
-                    &[
-                        "rev-list",
-                        "--left-right",
-                        "--count",
-                        &format!("{base}...{name}"),
-                    ],
-                ) {
-                    ahead = counts
-                        .split_whitespace()
-                        .nth(1)
-                        .and_then(|s| s.parse().ok())
-                        .unwrap_or(0);
-                }
+        .filter_map(|line| {
+            let mut parts = line.splitn(3, '\t');
+            let name = parts.next()?;
+            if name.is_empty() || checked_out.contains(name) {
+                return None;
             }
+            let last_commit_ts = parts.next().and_then(|s| s.parse().ok());
+            let last_commit_subject = parts.next().filter(|s| !s.is_empty()).map(str::to_string);
+            let (ahead, _behind) = ahead_behind(root, base, name);
             let is_merged = name != base && ahead == 0;
-            let last_commit_ts =
-                git(root, &["log", "-1", "--format=%ct", name]).and_then(|s| s.parse().ok());
-            let last_commit_subject = git(root, &["log", "-1", "--format=%s", name]);
-            BranchInfo {
+            Some(BranchInfo {
                 name: name.to_string(),
                 is_merged,
                 ahead,
                 last_commit_ts,
                 last_commit_subject,
                 has_remote: false,
-            }
+            })
         })
         .collect();
     out.sort_by_key(|b| std::cmp::Reverse(b.last_commit_ts.unwrap_or(0)));
     out
 }
 
-/// (remote, branch name) for every ref under `refs/remotes/*`, symbolic
-/// `HEAD` refs excluded. Reads local remote-tracking state only — no
-/// network call, so this reflects the last fetch, not live upstream state.
-fn list_remote_refs(root: &Path) -> Vec<(String, String)> {
+/// One `refs/remotes/*` ref: which remote it's under, its branch name, and
+/// its last commit — fetched together in one `for-each-ref` call so neither
+/// caller needs a per-branch `git log` spawn.
+struct RemoteRef {
+    remote: String,
+    name: String,
+    last_commit_ts: Option<u64>,
+    last_commit_subject: Option<String>,
+}
+
+/// Every ref under `refs/remotes/*`, symbolic `HEAD` refs excluded. Reads
+/// local remote-tracking state only — no network call, so this reflects the
+/// last fetch, not live upstream state.
+fn list_remote_refs(root: &Path) -> Vec<RemoteRef> {
     let Some(listing) = git(
         root,
-        &["for-each-ref", "refs/remotes", "--format=%(refname:short)"],
+        &[
+            "for-each-ref",
+            "refs/remotes",
+            "--format=%(refname:short)%09%(committerdate:unix)%09%(subject)",
+        ],
     ) else {
         return Vec::new();
     };
     listing
         .lines()
         .filter_map(|line| {
-            let (remote, name) = line.split_once('/')?;
+            let mut parts = line.splitn(3, '\t');
+            let (remote, name) = parts.next()?.split_once('/')?;
             if name == "HEAD" {
                 return None;
             }
-            Some((remote.to_string(), name.to_string()))
+            let last_commit_ts = parts.next().and_then(|s| s.parse().ok());
+            let last_commit_subject = parts.next().filter(|s| !s.is_empty()).map(str::to_string);
+            Some(RemoteRef {
+                remote: remote.to_string(),
+                name: name.to_string(),
+                last_commit_ts,
+                last_commit_subject,
+            })
         })
         .collect()
 }
@@ -579,28 +605,21 @@ fn list_remote_refs(root: &Path) -> Vec<(String, String)> {
 /// `remote_refs` whose name doesn't appear in `local_names`. When a branch
 /// exists under more than one remote, `origin` wins.
 fn list_remote_only_branches(
-    root: &Path,
-    remote_refs: &[(String, String)],
+    remote_refs: Vec<RemoteRef>,
     local_names: &HashSet<String>,
 ) -> Vec<RemoteBranchInfo> {
-    let mut ordered = remote_refs.to_vec();
-    ordered.sort_by_key(|(remote, _)| if remote == "origin" { 0 } else { 1 });
+    let mut ordered = remote_refs;
+    ordered.sort_by_key(|r| if r.remote == "origin" { 0 } else { 1 });
 
     let mut seen = HashSet::new();
     let mut out: Vec<RemoteBranchInfo> = ordered
         .into_iter()
-        .filter(|(_, name)| !local_names.contains(name) && seen.insert(name.clone()))
-        .map(|(remote, name)| {
-            let refname = format!("{remote}/{name}");
-            let last_commit_ts =
-                git(root, &["log", "-1", "--format=%ct", &refname]).and_then(|s| s.parse().ok());
-            let last_commit_subject = git(root, &["log", "-1", "--format=%s", &refname]);
-            RemoteBranchInfo {
-                name,
-                remote,
-                last_commit_ts,
-                last_commit_subject,
-            }
+        .filter(|r| !local_names.contains(&r.name) && seen.insert(r.name.clone()))
+        .map(|r| RemoteBranchInfo {
+            name: r.name,
+            remote: r.remote,
+            last_commit_ts: r.last_commit_ts,
+            last_commit_subject: r.last_commit_subject,
         })
         .collect();
     out.sort_by_key(|b| std::cmp::Reverse(b.last_commit_ts.unwrap_or(0)));
@@ -681,26 +700,32 @@ pub fn list_worktrees() -> Vec<RepoWorktrees> {
         worktrees.sort_by_key(|w| std::cmp::Reverse(w.last_commit_ts.unwrap_or(0)));
 
         let remote_refs = list_remote_refs(&primary_root);
-        let remote_names: HashSet<String> = remote_refs.iter().map(|(_, n)| n.clone()).collect();
+        let remote_names: HashSet<String> = remote_refs.iter().map(|r| r.name.clone()).collect();
         for w in &mut worktrees {
             if let Some(b) = &w.branch {
                 w.has_remote = remote_names.contains(b);
             }
         }
 
-        let checked_out: HashSet<String> =
-            worktrees.iter().filter_map(|w| w.branch.clone()).collect();
-        let mut bare_branches = list_bare_branches(&primary_root, &base, &checked_out);
+        // Every branch git's own worktree bookkeeping still has attached,
+        // regardless of whether its directory exists on disk — a branch
+        // whose worktree dir was deleted outside git (e.g. `rm -rf` instead
+        // of `git worktree remove`) is still "checked out" as far as `git
+        // branch -d`/`worktree remove` are concerned, so it must not be
+        // misclassified as a free-standing bare branch here.
+        let all_worktree_branches: HashSet<String> =
+            entries.iter().filter_map(|(_, b, _)| b.clone()).collect();
+        let mut bare_branches = list_bare_branches(&primary_root, &base, &all_worktree_branches);
         for b in &mut bare_branches {
             b.has_remote = remote_names.contains(&b.name);
         }
 
-        let local_names: HashSet<String> = checked_out
+        let local_names: HashSet<String> = all_worktree_branches
             .iter()
             .cloned()
             .chain(bare_branches.iter().map(|b| b.name.clone()))
             .collect();
-        let remote_branches = list_remote_only_branches(&primary_root, &remote_refs, &local_names);
+        let remote_branches = list_remote_only_branches(remote_refs, &local_names);
 
         let repo_name = primary_root
             .file_name()

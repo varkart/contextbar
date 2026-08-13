@@ -308,19 +308,23 @@ export default function WorktreesSection({ repos, loading, sessions, onRemoved, 
     sessions.some(s => s.project === wt.path && (s.isLive || Date.now() - s.timestamp < 7 * DAY))
 
   const allWts = useMemo(() => repos.flatMap(r => r.worktrees), [repos])
+  const allBareBranches = useMemo(() => repos.flatMap(r => r.bareBranches), [repos])
   const counts = useMemo(() => ({
     repos: repos.length,
     active: allWts.filter(w => worktreeStatus(w, hasRecentSession(w)) === 'active').length,
     stale: allWts.filter(w => worktreeStatus(w, hasRecentSession(w)) === 'stale').length,
     abandoned: allWts.filter(w => worktreeStatus(w, hasRecentSession(w)) === 'abandoned').length,
     dirty: allWts.filter(w => w.isDirty).length,
-    safe: allWts.filter(isSafeToDelete).length,
+    // Matches the `safe` filter below (matchesBareBranch treats a merged
+    // bare branch as safe too) — otherwise the tile/banner undercounts what
+    // clicking through to the filter actually reveals.
+    safe: allWts.filter(isSafeToDelete).length + allBareBranches.filter(b => b.isMerged).length,
     attention: allWts.filter(w => {
       const st = worktreeStatus(w, hasRecentSession(w))
       return st === 'stale' || st === 'abandoned' || w.isDirty
     }).length,
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }), [repos, allWts, sessions])
+  }), [repos, allWts, allBareBranches, sessions])
 
   const matches = (wt: WorktreeInfo, repo: RepoWorktrees): boolean => {
     const st = worktreeStatus(wt, hasRecentSession(wt))
@@ -412,7 +416,12 @@ export default function WorktreesSection({ repos, loading, sessions, onRemoved, 
   }
 
   const lastTouchedTs = (repo: RepoWorktrees): number =>
-    Math.max(0, ...repo.worktrees.map(w => w.lastCommitTs ?? 0))
+    Math.max(
+      0,
+      ...repo.worktrees.map(w => w.lastCommitTs ?? 0),
+      ...repo.bareBranches.map(b => b.lastCommitTs ?? 0),
+      ...repo.remoteBranches.map(b => b.lastCommitTs ?? 0),
+    )
 
   type TimeBucket = 'today' | 'week' | 'older'
   const timeBucket = (tsSec: number): TimeBucket => {
@@ -509,7 +518,7 @@ export default function WorktreesSection({ repos, loading, sessions, onRemoved, 
           <div className="flex items-center justify-between gap-3 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-2.5 mb-4">
             <p className="text-[14px]">
               <span className="text-emerald-400 font-semibold">{counts.safe}</span>{' '}
-              worktree{counts.safe > 1 ? 's are' : ' is'} merged and clean — safe to delete
+              branch{counts.safe > 1 ? 'es are' : ' is'} merged and clean — safe to delete
             </p>
             <button
               onClick={() => setFilter('safe')}

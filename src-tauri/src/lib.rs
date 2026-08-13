@@ -656,6 +656,8 @@ async fn list_worktrees() -> Vec<engine::worktrees::RepoWorktrees> {
 
 #[tauri::command]
 async fn remove_worktree(repo_path: String, worktree_path: String) -> Result<(), String> {
+    validate_tool_path(&repo_path)?;
+    validate_tool_path(&worktree_path)?;
     tokio::task::spawn_blocking(move || {
         engine::worktrees::remove_worktree(&repo_path, &worktree_path)
     })
@@ -665,6 +667,7 @@ async fn remove_worktree(repo_path: String, worktree_path: String) -> Result<(),
 
 #[tauri::command]
 async fn delete_branch(repo_path: String, branch_name: String) -> Result<(), String> {
+    validate_tool_path(&repo_path)?;
     tokio::task::spawn_blocking(move || engine::worktrees::delete_branch(&repo_path, &branch_name))
         .await
         .map_err(|e| e.to_string())?
