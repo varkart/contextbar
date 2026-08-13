@@ -352,6 +352,26 @@ export interface WorktreeInfo {
   /** Unix seconds of the last commit in this worktree. */
   lastCommitTs?: number
   lastCommitSubject?: string
+  /** A remote-tracking ref shares this branch's name — i.e. it's been pushed. */
+  hasRemote: boolean
+}
+
+export interface BranchInfo {
+  name: string
+  /** Fully merged into the base branch — safe to delete. */
+  isMerged: boolean
+  ahead: number
+  lastCommitTs?: number
+  lastCommitSubject?: string
+  hasRemote: boolean
+}
+
+/** A remote branch with no matching local branch — never pulled down here. */
+export interface RemoteBranchInfo {
+  name: string
+  remote: string
+  lastCommitTs?: number
+  lastCommitSubject?: string
 }
 
 export interface PullRequestInfo {
@@ -384,6 +404,10 @@ export interface RepoWorktrees {
   repoPath: string
   baseBranch: string
   worktrees: WorktreeInfo[]
+  /** Local branches with no worktree checked out — not present in `worktrees`. */
+  bareBranches: BranchInfo[]
+  /** Remote branches with no local branch at all — never pulled down here. */
+  remoteBranches: RemoteBranchInfo[]
   /** Agent instruction/config files present at the repo root (CLAUDE.md, AGENTS.md, …). */
   agentFiles: string[]
   /** Skill names under <root>/.claude/skills/. */

@@ -142,6 +142,7 @@ export const expandedFixture: ExpandedMockData = {
           isMerged: false,
           lastCommitTs: Math.floor((now - 2 * HOUR) / 1000),
           lastCommitSubject: 'feat: retry logic',
+          hasRemote: true,
         },
         {
           path: '/Users/test/proj/alpha-wt-merged',
@@ -154,6 +155,7 @@ export const expandedFixture: ExpandedMockData = {
           isMerged: true,
           lastCommitTs: Math.floor((now - 2 * DAY) / 1000),
           lastCommitSubject: 'fix: final tweak',
+          hasRemote: true,
         },
         {
           path: '/Users/test/proj/alpha-wt-dirty',
@@ -166,6 +168,33 @@ export const expandedFixture: ExpandedMockData = {
           isMerged: false,
           lastCommitTs: Math.floor((now - 10 * DAY) / 1000),
           lastCommitSubject: 'wip: half done',
+          hasRemote: false,
+        },
+      ],
+      bareBranches: [
+        {
+          name: 'feature/old-experiment',
+          isMerged: true,
+          ahead: 0,
+          lastCommitTs: Math.floor((now - 40 * DAY) / 1000),
+          lastCommitSubject: 'spike: try alternate approach',
+          hasRemote: true,
+        },
+        {
+          name: 'feature/queued',
+          isMerged: false,
+          ahead: 3,
+          lastCommitTs: Math.floor((now - 5 * DAY) / 1000),
+          lastCommitSubject: 'wip: queued work, not checked out',
+          hasRemote: false,
+        },
+      ],
+      remoteBranches: [
+        {
+          name: 'feature/teammate-spike',
+          remote: 'origin',
+          lastCommitTs: Math.floor((now - 3 * DAY) / 1000),
+          lastCommitSubject: 'spike: teammate exploring caching layer',
         },
       ],
     },

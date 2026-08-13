@@ -25,6 +25,8 @@ function repo(overrides: Partial<RepoWorktrees> = {}): RepoWorktrees {
     repoPath: '/Users/test/alpha',
     baseBranch: 'main',
     worktrees: [],
+    bareBranches: [],
+    remoteBranches: [],
     agentFiles: [],
     repoSkills: [],
     ...overrides,
@@ -68,7 +70,7 @@ describe('buildPaletteItems', () => {
   })
 
   it('maps repos to Repos group items with worktree count in sub', () => {
-    const items = buildPaletteItems([], [repo({ worktrees: [{ path: '/a', isPrimary: true, isDetached: false, isDirty: false, ahead: 0, behind: 0, isMerged: false }] })], handlers)
+    const items = buildPaletteItems([], [repo({ worktrees: [{ path: '/a', isPrimary: true, isDetached: false, isDirty: false, ahead: 0, behind: 0, isMerged: false, hasRemote: true }] })], handlers)
     const repoItems = items.filter(i => i.group === 'Repos')
     expect(repoItems).toHaveLength(1)
     expect(repoItems[0].sub).toBe('1 worktree')
