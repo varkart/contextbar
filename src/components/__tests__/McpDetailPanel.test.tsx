@@ -231,4 +231,31 @@ describe('NpmInstallSection', () => {
     )
     expect(screen.getByText('v2.0.0 available')).toBeInTheDocument()
   })
+
+  it('shows a Source link for the cached, resolved package URL', async () => {
+    mockInvoke.mockImplementation((cmd: string) => {
+      if (cmd === 'get_mcp_install_state') return Promise.resolve(notInstalledState)
+      if (cmd === 'query_mcp_tools') return Promise.resolve([])
+      if (cmd === 'get_mcp_cache_status') return Promise.resolve({
+        name: 'github',
+        command: 'npx',
+        args: ['-y', '@modelcontextprotocol/server-github'],
+        url: null,
+        sourceUrl: 'https://github.com/modelcontextprotocol/servers',
+        cachedAt: 0,
+        updatedAt: 0,
+      })
+      return Promise.resolve(null)
+    })
+    render(<McpDetailPanel mcp={baseMcp} onBack={vi.fn()} />)
+    await waitFor(() => expect(screen.getByText('Source')).toBeInTheDocument())
+    expect(screen.getByText('https://github.com/modelcontextprotocol/servers')).toBeInTheDocument()
+  })
+
+  it('shows no Source section when nothing is cached yet', async () => {
+    defaultMocks()
+    render(<McpDetailPanel mcp={baseMcp} onBack={vi.fn()} />)
+    await waitFor(() => expect(mockInvoke).toHaveBeenCalledWith('get_mcp_cache_status', { mcpName: 'github' }))
+    expect(screen.queryByText('Source')).not.toBeInTheDocument()
+  })
 })

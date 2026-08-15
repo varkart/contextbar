@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react'
 import { invoke } from '@tauri-apps/api/core'
-import type { McpServer, McpTool, NpmInstallState, Agent } from '../types'
+import type { McpServer, McpTool, NpmInstallState, Agent, CachedMcp } from '../types'
 import { capture, captureException } from '../analytics'
 import { McpInstalledOn } from './InstalledOnSection'
+import SourceLink from './SourceLink'
 
 interface McpDetailPanelProps {
   mcp: McpServer
@@ -255,6 +256,17 @@ export default function McpDetailPanel({ mcp, onBack, agentId, onToggled, allAge
   const commandStr = [mcp.command, ...mcp.args].join(' ')
   const isHttp = !!mcp.url && !mcp.command
 
+  // Resolved at add-time (npm registry lookup for npx packages) and cached —
+  // shown as a persistent "where this came from" reference, separate from
+  // NpmInstallSection's live version-check fetch above.
+  const [cachedSourceUrl, setCachedSourceUrl] = useState<string | null>(null)
+  useEffect(() => {
+    setCachedSourceUrl(null)
+    invoke<CachedMcp | null>('get_mcp_cache_status', { mcpName: mcp.name })
+      .then(cached => setCachedSourceUrl(cached?.sourceUrl ?? null))
+      .catch(() => {})
+  }, [mcp.name])
+
   useEffect(() => {
     if (!loading) return
     setElapsed(0)
@@ -429,6 +441,13 @@ export default function McpDetailPanel({ mcp, onBack, agentId, onToggled, allAge
                 )}
               </>
             )}
+          </div>
+        )}
+
+        {/* Source reference — resolved package repo/homepage, cached at add-time */}
+        {cachedSourceUrl && (
+          <div className="px-4 py-3 border-t border-[var(--c-border)]">
+            <SourceLink url={cachedSourceUrl} accent="violet" />
           </div>
         )}
       </div>

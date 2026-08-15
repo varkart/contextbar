@@ -2,10 +2,11 @@ import { useState, useEffect, useRef } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import type { Skill, FileEntry, Agent } from '../types'
+import type { Skill, FileEntry, Agent, CachedSkill } from '../types'
 import { capture } from '../analytics'
 import { SkillInstalledOn } from './InstalledOnSection'
 import { agentColor } from '../constants/agentColors'
+import SourceLink from './SourceLink'
 
 interface SkillDetailPanelProps {
   skill: Skill
@@ -159,7 +160,13 @@ export default function SkillDetailPanel({ skill: initialSkill, agentId, onToggl
   // Derive path to display from the selected provider's variant
   const displayedSkill = variants?.find(v => v.agentId === selectedPathAgentId) ?? skill
   const displayedPath = displayedSkill.path
-  const displayedSourceUrl = displayedSkill.sourceUrl ?? skill.sourceUrl
+
+  // Skills installed via URL don't usually self-declare a `source:`
+  // frontmatter field, but the app records the install URL itself when the
+  // user used "Add skill → from URL" — fall back to that so the origin is
+  // still shown even when the skill's own file has no opinion on it.
+  const [cachedSource, setCachedSource] = useState<string | null>(null)
+  const displayedSourceUrl = displayedSkill.sourceUrl ?? skill.sourceUrl ?? cachedSource
 
   const [fileTree, setFileTree] = useState<FileEntry | null>(null)
   const [loading, setLoading] = useState(true)
@@ -196,6 +203,13 @@ export default function SkillDetailPanel({ skill: initialSkill, agentId, onToggl
       .catch(e => setError(String(e)))
       .finally(() => setLoading(false))
   }, [skill.path])
+
+  useEffect(() => {
+    setCachedSource(null)
+    invoke<CachedSkill | null>('get_skill_cache_status', { skillName: skill.name })
+      .then(cached => setCachedSource(cached?.installMethod === 'url' ? cached.installSource : null))
+      .catch(() => {})
+  }, [skill.name])
 
   // Close overlays and reset content when skill changes
   useEffect(() => {
@@ -343,23 +357,7 @@ export default function SkillDetailPanel({ skill: initialSkill, agentId, onToggl
 
         {/* Path + source link — updates when user selects a provider row above */}
         <div className="px-4 py-3 border-t border-[var(--c-border)] mt-auto space-y-1.5">
-          {displayedSourceUrl && (
-            <button
-              onClick={async () => {
-                try { await invoke('open_url', { url: displayedSourceUrl }) } catch {}
-              }}
-              className="flex items-center gap-1.5 text-[12px] text-indigo-400 hover:text-indigo-300 transition-colors"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
-                stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
-                className="w-3 h-3 flex-shrink-0">
-                <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
-                <polyline points="15 3 21 3 21 9"/>
-                <line x1="10" y1="14" x2="21" y2="3"/>
-              </svg>
-              <span className="truncate">{displayedSourceUrl}</span>
-            </button>
-          )}
+          {displayedSourceUrl && <SourceLink url={displayedSourceUrl} accent="indigo" />}
           <p className="text-[12px] text-[var(--c-text-3)] font-mono break-all leading-relaxed">
             {displayedPath}
           </p>
