@@ -779,6 +779,16 @@ fn get_all_cached_mcps(db: tauri::State<'_, db::DbState>) -> Vec<db::CachedMcp> 
     db::get_all_cached_mcps(&db)
 }
 
+/// Cache metadata for a single MCP — used to show its source URL (resolved
+/// from the npm registry for npx-based servers) on the MCP detail page.
+#[tauri::command]
+fn get_mcp_cache_status(
+    db: tauri::State<'_, db::DbState>,
+    mcp_name: String,
+) -> Option<db::CachedMcp> {
+    db::get_cached_mcp(&db, &mcp_name)
+}
+
 /// Return cache metadata for a skill so the frontend knows whether a re-install
 /// can be attempted without user input.
 #[tauri::command]
@@ -2705,6 +2715,7 @@ pub fn run() {
             add_skill_to_agent,
             warm_mcp_cache,
             get_all_cached_mcps,
+            get_mcp_cache_status,
             create_skill,
             install_skill_from_url,
             install_skill_from_path,

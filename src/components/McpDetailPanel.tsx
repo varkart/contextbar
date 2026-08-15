@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { invoke } from '@tauri-apps/api/core'
-import type { McpServer, McpTool, NpmInstallState, Agent } from '../types'
+import type { McpServer, McpTool, NpmInstallState, Agent, CachedMcp } from '../types'
 import { capture, captureException } from '../analytics'
 import { McpInstalledOn } from './InstalledOnSection'
 
@@ -255,6 +255,17 @@ export default function McpDetailPanel({ mcp, onBack, agentId, onToggled, allAge
   const commandStr = [mcp.command, ...mcp.args].join(' ')
   const isHttp = !!mcp.url && !mcp.command
 
+  // Resolved at add-time (npm registry lookup for npx packages) and cached —
+  // shown as a persistent "where this came from" reference, separate from
+  // NpmInstallSection's live version-check fetch above.
+  const [cachedSourceUrl, setCachedSourceUrl] = useState<string | null>(null)
+  useEffect(() => {
+    setCachedSourceUrl(null)
+    invoke<CachedMcp | null>('get_mcp_cache_status', { mcpName: mcp.name })
+      .then(cached => setCachedSourceUrl(cached?.sourceUrl ?? null))
+      .catch(() => {})
+  }, [mcp.name])
+
   useEffect(() => {
     if (!loading) return
     setElapsed(0)
@@ -429,6 +440,28 @@ export default function McpDetailPanel({ mcp, onBack, agentId, onToggled, allAge
                 )}
               </>
             )}
+          </div>
+        )}
+
+        {/* Source reference — resolved package repo/homepage, cached at add-time */}
+        {cachedSourceUrl && (
+          <div className="px-4 py-3 border-t border-[var(--c-border)]">
+            <p className="text-[10px] font-semibold text-[var(--c-text-3)] uppercase tracking-wider mb-0.5">
+              Source
+            </p>
+            <button
+              onClick={() => invoke('open_url', { url: cachedSourceUrl }).catch(() => {})}
+              className="flex items-center gap-1.5 text-[12px] text-violet-400 hover:text-violet-300 transition-colors"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+                stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+                className="w-3 h-3 flex-shrink-0">
+                <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+                <polyline points="15 3 21 3 21 9"/>
+                <line x1="10" y1="14" x2="21" y2="3"/>
+              </svg>
+              <span className="truncate">{cachedSourceUrl}</span>
+            </button>
           </div>
         )}
       </div>

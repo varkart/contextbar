@@ -34,6 +34,18 @@ export interface Skill {
   agentName?: string;
 }
 
+export interface CachedSkill {
+  name: string;
+  content: string;
+  contentHash: string;
+  /** "url" | "local" | "template" | "copy" | "detected" */
+  installMethod: string;
+  /** The URL (installMethod "url") or local path (installMethod "local") it was installed from. */
+  installSource: string | null;
+  cachedAt: number;
+  updatedAt: number;
+}
+
 export interface McpServer {
   name: string;
   command: string;     // empty string for HTTP-only MCPs

@@ -180,4 +180,62 @@ describe('SkillDetailPanel', () => {
     fireEvent.keyDown(window, { key: 'Escape', bubbles: true })
     expect(onBack).not.toHaveBeenCalled()
   })
+
+  it('falls back to the cached install URL as Source when the skill has no source frontmatter', async () => {
+    mockInvoke.mockImplementation((cmd: string) => {
+      if (cmd === 'read_skill_dir') return Promise.resolve(fileTree)
+      if (cmd === 'get_skill_cache_status') return Promise.resolve({
+        name: 'impeccable',
+        content: '...',
+        contentHash: 'abc',
+        installMethod: 'url',
+        installSource: 'https://github.com/someone/skills/blob/main/impeccable/SKILL.md',
+        cachedAt: 0,
+        updatedAt: 0,
+      })
+      return Promise.resolve(null)
+    })
+    render(<SkillDetailPanel skill={skill} onBack={vi.fn()} />)
+    await waitFor(() => expect(screen.getByText('Source')).toBeInTheDocument())
+    expect(screen.getByText('https://github.com/someone/skills/blob/main/impeccable/SKILL.md')).toBeInTheDocument()
+  })
+
+  it('does not show a Source link when the cached install method is local, not url', async () => {
+    mockInvoke.mockImplementation((cmd: string) => {
+      if (cmd === 'read_skill_dir') return Promise.resolve(fileTree)
+      if (cmd === 'get_skill_cache_status') return Promise.resolve({
+        name: 'impeccable',
+        content: '...',
+        contentHash: 'abc',
+        installMethod: 'local',
+        installSource: '/Users/me/some/local/path',
+        cachedAt: 0,
+        updatedAt: 0,
+      })
+      return Promise.resolve(null)
+    })
+    render(<SkillDetailPanel skill={skill} onBack={vi.fn()} />)
+    await waitFor(() => expect(screen.getByText('SKILL.md')).toBeInTheDocument())
+    expect(screen.queryByText('Source')).not.toBeInTheDocument()
+  })
+
+  it('prefers frontmatter sourceUrl over the cached install URL', async () => {
+    const skillWithSource = { ...skill, sourceUrl: 'https://example.com/from-frontmatter' }
+    mockInvoke.mockImplementation((cmd: string) => {
+      if (cmd === 'read_skill_dir') return Promise.resolve(fileTree)
+      if (cmd === 'get_skill_cache_status') return Promise.resolve({
+        name: 'impeccable',
+        content: '...',
+        contentHash: 'abc',
+        installMethod: 'url',
+        installSource: 'https://example.com/from-install',
+        cachedAt: 0,
+        updatedAt: 0,
+      })
+      return Promise.resolve(null)
+    })
+    render(<SkillDetailPanel skill={skillWithSource} onBack={vi.fn()} />)
+    await waitFor(() => expect(screen.getByText('https://example.com/from-frontmatter')).toBeInTheDocument())
+    expect(screen.queryByText('https://example.com/from-install')).not.toBeInTheDocument()
+  })
 })
