@@ -6,6 +6,7 @@ import type { Skill, FileEntry, Agent, CachedSkill } from '../types'
 import { capture } from '../analytics'
 import { SkillInstalledOn } from './InstalledOnSection'
 import { agentColor } from '../constants/agentColors'
+import SourceLink from './SourceLink'
 
 interface SkillDetailPanelProps {
   skill: Skill
@@ -356,28 +357,7 @@ export default function SkillDetailPanel({ skill: initialSkill, agentId, onToggl
 
         {/* Path + source link — updates when user selects a provider row above */}
         <div className="px-4 py-3 border-t border-[var(--c-border)] mt-auto space-y-1.5">
-          {displayedSourceUrl && (
-            <div>
-              <p className="text-[10px] font-semibold text-[var(--c-text-3)] uppercase tracking-wider mb-0.5">
-                Source
-              </p>
-              <button
-                onClick={async () => {
-                  try { await invoke('open_url', { url: displayedSourceUrl }) } catch {}
-                }}
-                className="flex items-center gap-1.5 text-[12px] text-indigo-400 hover:text-indigo-300 transition-colors"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
-                  stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
-                  className="w-3 h-3 flex-shrink-0">
-                  <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
-                  <polyline points="15 3 21 3 21 9"/>
-                  <line x1="10" y1="14" x2="21" y2="3"/>
-                </svg>
-                <span className="truncate">{displayedSourceUrl}</span>
-              </button>
-            </div>
-          )}
+          {displayedSourceUrl && <SourceLink url={displayedSourceUrl} accent="indigo" />}
           <p className="text-[12px] text-[var(--c-text-3)] font-mono break-all leading-relaxed">
             {displayedPath}
           </p>

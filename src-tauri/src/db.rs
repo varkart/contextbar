@@ -561,7 +561,13 @@ pub fn cache_skill(state: &DbState, name: &str, content: &str, method: &str, sou
          ON CONFLICT(name) DO UPDATE SET
            content        = excluded.content,
            content_hash   = excluded.content_hash,
-           install_method = excluded.install_method,
+           -- method and source are kept as a pair: a call with no source
+           -- (e.g. create_skill's template flow) must not overwrite an
+           -- existing url/local method+source with a mismatched method
+           -- while COALESCE preserves the old source underneath it.
+           install_method = CASE WHEN excluded.install_source IS NOT NULL
+                                  THEN excluded.install_method
+                                  ELSE skill_cache.install_method END,
            install_source = COALESCE(excluded.install_source, skill_cache.install_source),
            updated_at     = excluded.updated_at",
         rusqlite::params![name, content, hash, method, source, now],
@@ -1128,6 +1134,61 @@ mod tests {
         assert!(search_transcripts(&db, "\"unbalanced", 10).is_empty());
         assert!(search_transcripts(&db, "col:value", 10).is_empty());
         assert!(search_transcripts(&db, "   ", 10).is_empty());
+    }
+
+    // ── skill_cache ───────────────────────────────────────────────────────────
+
+    #[test]
+    fn cache_skill_upserts_method_and_source_together() {
+        let db = test_db();
+        cache_skill(
+            &db,
+            "foo",
+            "content v1",
+            "url",
+            Some("https://example.com/foo"),
+        );
+        let cached = get_cached_skill(&db, "foo").unwrap();
+        assert_eq!(cached.install_method, "url");
+        assert_eq!(
+            cached.install_source.as_deref(),
+            Some("https://example.com/foo")
+        );
+
+        // A later call with no source (e.g. create_skill's template flow
+        // reusing the same slug) must not detach method from source — the
+        // url method+source pair should survive intact, not end up as
+        // method="template" with the old url still attached underneath.
+        cache_skill(&db, "foo", "content v2", "template", None);
+        let cached = get_cached_skill(&db, "foo").unwrap();
+        assert_eq!(cached.content, "content v2", "content always updates");
+        assert_eq!(
+            cached.install_method, "url",
+            "method stays paired with its source"
+        );
+        assert_eq!(
+            cached.install_source.as_deref(),
+            Some("https://example.com/foo")
+        );
+    }
+
+    #[test]
+    fn cache_skill_reinstall_via_url_replaces_method_and_source_together() {
+        let db = test_db();
+        cache_skill(&db, "foo", "content v1", "local", Some("/Users/me/foo"));
+        cache_skill(
+            &db,
+            "foo",
+            "content v2",
+            "url",
+            Some("https://example.com/foo"),
+        );
+        let cached = get_cached_skill(&db, "foo").unwrap();
+        assert_eq!(cached.install_method, "url");
+        assert_eq!(
+            cached.install_source.as_deref(),
+            Some("https://example.com/foo")
+        );
     }
 
     // ── schema ────────────────────────────────────────────────────────────────
