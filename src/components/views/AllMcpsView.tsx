@@ -6,7 +6,9 @@ import AgentToggleChips from '../AgentToggleChips'
 import AgentActivePill from '../AgentActivePill'
 import BulkToggleBar, { type BulkDescribe, type BulkMode } from '../BulkToggleBar'
 import SearchInput from '../SearchInput'
+import SortToggleButton from '../SortToggleButton'
 import { useAgentFilter } from '../../hooks/useAgentFilter'
+import { useEnabledSort } from '../../hooks/useEnabledSort'
 import { capture, captureException } from '../../analytics'
 
 interface Props {
@@ -65,20 +67,8 @@ function computeBulkChanges(groups: McpGroup[], mode: BulkMode) {
   return { changed, changedAgentIds, untouchedAgentIds }
 }
 
-type SortMode = 'name' | 'enabled'
-
-/** Fully-enabled groups first, partially-enabled next, fully-disabled last;
- *  alphabetical within each tier. */
-function enabledRank(g: McpGroup): number {
-  const activeCount = g.variants.filter(v => v.active).length
-  if (activeCount === 0) return 2
-  if (activeCount === g.variants.length) return 0
-  return 1
-}
-
 export default function AllMcpsView({ agents, onSelectMcp, onAddMcp, onInstalled, compact }: Props) {
   const [query, setQuery] = useState('')
-  const [sortMode, setSortMode] = useState<SortMode>('name')
   const [togglingKey, setTogglingKey] = useState<{ name: string; toolId: string } | null>(null)
   const { installedAgents, selectedTools, toggleTool, allSelected } = useAgentFilter(agents)
   const groups = useMemo(() => buildMcpGroups(agents), [agents])
@@ -140,10 +130,7 @@ export default function AllMcpsView({ agents, onSelectMcp, onAddMcp, onInstalled
     return result
   }, [groups, query, selectedTools, allSelected])
 
-  const sorted = useMemo(() => {
-    if (sortMode === 'name') return filtered
-    return [...filtered].sort((a, b) => enabledRank(a) - enabledRank(b) || a.name.localeCompare(b.name))
-  }, [filtered, sortMode])
+  const { sortMode, setSortMode, sorted } = useEnabledSort(filtered)
 
   const totalMcps = groups.length
   const installedAgentCount = installedAgents.length
@@ -178,18 +165,11 @@ export default function AllMcpsView({ agents, onSelectMcp, onAddMcp, onInstalled
       <BulkToggleBar noun="MCP" agentName={agentName} describeBulk={describeBulk} applyBulk={applyBulk} />
 
       <div className="flex items-center px-4 py-1.5 border-b border-[var(--c-border-sub)] flex-shrink-0">
-        <button
-          onClick={() => setSortMode(m => m === 'name' ? 'enabled' : 'name')}
-          title={sortMode === 'name' ? 'Sorted by name — click to sort by enabled status' : 'Sorted by enabled status — click to sort by name'}
-          className={`flex-1 flex items-center gap-1 font-semibold uppercase tracking-wider text-[var(--c-text-3)] hover:text-[var(--c-text-2)] transition-colors ${compact ? 'text-[9.5px]' : 'text-[11px]'}`}
-        >
-          {sortMode === 'name' ? 'Name' : 'Enabled first'}
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
-            stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
-            className="w-2.5 h-2.5 flex-shrink-0">
-            <polyline points="8 9 12 5 16 9"/><polyline points="16 15 12 19 8 15"/>
-          </svg>
-        </button>
+        <SortToggleButton
+          sortMode={sortMode}
+          onToggle={() => setSortMode(m => m === 'name' ? 'enabled' : 'name')}
+          compact={compact}
+        />
         <span className={`font-semibold uppercase tracking-wider text-[var(--c-text-3)] ${compact ? 'text-[9.5px]' : 'text-[11px]'}`}>Agents</span>
         <span className="w-[18px]" />
       </div>
