@@ -106,6 +106,27 @@ describe('AllMcpsView — provider chips', () => {
   })
 })
 
+describe('AllMcpsView — sorting', () => {
+  const mixedTool = makeTool('claude', 'Claude Code', [
+    makeMcp({ name: 'alpha-disabled', active: false }),
+    makeMcp({ name: 'zeta-enabled', active: true }),
+  ])
+
+  it('defaults to alphabetical order', () => {
+    const { container } = render(<AllMcpsView agents={[mixedTool]} onBack={vi.fn()} onSelectMcp={vi.fn()} />)
+    const text = container.textContent ?? ''
+    expect(text.indexOf('alpha-disabled')).toBeLessThan(text.indexOf('zeta-enabled'))
+  })
+
+  it('clicking the sort control switches to enabled-first order', () => {
+    const { container } = render(<AllMcpsView agents={[mixedTool]} onBack={vi.fn()} onSelectMcp={vi.fn()} />)
+    fireEvent.click(screen.getByTitle(/click to sort by enabled status/i))
+    expect(screen.getByText('Enabled first')).toBeInTheDocument()
+    const text = container.textContent ?? ''
+    expect(text.indexOf('zeta-enabled')).toBeLessThan(text.indexOf('alpha-disabled'))
+  })
+})
+
 describe('AllMcpsView — interaction', () => {
   it('clicking an MCP calls onSelectMcp with the primary MCP', () => {
     const onSelectMcp = vi.fn()
