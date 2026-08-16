@@ -116,6 +116,35 @@ describe('AllSkillsView — provider chips', () => {
   })
 })
 
+describe('AllSkillsView — sorting', () => {
+  const mixedTool = makeTool('claude', 'Claude Code', [
+    makeSkill({ name: 'alpha-disabled', active: false }),
+    makeSkill({ name: 'zeta-enabled', active: true }),
+  ])
+
+  it('defaults to alphabetical order', () => {
+    const { container } = render(<AllSkillsView agents={[mixedTool]} onBack={vi.fn()} onSelectSkill={vi.fn()} />)
+    const text = container.textContent ?? ''
+    expect(text.indexOf('alpha-disabled')).toBeLessThan(text.indexOf('zeta-enabled'))
+  })
+
+  it('clicking the sort control switches to enabled-first order', () => {
+    const { container } = render(<AllSkillsView agents={[mixedTool]} onBack={vi.fn()} onSelectSkill={vi.fn()} />)
+    fireEvent.click(screen.getByTitle(/click to sort by enabled status/i))
+    expect(screen.getByText('Enabled first')).toBeInTheDocument()
+    const text = container.textContent ?? ''
+    expect(text.indexOf('zeta-enabled')).toBeLessThan(text.indexOf('alpha-disabled'))
+  })
+
+  it('clicking the sort control twice returns to alphabetical order', () => {
+    render(<AllSkillsView agents={[mixedTool]} onBack={vi.fn()} onSelectSkill={vi.fn()} />)
+    const toggle = () => fireEvent.click(screen.getByText(/name|enabled first/i))
+    toggle()
+    toggle()
+    expect(screen.getByText('Name')).toBeInTheDocument()
+  })
+})
+
 describe('AllSkillsView — interaction', () => {
   it('clicking a skill calls onSelectSkill with the primary skill', () => {
     const onSelectSkill = vi.fn()

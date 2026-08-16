@@ -6,7 +6,9 @@ import AgentToggleChips from '../AgentToggleChips'
 import AgentActivePill from '../AgentActivePill'
 import BulkToggleBar, { type BulkDescribe, type BulkMode } from '../BulkToggleBar'
 import SearchInput from '../SearchInput'
+import SortToggleButton from '../SortToggleButton'
 import { useAgentFilter } from '../../hooks/useAgentFilter'
+import { useEnabledSort } from '../../hooks/useEnabledSort'
 import { capture, captureException } from '../../analytics'
 
 interface Props {
@@ -128,6 +130,8 @@ export default function AllMcpsView({ agents, onSelectMcp, onAddMcp, onInstalled
     return result
   }, [groups, query, selectedTools, allSelected])
 
+  const { sortMode, setSortMode, sorted } = useEnabledSort(filtered)
+
   const totalMcps = groups.length
   const installedAgentCount = installedAgents.length
   const isFiltered = filtered.length !== totalMcps
@@ -161,7 +165,11 @@ export default function AllMcpsView({ agents, onSelectMcp, onAddMcp, onInstalled
       <BulkToggleBar noun="MCP" agentName={agentName} describeBulk={describeBulk} applyBulk={applyBulk} />
 
       <div className="flex items-center px-4 py-1.5 border-b border-[var(--c-border-sub)] flex-shrink-0">
-        <span className={`flex-1 font-semibold uppercase tracking-wider text-[var(--c-text-3)] ${compact ? 'text-[9.5px]' : 'text-[11px]'}`}>Name</span>
+        <SortToggleButton
+          sortMode={sortMode}
+          onToggle={() => setSortMode(m => m === 'name' ? 'enabled' : 'name')}
+          compact={compact}
+        />
         <span className={`font-semibold uppercase tracking-wider text-[var(--c-text-3)] ${compact ? 'text-[9.5px]' : 'text-[11px]'}`}>Agents</span>
         <span className="w-[18px]" />
       </div>
@@ -172,7 +180,7 @@ export default function AllMcpsView({ agents, onSelectMcp, onAddMcp, onInstalled
             {query ? 'No MCPs match' : 'No MCPs found'}
           </p>
         )}
-        {filtered.map(group => {
+        {sorted.map(group => {
           const activeCount = group.variants.filter(v => v.active).length
           const allOff = activeCount === 0
           const hasSecrets = group.variants.some(v => v.hasSecrets)
