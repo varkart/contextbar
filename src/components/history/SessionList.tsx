@@ -181,7 +181,7 @@ function SessionRow({ session, onSelect, snippet, pinned, tags, customName, sele
           <div className="flex items-center gap-2 mt-1">
             <AgentBadge agent={session.agent} />
             <span
-              className="text-[11px] text-[var(--c-text-3)] truncate max-w-[170px]"
+              className="text-[11px] font-medium text-[var(--c-text-2)] truncate max-w-[170px]"
               title={session.project}
             >
               {session.projectName}
