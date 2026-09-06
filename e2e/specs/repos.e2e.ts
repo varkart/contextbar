@@ -13,15 +13,26 @@ test.beforeEach(async ({ page }) => {
 
 test('repo cards start collapsed', async ({ page }) => {
   await expect(page.getByText('3 worktrees · 2 branches · base main')).toBeVisible()
-  await expect(page.getByText('feature/done')).not.toBeVisible()
+  await expect(page.getByText('alpha-wt-merged', { exact: true })).not.toBeVisible()
 })
 
 test('expanding a repo reveals worktrees and chips', async ({ page }) => {
   await page.getByRole('button', { name: /alpha/ }).first().click()
-  await expect(page.getByText('feature/done')).toBeVisible()
-  await expect(page.getByText('feature/wip')).toBeVisible()
+  // Worktree cards show the worktree (directory) name; the branch itself
+  // only appears once a card is expanded — see 'expanding a worktree card
+  // reveals its branch' below.
+  await expect(page.getByText('alpha-wt-merged', { exact: true })).toBeVisible()
+  await expect(page.getByText('alpha-wt-dirty', { exact: true })).toBeVisible()
   await expect(page.getByText('CLAUDE.md')).toBeVisible()
   await expect(page.getByText('1 skill')).toBeVisible()
+})
+
+test('expanding a worktree card reveals its branch', async ({ page }) => {
+  await page.getByRole('button', { name: /alpha/ }).first().click()
+  const doneCard = page.getByTestId('wt-card-/Users/test/proj/alpha-wt-merged')
+  await expect(doneCard.getByText('feature/done')).not.toBeVisible()
+  await doneCard.click()
+  await expect(doneCard.getByText('feature/done')).toBeVisible()
 })
 
 test('insight tiles show status counts', async ({ page }) => {
@@ -46,21 +57,21 @@ test('needs attention tile shows a breakdown on hover', async ({ page }) => {
 
 test('filter pill auto-expands and narrows to safe worktrees', async ({ page }) => {
   await page.getByRole('button', { name: 'Safe to delete' }).click()
-  await expect(page.getByText('feature/done')).toBeVisible()
-  await expect(page.getByText('feature/wip')).not.toBeVisible()
+  await expect(page.getByText('alpha-wt-merged', { exact: true })).toBeVisible()
+  await expect(page.getByText('alpha-wt-dirty', { exact: true })).not.toBeVisible()
 })
 
 test('safe-to-delete count includes merged bare branches, not just worktrees', async ({ page }) => {
-  // Fixture has 1 safe worktree (feature/done) + 1 safe bare branch
-  // (feature/old-experiment) — the tile/banner must count both, matching
-  // what the "safe" filter itself reveals.
+  // Fixture has 1 safe worktree (feature/done, dir alpha-wt-merged) + 1 safe
+  // bare branch (feature/old-experiment) — the tile/banner must count both,
+  // matching what the "safe" filter itself reveals.
   await expect(page.getByRole('button', { name: /Safe to delete: 2\./ })).toBeVisible()
   await expect(page.getByText(/2 branches are merged and clean/)).toBeVisible()
   // The "safe" filter auto-expands matching repos — no extra click needed.
   await page.getByRole('button', { name: 'Safe to delete' }).click()
-  await expect(page.getByText('feature/done')).toBeVisible()
+  await expect(page.getByText('alpha-wt-merged', { exact: true })).toBeVisible()
   await expect(page.getByText('feature/old-experiment')).toBeVisible()
-  await expect(page.getByText('feature/wip')).not.toBeVisible()
+  await expect(page.getByText('alpha-wt-dirty', { exact: true })).not.toBeVisible()
   await expect(page.getByText('feature/queued')).not.toBeVisible()
 })
 
@@ -163,23 +174,23 @@ test('clearing the repo scope chip shows all sessions again', async ({ page }) =
 
 test('Agent settings expands a collapsed repo card and shows Agent permissions', async ({ page }) => {
   // Repo card starts collapsed — clicking Agent settings must still work.
-  await expect(page.getByText('feature/done')).not.toBeVisible()
+  await expect(page.getByText('alpha-wt-merged', { exact: true })).not.toBeVisible()
   await page.getByRole('button', { name: 'Agent settings' }).click()
   await expect(page.getByText('Agent permissions')).toBeVisible()
 })
 
 test('Agent settings swaps out branches/worktrees for Agent permissions', async ({ page }) => {
   await page.getByRole('button', { name: /alpha/ }).first().click()
-  await expect(page.getByText('feature/done')).toBeVisible()
+  await expect(page.getByText('alpha-wt-merged', { exact: true })).toBeVisible()
   await expect(page.getByText('Agent permissions')).not.toBeVisible()
 
   await page.getByRole('button', { name: 'Agent settings' }).click()
   await expect(page.getByText('Agent permissions')).toBeVisible()
-  await expect(page.getByText('feature/done')).not.toBeVisible()
-  await expect(page.getByText('feature/wip')).not.toBeVisible()
+  await expect(page.getByText('alpha-wt-merged', { exact: true })).not.toBeVisible()
+  await expect(page.getByText('alpha-wt-dirty', { exact: true })).not.toBeVisible()
 
   await page.getByRole('button', { name: 'Agent settings' }).click()
-  await expect(page.getByText('feature/done')).toBeVisible()
+  await expect(page.getByText('alpha-wt-merged', { exact: true })).toBeVisible()
   await expect(page.getByText('Agent permissions')).not.toBeVisible()
 })
 
