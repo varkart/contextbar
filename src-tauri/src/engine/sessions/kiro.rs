@@ -18,9 +18,11 @@
 //!   mechanical results and keep just the call).
 //! - `{id}.lock` — exists only while the session is actively open, so its
 //!   presence is a more accurate "live" signal than the mtime heuristic
-//!   other sources fall back to.
+//!   other sources fall back to. It isn't rewritten per turn though, so a
+//!   crashed/killed CLI can leave one behind; `lock_is_live` treats a lock
+//!   older than the max plausible session span as stale rather than live.
 
-use super::{rfc3339_to_ms, SessionSource};
+use super::{file_mtime_ms, rfc3339_to_ms, SessionSource, MAX_SESSION_SPAN_MIN};
 use crate::engine::history::types::{ContentBlock, Message, SessionDetail, SessionEntry};
 use std::path::PathBuf;
 
@@ -71,6 +73,17 @@ fn read_meta(path: &std::path::Path) -> Option<SessionMeta> {
     serde_json::from_str(&content).ok()
 }
 
+/// Lock exists and isn't older than the longest plausible single sitting —
+/// guards against a stale lock left by a crashed/force-quit CLI reading as
+/// permanently "live".
+fn lock_is_live(path: &std::path::Path) -> bool {
+    path.metadata()
+        .and_then(|m| m.modified())
+        .ok()
+        .and_then(|m| std::time::SystemTime::now().duration_since(m).ok())
+        .is_some_and(|age| age.as_secs() < MAX_SESSION_SPAN_MIN * 60)
+}
+
 fn list_from_root(root: &std::path::Path, limit: usize) -> Vec<SessionEntry> {
     let Ok(entries) = std::fs::read_dir(root) else {
         return vec![];
@@ -86,8 +99,15 @@ fn list_from_root(root: &std::path::Path, limit: usize) -> Vec<SessionEntry> {
             let session_id = path.file_stem()?.to_str()?.to_string();
             let meta = read_meta(&path)?;
 
-            let ts = rfc3339_to_ms(&meta.updated_at)
-                .or_else(|| rfc3339_to_ms(&meta.created_at))
+            // `updated_at` is only as fresh as Kiro's last metadata write; the
+            // jsonl transcript is appended on every turn, so its mtime is the
+            // more reliable "last activity" signal when it's newer.
+            let jsonl_path = root.join(format!("{session_id}.jsonl"));
+            let ts = file_mtime_ms(&jsonl_path)
+                .into_iter()
+                .chain(rfc3339_to_ms(&meta.updated_at))
+                .chain(rfc3339_to_ms(&meta.created_at))
+                .max()
                 .unwrap_or(0);
             let duration_minutes = rfc3339_to_ms(&meta.created_at)
                 .and_then(|created| super::session_duration_minutes(created, ts));
@@ -97,7 +117,7 @@ fn list_from_root(root: &std::path::Path, limit: usize) -> Vec<SessionEntry> {
                 .and_then(|s| s.conversation_metadata.as_ref())
                 .map(|c| c.user_turn_metadatas.len())
                 .unwrap_or(0) as u32;
-            let is_live = root.join(format!("{session_id}.lock")).exists();
+            let is_live = lock_is_live(&root.join(format!("{session_id}.lock")));
 
             Some(SessionEntry {
                 agent: "kiro".to_string(),
@@ -233,7 +253,13 @@ fn get_from_root(root: &std::path::Path, session_id: &str) -> Option<SessionDeta
 
     let created_ms = rfc3339_to_ms(&meta.created_at);
     let updated_ms = rfc3339_to_ms(&meta.updated_at);
-    let timestamp = updated_ms.or(created_ms).unwrap_or(0);
+    let jsonl_ms = file_mtime_ms(&root.join(format!("{session_id}.jsonl")));
+    let timestamp = jsonl_ms
+        .into_iter()
+        .chain(updated_ms)
+        .chain(created_ms)
+        .max()
+        .unwrap_or(0);
 
     Some(SessionDetail {
         agent: "kiro".to_string(),
