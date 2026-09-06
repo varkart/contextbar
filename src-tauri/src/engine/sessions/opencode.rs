@@ -706,9 +706,8 @@ mod tests {
     #[test]
     fn parses_v2_user_message_from_parts() {
         let meta = serde_json::json!({ "role": "user" }).to_string();
-        let parts = vec![
-            serde_json::json!({ "type": "text", "text": "fix the login bug" }).to_string(),
-        ];
+        let parts =
+            vec![serde_json::json!({ "type": "text", "text": "fix the login bug" }).to_string()];
         let msg = message_from_v2_row(&meta, &parts).unwrap();
         assert_eq!(msg.role, "user");
         assert_eq!(msg.content[0].text.as_deref(), Some("fix the login bug"));
