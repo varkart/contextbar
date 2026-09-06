@@ -530,7 +530,7 @@ dependencies = [
 
 [[package]]
 name = "contextbar"
-version = "0.8.20"
+version = "0.8.21"
 dependencies = [
  "dirs 6.0.0",
  "notify",
