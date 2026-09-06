@@ -257,6 +257,42 @@ fn tool_input_preview(state: &Option<Value>) -> Option<String> {
     }
 }
 
+// Shared between the legacy (session_message) and current (message/part)
+// content-block/usage shapes below — the surrounding parse differs per
+// schema, but a text block, a tool_use block, and a token tally mean the
+// same thing in both.
+
+fn text_content_block(text: String) -> ContentBlock {
+    ContentBlock {
+        block_type: "text".to_string(),
+        text: Some(text),
+        tool_name: None,
+        tool_input: None,
+        tool_result: None,
+        is_error: false,
+    }
+}
+
+fn tool_use_content_block(tool_name: Option<String>, state: &Option<Value>) -> ContentBlock {
+    ContentBlock {
+        block_type: "tool_use".to_string(),
+        text: None,
+        tool_name: tool_name.or_else(|| Some("tool".to_string())),
+        tool_input: tool_input_preview(state),
+        tool_result: None,
+        is_error: false,
+    }
+}
+
+fn token_usage_from(t: TokensData) -> TokenUsage {
+    TokenUsage {
+        input_tokens: t.input.unwrap_or(0.0).max(0.0) as u64,
+        output_tokens: t.output.unwrap_or(0.0).max(0.0) as u64,
+        cache_read_tokens: t.cache.read.unwrap_or(0.0).max(0.0) as u64,
+        cache_creation_tokens: t.cache.write.unwrap_or(0.0).max(0.0) as u64,
+    }
+}
+
 fn message_from_row(msg_type: &str, data: &str) -> Option<Message> {
     match msg_type {
         "user" => {
@@ -266,14 +302,7 @@ fn message_from_row(msg_type: &str, data: &str) -> Option<Message> {
             }
             Some(Message {
                 role: "user".to_string(),
-                content: vec![ContentBlock {
-                    block_type: "text".to_string(),
-                    text: Some(d.text),
-                    tool_name: None,
-                    tool_input: None,
-                    tool_result: None,
-                    is_error: false,
-                }],
+                content: vec![text_content_block(d.text)],
                 timestamp: None,
                 model: None,
                 usage: None,
@@ -286,25 +315,11 @@ fn message_from_row(msg_type: &str, data: &str) -> Option<Message> {
                 match item.kind.as_str() {
                     "text" => {
                         if let Some(text) = item.text.clone().filter(|t| !t.trim().is_empty()) {
-                            content.push(ContentBlock {
-                                block_type: "text".to_string(),
-                                text: Some(text),
-                                tool_name: None,
-                                tool_input: None,
-                                tool_result: None,
-                                is_error: false,
-                            });
+                            content.push(text_content_block(text));
                         }
                     }
                     "tool" => {
-                        content.push(ContentBlock {
-                            block_type: "tool_use".to_string(),
-                            text: None,
-                            tool_name: item.name.clone().or_else(|| Some("tool".to_string())),
-                            tool_input: tool_input_preview(&item.state),
-                            tool_result: None,
-                            is_error: false,
-                        });
+                        content.push(tool_use_content_block(item.name.clone(), &item.state));
                     }
                     _ => {} // reasoning and unknown future kinds: internal, skip
                 }
@@ -312,12 +327,7 @@ fn message_from_row(msg_type: &str, data: &str) -> Option<Message> {
             if content.is_empty() {
                 return None;
             }
-            let usage = d.tokens.map(|t| TokenUsage {
-                input_tokens: t.input.unwrap_or(0.0).max(0.0) as u64,
-                output_tokens: t.output.unwrap_or(0.0).max(0.0) as u64,
-                cache_read_tokens: t.cache.read.unwrap_or(0.0).max(0.0) as u64,
-                cache_creation_tokens: t.cache.write.unwrap_or(0.0).max(0.0) as u64,
-            });
+            let usage = d.tokens.map(token_usage_from);
             Some(Message {
                 role: "assistant".to_string(),
                 content,
@@ -374,14 +384,7 @@ fn message_from_v2_row(data: &str, parts: &[String]) -> Option<Message> {
             }
             Some(Message {
                 role: "user".to_string(),
-                content: vec![ContentBlock {
-                    block_type: "text".to_string(),
-                    text: Some(text),
-                    tool_name: None,
-                    tool_input: None,
-                    tool_result: None,
-                    is_error: false,
-                }],
+                content: vec![text_content_block(text)],
                 timestamp: None,
                 model: None,
                 usage: None,
@@ -393,25 +396,11 @@ fn message_from_v2_row(data: &str, parts: &[String]) -> Option<Message> {
                 match part.kind.as_str() {
                     "text" => {
                         if let Some(text) = part.text.filter(|t| !t.trim().is_empty()) {
-                            content.push(ContentBlock {
-                                block_type: "text".to_string(),
-                                text: Some(text),
-                                tool_name: None,
-                                tool_input: None,
-                                tool_result: None,
-                                is_error: false,
-                            });
+                            content.push(text_content_block(text));
                         }
                     }
                     "tool" => {
-                        content.push(ContentBlock {
-                            block_type: "tool_use".to_string(),
-                            text: None,
-                            tool_name: part.tool.or_else(|| Some("tool".to_string())),
-                            tool_input: tool_input_preview(&part.state),
-                            tool_result: None,
-                            is_error: false,
-                        });
+                        content.push(tool_use_content_block(part.tool, &part.state));
                     }
                     _ => {} // reasoning/step-start/snapshot/patch/unknown future kinds: skip
                 }
@@ -419,12 +408,7 @@ fn message_from_v2_row(data: &str, parts: &[String]) -> Option<Message> {
             if content.is_empty() {
                 return None;
             }
-            let usage = meta.tokens.map(|t| TokenUsage {
-                input_tokens: t.input.unwrap_or(0.0).max(0.0) as u64,
-                output_tokens: t.output.unwrap_or(0.0).max(0.0) as u64,
-                cache_read_tokens: t.cache.read.unwrap_or(0.0).max(0.0) as u64,
-                cache_creation_tokens: t.cache.write.unwrap_or(0.0).max(0.0) as u64,
-            });
+            let usage = meta.tokens.map(token_usage_from);
             Some(Message {
                 role: "assistant".to_string(),
                 content,

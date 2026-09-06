@@ -18,9 +18,13 @@
 //!   mechanical results and keep just the call).
 //! - `{id}.lock` — exists only while the session is actively open, so its
 //!   presence is a more accurate "live" signal than the mtime heuristic
-//!   other sources fall back to. It isn't rewritten per turn though, so a
-//!   crashed/killed CLI can leave one behind; `lock_is_live` treats a lock
-//!   older than the max plausible session span as stale rather than live.
+//!   other sources fall back to. It's created once and never rewritten per
+//!   turn though, so its own mtime is useless for staleness (a session open
+//!   for a long continuous sitting would look stale by lock-age alone, and
+//!   a crashed/killed CLI can leave the file behind indefinitely). Instead
+//!   `lock_is_live` checks the lock's presence against how recent the
+//!   session's last known activity (jsonl mtime, same signal `timestamp`
+//!   uses) is.
 
 use super::{file_mtime_ms, rfc3339_to_ms, SessionSource, MAX_SESSION_SPAN_MIN};
 use crate::engine::history::types::{ContentBlock, Message, SessionDetail, SessionEntry};
@@ -73,15 +77,21 @@ fn read_meta(path: &std::path::Path) -> Option<SessionMeta> {
     serde_json::from_str(&content).ok()
 }
 
-/// Lock exists and isn't older than the longest plausible single sitting —
-/// guards against a stale lock left by a crashed/force-quit CLI reading as
-/// permanently "live".
-fn lock_is_live(path: &std::path::Path) -> bool {
-    path.metadata()
-        .and_then(|m| m.modified())
-        .ok()
-        .and_then(|m| std::time::SystemTime::now().duration_since(m).ok())
-        .is_some_and(|age| age.as_secs() < MAX_SESSION_SPAN_MIN * 60)
+fn now_ms() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0)
+}
+
+/// Lock exists and the session's last known activity isn't older than the
+/// longest plausible single sitting. Checked against `last_activity_ms`
+/// (not the lock file's own mtime — see the module doc) so a long-running
+/// continuous session doesn't flip to "not live" mid-conversation, while a
+/// lock abandoned by a crashed/force-quit CLI still goes stale once activity
+/// stops.
+fn lock_is_live(path: &std::path::Path, last_activity_ms: u64) -> bool {
+    path.is_file() && now_ms().saturating_sub(last_activity_ms) < MAX_SESSION_SPAN_MIN * 60_000
 }
 
 fn list_from_root(root: &std::path::Path, limit: usize) -> Vec<SessionEntry> {
@@ -117,7 +127,7 @@ fn list_from_root(root: &std::path::Path, limit: usize) -> Vec<SessionEntry> {
                 .and_then(|s| s.conversation_metadata.as_ref())
                 .map(|c| c.user_turn_metadatas.len())
                 .unwrap_or(0) as u32;
-            let is_live = lock_is_live(&root.join(format!("{session_id}.lock")));
+            let is_live = lock_is_live(&root.join(format!("{session_id}.lock")), ts);
 
             Some(SessionEntry {
                 agent: "kiro".to_string(),
@@ -267,10 +277,10 @@ fn get_from_root(root: &std::path::Path, session_id: &str) -> Option<SessionDeta
         messages,
         total_tokens: Default::default(),
         model: None,
-        duration_ms: match (created_ms, updated_ms) {
-            (Some(c), Some(u)) => u.checked_sub(c),
-            _ => None,
-        },
+        // Uses `timestamp` (jsonl-mtime-aware), not raw `updated_ms`, so a
+        // session whose jsonl is fresher than its metadata's `updated_at`
+        // reports the same duration here as `list_from_root` does.
+        duration_ms: created_ms.and_then(|c| timestamp.checked_sub(c)),
         project: meta.cwd.clone(),
         project_name: project_name(&meta.cwd),
         timestamp,
@@ -412,6 +422,32 @@ mod tests {
     }
 
     #[test]
+    fn duration_ms_uses_jsonl_mtime_over_stale_updated_at() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let id = "sess-duration";
+        // `updated_at` claims the session lasted ~24s; the jsonl (freshly
+        // written "now" by this test, long after `created_at`) is the more
+        // reliable signal and should win.
+        std::fs::write(
+            root.join(format!("{id}.json")),
+            serde_json::json!({
+                "cwd": "/Users/test/proj",
+                "created_at": "2026-07-29T18:48:27Z",
+                "updated_at": "2026-07-29T18:48:51Z",
+                "title": "t",
+            })
+            .to_string(),
+        )
+        .unwrap();
+        std::fs::write(root.join(format!("{id}.jsonl")), "").unwrap();
+
+        let detail = get_from_root(root, id).unwrap();
+        let stale_duration_ms = 24_000; // what updated_at - created_at alone would give
+        assert!(detail.duration_ms.unwrap() > stale_duration_ms);
+    }
+
+    #[test]
     fn is_live_reflects_lock_file_presence() {
         let dir = tempfile::tempdir().unwrap();
         let root = dir.path();
@@ -427,10 +463,59 @@ mod tests {
             .to_string(),
         )
         .unwrap();
+        // jsonl mtime (freshly written = "now") is what liveness is checked
+        // against, not the lock file's own mtime or the meta's stale dates.
+        std::fs::write(root.join(format!("{id}.jsonl")), "").unwrap();
         std::fs::write(root.join(format!("{id}.lock")), "").unwrap();
 
         let entries = list_from_root(root, 10);
         assert!(entries[0].is_live);
+    }
+
+    #[test]
+    fn is_live_false_when_lock_missing() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let id = "sess-no-lock";
+        std::fs::write(
+            root.join(format!("{id}.json")),
+            serde_json::json!({
+                "cwd": "/Users/test/proj",
+                "created_at": "2026-07-29T18:48:27Z",
+                "updated_at": "2026-07-29T18:48:27Z",
+                "title": "t",
+            })
+            .to_string(),
+        )
+        .unwrap();
+        std::fs::write(root.join(format!("{id}.jsonl")), "").unwrap();
+
+        let entries = list_from_root(root, 10);
+        assert!(!entries[0].is_live); // fresh activity, but no lock file at all
+    }
+
+    #[test]
+    fn is_live_false_when_activity_stale_even_with_lock() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let id = "sess-stale";
+        std::fs::write(
+            root.join(format!("{id}.json")),
+            serde_json::json!({
+                "cwd": "/Users/test/proj",
+                "created_at": "2026-07-29T18:48:27Z",
+                "updated_at": "2026-07-29T18:48:27Z",
+                "title": "t",
+            })
+            .to_string(),
+        )
+        .unwrap();
+        // No jsonl file, so `ts` falls back to the (long-past) meta dates —
+        // a lock left behind by a crashed CLI should read as stale.
+        std::fs::write(root.join(format!("{id}.lock")), "").unwrap();
+
+        let entries = list_from_root(root, 10);
+        assert!(!entries[0].is_live);
     }
 }
 
