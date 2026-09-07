@@ -1,7 +1,18 @@
-import { render, screen, fireEvent, within } from '@testing-library/react'
-import { describe, it, expect, vi } from 'vitest'
+import { render, screen, fireEvent, within, waitFor } from '@testing-library/react'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import AllSkillsView from '../views/AllSkillsView'
 import type { Agent, Skill } from '../../types'
+
+vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn() }))
+vi.mock('../../analytics', () => ({ capture: vi.fn(), captureException: vi.fn() }))
+
+import { invoke } from '@tauri-apps/api/core'
+const mockInvoke = vi.mocked(invoke)
+
+beforeEach(() => {
+  mockInvoke.mockReset()
+  mockInvoke.mockResolvedValue(undefined)
+})
 
 function makeSkill(overrides: Partial<Skill> & Pick<Skill, 'name'>): Skill {
   return {
@@ -168,5 +179,117 @@ describe('AllSkillsView — interaction', () => {
     expect(screen.queryByText('graphify')).not.toBeInTheDocument()
     // Cursor-exclusive skill remains visible
     expect(screen.getByText('cursor-review')).toBeInTheDocument()
+  })
+})
+
+describe('AllSkillsView — agent selector switches to a dropdown at 3+ agents', () => {
+  const geminiTool = makeTool('gemini', 'Gemini', [makeSkill({ name: 'gemini-only' })])
+
+  it('renders chips (not the dropdown) with 2 installed agents', () => {
+    render(<AllSkillsView agents={[claudeTool, cursorTool]} onBack={vi.fn()} onSelectSkill={vi.fn()} />)
+    expect(screen.getByTestId('agent-filter-chips')).toBeInTheDocument()
+    expect(screen.queryByTestId('agent-filter-dropdown')).not.toBeInTheDocument()
+  })
+
+  it('renders the dropdown (not chips) with 3 installed agents', () => {
+    render(<AllSkillsView agents={[claudeTool, cursorTool, geminiTool]} onBack={vi.fn()} onSelectSkill={vi.fn()} />)
+    expect(screen.getByTestId('agent-filter-dropdown')).toBeInTheDocument()
+    expect(screen.queryByTestId('agent-filter-chips')).not.toBeInTheDocument()
+  })
+
+  it('dropdown starts labeled "All agents" and narrows when one is unchecked', () => {
+    render(<AllSkillsView agents={[claudeTool, cursorTool, geminiTool]} onBack={vi.fn()} onSelectSkill={vi.fn()} />)
+    const dropdown = screen.getByTestId('agent-filter-dropdown')
+    expect(within(dropdown).getByText('All agents')).toBeInTheDocument()
+    fireEvent.click(within(dropdown).getByText('All agents'))
+    fireEvent.click(within(dropdown).getByText('Gemini'))
+    // graphify (Claude-only) and cursor-review (Cursor-only) both stay visible —
+    // unchecking Gemini deselects just Gemini, not everyone else (no solo).
+    expect(screen.getByText('graphify')).toBeInTheDocument()
+    expect(screen.getByText('cursor-review')).toBeInTheDocument()
+    expect(screen.queryByText('gemini-only')).not.toBeInTheDocument()
+    expect(within(dropdown).getByText('2 of 3 agents')).toBeInTheDocument()
+  })
+})
+
+describe('AllSkillsView — status filter (All / Active / Inactive)', () => {
+  const mixedStatusTool = makeTool('claude', 'Claude Code', [
+    makeSkill({ name: 'on-skill', active: true }),
+    makeSkill({ name: 'off-skill', active: false }),
+  ])
+
+  it('defaults to showing both active and inactive skills', () => {
+    render(<AllSkillsView agents={[mixedStatusTool]} onBack={vi.fn()} onSelectSkill={vi.fn()} />)
+    expect(screen.getByText('on-skill')).toBeInTheDocument()
+    expect(screen.getByText('off-skill')).toBeInTheDocument()
+  })
+
+  it('"Active" narrows to skills with at least one enabled variant', () => {
+    render(<AllSkillsView agents={[mixedStatusTool]} onBack={vi.fn()} onSelectSkill={vi.fn()} />)
+    fireEvent.click(within(screen.getByTestId('status-filter')).getByText('Active'))
+    expect(screen.getByText('on-skill')).toBeInTheDocument()
+    expect(screen.queryByText('off-skill')).not.toBeInTheDocument()
+  })
+
+  it('"Inactive" narrows to skills with no enabled variant', () => {
+    render(<AllSkillsView agents={[mixedStatusTool]} onBack={vi.fn()} onSelectSkill={vi.fn()} />)
+    fireEvent.click(within(screen.getByTestId('status-filter')).getByText('Inactive'))
+    expect(screen.getByText('off-skill')).toBeInTheDocument()
+    expect(screen.queryByText('on-skill')).not.toBeInTheDocument()
+  })
+
+  it('"All" restores both after narrowing', () => {
+    render(<AllSkillsView agents={[mixedStatusTool]} onBack={vi.fn()} onSelectSkill={vi.fn()} />)
+    const bar = screen.getByTestId('status-filter')
+    fireEvent.click(within(bar).getByText('Active'))
+    fireEvent.click(within(bar).getByText('All'))
+    expect(screen.getByText('on-skill')).toBeInTheDocument()
+    expect(screen.getByText('off-skill')).toBeInTheDocument()
+  })
+})
+
+describe('AllSkillsView — remove everywhere from the list row', () => {
+  it('shows a warning naming every agent the skill is on, before removing anything', () => {
+    render(<AllSkillsView agents={[claudeTool, cursorTool]} onBack={vi.fn()} onSelectSkill={vi.fn()} />)
+    fireEvent.click(screen.getByLabelText('Remove impeccable from all agents'))
+    const banner = screen.getByText(/Remove completely\?/).closest('p')!
+    expect(banner.textContent).toContain('Claude Code')
+    expect(banner.textContent).toContain('Cursor')
+    expect(mockInvoke).not.toHaveBeenCalled()
+  })
+
+  it('cancel dismisses without removing anything', () => {
+    render(<AllSkillsView agents={[claudeTool, cursorTool]} onBack={vi.fn()} onSelectSkill={vi.fn()} />)
+    fireEvent.click(screen.getByLabelText('Remove impeccable from all agents'))
+    fireEvent.click(screen.getByText('Cancel'))
+    expect(screen.queryByText(/Remove completely\?/)).not.toBeInTheDocument()
+    expect(mockInvoke).not.toHaveBeenCalled()
+  })
+
+  it('confirming removes the skill from every agent that has it and refreshes', async () => {
+    const onInstalled = vi.fn().mockResolvedValue(undefined)
+    render(<AllSkillsView agents={[claudeTool, cursorTool]} onBack={vi.fn()} onSelectSkill={vi.fn()} onInstalled={onInstalled} />)
+    // "impeccable" exists on both Claude and Cursor
+    fireEvent.click(screen.getByLabelText('Remove impeccable from all agents'))
+    fireEvent.click(screen.getByText('Remove completely'))
+
+    await waitFor(() => expect(onInstalled).toHaveBeenCalled())
+    const removeCalls = mockInvoke.mock.calls.filter(([cmd]) => cmd === 'remove_skill')
+    expect(removeCalls).toHaveLength(2)
+    expect(removeCalls.map(([, args]) => (args as { agentId: string }).agentId).sort()).toEqual(['claude', 'cursor'])
+    expect(screen.queryByText(/Remove completely\?/)).not.toBeInTheDocument()
+  })
+
+  it('a skill installed on only one agent only removes from that one', async () => {
+    const onInstalled = vi.fn().mockResolvedValue(undefined)
+    render(<AllSkillsView agents={[claudeTool, cursorTool]} onBack={vi.fn()} onSelectSkill={vi.fn()} onInstalled={onInstalled} />)
+    // "graphify" only exists on Claude
+    fireEvent.click(screen.getByLabelText('Remove graphify from all agents'))
+    fireEvent.click(screen.getByText('Remove completely'))
+
+    await waitFor(() => expect(onInstalled).toHaveBeenCalled())
+    const removeCalls = mockInvoke.mock.calls.filter(([cmd]) => cmd === 'remove_skill')
+    expect(removeCalls).toHaveLength(1)
+    expect((removeCalls[0][1] as { agentId: string }).agentId).toBe('claude')
   })
 })

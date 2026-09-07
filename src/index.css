@@ -71,8 +71,8 @@
   --c-border-sub: rgba(39,39,42,0.5);
   --c-text:       #e4e4e7;
   --c-text-1:     #e4e4e7;
-  --c-text-2:     #71717a;
-  --c-text-3:     #52525b;
+  --c-text-2:     #d4d4d8;
+  --c-text-3:     #a1a1aa;
   --c-input:      rgba(39,39,42,0.6);
   --c-track:      #3f3f46;
   --c-skeleton:   #27272a;
@@ -300,4 +300,15 @@ body {
   font-weight: 600;
   color: var(--c-text);
   background: var(--c-surface);
+}
+
+/* ── Find-on-page (FindInPage.tsx) ────────────────────────
+   Styled via the CSS Custom Highlight API rather than <mark> elements so
+   matches can be highlighted without touching React-rendered DOM nodes. */
+::highlight(contextbar-find-match) {
+  background-color: rgba(250, 204, 21, 0.35);
+}
+::highlight(contextbar-find-current) {
+  background-color: rgba(250, 204, 21, 0.85);
+  color: #1a1a1a;
 }

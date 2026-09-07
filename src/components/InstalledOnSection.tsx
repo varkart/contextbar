@@ -4,6 +4,7 @@ import { invoke } from '@tauri-apps/api/core'
 import type { Agent, Skill, McpServer } from '../types'
 import { agentColor } from '../constants/agentColors'
 import { capture, captureException } from '../analytics'
+import RemoveEverywhereBanner from './RemoveEverywhereBanner'
 
 
 const MIN_SPINNER_MS = 1000
@@ -23,6 +24,17 @@ function MiniSpinner() {
     <svg className="w-3 h-3 animate-spin" viewBox="0 0 24 24" fill="none">
       <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2.5" strokeOpacity="0.25"/>
       <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"/>
+    </svg>
+  )
+}
+
+function TrashIcon() {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+      stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+      className="w-3.5 h-3.5">
+      <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/>
+      <path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/>
     </svg>
   )
 }
@@ -53,6 +65,9 @@ export function SkillInstalledOn({ skill, currentAgentId, allAgents, onInstalled
   const [errors, setErrors] = useState<Record<string, string>>({})
   // Pending disable when skill has no cache and this is the last provider
   const [pendingDisable, setPendingDisable] = useState<PendingDisable | null>(null)
+  const [confirmRemoveAll, setConfirmRemoveAll] = useState(false)
+  const [removingAll, setRemovingAll] = useState(false)
+  const [removeAllError, setRemoveAllError] = useState<string | null>(null)
 
   const installedAgents = allAgents.filter(t => t.installed)
 
@@ -138,24 +153,74 @@ export function SkillInstalledOn({ skill, currentAgentId, allAgents, onInstalled
     }
   }
 
-  const installedCount = installedAgents.filter(t =>
-    t.skills.some(s => s.name.toLowerCase().trim() === skill.name.toLowerCase().trim())
-  ).length
+  const installedVariants = installedAgents
+    .map(tool => ({ tool, match: tool.skills.find(s => s.name.toLowerCase().trim() === skill.name.toLowerCase().trim()) }))
+    .filter((x): x is { tool: Agent; match: Skill } => !!x.match)
+  const installedCount = installedVariants.length
+
+  const handleRemoveEverywhere = async () => {
+    setRemovingAll(true)
+    setRemoveAllError(null)
+    const started = Date.now()
+    try {
+      for (const { tool, match } of installedVariants) {
+        await invoke('remove_skill', { agentId: tool.id, skillName: match.name, skillPath: match.path })
+        capture('skill_deleted', { tool_id: tool.id, skill_name: match.name })
+      }
+      capture('skill_removed_everywhere', { skill_name: skill.name, agent_count: installedVariants.length })
+    } catch (e) {
+      setRemoveAllError(String(e))
+      captureException(e)
+      setRemovingAll(false)
+      return
+    }
+    const elapsed = Date.now() - started
+    if (elapsed < MIN_SPINNER_MS) await sleep(MIN_SPINNER_MS - elapsed)
+    await onInstalled()
+    setRemovingAll(false)
+    setConfirmRemoveAll(false)
+  }
 
   return (
     <div className="px-4 py-3 border-b border-[var(--c-border)]">
-      <button
-        onClick={() => setCollapsed(c => !c)}
-        className="flex items-center gap-1.5 w-full text-left mb-2 group"
-      >
-        <span className="text-[13px] font-semibold text-indigo-500">Installed on</span>
-        <span className="text-[11px] text-[var(--c-text-3)]">({installedCount})</span>
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
-          stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
-          className={`w-3 h-3 text-[var(--c-text-3)] ml-auto transition-transform duration-150 ${collapsed ? '-rotate-90' : ''}`}>
-          <polyline points="6 9 12 15 18 9"/>
-        </svg>
-      </button>
+      <div className="flex items-center gap-1.5 mb-2">
+        <button
+          onClick={() => setCollapsed(c => !c)}
+          className="flex items-center gap-1.5 flex-1 min-w-0 text-left group"
+        >
+          <span className="text-[13px] font-semibold text-indigo-500">Installed on</span>
+          <span className="text-[11px] text-[var(--c-text-3)]">({installedCount})</span>
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+            stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
+            className={`w-3 h-3 text-[var(--c-text-3)] transition-transform duration-150 ${collapsed ? '-rotate-90' : ''}`}>
+            <polyline points="6 9 12 15 18 9"/>
+          </svg>
+        </button>
+        {installedCount > 0 && (
+          <button
+            onClick={() => { setPendingDisable(null); setConfirmRemoveAll(true) }}
+            aria-label="Remove skill from all agents"
+            className="flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded text-[var(--c-text-3)] hover:text-red-400 hover:bg-red-500/5 transition-colors flex-shrink-0"
+          >
+            <TrashIcon />
+            Remove everywhere
+          </button>
+        )}
+      </div>
+
+      {confirmRemoveAll && (
+        <div className="mb-3">
+          <RemoveEverywhereBanner
+            noun="skill"
+            name={skill.name}
+            agentNames={installedVariants.map(v => v.tool.name)}
+            running={removingAll}
+            error={removeAllError}
+            onCancel={() => { setConfirmRemoveAll(false); setRemoveAllError(null) }}
+            onConfirm={handleRemoveEverywhere}
+          />
+        </div>
+      )}
 
       {/* Modal: no-cache last-provider disable warning — rendered outside collapse so it stays visible */}
       {pendingDisable && (
@@ -264,14 +329,7 @@ export function SkillInstalledOn({ skill, currentAgentId, allAgents, onInstalled
                       aria-label="Delete skill"
                       className="p-0.5 text-[var(--c-text-3)] hover:text-red-400 transition-colors disabled:opacity-40"
                     >
-                      {deleting === tool.id ? <MiniSpinner /> : (
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
-                          stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
-                          className="w-3.5 h-3.5">
-                          <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/>
-                          <path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/>
-                        </svg>
-                      )}
+                      {deleting === tool.id ? <MiniSpinner /> : <TrashIcon />}
                     </button>
                   </div>
                 )}
@@ -318,6 +376,9 @@ export function McpInstalledOn({ mcp, currentAgentId, allAgents, onInstalled, on
   const [envValues, setEnvValues] = useState<Record<string, string>>(() =>
     Object.fromEntries((mcp.secretKeyNames ?? []).map(k => [k, '']))
   )
+  const [confirmRemoveAll, setConfirmRemoveAll] = useState(false)
+  const [removingAll, setRemovingAll] = useState(false)
+  const [removeAllError, setRemoveAllError] = useState<string | null>(null)
 
   const installedAgents = allAgents.filter(t => t.installed)
 
@@ -401,24 +462,84 @@ export function McpInstalledOn({ mcp, currentAgentId, allAgents, onInstalled, on
 
   const hasSecrets = mcp.hasSecrets && mcp.secretKeyNames.length > 0
 
-  const installedMcpCount = installedAgents.filter(t =>
-    t.mcps.some(m => m.name.toLowerCase().trim() === mcp.name.toLowerCase().trim())
-  ).length
+  const installedMcpVariants = installedAgents
+    .map(tool => ({ tool, match: tool.mcps.find(m => m.name.toLowerCase().trim() === mcp.name.toLowerCase().trim()) }))
+    .filter((x): x is { tool: Agent; match: McpServer } => !!x.match)
+  const installedMcpCount = installedMcpVariants.length
+
+  const handleRemoveEverywhere = async () => {
+    setRemovingAll(true)
+    setRemoveAllError(null)
+    const started = Date.now()
+    const touchesCurrentAgent = installedMcpVariants.some(v => v.tool.id === currentAgentId)
+    try {
+      for (const { tool, match } of installedMcpVariants) {
+        await invoke('remove_mcp', {
+          agentId: tool.id,
+          mcpName: match.name,
+          sourceId: match.sourceId,
+          command: match.command || null,
+          args: match.args,
+          url: match.url ?? null,
+        })
+        capture('mcp_removed', { tool_id: tool.id, mcp_name: match.name })
+      }
+      capture('mcp_removed_everywhere', { mcp_name: mcp.name, agent_count: installedMcpVariants.length })
+    } catch (e) {
+      setRemoveAllError(String(e))
+      captureException(e)
+      setRemovingAll(false)
+      return
+    }
+    const elapsed = Date.now() - started
+    if (elapsed < MIN_SPINNER_MS) await sleep(MIN_SPINNER_MS - elapsed)
+    await onInstalled()
+    setRemovingAll(false)
+    setConfirmRemoveAll(false)
+    if (touchesCurrentAgent) onBack?.()
+  }
 
   return (
     <div className="px-4 py-3 border-b border-[var(--c-border)]">
-      <button
-        onClick={() => setCollapsed(c => !c)}
-        className="flex items-center gap-1.5 w-full text-left mb-2 group"
-      >
-        <span className="text-[13px] font-semibold text-violet-500">Installed on</span>
-        <span className="text-[11px] text-[var(--c-text-3)]">({installedMcpCount})</span>
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
-          stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
-          className={`w-3 h-3 text-[var(--c-text-3)] ml-auto transition-transform duration-150 ${collapsed ? '-rotate-90' : ''}`}>
-          <polyline points="6 9 12 15 18 9"/>
-        </svg>
-      </button>
+      <div className="flex items-center gap-1.5 mb-2">
+        <button
+          onClick={() => setCollapsed(c => !c)}
+          className="flex items-center gap-1.5 flex-1 min-w-0 text-left group"
+        >
+          <span className="text-[13px] font-semibold text-violet-500">Installed on</span>
+          <span className="text-[11px] text-[var(--c-text-3)]">({installedMcpCount})</span>
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+            stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
+            className={`w-3 h-3 text-[var(--c-text-3)] transition-transform duration-150 ${collapsed ? '-rotate-90' : ''}`}>
+            <polyline points="6 9 12 15 18 9"/>
+          </svg>
+        </button>
+        {installedMcpCount > 0 && (
+          <button
+            onClick={() => setConfirmRemoveAll(true)}
+            aria-label="Remove MCP from all agents"
+            className="flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded text-[var(--c-text-3)] hover:text-red-400 hover:bg-red-500/5 transition-colors flex-shrink-0"
+          >
+            <TrashIcon />
+            Remove everywhere
+          </button>
+        )}
+      </div>
+
+      {confirmRemoveAll && (
+        <div className="mb-2">
+          <RemoveEverywhereBanner
+            noun="MCP"
+            name={mcp.name}
+            agentNames={installedMcpVariants.map(v => v.tool.name)}
+            running={removingAll}
+            error={removeAllError}
+            onCancel={() => { setConfirmRemoveAll(false); setRemoveAllError(null) }}
+            onConfirm={handleRemoveEverywhere}
+          />
+        </div>
+      )}
+
       {hasSecrets && (
         <div className="mt-1 mb-2 px-2.5 py-2.5 rounded-md bg-amber-500/5 border border-amber-500/15 space-y-2">
           <div className="flex items-center gap-1.5">
@@ -503,17 +624,7 @@ export function McpInstalledOn({ mcp, currentAgentId, allAgents, onInstalled, on
                       aria-label="Remove MCP"
                       className="p-0.5 text-[var(--c-text-3)] hover:text-red-400 transition-colors disabled:opacity-40"
                     >
-                      {removing === tool.id ? (
-                        <MiniSpinner />
-                      ) : (
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
-                          stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
-                          className="w-3.5 h-3.5">
-                          <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/>
-                          <path d="M10 11v6"/><path d="M14 11v6"/>
-                          <path d="M9 6V4h6v2"/>
-                        </svg>
-                      )}
+                      {removing === tool.id ? <MiniSpinner /> : <TrashIcon />}
                     </button>
                   </div>
                 )}
