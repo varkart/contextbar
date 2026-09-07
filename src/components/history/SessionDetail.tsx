@@ -1,49 +1,12 @@
-import { useState, useEffect, useRef, useMemo } from 'react'
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { invoke } from '@tauri-apps/api/core'
-import type { SessionEntry, SessionDetail as SessionDetailType, SessionMeta, HistoryMessage, ContentBlock } from '../../types'
+import type { SessionEntry, SessionDetail as SessionDetailType, SessionMeta } from '../../types'
 import SessionStats from './SessionStats'
-import MessageBubble from './MessageBubble'
-import ToolCallGroup from './ToolCallGroup'
 import AgentBadge from './AgentBadge'
 import FindInPage from '../FindInPage'
-
-/** Runs of this many or more sequential tool-only messages collapse into one
- *  group. Codex/agy push one message per tool step (no batching like Claude),
- *  so a session with a long tool-heavy stretch becomes a wall of repeated
- *  avatar rows without this. */
-const COLLAPSE_THRESHOLD = 3
-
-export function isToolOnlyMessage(m: HistoryMessage): boolean {
-  return m.role === 'assistant' && m.content.length > 0 && m.content.every(b => b.blockType === 'tool_use')
-}
-
-type RenderUnit =
-  | { kind: 'message'; message: HistoryMessage; key: number }
-  | { kind: 'toolGroup'; blocks: ContentBlock[]; key: number }
-
-/** Collapse consecutive tool-only messages into one group; everything else
- *  (text turns, user turns, short tool runs) renders as before. */
-export function groupMessages(messages: HistoryMessage[]): RenderUnit[] {
-  const units: RenderUnit[] = []
-  let i = 0
-  while (i < messages.length) {
-    if (isToolOnlyMessage(messages[i])) {
-      let j = i
-      while (j < messages.length && isToolOnlyMessage(messages[j])) j++
-      const run = messages.slice(i, j)
-      if (run.length >= COLLAPSE_THRESHOLD) {
-        units.push({ kind: 'toolGroup', blocks: run.flatMap(m => m.content), key: i })
-      } else {
-        run.forEach((m, k) => units.push({ kind: 'message', message: m, key: i + k }))
-      }
-      i = j
-    } else {
-      units.push({ kind: 'message', message: messages[i], key: i })
-      i++
-    }
-  }
-  return units
-}
+import { buildTurns } from './transcript/model'
+import TurnRow from './transcript/TurnRow'
+import TranscriptToolbar, { type RoleFilter } from './transcript/TranscriptToolbar'
 
 /** Inline tag chips with add/remove, persisted via set_session_tags. */
 function TagEditor({ sessionId }: { sessionId: string }) {
@@ -176,10 +139,22 @@ export default function SessionDetail({ session }: SessionDetailProps) {
   const scrollRef = useRef<HTMLDivElement>(null)
   const [findOpen, setFindOpen] = useState(false)
 
-  // ⌘F opens find-in-page, scoped to this session's transcript only — not
-  // the whole window. Scoped to this component's own lifecycle (mounted
-  // only while a session is open), so no global "which view is active"
-  // bookkeeping is needed.
+  // Transcript toolbar state
+  const [q, setQ] = useState('')
+  const [role, setRole] = useState<RoleFilter>('all')
+  const [errorsOnly, setErrorsOnly] = useState(false)
+  const [eventsOnly, setEventsOnly] = useState(false)
+  const [stepsExpanded, setStepsExpanded] = useState(false)
+
+  const turnRefs = useRef<(HTMLDivElement | null)[]>([])
+  const [promptPos, setPromptPos] = useState(0)
+  const promptPosRef = useRef(0)
+  // While a programmatic jump's smooth-scroll is animating, the scroll
+  // handler must not recompute the indicator from the moving scrollTop —
+  // that's what made "2 / 44" snap back to "1 / 44".
+  const suppressSyncUntil = useRef(0)
+
+  // ⌘F opens find-in-page, scoped to this session's transcript only.
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (!e.metaKey || e.shiftKey || e.altKey || e.ctrlKey) return
@@ -191,14 +166,18 @@ export default function SessionDetail({ session }: SessionDetailProps) {
     return () => window.removeEventListener('keydown', handler)
   }, [])
 
-  // A stale query/highlight shouldn't carry over onto a different session.
-  useEffect(() => {
-    setFindOpen(false)
-  }, [session.sessionId])
+  useEffect(() => { setFindOpen(false) }, [session.sessionId])
 
   useEffect(() => {
     setLoading(true)
     setError(null)
+    setQ('')
+    setRole('all')
+    setErrorsOnly(false)
+    setEventsOnly(false)
+    setStepsExpanded(false)
+    setPromptPos(0)
+    promptPosRef.current = 0
     invoke<SessionDetailType>('get_session', { sessionId: session.sessionId, agent: session.agent })
       .then(d => {
         setDetail(d)
@@ -218,7 +197,6 @@ export default function SessionDetail({ session }: SessionDetailProps) {
       setOpened(true)
       setTimeout(() => setOpened(false), 1500)
     } catch {
-      // Terminal launch failed — fall back to copying the command
       handleCopy()
     }
   }
@@ -239,11 +217,99 @@ export default function SessionDetail({ session }: SessionDetailProps) {
     0
   ) ?? 0
 
-  const renderUnits = useMemo(() => groupMessages(detail?.messages ?? []), [detail])
+  const turns = useMemo(() => buildTurns(detail?.messages ?? []), [detail])
+
+  const visible = useMemo(() => {
+    const term = q.trim().toLowerCase()
+    return turns.map(t =>
+      (role === 'all' || t.role === role)
+      && (!errorsOnly || t.hasError)
+      && (!eventsOnly || t.hasEvent)
+      && (!term || t.haystack.includes(term)),
+    )
+  }, [turns, q, role, errorsOnly, eventsOnly])
+
+  const visibleUserIdx = useMemo(
+    () => turns.map((t, i) => (t.role === 'user' && visible[i] ? i : -1)).filter(i => i >= 0),
+    [turns, visible],
+  )
+
+  const scrollToTurn = useCallback((i: number) => {
+    const el = turnRefs.current[i]
+    const box = scrollRef.current
+    if (!el || !box) return
+    const top = el.getBoundingClientRect().top - box.getBoundingClientRect().top + box.scrollTop
+    box.scrollTo({ top: Math.max(0, top - 8), behavior: 'smooth' })
+  }, [])
+
+  const setPrompt = useCallback((p: number) => {
+    promptPosRef.current = p
+    setPromptPos(p)
+  }, [])
+
+  const jumpPrompt = useCallback((dir: number) => {
+    if (!visibleUserIdx.length) return
+    const next = Math.max(0, Math.min(visibleUserIdx.length - 1, promptPosRef.current + dir))
+    suppressSyncUntil.current = performance.now() + 700
+    setPrompt(next)
+    scrollToTurn(visibleUserIdx[next])
+  }, [visibleUserIdx, scrollToTurn, setPrompt])
+
+  const jumpTop = useCallback(() => scrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' }), [])
+  const jumpBottom = useCallback(
+    () => scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' }),
+    [],
+  )
+  const toggleSteps = useCallback(() => {
+    setStepsExpanded(prev => {
+      const next = !prev
+      scrollRef.current
+        ?.querySelectorAll<HTMLDetailsElement>('.turn:not(.hidden) details.work')
+        .forEach(d => { d.open = next })
+      return next
+    })
+  }, [])
+
+  // Keep the "prompt N / M" indicator in step with the scroll position.
+  // Rect-based (not offsetTop, whose frame depends on offsetParent) and
+  // paused while a jump animates.
+  const syncPromptPos = useCallback(() => {
+    const box = scrollRef.current
+    if (!box || !visibleUserIdx.length) return
+    if (performance.now() < suppressSyncUntil.current) return
+    const boxTop = box.getBoundingClientRect().top
+    let pos = 0
+    visibleUserIdx.forEach((idx, k) => {
+      const el = turnRefs.current[idx]
+      if (el && el.getBoundingClientRect().top - boxTop <= 60) pos = k
+    })
+    setPrompt(pos)
+  }, [visibleUserIdx, setPrompt])
+
+  // Whole-window keys for jump nav (ignored while typing in a field).
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement)?.tagName
+      if (/^(INPUT|TEXTAREA|SELECT)$/.test(tag ?? '')) return
+      if (e.metaKey || e.ctrlKey || e.altKey) return
+      if (e.key === '[') { e.preventDefault(); jumpPrompt(-1) }
+      else if (e.key === ']') { e.preventDefault(); jumpPrompt(1) }
+      else if (e.key === 'g') { e.preventDefault(); jumpTop() }
+      else if (e.key === 'G') { e.preventDefault(); jumpBottom() }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [jumpPrompt, jumpTop, jumpBottom])
 
   const ts = new Date(session.timestamp)
   const dateStr = ts.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
   const timeStr = ts.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })
+
+  const promptLabel = visibleUserIdx.length
+    ? `${Math.min(promptPos + 1, visibleUserIdx.length)} / ${visibleUserIdx.length}`
+    : '– / –'
+
+  const nothingVisible = !loading && !error && turns.length > 0 && visible.every(v => !v)
 
   return (
     <div className="flex flex-col h-full">
@@ -297,24 +363,47 @@ export default function SessionDetail({ session }: SessionDetailProps) {
         <TagEditor sessionId={session.sessionId} />
       </div>
 
+      {!loading && !error && turns.length > 0 && (
+        <TranscriptToolbar
+          q={q} setQ={setQ}
+          role={role} setRole={setRole}
+          errorsOnly={errorsOnly} setErrorsOnly={setErrorsOnly}
+          eventsOnly={eventsOnly} setEventsOnly={setEventsOnly}
+          stepsExpanded={stepsExpanded}
+          onToggleSteps={toggleSteps}
+          onJumpTop={jumpTop}
+          onJumpBottom={jumpBottom}
+          onPrevPrompt={() => jumpPrompt(-1)}
+          onNextPrompt={() => jumpPrompt(1)}
+          promptPos={promptLabel}
+        />
+      )}
+
       {/* Conversation */}
-      <div ref={scrollRef} className="flex-1 overflow-y-auto px-3 py-2 space-y-0.5">
+      <div ref={scrollRef} onScroll={syncPromptPos} className="relative flex-1 overflow-y-auto">
         {loading && (
           <div className="flex items-center justify-center h-20">
             <div className="w-4 h-4 border-2 border-[var(--c-accent)]/40 border-t-[var(--c-accent)] rounded-full animate-spin" />
           </div>
         )}
         {error && (
-          <div className="text-[13px] text-rose-400 bg-rose-500/10 rounded-lg px-3 py-2">
+          <div className="m-3 text-[13px] text-rose-400 bg-rose-500/10 rounded-lg px-3 py-2">
             {error}
           </div>
         )}
-        {renderUnits.map(unit =>
-          unit.kind === 'toolGroup'
-            ? <ToolCallGroup key={unit.key} blocks={unit.blocks} />
-            : <MessageBubble key={unit.key} message={unit.message} />
+        {turns.map((turn, i) => (
+          <TurnRow
+            key={i}
+            ref={el => { turnRefs.current[i] = el }}
+            turn={turn}
+            isLast={i === turns.length - 1}
+            hidden={!visible[i]}
+          />
+        ))}
+        {nothingVisible && (
+          <p className="text-[13px] text-[var(--c-text-3)] text-center py-6">No turns match the filters</p>
         )}
-        {detail && detail.messages.length === 0 && (
+        {detail && turns.length === 0 && !loading && (
           <p className="text-[13px] text-[var(--c-text-3)] text-center py-6">No messages found</p>
         )}
       </div>

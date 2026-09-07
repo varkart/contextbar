@@ -1,9 +1,18 @@
 import type { TokenUsage } from '../../types'
 
+const TOKEN_UNITS: [number, string][] = [
+  [1e12, 'T'],
+  [1e9, 'B'],
+  [1e6, 'M'],
+  [1e3, 'k'],
+]
+
+/** Compact token count. Scales through k / M / B / T so the integer part
+ *  stays at most three digits (1_000_000_000 → "1B", not "1000M"). */
 function formatTokens(n: number): string {
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
-  if (n >= 1_000) return `${Math.round(n / 1_000)}k`
-  return String(n)
+  if (!Number.isFinite(n) || n < 1000) return String(Math.max(0, Math.round(n || 0)))
+  const [size, suffix] = TOKEN_UNITS.find(([s]) => n >= s)!
+  return `${Number((n / size).toFixed(1))}${suffix}`
 }
 
 function tokenBadgeColor(total: number): string {
