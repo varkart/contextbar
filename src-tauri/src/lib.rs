@@ -1065,7 +1065,12 @@ fn github_blob_to_raw(url: &str) -> Option<String> {
 }
 
 /// For a github.com repo or tree URL, return (owner, repo, branch).
-fn parse_github_repo_url(url: &str) -> Option<(String, String, String)> {
+/// Parses a github.com repo/tree URL into (owner, repo, branch, scope_path).
+/// `scope_path` is empty for a bare repo URL or a branch-only tree URL — it's
+/// only populated when the URL points at a specific subdirectory (e.g.
+/// `tree/main/skills/graphify` → scope_path `"skills/graphify"`), so callers
+/// can narrow their search to that subtree instead of scanning the whole repo.
+fn parse_github_repo_url(url: &str) -> Option<(String, String, String, String)> {
     if url.contains("raw.githubusercontent.com") {
         return None;
     }
@@ -1081,21 +1086,108 @@ fn parse_github_repo_url(url: &str) -> Option<(String, String, String)> {
     if parts.len() >= 3 && parts[2] == "blob" {
         return None; // blob → direct file, not a repo search
     }
-    let branch = if parts.len() >= 4 && parts[2] == "tree" {
-        parts[3]
+    let (branch, scope_path) = if parts.len() >= 4 && parts[2] == "tree" {
+        (parts[3], parts[4..].join("/"))
     } else {
-        "HEAD"
+        ("HEAD", String::new())
     };
-    Some((owner.to_string(), repo.to_string(), branch.to_string()))
+    Some((
+        owner.to_string(),
+        repo.to_string(),
+        branch.to_string(),
+        scope_path,
+    ))
 }
 
-/// Search a GitHub repo for SKILL.md files up to 2 directory levels deep,
-/// fetch each one, and return (skill_name, content) pairs.
+/// First-level Markdown heading (`# ...`) in `content`, if any — the same
+/// fallback a plain README gets read by when it has no other declared
+/// title. Skips a leading YAML frontmatter block first so a `# `-prefixed
+/// comment inside frontmatter (rare, but valid YAML) can't be mistaken for
+/// the document's real heading.
+fn first_h1_heading(content: &str) -> Option<String> {
+    let lines: Vec<&str> = content.lines().collect();
+    let body_start = if lines.first().map(|l| l.trim()) == Some("---") {
+        lines[1..]
+            .iter()
+            .position(|l| l.trim() == "---")
+            .map(|end_idx| end_idx + 2)
+            .unwrap_or(0)
+    } else {
+        0
+    };
+    lines[body_start..].iter().find_map(|line| {
+        let trimmed = line.trim();
+        trimmed
+            .strip_prefix("# ")
+            .map(str::trim)
+            .filter(|h| !h.is_empty())
+            .map(str::to_string)
+    })
+}
+
+/// Skill name for a fetched SKILL.md, in order of trust:
+/// 1. Its own declared `name:` frontmatter — the identity every SKILL.md is
+///    supposed to carry.
+/// 2. The first `# Heading` in the body — many hand-written skills skip
+///    frontmatter entirely but still open with a title.
+/// 3. The parent directory (then the repo name at root) — last resort only.
+///
+/// A repo can nest SKILL.md under an arbitrary wrapper folder — e.g.
+/// `human-review/src/SKILL.md` — where the immediate parent directory
+/// ("src") is an implementation detail, not the skill's name, so directory
+/// position is never trusted first.
+fn skill_name_for(path: &str, repo: &str, content: &str) -> String {
+    if let Some(declared) = crate::detectors::extract_frontmatter_field(content, "name") {
+        return declared;
+    }
+    if let Some(heading) = first_h1_heading(content) {
+        return heading;
+    }
+    let parts: Vec<&str> = path.split('/').collect();
+    if parts.len() >= 2 {
+        parts[parts.len() - 2].to_string()
+    } else {
+        repo.to_string()
+    }
+}
+
+/// True if `path` (a full repo-relative path to a blob) is a SKILL.md inside
+/// `scope_path`, no deeper than `max_depth` path segments *below the scope
+/// root* — not the repo root. Pointing a URL at a specific subdirectory
+/// (e.g. `tree/main/skills/graphify`) should search relative to that
+/// subdirectory, not force raising `max_depth` to compensate for how deep
+/// the subdirectory already sits in the repo. `scope_path` empty means
+/// search the whole repo, matching the pre-scoping behavior.
+///
+/// Uses a `/`-boundary check (not a bare prefix match) so a scope of
+/// `skills/human-review` doesn't also match `skills/human-review-extra` —
+/// a real bug in the naive `startsWith` version of this check.
+fn skill_md_in_scope(path: &str, scope_path: &str, max_depth: usize) -> bool {
+    if !path.to_uppercase().ends_with("SKILL.MD") {
+        return false;
+    }
+    let relative = if scope_path.is_empty() {
+        path
+    } else {
+        match path
+            .strip_prefix(scope_path)
+            .and_then(|rest| rest.strip_prefix('/'))
+        {
+            Some(rest) => rest,
+            None => return false, // outside the requested scope entirely
+        }
+    };
+    relative.split('/').count() <= max_depth
+}
+
+/// Search a GitHub repo (optionally scoped to one subdirectory) for
+/// SKILL.md files, fetch each one, and return (skill_name, content) pairs.
 async fn github_find_skill_mds(
     owner: &str,
     repo: &str,
     branch_hint: &str, // "HEAD" means resolve from API
-    max_depth: usize,  // max path segments, e.g. 2 = "dir/SKILL.md"
+    scope_path: &str,  // "" = whole repo; otherwise a subdirectory to search within
+    max_depth: usize,  // max path segments below scope_path, e.g. 2 = "dir/SKILL.md"
 ) -> Result<Vec<(String, String)>, String> {
     let client = reqwest::Client::builder()
         .user_agent("contextbar")
@@ -1148,7 +1240,6 @@ async fn github_find_skill_mds(
         .as_array()
         .ok_or_else(|| "unexpected GitHub API response".to_string())?;
 
-    // Collect SKILL.md paths at depth ≤ 2 (e.g. "SKILL.md" or "subdir/SKILL.md")
     let skill_paths: Vec<String> = items
         .iter()
         .filter_map(|item| {
@@ -1157,19 +1248,20 @@ async fn github_find_skill_mds(
             if type_ != "blob" {
                 return None;
             }
-            let parts: Vec<&str> = path.split('/').collect();
-            if parts.len() <= max_depth && *parts.last().unwrap() == "SKILL.md" {
-                Some(path.to_string())
-            } else {
-                None
-            }
+            skill_md_in_scope(path, scope_path, max_depth).then(|| path.to_string())
         })
         .collect();
 
     if skill_paths.is_empty() {
-        return Err(format!(
-            "no SKILL.md found in {owner}/{repo} (searched up to 2 directory levels)"
-        ));
+        return Err(if scope_path.is_empty() {
+            format!(
+                "no SKILL.md found in {owner}/{repo} (searched up to {max_depth} directory levels)"
+            )
+        } else {
+            format!(
+                "no SKILL.md found in {owner}/{repo}/{scope_path} (searched up to {max_depth} directory levels below that path)"
+            )
+        });
     }
 
     // Fetch each SKILL.md and validate
@@ -1188,13 +1280,7 @@ async fn github_find_skill_mds(
         if validate_skill_content(&content).is_err() {
             continue;
         }
-        // Name: parent directory of SKILL.md, or repo name if at root
-        let parts: Vec<&str> = path.split('/').collect();
-        let name = if parts.len() >= 2 {
-            parts[parts.len() - 2].to_string()
-        } else {
-            repo.to_string()
-        };
+        let name = skill_name_for(path, repo, &content);
         results.push((name, content));
     }
 
@@ -1218,8 +1304,8 @@ async fn install_skill_from_url(
     let depth = max_depth.unwrap_or(2).clamp(1, 10) as usize;
 
     // GitHub repo/tree URL → search the repo with the API
-    if let Some((owner, repo, branch)) = parse_github_repo_url(&url) {
-        let skills = github_find_skill_mds(&owner, &repo, &branch, depth).await?;
+    if let Some((owner, repo, branch, scope_path)) = parse_github_repo_url(&url) {
+        let skills = github_find_skill_mds(&owner, &repo, &branch, &scope_path, depth).await?;
         let multi = skills.len() > 1;
         let mut all_paths = Vec::new();
         for (skill_name, content) in skills {
@@ -2864,7 +2950,7 @@ fn show_expanded_window(app: &tauri::AppHandle, section: Option<&str>) {
 mod tests {
     use super::{
         build_json_mcp_entry, github_blob_to_raw, parse_github_repo_url, percent_encode_path,
-        validate_skill_content, validate_tool_path,
+        skill_md_in_scope, skill_name_for, validate_skill_content, validate_tool_path,
     };
 
     #[test]
@@ -2973,13 +3059,45 @@ mod tests {
     #[test]
     fn repo_url_parsed() {
         let r = parse_github_repo_url("https://github.com/obra/superpowers").unwrap();
-        assert_eq!(r, ("obra".into(), "superpowers".into(), "HEAD".into()));
+        assert_eq!(
+            r,
+            (
+                "obra".into(),
+                "superpowers".into(),
+                "HEAD".into(),
+                "".into()
+            )
+        );
     }
 
     #[test]
     fn tree_url_uses_branch() {
         let r = parse_github_repo_url("https://github.com/obra/superpowers/tree/main").unwrap();
-        assert_eq!(r, ("obra".into(), "superpowers".into(), "main".into()));
+        assert_eq!(
+            r,
+            (
+                "obra".into(),
+                "superpowers".into(),
+                "main".into(),
+                "".into()
+            )
+        );
+    }
+
+    #[test]
+    fn tree_url_with_subdirectory_captures_scope_path() {
+        let r =
+            parse_github_repo_url("https://github.com/obra/superpowers/tree/main/skills/graphify")
+                .unwrap();
+        assert_eq!(
+            r,
+            (
+                "obra".into(),
+                "superpowers".into(),
+                "main".into(),
+                "skills/graphify".into()
+            )
+        );
     }
 
     #[test]
@@ -2996,6 +3114,119 @@ mod tests {
             "https://raw.githubusercontent.com/obra/superpowers/main/SKILL.md"
         )
         .is_none());
+    }
+
+    // skill_md_in_scope tests — regression coverage for the "subfolder scoping"
+    // gap: pointing a URL at a specific subdirectory should search relative
+    // to that subdirectory, not the whole repo, and must not false-match a
+    // sibling directory whose name happens to share a prefix.
+    #[test]
+    fn empty_scope_matches_anywhere_in_repo() {
+        assert!(skill_md_in_scope("SKILL.md", "", 2));
+        assert!(skill_md_in_scope("dir/SKILL.md", "", 2));
+        assert!(!skill_md_in_scope("too/deep/for/this/SKILL.md", "", 2));
+    }
+
+    #[test]
+    fn scoped_search_matches_inside_the_subdirectory() {
+        assert!(skill_md_in_scope(
+            "skills/graphify/SKILL.md",
+            "skills/graphify",
+            2
+        ));
+        assert!(skill_md_in_scope(
+            "skills/graphify/src/SKILL.md",
+            "skills/graphify",
+            2
+        ));
+    }
+
+    #[test]
+    fn scoped_search_rejects_paths_outside_the_subdirectory() {
+        assert!(!skill_md_in_scope(
+            "skills/other-skill/SKILL.md",
+            "skills/graphify",
+            2
+        ));
+    }
+
+    #[test]
+    fn scoped_search_does_not_prefix_match_a_sibling_directory() {
+        // "skills/graphify-extra" starts with "skills/graphify" as a bare string,
+        // but isn't inside it — this is exactly the boundary bug a naive
+        // startsWith() check would introduce.
+        assert!(!skill_md_in_scope(
+            "skills/graphify-extra/SKILL.md",
+            "skills/graphify",
+            2
+        ));
+    }
+
+    #[test]
+    fn scoped_search_depth_is_relative_to_scope_root_not_repo_root() {
+        // 3 segments from the repo root, but only 1 below the scope root —
+        // should pass at max_depth=1 even though it'd fail an un-scoped
+        // depth check measured from the repo root.
+        assert!(skill_md_in_scope(
+            "skills/graphify/SKILL.md",
+            "skills/graphify",
+            1
+        ));
+        assert!(!skill_md_in_scope(
+            "skills/graphify/nested/SKILL.md",
+            "skills/graphify",
+            1
+        ));
+    }
+
+    // skill_name_for tests — regression coverage for a real bug: a skill
+    // nested as `human-review/src/SKILL.md` was named "src" (its immediate
+    // parent directory) instead of "human-review", because the old code
+    // never looked at the SKILL.md's own declared name.
+    #[test]
+    fn skill_name_prefers_declared_frontmatter_name_over_parent_dir() {
+        let content = "---\nname: human-review\ndescription: Reviews things\n---\nbody";
+        let name = skill_name_for("some/human-review/src/SKILL.md", "repo", content);
+        assert_eq!(name, "human-review");
+    }
+
+    #[test]
+    fn skill_name_falls_back_to_parent_dir_when_no_frontmatter_name() {
+        let content = "---\ndescription: no name field here\n---\nbody";
+        let name = skill_name_for("some/human-review/SKILL.md", "repo", content);
+        assert_eq!(name, "human-review");
+    }
+
+    #[test]
+    fn skill_name_falls_back_to_repo_name_at_root_with_no_frontmatter_name() {
+        let content = "no frontmatter at all";
+        let name = skill_name_for("SKILL.md", "my-repo", content);
+        assert_eq!(name, "my-repo");
+    }
+
+    #[test]
+    fn skill_name_ignores_quoting_in_frontmatter_name() {
+        let content = "---\nname: \"human-review\"\n---\nbody";
+        let name = skill_name_for("a/b/src/SKILL.md", "repo", content);
+        assert_eq!(name, "human-review");
+    }
+
+    #[test]
+    fn skill_name_falls_back_to_first_h1_heading_when_no_frontmatter_name() {
+        // No frontmatter `name:` at all, but the body opens with a heading —
+        // should win over the directory-position guess ("src").
+        let content = "# PostgreSQL Optimization Guide\n\nSome body text.";
+        let name = skill_name_for("some/pg-guide/src/SKILL.md", "repo", content);
+        assert_eq!(name, "PostgreSQL Optimization Guide");
+    }
+
+    #[test]
+    fn skill_name_h1_fallback_skips_past_frontmatter_block() {
+        // Frontmatter present (with no name: field) followed by a real heading —
+        // must not mistake a `# `-prefixed line *inside* frontmatter for the title.
+        let content = "---\n# not a real title, just a YAML comment\ndescription: foo\n---\n# Real Title\nbody";
+        let name = skill_name_for("some/dir/src/SKILL.md", "repo", content);
+        assert_eq!(name, "Real Title");
     }
 
     // github_blob_to_raw tests

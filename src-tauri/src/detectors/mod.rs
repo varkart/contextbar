@@ -120,7 +120,7 @@ pub fn read_skill_file_content(skill_path: &std::path::Path) -> Option<String> {
     None
 }
 
-fn extract_frontmatter_field(content: &str, key: &str) -> Option<String> {
+pub(crate) fn extract_frontmatter_field(content: &str, key: &str) -> Option<String> {
     let lines: Vec<&str> = content.lines().collect();
     if lines.first().map(|l| l.trim()) != Some("---") {
         return None;
