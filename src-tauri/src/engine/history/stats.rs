@@ -60,6 +60,12 @@ pub struct SessionInsights {
     pub tool_counts: Vec<ToolCount>,
     pub mcp_tool_counts: Vec<ToolCount>,
     pub skill_counts: Vec<ToolCount>,
+    /// Every distinct skill name invoked at least once in the window —
+    /// untruncated, unlike `skill_counts`. Lets the UI flag installed-but-
+    /// unused skills without a false positive past the top-N cutoff.
+    pub skill_names_used: Vec<String>,
+    /// Every distinct MCP server name called at least once in the window.
+    pub mcp_names_used: Vec<String>,
     pub heaviest: Option<HeaviestSession>,
 }
 
@@ -571,6 +577,9 @@ pub fn aggregate(db: &DbState, since_ms: u64, projects: Option<&[String]>) -> Se
             .to_string();
         *mcp_by_server.entry(server).or_insert(0) += count;
     }
+    let mut mcp_names_used: Vec<String> = mcp_by_server.keys().cloned().collect();
+    mcp_names_used.sort();
+    out.mcp_names_used = mcp_names_used;
     let mut mcp_counts: Vec<ToolCount> = mcp_by_server
         .into_iter()
         .map(|(name, count)| ToolCount { name, count })
@@ -579,6 +588,9 @@ pub fn aggregate(db: &DbState, since_ms: u64, projects: Option<&[String]>) -> Se
     mcp_counts.truncate(8);
     out.mcp_tool_counts = mcp_counts;
 
+    let mut skill_names_used: Vec<String> = skills.keys().cloned().collect();
+    skill_names_used.sort();
+    out.skill_names_used = skill_names_used;
     let mut skill_counts: Vec<ToolCount> = skills
         .into_iter()
         .map(|(name, count)| ToolCount { name, count })

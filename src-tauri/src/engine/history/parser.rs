@@ -213,6 +213,7 @@ fn parse_content_blocks(content: Option<&Value>, error_count: &mut u32) -> Vec<C
                     tool_input: None,
                     tool_result: None,
                     is_error: false,
+                    tool_use_id: None,
                 });
             }
         }
@@ -244,6 +245,7 @@ fn parse_single_block(item: &Value, error_count: &mut u32) -> Option<ContentBloc
                 tool_input: None,
                 tool_result: None,
                 is_error: false,
+                tool_use_id: None,
             })
         }
         "tool_use" => {
@@ -256,10 +258,13 @@ fn parse_single_block(item: &Value, error_count: &mut u32) -> Option<ContentBloc
                 tool_input: input,
                 tool_result: None,
                 is_error: false,
+                tool_use_id: item
+                    .get("id")
+                    .and_then(|v| v.as_str())
+                    .map(str::to_string),
             })
         }
         "tool_result" => {
-            // Count errors for badge; don't surface result content (lives in user protocol turn)
             let is_error = item
                 .get("is_error")
                 .and_then(|v| v.as_bool())
@@ -267,11 +272,57 @@ fn parse_single_block(item: &Value, error_count: &mut u32) -> Option<ContentBloc
             if is_error {
                 *error_count += 1;
             }
-            None
+            // Emit the block so the frontend can pair it with its tool_use by
+            // id and show the output. Blocks with no id / no content are still
+            // worth keeping when they mark an error.
+            let tool_use_id = item
+                .get("tool_use_id")
+                .and_then(|v| v.as_str())
+                .map(str::to_string);
+            let tool_result = extract_result_text(item.get("content"));
+            if tool_use_id.is_none() && tool_result.is_none() && !is_error {
+                return None;
+            }
+            Some(ContentBlock {
+                block_type: "tool_result".to_string(),
+                text: None,
+                tool_name: None,
+                tool_input: None,
+                tool_result,
+                is_error,
+                tool_use_id,
+            })
         }
         // Skip thinking blocks — internal model cognition, not user-facing content
         _ => None,
     }
+}
+
+/// A `tool_result` block's `content` is either a bare string or an array of
+/// `{type:"text", text:"…"}` parts (image parts are ignored). Returns the
+/// joined, sanitized, length-capped text, or None when there's nothing useful.
+fn extract_result_text(content: Option<&Value>) -> Option<String> {
+    let raw = match content {
+        Some(Value::String(s)) => s.clone(),
+        Some(Value::Array(arr)) => arr
+            .iter()
+            .filter_map(|part| {
+                if part.get("type").and_then(|v| v.as_str()) == Some("text") {
+                    part.get("text").and_then(|v| v.as_str())
+                } else {
+                    None
+                }
+            })
+            .collect::<Vec<_>>()
+            .join("\n"),
+        _ => return None,
+    };
+    let cleaned = sanitize_xml(&raw);
+    let cleaned = cleaned.trim();
+    if cleaned.is_empty() {
+        return None;
+    }
+    Some(truncate_str(cleaned, 2000))
 }
 
 fn truncate_str(s: &str, max: usize) -> String {
@@ -317,4 +368,85 @@ fn strip_tagged_content(s: &str, tag: &str) -> String {
         }
     }
     result
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn tool_use_block_captures_its_id() {
+        let mut errs = 0;
+        let block = parse_single_block(
+            &json!({"type": "tool_use", "id": "toolu_abc", "name": "Bash", "input": {"command": "ls"}}),
+            &mut errs,
+        )
+        .unwrap();
+        assert_eq!(block.block_type, "tool_use");
+        assert_eq!(block.tool_use_id.as_deref(), Some("toolu_abc"));
+        assert_eq!(errs, 0);
+    }
+
+    #[test]
+    fn tool_result_string_content_is_surfaced_and_paired() {
+        let mut errs = 0;
+        let block = parse_single_block(
+            &json!({"type": "tool_result", "tool_use_id": "toolu_abc", "content": "3 files"}),
+            &mut errs,
+        )
+        .unwrap();
+        assert_eq!(block.block_type, "tool_result");
+        assert_eq!(block.tool_use_id.as_deref(), Some("toolu_abc"));
+        assert_eq!(block.tool_result.as_deref(), Some("3 files"));
+        assert!(!block.is_error);
+        assert_eq!(errs, 0);
+    }
+
+    #[test]
+    fn tool_result_array_content_is_joined() {
+        let mut errs = 0;
+        let block = parse_single_block(
+            &json!({"type": "tool_result", "tool_use_id": "t1", "content": [
+                {"type": "text", "text": "line one"},
+                {"type": "image", "source": {}},
+                {"type": "text", "text": "line two"}
+            ]}),
+            &mut errs,
+        )
+        .unwrap();
+        assert_eq!(block.tool_result.as_deref(), Some("line one\nline two"));
+    }
+
+    #[test]
+    fn tool_result_error_increments_count_and_keeps_block() {
+        let mut errs = 0;
+        let block = parse_single_block(
+            &json!({"type": "tool_result", "tool_use_id": "t1", "is_error": true, "content": "boom"}),
+            &mut errs,
+        )
+        .unwrap();
+        assert!(block.is_error);
+        assert_eq!(block.tool_result.as_deref(), Some("boom"));
+        assert_eq!(errs, 1);
+    }
+
+    #[test]
+    fn empty_non_error_tool_result_is_dropped() {
+        let mut errs = 0;
+        assert!(parse_single_block(
+            &json!({"type": "tool_result", "content": ""}),
+            &mut errs,
+        )
+        .is_none());
+        assert_eq!(errs, 0);
+    }
+
+    #[test]
+    fn result_text_strips_system_reminder_noise() {
+        let got = extract_result_text(Some(&json!(
+            "real output<system-reminder>ignored</system-reminder>"
+        )));
+        assert_eq!(got.as_deref(), Some("real output"));
+    }
 }

@@ -65,6 +65,11 @@ pub struct ContentBlock {
     pub tool_input: Option<String>,
     pub tool_result: Option<String>,
     pub is_error: bool,
+    /// `tool_use` blocks carry their own id; `tool_result` blocks carry the
+    /// id of the call they answer. The frontend pairs the two to show a
+    /// tool's output next to its invocation.
+    #[serde(default)]
+    pub tool_use_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
