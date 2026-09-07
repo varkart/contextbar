@@ -196,6 +196,7 @@ fn parse_content(items: &[ContentItem]) -> Vec<ContentBlock> {
                         tool_input: None,
                         tool_result: None,
                         is_error: false,
+                        tool_use_id: None,
                     });
                 }
             }
@@ -217,6 +218,7 @@ fn parse_content(items: &[ContentItem]) -> Vec<ContentBlock> {
                     tool_input: input,
                     tool_result: None,
                     is_error: false,
+                    tool_use_id: None,
                 });
             }
             _ => {} // other/future content kinds: skip

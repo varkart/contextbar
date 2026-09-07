@@ -257,6 +257,10 @@ export interface ContentBlock {
   toolInput?: string
   toolResult?: string
   isError: boolean
+  /** `tool_use` blocks carry their own id; `tool_result` blocks carry the id
+   *  of the call they answer. Paired in the transcript to show a tool's
+   *  output next to its invocation. */
+  toolUseId?: string
 }
 
 export interface HistoryMessage {
@@ -347,6 +351,10 @@ export interface SessionInsights {
   toolCounts: ToolCount[]
   mcpToolCounts: ToolCount[]
   skillCounts: ToolCount[]
+  /** Every skill name invoked ≥1× in the window (untruncated). */
+  skillNamesUsed: string[]
+  /** Every MCP server name called ≥1× in the window (untruncated). */
+  mcpNamesUsed: string[]
   heaviest?: HeaviestSession | null
 }
 

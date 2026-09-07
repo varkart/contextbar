@@ -329,6 +329,9 @@ async fn list_sessions(
     // Titles (ai-title / custom-title records) are indexed by the stats warm
     // pass; overlay them so the list matches each agent's own resume picker.
     let titles = db::get_session_titles(&db);
+    // The list index doesn't parse transcripts, so Claude entries arrive with
+    // total_tokens == 0; overlay the warm pass's per-session totals.
+    let token_totals = db::get_session_token_totals(&db);
     Ok(tokio::task::spawn_blocking(move || {
         let mut entries = engine::sessions::list_all(
             limit.unwrap_or(200),
@@ -339,6 +342,11 @@ async fn list_sessions(
         for e in &mut entries {
             if e.title.is_none() {
                 e.title = titles.get(&e.session_id).cloned();
+            }
+            if e.total_tokens == 0 {
+                if let Some(&t) = token_totals.get(&e.session_id) {
+                    e.total_tokens = t;
+                }
             }
         }
         entries

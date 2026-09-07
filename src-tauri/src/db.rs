@@ -283,6 +283,27 @@ pub fn get_session_titles(state: &DbState) -> std::collections::HashMap<String, 
         .unwrap_or_default()
 }
 
+/// Per-session token totals (input + output + cache read + cache creation)
+/// from the stats warm pass. Overlaid onto `SessionEntry::total_tokens`,
+/// which the list index leaves at 0 for Claude sessions (it never parses the
+/// transcript body).
+pub fn get_session_token_totals(state: &DbState) -> std::collections::HashMap<String, u64> {
+    let Ok(conn) = state.0.lock() else {
+        return Default::default();
+    };
+    let Ok(mut stmt) = conn.prepare(
+        "SELECT session_id, input_tokens + output_tokens + cache_read + cache_creation
+         FROM session_stats",
+    ) else {
+        return Default::default();
+    };
+    stmt.query_map([], |r| {
+        Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?.max(0) as u64))
+    })
+    .map(|rows| rows.flatten().collect())
+    .unwrap_or_default()
+}
+
 // ---------------------------------------------------------------------------
 // Session metadata (pins, tags)
 // ---------------------------------------------------------------------------

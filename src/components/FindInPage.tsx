@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 
 /** Dispatched with the live query string whenever the find bar's text
  *  changes (never for an empty query). Any component with content that's
- *  collapsed by default (e.g. ToolCallGroup) should listen for this and
+ *  collapsed by default (e.g. the transcript's WorkGroup) should listen for this and
  *  open itself when its own text contains the query — otherwise a match
  *  that only exists in already-loaded data, but isn't in the DOM yet, can
  *  never be found or highlighted. */

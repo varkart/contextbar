@@ -270,6 +270,7 @@ fn text_content_block(text: String) -> ContentBlock {
         tool_input: None,
         tool_result: None,
         is_error: false,
+        tool_use_id: None,
     }
 }
 
@@ -281,6 +282,7 @@ fn tool_use_content_block(tool_name: Option<String>, state: &Option<Value>) -> C
         tool_input: tool_input_preview(state),
         tool_result: None,
         is_error: false,
+        tool_use_id: None,
     }
 }
 
