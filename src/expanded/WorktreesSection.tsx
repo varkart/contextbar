@@ -35,6 +35,18 @@ export function isSafeToDelete(wt: WorktreeInfo): boolean {
   return !wt.isPrimary && wt.isMerged && !wt.isDirty
 }
 
+/** Worktree directory name — the folder the checkout lives in. Shown as the
+ *  card's primary label for actual worktrees; the git branch (which can
+ *  differ, e.g. a detached or renamed checkout) is shown once the card is
+ *  expanded instead. The primary worktree's path is always the repo root,
+ *  so its "directory name" is just the repo name again (already shown one
+ *  level up) — the branch is the more useful label there instead. */
+function worktreeName(wt: WorktreeInfo): string {
+  if (wt.isPrimary) return wt.branch ?? (wt.isDetached ? 'detached HEAD' : '?')
+  const last = wt.path.replace(/\/+$/, '').split('/').pop()
+  return last && last.length > 0 ? last : wt.path
+}
+
 function relativeTime(tsSec?: number): string {
   if (!tsSec) return '—'
   const diff = Date.now() - tsSec * 1000
@@ -336,7 +348,8 @@ export default function WorktreesSection({ repos, loading, sessions, onRemoved, 
       const q = search.toLowerCase()
       const alias = repoNames[repo.repoPath]?.toLowerCase() ?? ''
       if (
-        !(wt.branch ?? '').toLowerCase().includes(q)
+        !worktreeName(wt).toLowerCase().includes(q)
+        && !(wt.branch ?? '').toLowerCase().includes(q)
         && !repo.repoName.toLowerCase().includes(q)
         && !alias.includes(q)
       ) return false
@@ -782,7 +795,7 @@ export default function WorktreesSection({ repos, loading, sessions, onRemoved, 
                         <div className="flex items-center gap-2">
                           <span className={`w-2 h-2 rounded-full shrink-0 ${STATUS_DOT[st]} ${st === 'active' ? 'animate-pulse' : ''}`} />
                           <span className="text-[15px] font-mono font-semibold truncate">
-                            {wt.branch ?? (wt.isDetached ? 'detached HEAD' : '?')}
+                            {worktreeName(wt)}
                           </span>
                         </div>
                         <div className="text-[13px] text-[var(--c-text-3)] mt-0.5 ml-4">
@@ -806,7 +819,8 @@ export default function WorktreesSection({ repos, loading, sessions, onRemoved, 
 
                     {isOpen && (
                       <div className="px-4 pb-4 border-t border-[var(--c-border)] pt-3">
-                        <div className="grid grid-cols-3 gap-2 mb-3">
+                        <div className="grid grid-cols-2 gap-2 mb-3">
+                          <DetailCell k="Branch" v={wt.branch ?? (wt.isDetached ? 'detached HEAD' : '—')} />
                           <DetailCell k="Last active" v={relativeTime(wt.lastCommitTs)} />
                           <DetailCell k="Ahead / behind" v={`↑${wt.ahead} ↓${wt.behind}`} />
                           <DetailCell k="Status" v={wt.isPrimary ? 'primary checkout' : wt.isMerged ? 'merged' : st} />
