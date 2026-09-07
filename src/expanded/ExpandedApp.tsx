@@ -11,6 +11,7 @@ import WorktreesSection from './WorktreesSection'
 import MyWorkSection from './MyWorkSection'
 import ToolsPanel, { type ToolsSection } from './ToolsPanel'
 import { Tile, TileRow } from './InsightTiles'
+import { formatTokens } from '../components/history/SessionStats'
 import { RefreshButton } from './InsightWidgets'
 import CommandPalette, { buildPaletteItems } from './CommandPalette'
 import { useToasts, ToastStack } from './Toast'
@@ -587,6 +588,10 @@ function SessionsSection({ sessions, loading, selected, onSelect, onRefresh, onL
     total: scoped.length,
     live: scoped.filter(s => s.isLive).length,
     prompts: scoped.reduce((n, s) => n + s.promptCount, 0),
+    // total_tokens is overlaid onto each entry from the stats warm pass
+    // (Rust-side, in list_sessions) — same per-session number the row badge
+    // and the session detail show, so the tile is their exact sum.
+    tokens: scoped.reduce((n, s) => n + (s.totalTokens ?? 0), 0),
   }), [scoped])
 
   return (
@@ -623,6 +628,7 @@ function SessionsSection({ sessions, loading, selected, onSelect, onRefresh, onL
             <Tile value={insights.total} label="Sessions" />
             <Tile value={insights.live} label="Live" color={insights.live > 0 ? 'text-emerald-400' : 'text-[var(--c-text-3)]'} />
             <Tile value={insights.prompts} label="Prompts" />
+            <Tile value={formatTokens(insights.tokens)} label="Tokens" />
           </TileRow>
         </div>
       )}
