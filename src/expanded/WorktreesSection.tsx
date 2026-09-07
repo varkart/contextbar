@@ -189,6 +189,15 @@ export default function WorktreesSection({ repos, loading, sessions, onRemoved, 
   const [confirmDeleteBranch, setConfirmDeleteBranch] = useState<string | null>(null)
   const [deletingBranch, setDeletingBranch] = useState(false)
   const [deleteBranchError, setDeleteBranchError] = useState<string | null>(null)
+  // Branches deleted this render but not yet gone from `repos` (parent refetch
+  // is async). Hiding them here closes the window where the row — and its
+  // re-armed Delete button — reappear before the refresh lands, which let a
+  // second click fire `delete_branch` on an already-deleted branch.
+  const [deletedBranchKeys, setDeletedBranchKeys] = useState<Set<string>>(new Set())
+  useEffect(() => {
+    // Fresh `repos` data arrived — the optimistic hide has done its job.
+    setDeletedBranchKeys(s => (s.size ? new Set() : s))
+  }, [repos])
   const [copied, setCopied] = useState<string | null>(null)
   // Per-repo usage insights, fetched lazily on first toggle. 'loading' while in flight.
   const [repoInsights, setRepoInsights] = useState<Record<string, SessionInsights | 'loading'>>({})
@@ -419,6 +428,7 @@ export default function WorktreesSection({ repos, loading, sessions, onRemoved, 
     setDeleteBranchError(null)
     try {
       await invoke('delete_branch', { repoPath: repo.repoPath, branchName: branch.name })
+      setDeletedBranchKeys(prev => new Set(prev).add(`${repo.repoPath}:${branch.name}`))
       setConfirmDeleteBranch(null)
       onRemoved()
     } catch (e) {
@@ -450,7 +460,9 @@ export default function WorktreesSection({ repos, loading, sessions, onRemoved, 
     .map(r => ({
       repo: r,
       items: r.worktrees.filter(w => matches(w, r)),
-      bareItems: r.bareBranches.filter(b => matchesBareBranch(b, r)),
+      bareItems: r.bareBranches.filter(
+        b => matchesBareBranch(b, r) && !deletedBranchKeys.has(`${r.repoPath}:${b.name}`),
+      ),
     }))
     .filter(g => g.items.length > 0 || g.bareItems.length > 0)
     .sort((a, b) => lastTouchedTs(b.repo) - lastTouchedTs(a.repo))
