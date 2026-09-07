@@ -5,6 +5,7 @@ import SessionStats from './SessionStats'
 import MessageBubble from './MessageBubble'
 import ToolCallGroup from './ToolCallGroup'
 import AgentBadge from './AgentBadge'
+import FindInPage from '../FindInPage'
 
 /** Runs of this many or more sequential tool-only messages collapse into one
  *  group. Codex/agy push one message per tool step (no batching like Claude),
@@ -173,6 +174,27 @@ export default function SessionDetail({ session }: SessionDetailProps) {
   const [error, setError] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
+  const [findOpen, setFindOpen] = useState(false)
+
+  // ⌘F opens find-in-page, scoped to this session's transcript only — not
+  // the whole window. Scoped to this component's own lifecycle (mounted
+  // only while a session is open), so no global "which view is active"
+  // bookkeeping is needed.
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (!e.metaKey || e.shiftKey || e.altKey || e.ctrlKey) return
+      if (e.key.toLowerCase() !== 'f') return
+      e.preventDefault()
+      setFindOpen(true)
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [])
+
+  // A stale query/highlight shouldn't carry over onto a different session.
+  useEffect(() => {
+    setFindOpen(false)
+  }, [session.sessionId])
 
   useEffect(() => {
     setLoading(true)
@@ -225,6 +247,7 @@ export default function SessionDetail({ session }: SessionDetailProps) {
 
   return (
     <div className="flex flex-col h-full">
+      <FindInPage open={findOpen} onClose={() => setFindOpen(false)} container={scrollRef.current} />
       {/* Header info */}
       <div className="px-3 pt-2 pb-1 flex-shrink-0 border-b border-[var(--c-border)]">
         <div className="flex items-center justify-between mb-1">

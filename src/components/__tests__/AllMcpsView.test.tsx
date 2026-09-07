@@ -1,7 +1,18 @@
-import { render, screen, fireEvent, within } from '@testing-library/react'
-import { describe, it, expect, vi } from 'vitest'
+import { render, screen, fireEvent, within, waitFor } from '@testing-library/react'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import AllMcpsView from '../views/AllMcpsView'
 import type { Agent, McpServer } from '../../types'
+
+vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn() }))
+vi.mock('../../analytics', () => ({ capture: vi.fn(), captureException: vi.fn() }))
+
+import { invoke } from '@tauri-apps/api/core'
+const mockInvoke = vi.mocked(invoke)
+
+beforeEach(() => {
+  mockInvoke.mockReset()
+  mockInvoke.mockResolvedValue(undefined)
+})
 
 function makeMcp(overrides: Partial<McpServer> & Pick<McpServer, 'name'>): McpServer {
   return {
@@ -147,5 +158,72 @@ describe('AllMcpsView — interaction', () => {
     // Claude-exclusive MCP hidden, Cursor-exclusive MCP remains
     expect(screen.queryByText('netlify')).not.toBeInTheDocument()
     expect(screen.getByText('cursor-db')).toBeInTheDocument()
+  })
+})
+
+describe('AllMcpsView — agent selector switches to a dropdown at 3+ agents', () => {
+  it('renders the dropdown (not chips) with 3 installed agents', () => {
+    const geminiTool = makeTool('gemini', 'Gemini', [makeMcp({ name: 'gemini-only' })])
+    render(<AllMcpsView agents={[claudeTool, cursorTool, geminiTool]} onBack={vi.fn()} onSelectMcp={vi.fn()} />)
+    expect(screen.getByTestId('agent-filter-dropdown')).toBeInTheDocument()
+    expect(screen.queryByTestId('agent-filter-chips')).not.toBeInTheDocument()
+  })
+})
+
+describe('AllMcpsView — status filter (All / Active / Inactive)', () => {
+  const mixedStatusTool = makeTool('claude', 'Claude Code', [
+    makeMcp({ name: 'on-mcp', active: true }),
+    makeMcp({ name: 'off-mcp', active: false }),
+  ])
+
+  it('"Active" narrows to MCPs with at least one enabled variant', () => {
+    render(<AllMcpsView agents={[mixedStatusTool]} onBack={vi.fn()} onSelectMcp={vi.fn()} />)
+    fireEvent.click(within(screen.getByTestId('status-filter')).getByText('Active'))
+    expect(screen.getByText('on-mcp')).toBeInTheDocument()
+    expect(screen.queryByText('off-mcp')).not.toBeInTheDocument()
+  })
+
+  it('"Inactive" narrows to MCPs with no enabled variant', () => {
+    render(<AllMcpsView agents={[mixedStatusTool]} onBack={vi.fn()} onSelectMcp={vi.fn()} />)
+    fireEvent.click(within(screen.getByTestId('status-filter')).getByText('Inactive'))
+    expect(screen.getByText('off-mcp')).toBeInTheDocument()
+    expect(screen.queryByText('on-mcp')).not.toBeInTheDocument()
+  })
+})
+
+describe('AllMcpsView — remove everywhere from the list row', () => {
+  it('shows a warning naming every agent the MCP is on, before removing anything', () => {
+    render(<AllMcpsView agents={[claudeTool, cursorTool]} onBack={vi.fn()} onSelectMcp={vi.fn()} />)
+    fireEvent.click(screen.getByLabelText('Remove github from all agents'))
+    const banner = screen.getByText(/Remove completely\?/).closest('p')!
+    expect(banner.textContent).toContain('Claude Code')
+    expect(banner.textContent).toContain('Cursor')
+    expect(mockInvoke).not.toHaveBeenCalled()
+  })
+
+  it('confirming removes the MCP from every agent that has it and refreshes', async () => {
+    const onInstalled = vi.fn().mockResolvedValue(undefined)
+    render(<AllMcpsView agents={[claudeTool, cursorTool]} onBack={vi.fn()} onSelectMcp={vi.fn()} onInstalled={onInstalled} />)
+    // "github" exists on both Claude and Cursor
+    fireEvent.click(screen.getByLabelText('Remove github from all agents'))
+    fireEvent.click(screen.getByText('Remove completely'))
+
+    await waitFor(() => expect(onInstalled).toHaveBeenCalled())
+    const removeCalls = mockInvoke.mock.calls.filter(([cmd]) => cmd === 'remove_mcp')
+    expect(removeCalls).toHaveLength(2)
+    expect(removeCalls.map(([, args]) => (args as { agentId: string }).agentId).sort()).toEqual(['claude', 'cursor'])
+  })
+
+  it('an MCP installed on only one agent only removes from that one', async () => {
+    const onInstalled = vi.fn().mockResolvedValue(undefined)
+    render(<AllMcpsView agents={[claudeTool, cursorTool]} onBack={vi.fn()} onSelectMcp={vi.fn()} onInstalled={onInstalled} />)
+    // "sentry" only exists on Claude
+    fireEvent.click(screen.getByLabelText('Remove sentry from all agents'))
+    fireEvent.click(screen.getByText('Remove completely'))
+
+    await waitFor(() => expect(onInstalled).toHaveBeenCalled())
+    const removeCalls = mockInvoke.mock.calls.filter(([cmd]) => cmd === 'remove_mcp')
+    expect(removeCalls).toHaveLength(1)
+    expect((removeCalls[0][1] as { agentId: string }).agentId).toBe('claude')
   })
 })

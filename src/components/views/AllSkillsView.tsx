@@ -2,12 +2,16 @@ import { useState, useMemo } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import type { Agent, Skill } from '../../types'
 import AgentChips from '../AgentChips'
+import AgentMultiSelect from '../AgentMultiSelect'
 import AgentToggleChips from '../AgentToggleChips'
 import AgentActivePill from '../AgentActivePill'
 import BulkToggleBar, { type BulkDescribe, type BulkMode } from '../BulkToggleBar'
 import SearchInput from '../SearchInput'
 import SortToggleButton from '../SortToggleButton'
+import StatusFilterControl, { type StatusFilterValue } from '../StatusFilterControl'
+import RemoveEverywhereBanner from '../RemoveEverywhereBanner'
 import { useAgentFilter } from '../../hooks/useAgentFilter'
+import { AGENT_SELECTOR_DROPDOWN_THRESHOLD } from '../../constants/filters'
 import { useEnabledSort } from '../../hooks/useEnabledSort'
 import { capture, captureException } from '../../analytics'
 
@@ -69,9 +73,18 @@ function computeBulkChanges(groups: SkillGroup[], mode: BulkMode) {
 
 export default function AllSkillsView({ agents, onSelectSkill, onAddSkill, onInstalled, compact }: Props) {
   const [query, setQuery] = useState('')
+  const [statusFilter, setStatusFilter] = useState<StatusFilterValue>('all')
   const [togglingKey, setTogglingKey] = useState<{ name: string; toolId: string } | null>(null)
-  const { installedAgents, selectedTools, toggleTool, allSelected } = useAgentFilter(agents)
+  const [pendingRemoveGroup, setPendingRemoveGroup] = useState<string | null>(null)
+  const [removingGroup, setRemovingGroup] = useState<string | null>(null)
+  const [removeGroupError, setRemoveGroupError] = useState<Record<string, string>>({})
+  const { installedAgents, selectedTools, toggleTool, toggleToolCheckbox, selectAll, allSelected } = useAgentFilter(agents)
   const groups = useMemo(() => buildGroups(agents), [agents])
+  const agentSkillCounts = useMemo(() => {
+    const counts: Record<string, number> = {}
+    for (const tool of installedAgents) counts[tool.id] = tool.skills.length
+    return counts
+  }, [installedAgents])
 
   const agentName = (toolId: string) => agents.find(a => a.id === toolId)?.name ?? toolId
 
@@ -92,6 +105,26 @@ export default function AllSkillsView({ agents, onSelectSkill, onAddSkill, onIns
       await onInstalled?.()
       setTogglingKey(null)
     }
+  }
+
+  const handleRemoveGroupEverywhere = async (group: SkillGroup) => {
+    setRemovingGroup(group.name)
+    setRemoveGroupError(prev => ({ ...prev, [group.name]: '' }))
+    try {
+      for (const v of group.variants) {
+        await invoke('remove_skill', { agentId: v.toolId, skillName: v.name, skillPath: v.path })
+        capture('skill_deleted', { tool_id: v.toolId, skill_name: v.name })
+      }
+      capture('skill_removed_everywhere', { skill_name: group.name, agent_count: group.variants.length })
+    } catch (e) {
+      setRemoveGroupError(prev => ({ ...prev, [group.name]: String(e) }))
+      captureException(e)
+      setRemovingGroup(null)
+      return
+    }
+    await onInstalled?.()
+    setRemovingGroup(null)
+    setPendingRemoveGroup(null)
   }
 
   const describeBulk = (mode: BulkMode): BulkDescribe => {
@@ -130,8 +163,12 @@ export default function AllSkillsView({ agents, onSelectSkill, onAddSkill, onIns
     if (!allSelected) {
       result = result.filter(g => g.variants.some(v => selectedTools.has(v.toolId)))
     }
+    if (statusFilter !== 'all') {
+      const wantActive = statusFilter === 'active'
+      result = result.filter(g => g.variants.some(v => v.active) === wantActive)
+    }
     return result
-  }, [groups, query, selectedTools, allSelected])
+  }, [groups, query, selectedTools, allSelected, statusFilter])
 
   const { sortMode, setSortMode, sorted } = useEnabledSort(filtered)
 
@@ -163,7 +200,22 @@ export default function AllSkillsView({ agents, onSelectSkill, onAddSkill, onIns
         )}
       </div>
 
-      <AgentChips installedAgents={installedAgents} selectedTools={selectedTools} onToggle={toggleTool} />
+      <div className="flex items-center justify-between gap-2 px-3 py-1.5 border-b border-[var(--c-border)] flex-shrink-0 flex-wrap">
+        {installedAgents.length >= AGENT_SELECTOR_DROPDOWN_THRESHOLD ? (
+          <AgentMultiSelect
+            installedAgents={installedAgents}
+            selectedTools={selectedTools}
+            allSelected={allSelected}
+            onToggle={toggleToolCheckbox}
+            onSelectAll={selectAll}
+            counts={agentSkillCounts}
+            compact={compact}
+          />
+        ) : (
+          <AgentChips installedAgents={installedAgents} selectedTools={selectedTools} onToggle={toggleTool} />
+        )}
+        <StatusFilterControl value={statusFilter} onChange={setStatusFilter} compact={compact} />
+      </div>
 
       <BulkToggleBar noun="skill" agentName={agentName} describeBulk={describeBulk} applyBulk={applyBulk} />
 
@@ -187,48 +239,72 @@ export default function AllSkillsView({ agents, onSelectSkill, onAddSkill, onIns
           const activeCount = group.variants.filter(v => v.active).length
           const allOff = activeCount === 0
           return (
-            <div
-              key={group.name}
-              className="w-full flex items-center gap-3 px-4 py-2 hover:bg-[var(--c-hover)] transition-colors border-b border-[var(--c-border-sub)] last:border-0"
-            >
-              <button onClick={() => onSelectSkill(group.primary)} className="flex-1 min-w-0 text-left">
-                <span className={`block font-medium truncate font-mono ${allOff ? 'text-[var(--c-text-3)]' : 'text-[var(--c-text)]'} ${compact ? 'text-[13px]' : 'text-[14px]'}`}>
-                  {group.name}
-                </span>
-                {group.primary.description && (
-                  <span className={`block text-[var(--c-text-3)] truncate mt-0.5 ${compact ? 'text-[10.5px]' : 'text-[11.5px]'}`}>
-                    {group.primary.description}
+            <div key={group.name} className="border-b border-[var(--c-border-sub)] last:border-0">
+              <div className="w-full flex items-center gap-3 px-4 py-2 hover:bg-[var(--c-hover)] transition-colors">
+                <button onClick={() => onSelectSkill(group.primary)} className="flex-1 min-w-0 text-left">
+                  <span className={`block font-medium truncate font-mono ${allOff ? 'text-[var(--c-text-3)]' : 'text-[var(--c-text)]'} ${compact ? 'text-[13px]' : 'text-[14px]'}`}>
+                    {group.name}
                   </span>
+                  {group.primary.description && (
+                    <span className={`block text-[var(--c-text-3)] truncate mt-0.5 ${compact ? 'text-[10.5px]' : 'text-[11.5px]'}`}>
+                      {group.primary.description}
+                    </span>
+                  )}
+                </button>
+                {compact ? (
+                  <AgentActivePill
+                    items={group.variants.map(v => ({ toolId: v.toolId, active: v.active }))}
+                    itemName={group.name}
+                    togglingId={togglingKey?.name === group.name ? togglingKey.toolId : null}
+                    onToggle={toolId => {
+                      const v = group.variants.find(variant => variant.toolId === toolId)
+                      if (v) toggleVariant(v)
+                    }}
+                  />
+                ) : (
+                  <AgentToggleChips
+                    items={group.variants.map(v => ({ toolId: v.toolId, active: v.active }))}
+                    itemName={group.name}
+                    togglingId={togglingKey?.name === group.name ? togglingKey.toolId : null}
+                    onToggle={toolId => {
+                      const v = group.variants.find(variant => variant.toolId === toolId)
+                      if (v) toggleVariant(v)
+                    }}
+                  />
                 )}
-              </button>
-              {compact ? (
-                <AgentActivePill
-                  items={group.variants.map(v => ({ toolId: v.toolId, active: v.active }))}
-                  itemName={group.name}
-                  togglingId={togglingKey?.name === group.name ? togglingKey.toolId : null}
-                  onToggle={toolId => {
-                    const v = group.variants.find(variant => variant.toolId === toolId)
-                    if (v) toggleVariant(v)
-                  }}
-                />
-              ) : (
-                <AgentToggleChips
-                  items={group.variants.map(v => ({ toolId: v.toolId, active: v.active }))}
-                  itemName={group.name}
-                  togglingId={togglingKey?.name === group.name ? togglingKey.toolId : null}
-                  onToggle={toolId => {
-                    const v = group.variants.find(variant => variant.toolId === toolId)
-                    if (v) toggleVariant(v)
-                  }}
-                />
+                <button
+                  onClick={() => setPendingRemoveGroup(group.name)}
+                  aria-label={`Remove ${group.name} from all agents`}
+                  className="p-0.5 text-[var(--c-text-3)] hover:text-red-400 transition-colors flex-shrink-0"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+                    stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+                    className="w-3.5 h-3.5">
+                    <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/>
+                    <path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/>
+                  </svg>
+                </button>
+                <span className="w-[18px] flex justify-end flex-shrink-0" aria-hidden="true">
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+                    stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
+                    className="w-3 h-3 text-[var(--c-text-3)]">
+                    <polyline points="9 18 15 12 9 6"/>
+                  </svg>
+                </span>
+              </div>
+              {pendingRemoveGroup === group.name && (
+                <div className="px-4 pb-3">
+                  <RemoveEverywhereBanner
+                    noun="skill"
+                    name={group.name}
+                    agentNames={group.variants.map(v => v.toolName)}
+                    running={removingGroup === group.name}
+                    error={removeGroupError[group.name]}
+                    onCancel={() => { setPendingRemoveGroup(null); setRemoveGroupError(prev => ({ ...prev, [group.name]: '' })) }}
+                    onConfirm={() => handleRemoveGroupEverywhere(group)}
+                  />
+                </div>
               )}
-              <span className="w-[18px] flex justify-end flex-shrink-0" aria-hidden="true">
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
-                  stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
-                  className="w-3 h-3 text-[var(--c-text-3)]">
-                  <polyline points="9 18 15 12 9 6"/>
-                </svg>
-              </span>
             </div>
           )
         })}

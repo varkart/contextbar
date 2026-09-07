@@ -1,5 +1,6 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { ContentBlock } from '../../types'
+import { FIND_QUERY_EVENT } from '../FindInPage'
 
 const TOOL_COLORS: Record<string, string> = {
   Read: 'bg-blue-500/15 text-blue-400 border-blue-500/20',
@@ -25,6 +26,21 @@ export default function ToolCallBlock({ block, resultBlock }: ToolCallBlockProps
   const name = block.toolName ?? 'tool'
   const hasContent = block.toolInput || resultBlock?.toolResult
   const isError = resultBlock?.isError ?? false
+
+  // Input/output here is a second layer of collapsed-by-default content
+  // (independent of ToolCallGroup's own collapse) — open it too when
+  // find-on-page is searching for something it contains.
+  useEffect(() => {
+    if (!hasContent) return
+    const handler = (e: Event) => {
+      const query = (e as CustomEvent<string>).detail.trim().toLowerCase()
+      if (!query || expanded) return
+      const haystack = [name, block.toolInput, resultBlock?.toolResult].filter(Boolean).join(' ').toLowerCase()
+      if (haystack.includes(query)) setExpanded(true)
+    }
+    window.addEventListener(FIND_QUERY_EVENT, handler)
+    return () => window.removeEventListener(FIND_QUERY_EVENT, handler)
+  }, [hasContent, expanded, name, block.toolInput, resultBlock?.toolResult])
 
   return (
     <div className="my-1">

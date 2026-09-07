@@ -25,8 +25,26 @@ export function useAgentFilter(tools: Agent[]) {
     })
   }
 
+  // Checkbox semantics for the multiselect dropdown — distinct from the
+  // chip solo-toggle above. A checkbox list reads as "everything checked,
+  // uncheck what you don't want", so clicking one agent while all are
+  // selected should deselect just that one (leaving the rest checked), not
+  // solo it. Falls back to "all selected" once nothing's left checked,
+  // same as the chip toggle, rather than leaving a dead-end empty list.
+  const toggleToolCheckbox = (id: string) => {
+    setSelectedTools(prev => {
+      const base = prev ?? new Set(installedAgents.map(t => t.id))
+      const next = new Set(base)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next.size === 0 || next.size === installedAgents.length ? null : next
+    })
+  }
+
+  const selectAll = () => setSelectedTools(null)
+
   const allSelected = selectedTools === null || selectedTools.size === installedAgents.length
   const effectiveSelected = selectedTools ?? new Set(installedAgents.map(t => t.id))
 
-  return { installedAgents, selectedTools: effectiveSelected, toggleTool, allSelected }
+  return { installedAgents, selectedTools: effectiveSelected, toggleTool, toggleToolCheckbox, selectAll, allSelected }
 }

@@ -1,6 +1,7 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { ContentBlock } from '../../types'
 import ToolCallBlock from './ToolCallBlock'
+import { FIND_QUERY_EVENT } from '../FindInPage'
 
 interface ToolCallGroupProps {
   blocks: ContentBlock[]
@@ -12,6 +13,23 @@ interface ToolCallGroupProps {
 export default function ToolCallGroup({ blocks }: ToolCallGroupProps) {
   const [open, setOpen] = useState(false)
   const errorCount = blocks.filter(b => b.isError).length
+
+  // Collapsed content is invisible to find-on-page (it isn't in the DOM
+  // until opened) even though the data is already loaded — so open up
+  // whenever the live search query matches something we're hiding.
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const query = (e as CustomEvent<string>).detail.trim().toLowerCase()
+      if (!query || open) return
+      const haystack = blocks
+        .map(b => [b.toolName, b.text, b.toolInput, b.toolResult].filter(Boolean).join(' '))
+        .join(' ')
+        .toLowerCase()
+      if (haystack.includes(query)) setOpen(true)
+    }
+    window.addEventListener(FIND_QUERY_EVENT, handler)
+    return () => window.removeEventListener(FIND_QUERY_EVENT, handler)
+  }, [blocks, open])
 
   const counts = new Map<string, number>()
   for (const b of blocks) {
