@@ -51,6 +51,9 @@ export default function ViewManager({
   fetchNotifications,
   hideAgentHeader,
   compact,
+  usedSkillNames,
+  usedMcpNames,
+  usageAnalyzed,
 }: any) {
   if (view === 'doctor') {
     return <DoctorView onBack={() => goTo('settings')} />
@@ -125,6 +128,8 @@ export default function ViewManager({
         onAddSkill={openAddSkill}
         onInstalled={handleFetchTools}
         compact={compact}
+        usedNames={usedSkillNames}
+        usageAnalyzed={usageAnalyzed}
       />
     )
   }
@@ -137,6 +142,8 @@ export default function ViewManager({
         onAddMcp={openAddMcp}
         onInstalled={handleFetchTools}
         compact={compact}
+        usedNames={usedMcpNames}
+        usageAnalyzed={usageAnalyzed}
       />
     )
   }

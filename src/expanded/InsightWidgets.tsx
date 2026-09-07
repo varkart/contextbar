@@ -77,24 +77,38 @@ export function Card({ title, sub, children }: { title: string; sub?: string; ch
 /** Labeled horizontal bar: name + value sit directly above their bar so the
  *  association is unambiguous. Width capped so bars stay readable in
  *  full-width sections. */
-export function HBar({ name, value, pct, color, hint }: {
+export function HBar({ name, value, pct, color, hint, onClick }: {
   name: string
   value: string
   pct: number
   color: string
   hint?: string
+  /** When set, the whole bar becomes a button — used to jump from a usage
+   *  insight to that skill's / MCP's detail page. */
+  onClick?: () => void
 }) {
-  return (
-    <div className="mb-2 min-w-0 max-w-md" title={hint}>
+  const inner = (
+    <>
       <div className="flex items-baseline justify-between gap-2 text-[12px] mb-0.5">
-        <span className="font-medium text-[var(--c-text-2)] truncate">{name}</span>
-        <span className="font-mono text-[var(--c-text-3)] shrink-0">{value}</span>
+        <span className={`font-medium truncate ${onClick ? 'text-[var(--c-accent)] group-hover/hbar:underline' : 'text-[var(--c-text-2)]'}`}>{name}</span>
+        <span className="font-mono text-[var(--c-text-3)] shrink-0 flex items-center gap-1">
+          {value}
+          {onClick && <span aria-hidden className="text-[var(--c-accent)] group-hover/hbar:translate-x-0.5 transition-transform">›</span>}
+        </span>
       </div>
       <div className="h-2 rounded-full bg-[var(--c-surface-2)] overflow-hidden">
         <div className="h-full rounded-full" style={{ width: `${Math.max(1.5, pct)}%`, background: color }} />
       </div>
-    </div>
+    </>
   )
+  if (onClick) {
+    return (
+      <button onClick={onClick} title={hint ?? `Open ${name}`} className="group/hbar block w-full text-left mb-2 min-w-0 max-w-md -mx-1.5 px-1.5 py-1 rounded-md hover:bg-[var(--c-hover)] transition-colors cursor-pointer">
+        {inner}
+      </button>
+    )
+  }
+  return <div className="mb-2 min-w-0 max-w-md" title={hint}>{inner}</div>
 }
 
 /** Refresh button with feedback: spins while the refresh runs (min 600ms so

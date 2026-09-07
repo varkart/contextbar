@@ -172,6 +172,38 @@ export default function ToolsPanel({
     }
   }, [agents, installedAgents])
 
+  // Resolve a usage-insight row (which only carries a name) to an installed
+  // skill / MCP so its bar can jump to the detail page. First active variant
+  // wins; falls back to any variant so an all-disabled skill is still openable.
+  const skillByName = useMemo(() => {
+    const m = new Map<string, Agent['skills'][number]>()
+    for (const s of installedAgents.flatMap(a => a.skills)) {
+      const k = s.name.toLowerCase()
+      if (!m.has(k) || (s.active && !m.get(k)!.active)) m.set(k, s)
+    }
+    return m
+  }, [installedAgents])
+  const mcpByName = useMemo(() => {
+    const m = new Map<string, Agent['mcps'][number]>()
+    for (const s of installedAgents.flatMap(a => a.mcps)) {
+      const k = s.name.toLowerCase()
+      if (!m.has(k) || (s.active && !m.get(k)!.active)) m.set(k, s)
+    }
+    return m
+  }, [installedAgents])
+
+  // Used-skill / used-server name sets for the "review unused" affordance in
+  // the list views. Prefer the untruncated *_namesUsed lists; fall back to the
+  // (top-N) count lists on older backends.
+  const usedSkillNames = useMemo(
+    () => new Set((usage?.skillNamesUsed ?? usage?.skillCounts.map(s => s.name) ?? []).map(n => n.toLowerCase())),
+    [usage],
+  )
+  const usedMcpNames = useMemo(
+    () => new Set((usage?.mcpNamesUsed ?? usage?.mcpToolCounts.map(m => m.name) ?? []).map(n => n.toLowerCase())),
+    [usage],
+  )
+
   // Sidebar section changed while mounted → fresh stack at that section's root.
   const mountedRef = useRef(false)
   useEffect(() => {
@@ -306,27 +338,31 @@ export default function ToolsPanel({
                   label="Skill runs"
                   hint="Skill tool invocations in Claude Code sessions"
                 />
-                <Tile value={usage.skillCounts.length} label="Skills used" />
+                <Tile value={usage.skillNamesUsed?.length ?? usage.skillCounts.length} label="Skills used" />
                 <Tile value={agentInsights.skillsTotal} label="Installed" />
                 <Tile
-                  value={Math.max(0, new Set(installedAgents.flatMap(a => a.skills.map(s => s.name.toLowerCase()))).size - usage.skillCounts.length)}
-                  label="Never ran"
+                  value={[...new Set(installedAgents.flatMap(a => a.skills.filter(s => s.active).map(s => s.name.toLowerCase())))].filter(n => !usedSkillNames.has(n)).length}
+                  label="Unused"
                   color="text-amber-400"
-                  hint="Installed skills with no invocations in the last 30 days"
+                  hint="Active skills with no runs in the last 30 days — see the review bar below"
                 />
               </TileRow>
               {usage.skillCounts.length > 0 && (
                 <>
                   <p className="text-[11px] font-mono text-[var(--c-text-3)] uppercase tracking-wider mb-1.5">Most used skills</p>
-                  {usage.skillCounts.slice(0, 5).map(s => (
-                    <HBar
-                      key={s.name}
-                      name={s.name}
-                      value={`${s.count} run${s.count === 1 ? '' : 's'}`}
-                      pct={(s.count / Math.max(1, usage.skillCounts[0].count)) * 100}
-                      color="var(--c-accent)"
-                    />
-                  ))}
+                  {usage.skillCounts.slice(0, 5).map(s => {
+                    const skill = skillByName.get(s.name.toLowerCase())
+                    return (
+                      <HBar
+                        key={s.name}
+                        name={s.name}
+                        value={`${s.count} run${s.count === 1 ? '' : 's'}`}
+                        pct={(s.count / Math.max(1, usage.skillCounts[0].count)) * 100}
+                        color="var(--c-accent)"
+                        onClick={skill ? () => routerProps.selectSkill(skill, 'all-skills-list') : undefined}
+                      />
+                    )
+                  })}
                 </>
               )}
             </Collapsible>
@@ -416,15 +452,19 @@ export default function ToolsPanel({
               {usage.mcpToolCounts.length > 0 && (
                 <>
                   <p className="text-[11px] font-mono text-[var(--c-text-3)] uppercase tracking-wider mb-1.5">Most called servers</p>
-                  {usage.mcpToolCounts.slice(0, 5).map(m => (
-                    <HBar
-                      key={m.name}
-                      name={m.name}
-                      value={`${m.count} call${m.count === 1 ? '' : 's'}`}
-                      pct={(m.count / Math.max(1, usage.mcpToolCounts[0].count)) * 100}
-                      color="#2dd4bf"
-                    />
-                  ))}
+                  {usage.mcpToolCounts.slice(0, 5).map(m => {
+                    const mcp = mcpByName.get(m.name.toLowerCase())
+                    return (
+                      <HBar
+                        key={m.name}
+                        name={m.name}
+                        value={`${m.count} call${m.count === 1 ? '' : 's'}`}
+                        pct={(m.count / Math.max(1, usage.mcpToolCounts[0].count)) * 100}
+                        color="#2dd4bf"
+                        onClick={mcp ? () => routerProps.selectMcp(mcp, 'all-mcps-list') : undefined}
+                      />
+                    )
+                  })}
                 </>
               )}
             </Collapsible>
@@ -450,6 +490,9 @@ export default function ToolsPanel({
             setTheme={setTheme}
             fetchNotifications={fetchNotifications}
             hideAgentHeader={true}
+            usedSkillNames={usedSkillNames}
+            usedMcpNames={usedMcpNames}
+            usageAnalyzed={usage?.sessionsAnalyzed ?? 0}
           />
         </div>
       </div>

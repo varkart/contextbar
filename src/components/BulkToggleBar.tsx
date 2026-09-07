@@ -17,6 +17,10 @@ interface Props {
   describeBulk: (mode: BulkMode) => BulkDescribe
   /** Performs the writes + refresh, then returns the pre-mutation description for the toast. */
   applyBulk: (mode: BulkMode) => Promise<BulkDescribe>
+  /** 'block' (default): self-contained bar with its own pill + label.
+   *  'inline': just the two buttons (for placing on an existing actions row);
+   *  the confirm banner still renders, on its own full-width line. */
+  variant?: 'block' | 'inline'
 }
 
 function agentLabels(ids: string[], agentName: (id: string) => string): string {
@@ -60,12 +64,13 @@ function ToastMessage({ noun, mode, desc, agentName }: { noun: string; mode: Bul
 }
 
 /** Page-level "Enable all / Disable all" toolbar with a confirm step and a result toast, shared by the Skills and MCPs list pages. */
-export default function BulkToggleBar({ noun, agentName, describeBulk, applyBulk }: Props) {
+export default function BulkToggleBar({ noun, agentName, describeBulk, applyBulk, variant = 'block' }: Props) {
   const [confirmMode, setConfirmMode] = useState<BulkMode | null>(null)
   const [running, setRunning] = useState(false)
   const [toast, setToast] = useState<{ mode: BulkMode; desc: BulkDescribe } | null>(null)
 
   const desc = confirmMode ? describeBulk(confirmMode) : null
+  const inline = variant === 'inline'
 
   const handleApply = async () => {
     if (!confirmMode) return
@@ -77,67 +82,87 @@ export default function BulkToggleBar({ noun, agentName, describeBulk, applyBulk
     setToast({ mode, desc: result })
   }
 
+  const enableBtn = (
+    <button
+      onClick={() => setConfirmMode('enable')}
+      disabled={running}
+      className="text-[11.5px] font-medium px-2.5 py-1 rounded-md border border-[var(--c-border)] text-[var(--c-text-2)] hover:border-emerald-500/50 hover:text-emerald-500 transition-colors disabled:opacity-50"
+    >
+      Enable all
+    </button>
+  )
+  const disableBtn = (
+    <button
+      onClick={() => setConfirmMode('disable')}
+      disabled={running}
+      className="text-[11.5px] font-medium px-2.5 py-1 rounded-md border border-[var(--c-border)] text-[var(--c-text-2)] hover:border-rose-500/50 hover:text-rose-500 transition-colors disabled:opacity-50"
+    >
+      Disable all
+    </button>
+  )
+
+  const confirmBanner = confirmMode && desc && (
+    <div
+      className={`${inline ? 'basis-full w-full' : ''} mt-2 flex items-center gap-3 px-3 py-2 rounded-md text-[12px] leading-relaxed [&_b]:text-[var(--c-text)] [&_b]:font-semibold ${
+        confirmMode === 'enable'
+          ? 'bg-emerald-500/8 border border-emerald-500/25 text-[var(--c-text-2)]'
+          : 'bg-rose-500/8 border border-rose-500/25 text-[var(--c-text-2)]'
+      }`}
+    >
+      <p className="flex-1 min-w-0 m-0">
+        <ConfirmMessage noun={noun} mode={confirmMode} desc={desc} agentName={agentName} />
+      </p>
+      <div className="flex gap-1.5 flex-shrink-0">
+        <button
+          onClick={() => setConfirmMode(null)}
+          className="text-[11px] font-medium px-2.5 py-1 rounded-md bg-[var(--c-surface-2)] text-[var(--c-text-2)] hover:opacity-80 transition-opacity"
+        >
+          {desc.changeCount === 0 ? 'Dismiss' : 'Cancel'}
+        </button>
+        {desc.changeCount > 0 && (
+          <button
+            onClick={handleApply}
+            className={`text-[11px] font-semibold px-2.5 py-1 rounded-md text-white transition-opacity hover:opacity-90 ${
+              confirmMode === 'enable' ? 'bg-emerald-500' : 'bg-rose-500'
+            }`}
+          >
+            {confirmMode === 'enable' ? 'Enable all' : 'Disable all'}
+          </button>
+        )}
+      </div>
+    </div>
+  )
+
+  const toastEl = toast && (
+    <div className="fixed bottom-4 right-4 z-50 flex items-center gap-2 max-w-sm bg-[var(--c-bg)] border border-[var(--c-border)] rounded-lg px-3 py-2.5 text-[11.5px] shadow-xl">
+      <span className="text-emerald-500 font-bold flex-shrink-0">✓</span>
+      <span className="flex-1 text-[var(--c-text-2)] leading-relaxed [&_b]:text-[var(--c-text)] [&_b]:font-semibold">
+        <ToastMessage noun={noun} mode={toast.mode} desc={toast.desc} agentName={agentName} />
+      </span>
+      <button onClick={() => setToast(null)} aria-label="Dismiss" className="text-[var(--c-text-3)] hover:text-[var(--c-text-2)] flex-shrink-0">✕</button>
+    </div>
+  )
+
+  if (inline) {
+    return (
+      <>
+        {enableBtn}
+        {disableBtn}
+        {confirmBanner}
+        {toastEl}
+      </>
+    )
+  }
+
   return (
     <div className="px-3 pt-2 flex-shrink-0">
       <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-md bg-[var(--c-surface)] border border-[var(--c-border-sub)]">
         <span className="text-[11px] text-[var(--c-text-3)] mr-0.5">Bulk, across all agents:</span>
-        <button
-          onClick={() => setConfirmMode('enable')}
-          disabled={running}
-          className="text-[11.5px] font-medium px-2.5 py-1 rounded-md border border-[var(--c-border)] text-[var(--c-text-2)] hover:border-emerald-500/50 hover:text-emerald-500 transition-colors disabled:opacity-50"
-        >
-          Enable all
-        </button>
-        <button
-          onClick={() => setConfirmMode('disable')}
-          disabled={running}
-          className="text-[11.5px] font-medium px-2.5 py-1 rounded-md border border-[var(--c-border)] text-[var(--c-text-2)] hover:border-rose-500/50 hover:text-rose-500 transition-colors disabled:opacity-50"
-        >
-          Disable all
-        </button>
+        {enableBtn}
+        {disableBtn}
       </div>
-
-      {confirmMode && desc && (
-        <div
-          className={`mt-2 flex items-center gap-3 px-3 py-2 rounded-md text-[12px] leading-relaxed [&_b]:text-[var(--c-text)] [&_b]:font-semibold ${
-            confirmMode === 'enable'
-              ? 'bg-emerald-500/8 border border-emerald-500/25 text-[var(--c-text-2)]'
-              : 'bg-rose-500/8 border border-rose-500/25 text-[var(--c-text-2)]'
-          }`}
-        >
-          <p className="flex-1 min-w-0 m-0">
-            <ConfirmMessage noun={noun} mode={confirmMode} desc={desc} agentName={agentName} />
-          </p>
-          <div className="flex gap-1.5 flex-shrink-0">
-            <button
-              onClick={() => setConfirmMode(null)}
-              className="text-[11px] font-medium px-2.5 py-1 rounded-md bg-[var(--c-surface-2)] text-[var(--c-text-2)] hover:opacity-80 transition-opacity"
-            >
-              {desc.changeCount === 0 ? 'Dismiss' : 'Cancel'}
-            </button>
-            {desc.changeCount > 0 && (
-              <button
-                onClick={handleApply}
-                className={`text-[11px] font-semibold px-2.5 py-1 rounded-md text-white transition-opacity hover:opacity-90 ${
-                  confirmMode === 'enable' ? 'bg-emerald-500' : 'bg-rose-500'
-                }`}
-              >
-                {confirmMode === 'enable' ? 'Enable all' : 'Disable all'}
-              </button>
-            )}
-          </div>
-        </div>
-      )}
-
-      {toast && (
-        <div className="fixed bottom-4 right-4 z-50 flex items-center gap-2 max-w-sm bg-[var(--c-bg)] border border-[var(--c-border)] rounded-lg px-3 py-2.5 text-[11.5px] shadow-xl">
-          <span className="text-emerald-500 font-bold flex-shrink-0">✓</span>
-          <span className="flex-1 text-[var(--c-text-2)] leading-relaxed [&_b]:text-[var(--c-text)] [&_b]:font-semibold">
-            <ToastMessage noun={noun} mode={toast.mode} desc={toast.desc} agentName={agentName} />
-          </span>
-          <button onClick={() => setToast(null)} aria-label="Dismiss" className="text-[var(--c-text-3)] hover:text-[var(--c-text-2)] flex-shrink-0">✕</button>
-        </div>
-      )}
+      {confirmBanner}
+      {toastEl}
     </div>
   )
 }

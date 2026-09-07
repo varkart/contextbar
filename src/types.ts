@@ -351,6 +351,10 @@ export interface SessionInsights {
   toolCounts: ToolCount[]
   mcpToolCounts: ToolCount[]
   skillCounts: ToolCount[]
+  /** Every skill name invoked ≥1× in the window (untruncated). */
+  skillNamesUsed: string[]
+  /** Every MCP server name called ≥1× in the window (untruncated). */
+  mcpNamesUsed: string[]
   heaviest?: HeaviestSession | null
 }
 

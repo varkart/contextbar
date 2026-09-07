@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import type { Agent, Skill } from '../../types'
 import AgentChips from '../AgentChips'
@@ -9,6 +9,7 @@ import BulkToggleBar, { type BulkDescribe, type BulkMode } from '../BulkToggleBa
 import SearchInput from '../SearchInput'
 import SortToggleButton from '../SortToggleButton'
 import StatusFilterControl, { type StatusFilterValue } from '../StatusFilterControl'
+import ZoneLabel from '../ZoneLabel'
 import RemoveEverywhereBanner from '../RemoveEverywhereBanner'
 import { useAgentFilter } from '../../hooks/useAgentFilter'
 import { AGENT_SELECTOR_DROPDOWN_THRESHOLD } from '../../constants/filters'
@@ -24,6 +25,10 @@ interface Props {
   onInstalled?: () => Promise<void>
   /** Popover (small window): render agents as a hover-to-expand pill instead of always-visible chips. */
   compact?: boolean
+  /** Lower-cased names of skills invoked at least once in the usage window. */
+  usedNames?: Set<string>
+  /** Sessions analyzed for the usage window; 0 means "no data" — the unused review is hidden. */
+  usageAnalyzed?: number
 }
 
 interface SkillVariant extends Skill {
@@ -71,13 +76,17 @@ function computeBulkChanges(groups: SkillGroup[], mode: BulkMode) {
   return { changed, changedAgentIds, untouchedAgentIds }
 }
 
-export default function AllSkillsView({ agents, onSelectSkill, onAddSkill, onInstalled, compact }: Props) {
+export default function AllSkillsView({ agents, onSelectSkill, onAddSkill, onInstalled, compact, usedNames, usageAnalyzed = 0 }: Props) {
   const [query, setQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState<StatusFilterValue>('all')
   const [togglingKey, setTogglingKey] = useState<{ name: string; toolId: string } | null>(null)
   const [pendingRemoveGroup, setPendingRemoveGroup] = useState<string | null>(null)
   const [removingGroup, setRemovingGroup] = useState<string | null>(null)
   const [removeGroupError, setRemoveGroupError] = useState<Record<string, string>>({})
+  const [reviewMode, setReviewMode] = useState(false)
+  const [reviewSel, setReviewSel] = useState<Set<string>>(new Set())
+  const [bulkDeleteConfirm, setBulkDeleteConfirm] = useState(false)
+  const [bulkBusy, setBulkBusy] = useState(false)
   const { installedAgents, selectedTools, toggleTool, toggleToolCheckbox, selectAll, allSelected } = useAgentFilter(agents)
   const groups = useMemo(() => buildGroups(agents), [agents])
   const agentSkillCounts = useMemo(() => {
@@ -172,6 +181,63 @@ export default function AllSkillsView({ agents, onSelectSkill, onAddSkill, onIns
 
   const { sortMode, setSortMode, sorted } = useEnabledSort(filtered)
 
+  // "Active but not run in the usage window" — candidates for cleanup. Hidden
+  // entirely when there's no usage data (usageAnalyzed === 0), since then
+  // *everything* would look unused.
+  const unusedGroups = useMemo(() => {
+    if (!usedNames || usageAnalyzed === 0) return []
+    return groups.filter(g => g.variants.some(v => v.active) && !usedNames.has(g.name.toLowerCase()))
+  }, [groups, usedNames, usageAnalyzed])
+  const listGroups = reviewMode ? unusedGroups : sorted
+
+  const exitReview = () => { setReviewMode(false); setReviewSel(new Set()); setBulkDeleteConfirm(false) }
+  useEffect(() => {
+    if (reviewMode && unusedGroups.length === 0) exitReview()
+  }, [reviewMode, unusedGroups.length])
+
+  const toggleSel = (name: string) => setReviewSel(prev => {
+    const next = new Set(prev)
+    if (next.has(name)) next.delete(name); else next.add(name)
+    return next
+  })
+  const allSel = unusedGroups.length > 0 && unusedGroups.every(g => reviewSel.has(g.name))
+  const someSel = unusedGroups.some(g => reviewSel.has(g.name))
+  const toggleSelAll = () => setReviewSel(allSel ? new Set() : new Set(unusedGroups.map(g => g.name)))
+
+  const disableSelected = async () => {
+    setBulkBusy(true)
+    for (const g of unusedGroups) {
+      if (!reviewSel.has(g.name)) continue
+      for (const v of g.variants) {
+        if (!v.active) continue
+        try {
+          await invoke('set_skill_active', { agentId: v.toolId, skillName: v.name, skillPath: v.path, sourceId: v.sourceId, active: false })
+          capture('skill_toggled', { tool_id: v.toolId, skill_name: v.name, active: false })
+        } catch (e) { captureException(e) }
+      }
+    }
+    setReviewSel(new Set())
+    setBulkBusy(false)
+    await onInstalled?.()
+  }
+  const deleteSelected = async () => {
+    setBulkBusy(true)
+    const targets = unusedGroups.filter(g => reviewSel.has(g.name))
+    for (const g of targets) {
+      for (const v of g.variants) {
+        try {
+          await invoke('remove_skill', { agentId: v.toolId, skillName: v.name, skillPath: v.path })
+          capture('skill_deleted', { tool_id: v.toolId, skill_name: v.name })
+        } catch (e) { captureException(e) }
+      }
+      capture('skill_removed_everywhere', { skill_name: g.name, agent_count: g.variants.length })
+    }
+    setReviewSel(new Set())
+    setBulkDeleteConfirm(false)
+    setBulkBusy(false)
+    await onInstalled?.()
+  }
+
   const totalSkills = groups.length
   const totalInstances = groups.reduce((n, g) => n + g.variants.length, 0)
   const isFiltered = filtered.length !== totalSkills
@@ -181,14 +247,14 @@ export default function AllSkillsView({ agents, onSelectSkill, onAddSkill, onIns
 
   return (
     <div className="flex flex-col h-full bg-[var(--c-bg)]">
-      <div className="flex items-center gap-2 px-3 py-2 border-b border-[var(--c-border)] flex-shrink-0">
-        <div className="flex-1 min-w-0">
-          <SearchInput value={query} onChange={setQuery} placeholder="Search skills…" accentColor="indigo" />
-        </div>
+      {/* ACTIONS row — changes state; amber left rail + bolt mark it as such */}
+      <div className="border-l-2 border-l-amber-500/60 border-b border-[var(--c-border)] flex-shrink-0 flex items-center gap-2 px-3 py-1.5 flex-wrap">
+        <ZoneLabel kind="actions" />
+        <span className="flex-1" />
         {onAddSkill && (
           <button
             onClick={onAddSkill}
-            className={`flex items-center gap-1 px-2.5 py-1.5 rounded-md border border-indigo-500/40 text-indigo-400 hover:bg-indigo-500/10 transition-colors font-semibold flex-shrink-0 ${compact ? 'text-[12px]' : 'text-[13px]'}`}
+            className={`flex items-center gap-1 px-2.5 py-1 rounded-md border border-indigo-500/40 text-indigo-400 hover:bg-indigo-500/10 transition-colors font-semibold flex-shrink-0 ${compact ? 'text-[12px]' : 'text-[13px]'}`}
           >
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
               stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
@@ -198,49 +264,93 @@ export default function AllSkillsView({ agents, onSelectSkill, onAddSkill, onIns
             Add skill
           </button>
         )}
+        <BulkToggleBar variant="inline" noun="skill" agentName={agentName} describeBulk={describeBulk} applyBulk={applyBulk} />
       </div>
 
-      <div className="flex items-center justify-between gap-2 px-3 py-1.5 border-b border-[var(--c-border)] flex-shrink-0 flex-wrap">
-        {installedAgents.length >= AGENT_SELECTOR_DROPDOWN_THRESHOLD ? (
-          <AgentMultiSelect
-            installedAgents={installedAgents}
-            selectedTools={selectedTools}
-            allSelected={allSelected}
-            onToggle={toggleToolCheckbox}
-            onSelectAll={selectAll}
-            counts={agentSkillCounts}
+      {/* FILTER band — narrows what the list shows */}
+      <div className="bg-[var(--c-accent)]/[0.04] border-b border-[var(--c-border)] flex-shrink-0">
+        <div className="px-3 pt-1.5 pb-1"><ZoneLabel kind="filter" /></div>
+        <div className="px-3 pb-1.5">
+          <SearchInput value={query} onChange={setQuery} placeholder="Search skills…" accentColor="indigo" />
+        </div>
+        <div className="flex items-center justify-between gap-2 px-3 pb-2 flex-wrap">
+          {installedAgents.length >= AGENT_SELECTOR_DROPDOWN_THRESHOLD ? (
+            <AgentMultiSelect
+              installedAgents={installedAgents}
+              selectedTools={selectedTools}
+              allSelected={allSelected}
+              onToggle={toggleToolCheckbox}
+              onSelectAll={selectAll}
+              counts={agentSkillCounts}
+              compact={compact}
+            />
+          ) : (
+            <AgentChips installedAgents={installedAgents} selectedTools={selectedTools} onToggle={toggleTool} />
+          )}
+          <StatusFilterControl value={statusFilter} onChange={setStatusFilter} compact={compact} />
+        </div>
+      </div>
+
+      {unusedGroups.length > 0 && (
+        <div className="flex items-center gap-2 px-4 py-1.5 bg-amber-500/[0.08] border-b border-amber-500/20 flex-shrink-0 text-[12px] text-amber-300">
+          <span className="flex-1 min-w-0">
+            {reviewMode
+              ? `Reviewing ${unusedGroups.length} active skill${unusedGroups.length > 1 ? 's' : ''} not run in the last 30 days.`
+              : `${unusedGroups.length} active skill${unusedGroups.length > 1 ? 's' : ''} ${unusedGroups.length > 1 ? "haven't" : "hasn't"} run in the last 30 days.`}
+          </span>
+          <button
+            onClick={() => reviewMode ? exitReview() : setReviewMode(true)}
+            className="flex-shrink-0 px-2 py-0.5 rounded-md border border-amber-500/40 hover:bg-amber-500/10 font-semibold transition-colors"
+          >
+            {reviewMode ? 'Exit review' : 'Review'}
+          </button>
+        </div>
+      )}
+
+      {reviewMode ? (
+        <div className="flex items-center gap-3 px-4 py-1.5 border-b border-[var(--c-border-sub)] flex-shrink-0">
+          <button
+            onClick={toggleSelAll}
+            aria-label="Select all"
+            className={`w-4 h-4 rounded border flex items-center justify-center text-[10px] transition-colors ${allSel || someSel ? 'bg-[var(--c-accent)] border-[var(--c-accent)] text-white' : 'border-[var(--c-text-3)]'}`}
+          >
+            {allSel ? '✓' : someSel ? '–' : ''}
+          </button>
+          <span className={`font-semibold uppercase tracking-wider text-[var(--c-text-3)] ${compact ? 'text-[9.5px]' : 'text-[11px]'}`}>Active · not used in 30 days</span>
+        </div>
+      ) : (
+        <div className="flex items-center px-4 py-1.5 border-b border-[var(--c-border-sub)] flex-shrink-0">
+          <SortToggleButton
+            sortMode={sortMode}
+            onToggle={() => setSortMode(m => m === 'name' ? 'enabled' : 'name')}
             compact={compact}
           />
-        ) : (
-          <AgentChips installedAgents={installedAgents} selectedTools={selectedTools} onToggle={toggleTool} />
-        )}
-        <StatusFilterControl value={statusFilter} onChange={setStatusFilter} compact={compact} />
-      </div>
-
-      <BulkToggleBar noun="skill" agentName={agentName} describeBulk={describeBulk} applyBulk={applyBulk} />
-
-      <div className="flex items-center px-4 py-1.5 border-b border-[var(--c-border-sub)] flex-shrink-0">
-        <SortToggleButton
-          sortMode={sortMode}
-          onToggle={() => setSortMode(m => m === 'name' ? 'enabled' : 'name')}
-          compact={compact}
-        />
-        <span className={`font-semibold uppercase tracking-wider text-[var(--c-text-3)] ${compact ? 'text-[9.5px]' : 'text-[11px]'}`}>Agents</span>
-        <span className="w-[18px]" />
-      </div>
+          <span className={`font-semibold uppercase tracking-wider text-[var(--c-text-3)] ${compact ? 'text-[9.5px]' : 'text-[11px]'}`}>Agents</span>
+          <span className="w-[18px]" />
+        </div>
+      )}
 
       <div className="flex-1 overflow-y-auto">
-        {filtered.length === 0 && (
+        {listGroups.length === 0 && (
           <p className={`text-[var(--c-text-3)] px-4 py-6 text-center ${compact ? 'text-[13px]' : 'text-[14px]'}`}>
-            {query ? 'No skills match' : 'No skills found'}
+            {reviewMode ? 'No unused active skills' : query ? 'No skills match' : 'No skills found'}
           </p>
         )}
-        {sorted.map(group => {
+        {listGroups.map(group => {
           const activeCount = group.variants.filter(v => v.active).length
           const allOff = activeCount === 0
           return (
             <div key={group.name} className="border-b border-[var(--c-border-sub)] last:border-0">
-              <div className="w-full flex items-center gap-3 px-4 py-2 hover:bg-[var(--c-hover)] transition-colors">
+              <div className={`w-full flex items-center gap-3 px-4 py-2 hover:bg-[var(--c-hover)] transition-colors ${reviewMode && reviewSel.has(group.name) ? 'bg-[var(--c-accent)]/[0.06]' : ''}`}>
+                {reviewMode && (
+                  <button
+                    onClick={() => toggleSel(group.name)}
+                    aria-label={`Select ${group.name}`}
+                    className={`w-4 h-4 rounded border flex items-center justify-center text-[10px] flex-shrink-0 transition-colors ${reviewSel.has(group.name) ? 'bg-[var(--c-accent)] border-[var(--c-accent)] text-white' : 'border-[var(--c-text-3)]'}`}
+                  >
+                    {reviewSel.has(group.name) ? '✓' : ''}
+                  </button>
+                )}
                 <button onClick={() => onSelectSkill(group.primary)} className="flex-1 min-w-0 text-left">
                   <span className={`block font-medium truncate font-mono ${allOff ? 'text-[var(--c-text-3)]' : 'text-[var(--c-text)]'} ${compact ? 'text-[13px]' : 'text-[14px]'}`}>
                     {group.name}
@@ -309,6 +419,30 @@ export default function AllSkillsView({ agents, onSelectSkill, onAddSkill, onIns
           )
         })}
       </div>
+
+      {reviewMode && (
+        <div className="flex items-center gap-2 px-4 py-2 border-t border-[var(--c-border)] bg-[var(--c-surface)] flex-shrink-0 flex-wrap">
+          {bulkDeleteConfirm ? (
+            <>
+              <span className="flex-1 text-[11.5px] text-rose-400">Delete {reviewSel.size} skill{reviewSel.size === 1 ? '' : 's'} from every agent? This removes the files.</span>
+              <button disabled={bulkBusy} onClick={deleteSelected} className="text-[11px] font-semibold px-2.5 py-1 rounded-md bg-rose-500 text-white hover:opacity-90 disabled:opacity-50">
+                {bulkBusy ? 'Deleting…' : 'Confirm delete'}
+              </button>
+              <button disabled={bulkBusy} onClick={() => setBulkDeleteConfirm(false)} className="text-[11px] px-2.5 py-1 rounded-md bg-[var(--c-surface-2)] text-[var(--c-text-2)] hover:opacity-80">Cancel</button>
+            </>
+          ) : (
+            <>
+              <span className="flex-1 text-[11px] text-[var(--c-text-3)]">{reviewSel.size} selected</span>
+              <button disabled={!reviewSel.size || bulkBusy} onClick={disableSelected} className="text-[11px] font-medium px-2.5 py-1 rounded-md border border-[var(--c-border)] text-[var(--c-text-2)] hover:border-amber-500/50 hover:text-amber-500 transition-colors disabled:opacity-40">
+                {bulkBusy ? 'Working…' : 'Disable selected'}
+              </button>
+              <button disabled={!reviewSel.size || bulkBusy} onClick={() => setBulkDeleteConfirm(true)} className="text-[11px] font-medium px-2.5 py-1 rounded-md border border-rose-500/40 text-rose-400 hover:bg-rose-500/10 transition-colors disabled:opacity-40">
+                Delete selected
+              </button>
+            </>
+          )}
+        </div>
+      )}
 
       <div className="px-4 py-1.5 border-t border-[var(--c-border)] flex-shrink-0">
         <span className={`text-[var(--c-text-3)] ${compact ? 'text-[11px]' : 'text-[12px]'}`}>{countLabel}</span>
