@@ -258,10 +258,7 @@ fn parse_single_block(item: &Value, error_count: &mut u32) -> Option<ContentBloc
                 tool_input: input,
                 tool_result: None,
                 is_error: false,
-                tool_use_id: item
-                    .get("id")
-                    .and_then(|v| v.as_str())
-                    .map(str::to_string),
+                tool_use_id: item.get("id").and_then(|v| v.as_str()).map(str::to_string),
             })
         }
         "tool_result" => {
@@ -434,11 +431,10 @@ mod tests {
     #[test]
     fn empty_non_error_tool_result_is_dropped() {
         let mut errs = 0;
-        assert!(parse_single_block(
-            &json!({"type": "tool_result", "content": ""}),
-            &mut errs,
-        )
-        .is_none());
+        assert!(
+            parse_single_block(&json!({"type": "tool_result", "content": ""}), &mut errs,)
+                .is_none()
+        );
         assert_eq!(errs, 0);
     }
 
