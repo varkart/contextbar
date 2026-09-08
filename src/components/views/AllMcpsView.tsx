@@ -185,11 +185,16 @@ export default function AllMcpsView({ agents, onSelectMcp, onAddMcp, onInstalled
 
   const { sortMode, setSortMode, sorted } = useEnabledSort(filtered)
 
-  // "Active but not called in the usage window" — cleanup candidates. Hidden
-  // when there's no usage data (else everything looks unused).
+  // "Active on Claude Code, no recorded calls in the usage window" — cleanup
+  // candidates. Scoped to Claude: it's the only agent whose MCP calls we track,
+  // so an MCP active only on another agent must not be flagged. Hidden when
+  // there's no usage data (else everything looks unused).
   const unusedGroups = useMemo(() => {
     if (!usedNames || usageAnalyzed === 0) return []
-    return groups.filter(g => g.variants.some(v => v.active) && !usedNames.has(g.name.toLowerCase()))
+    return groups.filter(g =>
+      g.variants.some(v => v.active && v.toolId === 'claude')
+      && !usedNames.has(g.name.toLowerCase()),
+    )
   }, [groups, usedNames, usageAnalyzed])
   const listGroups = reviewMode ? unusedGroups : sorted
 
@@ -207,12 +212,13 @@ export default function AllMcpsView({ agents, onSelectMcp, onAddMcp, onInstalled
   const someSel = unusedGroups.some(g => reviewSel.has(g.name))
   const toggleSelAll = () => setReviewSel(allSel ? new Set() : new Set(unusedGroups.map(g => g.name)))
 
+  // Both bulk actions touch ONLY the Claude variant — the one the review judged.
   const disableSelected = async () => {
     setBulkBusy(true)
     for (const g of unusedGroups) {
       if (!reviewSel.has(g.name)) continue
       for (const v of g.variants) {
-        if (!v.active) continue
+        if (!v.active || v.toolId !== 'claude') continue
         try {
           await invoke('set_mcp_active', { agentId: v.toolId, mcpName: v.name, sourceId: v.sourceId, active: false, extensionName: v.extensionName ?? null })
           capture('mcp_toggled', { tool_id: v.toolId, mcp_name: v.name, active: false })
@@ -228,6 +234,7 @@ export default function AllMcpsView({ agents, onSelectMcp, onAddMcp, onInstalled
     const targets = unusedGroups.filter(g => reviewSel.has(g.name))
     for (const g of targets) {
       for (const v of g.variants) {
+        if (v.toolId !== 'claude') continue
         try {
           await invoke('remove_mcp', { agentId: v.toolId, mcpName: v.name, sourceId: v.sourceId, command: v.command || null, args: v.args, url: v.url ?? null })
           capture('mcp_removed', { tool_id: v.toolId, mcp_name: v.name })
@@ -298,8 +305,8 @@ export default function AllMcpsView({ agents, onSelectMcp, onAddMcp, onInstalled
         <div className="flex items-center gap-2 px-4 py-1.5 bg-amber-500/[0.08] border-b border-amber-500/20 flex-shrink-0 text-[12px] text-amber-300">
           <span className="flex-1 min-w-0">
             {reviewMode
-              ? `Reviewing ${unusedGroups.length} active MCP${unusedGroups.length > 1 ? 's' : ''} not called in the last 30 days.`
-              : `${unusedGroups.length} active MCP${unusedGroups.length > 1 ? 's' : ''} ${unusedGroups.length > 1 ? "haven't" : "hasn't"} been called in the last 30 days.`}
+              ? `Reviewing ${unusedGroups.length} Claude Code MCP${unusedGroups.length > 1 ? 's' : ''} with no recorded calls in the last 30 days.`
+              : `${unusedGroups.length} active Claude Code MCP${unusedGroups.length > 1 ? 's' : ''} — no recorded calls in the last 30 days.`}
           </span>
           <button
             onClick={() => reviewMode ? exitReview() : setReviewMode(true)}
@@ -319,7 +326,7 @@ export default function AllMcpsView({ agents, onSelectMcp, onAddMcp, onInstalled
           >
             {allSel ? '✓' : someSel ? '–' : ''}
           </button>
-          <span className={`font-semibold uppercase tracking-wider text-[var(--c-text-3)] ${compact ? 'text-[9.5px]' : 'text-[11px]'}`}>Active · not called in 30 days</span>
+          <span className={`font-semibold uppercase tracking-wider text-[var(--c-text-3)] ${compact ? 'text-[9.5px]' : 'text-[11px]'}`}>Claude Code · no calls in 30 days</span>
         </div>
       ) : (
         <div className="flex items-center px-4 py-1.5 border-b border-[var(--c-border-sub)] flex-shrink-0">
@@ -434,7 +441,7 @@ export default function AllMcpsView({ agents, onSelectMcp, onAddMcp, onInstalled
         <div className="flex items-center gap-2 px-4 py-2 border-t border-[var(--c-border)] bg-[var(--c-surface)] flex-shrink-0 flex-wrap">
           {bulkDeleteConfirm ? (
             <>
-              <span className="flex-1 text-[11.5px] text-rose-400">Remove {reviewSel.size} MCP{reviewSel.size === 1 ? '' : 's'} from every agent?</span>
+              <span className="flex-1 text-[11.5px] text-rose-400">Remove {reviewSel.size} MCP{reviewSel.size === 1 ? '' : 's'} from Claude Code? Other agents keep their config.</span>
               <button disabled={bulkBusy} onClick={deleteSelected} className="text-[11px] font-semibold px-2.5 py-1 rounded-md bg-rose-500 text-white hover:opacity-90 disabled:opacity-50">
                 {bulkBusy ? 'Removing…' : 'Confirm remove'}
               </button>
@@ -442,12 +449,12 @@ export default function AllMcpsView({ agents, onSelectMcp, onAddMcp, onInstalled
             </>
           ) : (
             <>
-              <span className="flex-1 text-[11px] text-[var(--c-text-3)]">{reviewSel.size} selected</span>
-              <button disabled={!reviewSel.size || bulkBusy} onClick={disableSelected} className="text-[11px] font-medium px-2.5 py-1 rounded-md border border-[var(--c-border)] text-[var(--c-text-2)] hover:border-amber-500/50 hover:text-amber-500 transition-colors disabled:opacity-40">
+              <span className="flex-1 text-[11px] text-[var(--c-text-3)]">{reviewSel.size} selected · action applies to Claude Code only</span>
+              <button disabled={!reviewSel.size || bulkBusy} onClick={disableSelected} className="text-[11px] font-semibold px-2.5 py-1 rounded-md bg-[var(--c-accent)] text-white hover:opacity-90 transition-opacity disabled:opacity-40">
                 {bulkBusy ? 'Working…' : 'Disable selected'}
               </button>
-              <button disabled={!reviewSel.size || bulkBusy} onClick={() => setBulkDeleteConfirm(true)} className="text-[11px] font-medium px-2.5 py-1 rounded-md border border-rose-500/40 text-rose-400 hover:bg-rose-500/10 transition-colors disabled:opacity-40">
-                Remove selected
+              <button disabled={!reviewSel.size || bulkBusy} onClick={() => setBulkDeleteConfirm(true)} className="text-[11px] font-medium px-2 py-1 rounded-md text-rose-400/80 hover:text-rose-400 hover:bg-rose-500/10 transition-colors disabled:opacity-40">
+                Remove
               </button>
             </>
           )}
