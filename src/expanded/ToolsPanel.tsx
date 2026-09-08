@@ -341,10 +341,10 @@ export default function ToolsPanel({
                 <Tile value={usage.skillNamesUsed?.length ?? usage.skillCounts.length} label="Skills used" />
                 <Tile value={agentInsights.skillsTotal} label="Installed" />
                 <Tile
-                  value={[...new Set(installedAgents.flatMap(a => a.skills.filter(s => s.active).map(s => s.name.toLowerCase())))].filter(n => !usedSkillNames.has(n)).length}
+                  value={[...new Set((installedAgents.find(a => a.id === 'claude')?.skills ?? []).filter(s => s.active).map(s => s.name.toLowerCase()))].filter(n => !usedSkillNames.has(n)).length}
                   label="Unused"
                   color="text-amber-400"
-                  hint="Active skills with no runs in the last 30 days — see the review bar below"
+                  hint="Active Claude Code skills with no recorded runs in the last 30 days — see the review bar below"
                 />
               </TileRow>
               {usage.skillCounts.length > 0 && (
