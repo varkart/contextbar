@@ -95,6 +95,36 @@ fn skill_name_from_input(input: &str) -> Option<String> {
     None
 }
 
+/// Kiro's own slash commands — not skills. A leading `/<one-of-these>` in a
+/// prompt is a builtin, not a skill invocation.
+const KIRO_BUILTIN_SLASH: &[&str] = &[
+    "resume", "help", "model", "config", "usage", "tasks", "rename", "mcp", "skills", "clear",
+    "login", "logout", "quit", "exit", "compact", "context", "tools", "agent", "agents", "init",
+    "doctor", "feedback", "new", "save", "undo", "redo", "profile", "settings", "history",
+];
+
+/// Kiro can invoke a skill with a leading `/<skill-name>` in the prompt.
+/// Returns the slug if the text opens with such a slash command and it isn't
+/// a Kiro builtin. Downstream matching against the installed-skill set
+/// discards anything that isn't a real skill.
+fn kiro_slash_skill(text: &str) -> Option<String> {
+    let token = text
+        .trim_start()
+        .strip_prefix('/')?
+        .split_whitespace()
+        .next()?;
+    if token.len() > 60
+        || !token.chars().any(|c| c.is_ascii_alphabetic())
+        || !token
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | ':'))
+        || KIRO_BUILTIN_SLASH.contains(&token)
+    {
+        return None;
+    }
+    Some(token.to_string())
+}
+
 // ── Pricing (bundled data, refreshed weekly by CI) ───────────────────────────
 
 #[derive(serde::Deserialize)]
@@ -362,6 +392,12 @@ fn upsert_session(
                             *skill_calls.entry(skill).or_insert(0) += 1;
                         }
                     }
+                }
+            }
+            // Kiro invokes skills with a leading `/<skill-name>` in the prompt.
+            if entry.agent == "kiro" && msg.role == "user" && block.block_type == "text" {
+                if let Some(skill) = block.text.as_deref().and_then(kiro_slash_skill) {
+                    *skill_calls.entry(skill).or_insert(0) += 1;
                 }
             }
         }
@@ -645,6 +681,26 @@ mod tests {
             Some("caveman".to_string())
         );
         assert_eq!(skill_name_from_input(r#"{"args":"no skill"}"#), None);
+    }
+
+    #[test]
+    fn kiro_slash_skill_matches_only_real_slash_invocations() {
+        assert_eq!(
+            kiro_slash_skill("/human-review fix the copy"),
+            Some("human-review".into())
+        );
+        assert_eq!(kiro_slash_skill("  /graphify"), Some("graphify".into()));
+        assert_eq!(
+            kiro_slash_skill("/visualcave:visualcave x"),
+            Some("visualcave:visualcave".into())
+        );
+        // builtins and non-slash prompts are ignored
+        assert_eq!(kiro_slash_skill("/resume"), None);
+        assert_eq!(kiro_slash_skill("/mcp"), None);
+        assert_eq!(kiro_slash_skill("just a normal prompt"), None);
+        assert_eq!(kiro_slash_skill("/"), None);
+        assert_eq!(kiro_slash_skill("/Users/vk/some/path"), None); // has a slash mid-token
+        assert_eq!(kiro_slash_skill("/123"), None); // no letters
     }
 
     #[test]
