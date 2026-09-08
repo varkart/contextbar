@@ -69,20 +69,30 @@ pub struct SessionInsights {
     pub heaviest: Option<HeaviestSession>,
 }
 
-/// Extract the invoked skill name from a Skill tool_use input.
-/// `tool_input` is a possibly-truncated JSON string like {"skill":"graphify",…}.
+/// Extract the invoked skill name from a skill-tool input. Shapes seen:
+/// Claude `{"skill":"graphify",…}`, OpenCode `{"name":"graphify"}`,
+/// slash form `{"command":"graphify"}`. Input may be truncated JSON.
 fn skill_name_from_input(input: &str) -> Option<String> {
     if let Ok(v) = serde_json::from_str::<serde_json::Value>(input) {
-        if let Some(s) = v.get("skill").and_then(|s| s.as_str()) {
-            return Some(s.to_string());
+        for key in ["skill", "name", "command"] {
+            if let Some(s) = v.get(key).and_then(|s| s.as_str()) {
+                return Some(s.to_string());
+            }
         }
     }
-    // Truncated JSON fallback: find "skill":"…"
-    let idx = input.find("\"skill\"")?;
-    let rest = &input[idx + 7..];
-    let start = rest.find('"')? + 1;
-    let end = rest[start..].find('"')? + start;
-    Some(rest[start..end].to_string())
+    // Truncated JSON fallback: find the first "<key>":"…"
+    for key in ["\"skill\"", "\"name\"", "\"command\""] {
+        if let Some(idx) = input.find(key) {
+            let rest = &input[idx + key.len()..];
+            if let Some(start) = rest.find('"') {
+                let rest = &rest[start + 1..];
+                if let Some(end) = rest.find('"') {
+                    return Some(rest[..end].to_string());
+                }
+            }
+        }
+    }
+    None
 }
 
 // ── Pricing (bundled data, refreshed weekly by CI) ───────────────────────────
@@ -340,7 +350,12 @@ fn upsert_session(
             if block.block_type == "tool_use" {
                 if let Some(name) = &block.tool_name {
                     *tool_calls.entry(name.clone()).or_insert(0) += 1;
-                    if name == "Skill" {
+                    // Claude Code invokes skills via a `Skill` tool; OpenCode
+                    // via a lowercase `skill` tool (`skill({ name })`). Both
+                    // carry the skill name in the tool input.
+                    let is_skill_tool =
+                        name == "Skill" || (entry.agent == "opencode" && name == "skill");
+                    if is_skill_tool {
                         if let Some(skill) =
                             block.tool_input.as_deref().and_then(skill_name_from_input)
                         {
@@ -630,6 +645,25 @@ mod tests {
             Some("caveman".to_string())
         );
         assert_eq!(skill_name_from_input(r#"{"args":"no skill"}"#), None);
+    }
+
+    #[test]
+    fn extracts_skill_name_from_opencode_and_slash_shapes() {
+        // OpenCode: skill({ name: "…" })
+        assert_eq!(
+            skill_name_from_input(r#"{"name":"algorithmic-art"}"#),
+            Some("algorithmic-art".to_string())
+        );
+        // Slash form
+        assert_eq!(
+            skill_name_from_input(r#"{"command":"ship"}"#),
+            Some("ship".to_string())
+        );
+        // "skill" still wins when several keys are present
+        assert_eq!(
+            skill_name_from_input(r#"{"name":"other","skill":"graphify"}"#),
+            Some("graphify".to_string())
+        );
     }
 }
 
