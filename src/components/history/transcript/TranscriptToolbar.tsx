@@ -11,6 +11,8 @@ interface TranscriptToolbarProps {
   setEventsOnly: (b: boolean) => void
   stepsExpanded: boolean
   onToggleSteps: () => void
+  onCopyAll: () => void
+  copiedAll: boolean
   onJumpTop: () => void
   onJumpBottom: () => void
   onPrevPrompt: () => void
@@ -55,6 +57,13 @@ export default function TranscriptToolbar(p: TranscriptToolbarProps) {
         title={p.stepsExpanded ? 'Collapse every work block' : 'Expand every work block'}
       >
         {p.stepsExpanded ? 'collapse steps' : 'expand steps'}
+      </button>
+      <button
+        className={p.copiedAll ? on : base}
+        onClick={p.onCopyAll}
+        title="Copy the whole conversation as text"
+      >
+        {p.copiedAll ? '✓ copied' : '⧉ copy all'}
       </button>
 
       <span className="flex-1" />

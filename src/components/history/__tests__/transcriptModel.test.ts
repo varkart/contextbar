@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { buildTurns, previewSteps, classify } from '../transcript/model'
+import { buildTurns, previewSteps, classify, turnToText, transcriptToText } from '../transcript/model'
 import type { HistoryMessage, ContentBlock } from '../../../types'
 
 const text = (t: string): ContentBlock => ({ blockType: 'text', text: t, isError: false })
@@ -139,5 +139,30 @@ describe('previewSteps', () => {
       { name: 'Read', isError: false, kind: 'read' },
       { name: 'Edit', isError: false, kind: 'edit' },
     ])).toBe('Grep · Read ×2 · Edit')
+  })
+})
+
+describe('turnToText / transcriptToText', () => {
+  it('renders a turn as role header + prose + steps', () => {
+    const turns = buildTurns([
+      msg('assistant', [text('Fixed it.'), toolUse('Bash', 'a', 'npm test')]),
+      msg('user', [toolResult('a', 'PASS')]),
+    ])
+    const out = turnToText(turns[0])
+    expect(out).toContain('### Claude')
+    expect(out).toContain('Fixed it.')
+    expect(out).toContain('$ npm test')
+    expect(out).toContain('  PASS')
+  })
+
+  it('joins turns with a divider', () => {
+    const turns = buildTurns([
+      msg('user', [text('do it')]),
+      msg('assistant', [text('done')]),
+    ])
+    const out = transcriptToText(turns)
+    expect(out).toContain('### You')
+    expect(out).toContain('### Claude')
+    expect(out.split('———')).toHaveLength(2)
   })
 })

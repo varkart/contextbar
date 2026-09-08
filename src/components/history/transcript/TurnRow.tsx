@@ -1,7 +1,7 @@
 import { forwardRef, useEffect, useState } from 'react'
 import Markdown from '../../Markdown'
 import type { TranscriptTurn } from './model'
-import { previewLine } from './model'
+import { previewLine, turnToText } from './model'
 import WorkGroup from './WorkGroup'
 import EventCard from './EventCard'
 import { FIND_QUERY_EVENT } from '../../FindInPage'
@@ -27,6 +27,14 @@ const TurnRow = forwardRef<HTMLDivElement, TurnRowProps>(function TurnRow(
 ) {
   const user = turn.role === 'user'
   const [collapsed, setCollapsed] = useState(false)
+  const [copied, setCopied] = useState(false)
+
+  const copyTurn = () => {
+    navigator.clipboard.writeText(turnToText(turn)).then(
+      () => { setCopied(true); setTimeout(() => setCopied(false), 1200) },
+      () => {},
+    )
+  }
 
   // Collapsed body isn't in the DOM — reopen it when find-in-page has a
   // query that matches this turn's content.
@@ -47,7 +55,19 @@ const TurnRow = forwardRef<HTMLDivElement, TurnRowProps>(function TurnRow(
       data-role={turn.role}
       className={`turn border-t border-[var(--c-border-sub)] ${hidden ? 'hidden' : ''}`}
     >
-      <div className="flex gap-3 px-5 py-2.5">
+      <div className="group/row relative flex gap-3 px-5 py-2.5">
+        <button
+          onClick={copyTurn}
+          title="Copy this turn"
+          aria-label="Copy this turn"
+          className={`absolute right-2 top-1.5 z-10 text-[11px] px-1.5 py-0.5 rounded-md border transition-all ${
+            copied
+              ? 'border-emerald-500/40 bg-emerald-500/15 text-emerald-400 opacity-100'
+              : 'border-[var(--c-border)] bg-[var(--c-bg)] text-[var(--c-text-3)] opacity-0 group-hover/row:opacity-100 hover:text-[var(--c-text-2)]'
+          }`}
+        >
+          {copied ? '✓' : '⧉'}
+        </button>
         <button
           onClick={() => setCollapsed(c => !c)}
           aria-label={collapsed ? 'Expand turn' : 'Collapse turn'}

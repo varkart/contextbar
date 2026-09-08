@@ -4,7 +4,7 @@ import type { SessionEntry, SessionDetail as SessionDetailType, SessionMeta } fr
 import SessionStats from './SessionStats'
 import AgentBadge from './AgentBadge'
 import FindInPage from '../FindInPage'
-import { buildTurns } from './transcript/model'
+import { buildTurns, transcriptToText } from './transcript/model'
 import TurnRow from './transcript/TurnRow'
 import TranscriptToolbar, { type RoleFilter } from './transcript/TranscriptToolbar'
 
@@ -136,6 +136,8 @@ export default function SessionDetail({ session }: SessionDetailProps) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
+  const [copiedPath, setCopiedPath] = useState(false)
+  const [copiedAll, setCopiedAll] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
   const [findOpen, setFindOpen] = useState(false)
 
@@ -212,12 +214,17 @@ export default function SessionDetail({ session }: SessionDetailProps) {
     }
   }
 
+  const flash = (set: (b: boolean) => void) => { set(true); setTimeout(() => set(false), 1300) }
+  const copyPath = () => navigator.clipboard.writeText(session.project).then(() => flash(setCopiedPath), () => {})
+
   const toolCount = detail?.messages.reduce(
     (acc, m) => acc + m.content.filter(b => b.blockType === 'tool_use').length,
     0
   ) ?? 0
 
   const turns = useMemo(() => buildTurns(detail?.messages ?? []), [detail])
+  const copyAll = () =>
+    navigator.clipboard.writeText(transcriptToText(turns)).then(() => flash(setCopiedAll), () => {})
 
   const visible = useMemo(() => {
     const term = q.trim().toLowerCase()
@@ -346,6 +353,17 @@ export default function SessionDetail({ session }: SessionDetailProps) {
           </div>
         </div>
 
+        <button
+          onClick={copyPath}
+          title={`${session.project} — click to copy`}
+          className="flex items-center gap-1 max-w-full text-left mb-0.5 text-[11px] font-mono text-[var(--c-text-3)] hover:text-[var(--c-text-2)] transition-colors group/path"
+        >
+          <span className="truncate">{session.project}</span>
+          <span className="flex-shrink-0 opacity-0 group-hover/path:opacity-100 transition-opacity">
+            {copiedPath ? '✓' : '⧉'}
+          </span>
+        </button>
+
         {detail && (
           <SessionStats
             usage={detail.totalTokens}
@@ -371,6 +389,8 @@ export default function SessionDetail({ session }: SessionDetailProps) {
           eventsOnly={eventsOnly} setEventsOnly={setEventsOnly}
           stepsExpanded={stepsExpanded}
           onToggleSteps={toggleSteps}
+          onCopyAll={copyAll}
+          copiedAll={copiedAll}
           onJumpTop={jumpTop}
           onJumpBottom={jumpBottom}
           onPrevPrompt={() => jumpPrompt(-1)}
