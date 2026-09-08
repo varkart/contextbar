@@ -656,7 +656,7 @@ pub fn aggregate(db: &DbState, since_ms: u64, projects: Option<&[String]>) -> Se
 
 #[cfg(test)]
 mod tests {
-    use super::{est_cost, rates, skill_name_from_input};
+    use super::{est_cost, kiro_slash_skill, rates, skill_name_from_input};
 
     #[test]
     fn pricing_loads_from_bundled_json() {
