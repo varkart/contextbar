@@ -125,6 +125,28 @@ fn kiro_slash_skill(text: &str) -> Option<String> {
     Some(token.to_string())
 }
 
+/// Codex uses a skill by opening its `SKILL.md`. Given a shell-tool input,
+/// return the skill-directory name immediately before `/SKILL.md`. Heuristic:
+/// a plain inspection of a skill file also matches, and skills read without
+/// opening the file are missed.
+fn codex_skill_from_read(input: &str) -> Option<String> {
+    let idx = input.to_ascii_lowercase().find("/skill.md")?;
+    let seg = input[..idx]
+        .rsplit(|c: char| matches!(c, '/' | '\\' | '"' | '\'' | ' '))
+        .next()?;
+    if seg.is_empty()
+        || seg.len() > 60
+        || seg == ".system"
+        || !seg.chars().any(|c| c.is_ascii_alphabetic())
+        || !seg
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.'))
+    {
+        return None;
+    }
+    Some(seg.to_string())
+}
+
 // ── Pricing (bundled data, refreshed weekly by CI) ───────────────────────────
 
 #[derive(serde::Deserialize)]
@@ -400,6 +422,14 @@ fn upsert_session(
                     *skill_calls.entry(skill).or_insert(0) += 1;
                 }
             }
+            // Codex has no skill tool — it opens `<name>/SKILL.md` via a shell
+            // command when it uses a skill. Heuristic, so it can over- or
+            // under-count; downstream matching keeps only real skill names.
+            if entry.agent == "codex" && block.block_type == "tool_use" {
+                if let Some(skill) = block.tool_input.as_deref().and_then(codex_skill_from_read) {
+                    *skill_calls.entry(skill).or_insert(0) += 1;
+                }
+            }
         }
     }
     let tool_calls_json = serde_json::to_string(&tool_calls).unwrap_or_else(|_| "{}".into());
@@ -656,7 +686,7 @@ pub fn aggregate(db: &DbState, since_ms: u64, projects: Option<&[String]>) -> Se
 
 #[cfg(test)]
 mod tests {
-    use super::{est_cost, kiro_slash_skill, rates, skill_name_from_input};
+    use super::{codex_skill_from_read, est_cost, kiro_slash_skill, rates, skill_name_from_input};
 
     #[test]
     fn pricing_loads_from_bundled_json() {
@@ -701,6 +731,28 @@ mod tests {
         assert_eq!(kiro_slash_skill("/"), None);
         assert_eq!(kiro_slash_skill("/Users/vk/some/path"), None); // has a slash mid-token
         assert_eq!(kiro_slash_skill("/123"), None); // no letters
+    }
+
+    #[test]
+    fn codex_skill_from_read_pulls_the_dir_before_skill_md() {
+        assert_eq!(
+            codex_skill_from_read(
+                r#"{"cmd":"sed -n '1,220p' /Users/x/.codex/skills/skill-creator/SKILL.md"}"#
+            ),
+            Some("skill-creator".into())
+        );
+        assert_eq!(
+            codex_skill_from_read(r#"{"cmd":"cat ~/.agents/skills/app-name-check/SKILL.md"}"#),
+            Some("app-name-check".into())
+        );
+        // the .system wrapper is not a skill; the skill dir sits under it
+        assert_eq!(
+            codex_skill_from_read(r#"{"cmd":"cat ~/.codex/skills/.system/imagegen/SKILL.md"}"#),
+            Some("imagegen".into())
+        );
+        // no SKILL.md → nothing
+        assert_eq!(codex_skill_from_read(r#"{"cmd":"ls src"}"#), None);
+        assert_eq!(codex_skill_from_read(r#"{"cmd":"cat /SKILL.md"}"#), None);
     }
 
     #[test]
