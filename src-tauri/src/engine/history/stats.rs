@@ -131,9 +131,7 @@ fn kiro_slash_skill(text: &str) -> Option<String> {
 /// opening the file are missed.
 fn codex_skill_from_read(input: &str) -> Option<String> {
     let idx = input.to_ascii_lowercase().find("/skill.md")?;
-    let seg = input[..idx]
-        .rsplit(|c: char| matches!(c, '/' | '\\' | '"' | '\'' | ' '))
-        .next()?;
+    let seg = input[..idx].rsplit(['/', '\\', '"', '\'', ' ']).next()?;
     if seg.is_empty()
         || seg.len() > 60
         || seg == ".system"
