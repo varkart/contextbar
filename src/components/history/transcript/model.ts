@@ -207,3 +207,34 @@ export function previewSteps(steps: Step[]): string {
   }
   return parts.join(' · ')
 }
+
+/** Plain-text form of one step, for copy-to-clipboard. */
+function stepToText(s: Step): string {
+  const head = s.name === 'Bash'
+    ? `$ ${s.input ?? ''}`
+    : `${s.name}${s.input ? ` ${s.input}` : ''}`
+  if (!s.output) return head
+  return `${head}\n${s.output.split('\n').map(l => `  ${l}`).join('\n')}`
+}
+
+/** Plain-text form of one turn (role header + prose + tool steps). */
+export function turnToText(turn: TranscriptTurn): string {
+  const who = turn.role === 'user' ? 'You' : (turn.model ?? 'Claude')
+  const when = turn.time ? ` · ${new Date(turn.time).toLocaleString()}` : ''
+  const parts: string[] = [`### ${who}${when}`]
+  if (turn.text) parts.push(turn.text)
+  for (const seg of turn.segments) {
+    if (seg.type === 'event') {
+      const s = seg.step
+      parts.push(`[${s.kind.toUpperCase()}${s.server ? ` · ${s.server}` : ''}] ${s.kind === 'skill' ? (s.input ?? '') : (s.bareName ?? s.name)}${s.output ? `\n${s.output}` : ''}`)
+    } else {
+      for (const st of seg.steps) parts.push(stepToText(st))
+    }
+  }
+  return parts.join('\n\n')
+}
+
+/** Plain-text form of the whole transcript. */
+export function transcriptToText(turns: TranscriptTurn[]): string {
+  return turns.map(turnToText).join('\n\n———\n\n')
+}
