@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef, Fragment } from 'react'
+import { useState, useEffect, useMemo, useRef, useCallback, Fragment } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import type { RepoWorktrees, WorktreeInfo, BranchInfo, RemoteBranchInfo, SessionEntry, SessionInsights, RepoMeta, PullRequestInfo } from '../types'
 import { formatTokens } from '../components/history/SessionStats'
@@ -210,6 +210,15 @@ export default function WorktreesSection({ repos, loading, sessions, onRemoved, 
   const [remoteOpen, setRemoteOpen] = useState<Record<string, boolean>>({})
   // Repo cards start collapsed; searching or filtering opens matches.
   const [repoOpen, setRepoOpen] = useState<Record<string, boolean>>({})
+  // Per-repo per-section fold state, keyed "<repoPath>:worktrees" / ":branches".
+  const [foldedSections, setFoldedSections] = useState<Set<string>>(new Set())
+  const toggleFold = useCallback((key: string) => {
+    setFoldedSections(prev => {
+      const next = new Set(prev)
+      if (next.has(key)) next.delete(key); else next.add(key)
+      return next
+    })
+  }, [])
   // When true, the branches/worktrees list is swapped out for the Agent
   // permissions section instead — the two never show at once.
   const [agentSettingsOpen, setAgentSettingsOpen] = useState<Record<string, boolean>>({})
@@ -775,10 +784,14 @@ export default function WorktreesSection({ repos, loading, sessions, onRemoved, 
                   )}
                 </div>
               )}
-            {items.length > 0 && (
+            {items.length > 0 && (() => {
+            const wtKey = `${repo.repoPath}:worktrees`
+            const wtFolded = foldedSections.has(wtKey)
+            return (
             <>
-            <SectionHeading label="Worktrees" count={items.length} accent="var(--c-accent)" />
-            {/* Branch map: trunk line down the left, one connector per worktree */}
+            <SectionHeading label="Worktrees" count={items.length} accent="var(--c-accent)" collapsed={wtFolded} onToggle={() => toggleFold(wtKey)} />
+            {!wtFolded && (
+            /* Branch map: trunk line down the left, one connector per worktree */
             <div className="relative pl-5 space-y-1.5">
               <div className="absolute left-[9px] top-1 bottom-5 w-px bg-[var(--c-border)]" aria-hidden="true" />
               {items.map(wt => {
@@ -926,12 +939,17 @@ export default function WorktreesSection({ repos, loading, sessions, onRemoved, 
                 )
               })}
             </div>
-            </>
             )}
+            </>
+            ) })()}
 
-            {bareItems.length > 0 && (
+            {bareItems.length > 0 && (() => {
+            const brKey = `${repo.repoPath}:branches`
+            const brFolded = foldedSections.has(brKey)
+            return (
               <div className={items.length > 0 ? 'mt-3' : ''}>
-                <SectionHeading label="Branches" hint="not checked out" count={bareItems.length} accent="var(--c-text-3)" />
+                <SectionHeading label="Branches" hint="not checked out" count={bareItems.length} accent="var(--c-text-3)" collapsed={brFolded} onToggle={() => toggleFold(brKey)} />
+                {!brFolded && (
                 <div className="space-y-1.5">
                   {bareItems.map(b => {
                     const key = `${repo.repoPath}:${b.name}`
@@ -992,8 +1010,9 @@ export default function WorktreesSection({ repos, loading, sessions, onRemoved, 
                     )
                   })}
                 </div>
+                )}
               </div>
-            )}
+            ) })()}
               </>
               )}
             </div>
@@ -1080,17 +1099,35 @@ function RepoPrs({ data }: { data: PullRequestInfo[] | 'loading' | undefined }) 
 /** Subsection label inside a repo card — a colored rail ties it to its
  *  cards' border color (solid accent for worktrees, dashed muted for bare
  *  branches) so which group is which reads at a glance while scrolling. */
-function SectionHeading({ label, hint, count, accent }: { label: string; hint?: string; count: number; accent: string }) {
-  return (
-    <div className="flex items-center gap-2 mb-2">
-      <span className="w-[3px] h-[13px] rounded-full" style={{ background: accent }} aria-hidden="true" />
+function SectionHeading({ label, hint, count, accent, collapsed, onToggle }: {
+  label: string; hint?: string; count: number; accent: string
+  collapsed?: boolean; onToggle?: () => void
+}) {
+  const inner = (
+    <>
+      <span className="w-[3px] h-[13px] rounded-full flex-shrink-0" style={{ background: accent }} aria-hidden="true" />
+      {onToggle && (
+        <span className={`text-[9px] text-[var(--c-text-3)] transition-transform ${collapsed ? '' : 'rotate-90'}`} aria-hidden="true">▶</span>
+      )}
       <span className="text-[13.5px] font-semibold text-[var(--c-text-2)]">
         {label}
         {hint && <span className="text-[11.5px] font-normal text-[var(--c-text-3)]"> · {hint}</span>}
       </span>
       <span className="text-[11px] font-mono text-[var(--c-text-3)]">{count}</span>
-    </div>
+    </>
   )
+  if (onToggle) {
+    return (
+      <button
+        onClick={onToggle}
+        aria-expanded={!collapsed}
+        className="flex items-center gap-2 mb-2 w-full text-left hover:opacity-80 transition-opacity"
+      >
+        {inner}
+      </button>
+    )
+  }
+  return <div className="flex items-center gap-2 mb-2">{inner}</div>
 }
 
 /** Branches that exist on a remote but were never pulled/checked out locally
