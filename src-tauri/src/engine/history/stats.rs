@@ -34,6 +34,25 @@ pub struct ProjectTokens {
     pub project: String,
     pub project_name: String,
     pub tokens: u64,
+    pub sessions: u64,
+    /// None when no session in the group matched a known pricing entry.
+    pub est_cost_usd: Option<f64>,
+}
+
+/// One session's token + cost line, for the drill-down "Sessions" pivot and
+/// the per-repo drill. Ranked by tokens, capped by the aggregator.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SessionCost {
+    pub session_id: String,
+    pub display: String,
+    pub project: String,
+    pub project_name: String,
+    pub agent: String,
+    pub model: String,
+    pub ts: i64,
+    pub tokens: u64,
+    pub est_cost_usd: Option<f64>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -57,6 +76,8 @@ pub struct SessionInsights {
     pub avg_tool_calls: f64,
     pub per_model: Vec<ModelStat>,
     pub per_project: Vec<ProjectTokens>,
+    /// Per-session token + cost rows, ranked by tokens (capped at 100).
+    pub per_session: Vec<SessionCost>,
     pub tool_counts: Vec<ToolCount>,
     pub mcp_tool_counts: Vec<ToolCount>,
     pub skill_counts: Vec<ToolCount>,
@@ -476,16 +497,24 @@ fn upsert_session(
     crate::db::index_transcript(db, &entry.session_id, &entry.agent, &text);
 }
 
-/// Aggregate cached rows with `ts >= since_ms` into one insights payload.
+/// Aggregate cached rows with `since_ms <= ts < until_ms` into one insights
+/// payload. Pass `u64::MAX` for `until_ms` to leave the window open-ended.
 /// When `projects` is set, only sessions whose cwd is one of those paths
 /// count (used for per-repo insights; a repo passes all its worktree paths).
-pub fn aggregate(db: &DbState, since_ms: u64, projects: Option<&[String]>) -> SessionInsights {
+pub fn aggregate(
+    db: &DbState,
+    since_ms: u64,
+    until_ms: u64,
+    projects: Option<&[String]>,
+) -> SessionInsights {
     struct Row {
         session_id: String,
         project: String,
         project_name: String,
         display: String,
+        agent: String,
         model: String,
+        ts: i64,
         input: u64,
         output: u64,
         cache_read: u64,
@@ -499,13 +528,13 @@ pub fn aggregate(db: &DbState, since_ms: u64, projects: Option<&[String]>) -> Se
         let mut stmt = match conn.prepare(
             "SELECT session_id, project, project_name, display, model,
                     input_tokens, output_tokens, cache_read, cache_creation, tool_calls,
-                    skill_calls
-             FROM session_stats WHERE ts >= ?1",
+                    skill_calls, agent, ts
+             FROM session_stats WHERE ts >= ?1 AND ts < ?2",
         ) {
             Ok(s) => s,
             Err(_) => return SessionInsights::default(),
         };
-        stmt.query_map([since_ms as i64], |r| {
+        stmt.query_map([since_ms as i64, until_ms.min(i64::MAX as u64) as i64], |r| {
             Ok(Row {
                 session_id: r.get(0)?,
                 project: r.get(1)?,
@@ -518,6 +547,8 @@ pub fn aggregate(db: &DbState, since_ms: u64, projects: Option<&[String]>) -> Se
                 cache_creation: r.get::<_, i64>(8)? as u64,
                 tool_calls: serde_json::from_str(&r.get::<_, String>(9)?).unwrap_or_default(),
                 skill_calls: serde_json::from_str(&r.get::<_, String>(10)?).unwrap_or_default(),
+                agent: r.get(11)?,
+                ts: r.get(12)?,
             })
         })
         .map(|it| it.flatten().collect())
@@ -543,6 +574,7 @@ pub fn aggregate(db: &DbState, since_ms: u64, projects: Option<&[String]>) -> Se
 
     let mut per_model: HashMap<String, ModelStat> = HashMap::new();
     let mut per_project: HashMap<String, ProjectTokens> = HashMap::new();
+    let mut per_session: Vec<SessionCost> = Vec::with_capacity(rows.len());
     let mut tools: HashMap<String, u64> = HashMap::new();
     let mut skills: HashMap<String, u64> = HashMap::new();
     let mut total_tool_calls = 0u64;
@@ -577,14 +609,39 @@ pub fn aggregate(db: &DbState, since_ms: u64, projects: Option<&[String]>) -> Se
         m.cache_creation_tokens += row.cache_creation;
 
         let session_tokens = row.input + row.output;
+        let session_cost = est_cost(
+            row.input,
+            row.output,
+            row.cache_read,
+            row.cache_creation,
+            &row.model,
+        );
         let p = per_project
             .entry(row.project.clone())
             .or_insert_with(|| ProjectTokens {
                 project: row.project.clone(),
                 project_name: row.project_name.clone(),
                 tokens: 0,
+                sessions: 0,
+                est_cost_usd: None,
             });
         p.tokens += session_tokens;
+        p.sessions += 1;
+        if let Some(c) = session_cost {
+            *p.est_cost_usd.get_or_insert(0.0) += c;
+        }
+
+        per_session.push(SessionCost {
+            session_id: row.session_id.clone(),
+            display: row.display.clone(),
+            project: row.project.clone(),
+            project_name: row.project_name.clone(),
+            agent: row.agent.clone(),
+            model: row.model.clone(),
+            ts: row.ts,
+            tokens: session_tokens,
+            est_cost_usd: session_cost,
+        });
 
         for (name, count) in &row.tool_calls {
             *tools.entry(name.clone()).or_insert(0) += count;
@@ -632,8 +689,12 @@ pub fn aggregate(db: &DbState, since_ms: u64, projects: Option<&[String]>) -> Se
 
     let mut per_project: Vec<ProjectTokens> = per_project.into_values().collect();
     per_project.sort_by_key(|p| std::cmp::Reverse(p.tokens));
-    per_project.truncate(8);
+    per_project.truncate(50);
     out.per_project = per_project;
+
+    per_session.sort_by_key(|s| std::cmp::Reverse(s.tokens));
+    per_session.truncate(100);
+    out.per_session = per_session;
 
     let (mcp, native): (Vec<_>, Vec<_>) =
         tools.into_iter().partition(|(n, _)| n.starts_with("mcp__"));
