@@ -64,6 +64,11 @@ jobs:
 
       - name: Install Tauri system dependencies
         run: |
+          # The runner's bundled Google Chrome apt source has been failing
+          # `apt-get update` with a hash-sum mismatch. We don't use it; drop
+          # only that source and keep the Ubuntu archive (ubuntu.sources).
+          sudo rm -f /etc/apt/sources.list.d/google-chrome.list \
+                     /etc/apt/sources.list.d/google-chrome.sources
           sudo apt-get update
           sudo apt-get install -y \
             libwebkit2gtk-4.1-dev \
