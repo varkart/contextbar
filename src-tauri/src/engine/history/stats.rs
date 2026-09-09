@@ -534,23 +534,26 @@ pub fn aggregate(
             Ok(s) => s,
             Err(_) => return SessionInsights::default(),
         };
-        stmt.query_map([since_ms as i64, until_ms.min(i64::MAX as u64) as i64], |r| {
-            Ok(Row {
-                session_id: r.get(0)?,
-                project: r.get(1)?,
-                project_name: r.get(2)?,
-                display: r.get(3)?,
-                model: r.get(4)?,
-                input: r.get::<_, i64>(5)? as u64,
-                output: r.get::<_, i64>(6)? as u64,
-                cache_read: r.get::<_, i64>(7)? as u64,
-                cache_creation: r.get::<_, i64>(8)? as u64,
-                tool_calls: serde_json::from_str(&r.get::<_, String>(9)?).unwrap_or_default(),
-                skill_calls: serde_json::from_str(&r.get::<_, String>(10)?).unwrap_or_default(),
-                agent: r.get(11)?,
-                ts: r.get(12)?,
-            })
-        })
+        stmt.query_map(
+            [since_ms as i64, until_ms.min(i64::MAX as u64) as i64],
+            |r| {
+                Ok(Row {
+                    session_id: r.get(0)?,
+                    project: r.get(1)?,
+                    project_name: r.get(2)?,
+                    display: r.get(3)?,
+                    model: r.get(4)?,
+                    input: r.get::<_, i64>(5)? as u64,
+                    output: r.get::<_, i64>(6)? as u64,
+                    cache_read: r.get::<_, i64>(7)? as u64,
+                    cache_creation: r.get::<_, i64>(8)? as u64,
+                    tool_calls: serde_json::from_str(&r.get::<_, String>(9)?).unwrap_or_default(),
+                    skill_calls: serde_json::from_str(&r.get::<_, String>(10)?).unwrap_or_default(),
+                    agent: r.get(11)?,
+                    ts: r.get(12)?,
+                })
+            },
+        )
         .map(|it| it.flatten().collect())
         .unwrap_or_default()
     };
