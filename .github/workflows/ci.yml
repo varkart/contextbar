@@ -64,12 +64,7 @@ jobs:
 
       - name: Install Tauri system dependencies
         run: |
-          # The runner image ships extra apt sources (Google Chrome, etc.) that
-          # intermittently fail `apt-get update` with a hash-sum mismatch. We
-          # don't need any of them — drop every third-party source (.list and
-          # deb822 .sources), and don't let a stale index abort the job.
-          sudo rm -f /etc/apt/sources.list.d/*
-          sudo apt-get update || true
+          sudo apt-get update
           sudo apt-get install -y \
             libwebkit2gtk-4.1-dev \
             build-essential \

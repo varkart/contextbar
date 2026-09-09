@@ -11,6 +11,7 @@ import WorktreesSection from './WorktreesSection'
 import MyWorkSection from './MyWorkSection'
 import ToolsPanel, { type ToolsSection } from './ToolsPanel'
 import { Tile, TileRow } from './InsightTiles'
+import TokenBreakdownPanel from './TokenBreakdownPanel'
 import { formatTokens } from '../components/history/SessionStats'
 import { RefreshButton } from './InsightWidgets'
 import CommandPalette, { buildPaletteItems } from './CommandPalette'
@@ -577,6 +578,7 @@ function SessionsSection({ sessions, loading, selected, onSelect, onRefresh, onL
   agentPreset: string | null
 }) {
   const [timeFilter, setTimeFilter] = useState<SessionTimeFilter>('all')
+  const [tokenBreakdownOpen, setTokenBreakdownOpen] = useState(false)
   const scoped = useMemo(() => {
     let result = scope ? sessions.filter(s => scope.paths.includes(s.project)) : sessions
     const cutoff = sessionTimeCutoff(timeFilter)
@@ -628,8 +630,22 @@ function SessionsSection({ sessions, loading, selected, onSelect, onRefresh, onL
             <Tile value={insights.total} label="Sessions" />
             <Tile value={insights.live} label="Live" color={insights.live > 0 ? 'text-emerald-400' : 'text-[var(--c-text-3)]'} />
             <Tile value={insights.prompts} label="Prompts" />
-            <Tile value={formatTokens(insights.tokens)} label="Tokens" />
+            <Tile
+              value={formatTokens(insights.tokens)}
+              label="Tokens"
+              hint="Break down by month, repo, session, tool or skill"
+              selected={tokenBreakdownOpen}
+              onClick={() => setTokenBreakdownOpen(o => !o)}
+            />
           </TileRow>
+          {tokenBreakdownOpen && (
+            <TokenBreakdownPanel
+              onOpenSession={id => {
+                const s = sessions.find(x => x.sessionId === id)
+                if (s) onSelect(s)
+              }}
+            />
+          )}
         </div>
       )}
       <div className="flex-1 flex overflow-hidden">
