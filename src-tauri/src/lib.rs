@@ -623,9 +623,15 @@ fn search_transcripts(
 fn get_session_insights(
     db: tauri::State<'_, db::DbState>,
     since_ms: u64,
+    until_ms: Option<u64>,
     projects: Option<Vec<String>>,
 ) -> engine::history::stats::SessionInsights {
-    engine::history::stats::aggregate(&db, since_ms, projects.as_deref())
+    engine::history::stats::aggregate(
+        &db,
+        since_ms,
+        until_ms.unwrap_or(u64::MAX),
+        projects.as_deref(),
+    )
 }
 
 #[tauri::command]
