@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import type { SessionEntry, SessionDetail as SessionDetailType, SessionMeta } from '../../types'
-import SessionStats from './SessionStats'
+import { formatTokens } from './SessionStats'
 import AgentBadge from './AgentBadge'
 import FindInPage from '../FindInPage'
 import { buildTurns, transcriptToText } from './transcript/model'
@@ -311,6 +311,23 @@ export default function SessionDetail({ session }: SessionDetailProps) {
   const ts = new Date(session.timestamp)
   const dateStr = ts.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
   const timeStr = ts.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })
+  const relTime = (() => {
+    const d = Date.now() - session.timestamp
+    const m = Math.floor(d / 60_000), h = Math.floor(d / 3_600_000), days = Math.floor(d / 86_400_000)
+    if (m < 1) return 'just now'
+    if (m < 60) return `${m}m ago`
+    if (h < 24) return `${h}h ago`
+    if (days === 1) return 'yesterday'
+    if (days < 7) return `${days}d ago`
+    return dateStr
+  })()
+  const tokenTotal = detail
+    ? detail.totalTokens.inputTokens + detail.totalTokens.outputTokens
+      + detail.totalTokens.cacheReadTokens + detail.totalTokens.cacheCreationTokens
+    : 0
+  const durationStr = detail?.durationMs
+    ? detail.durationMs < 60_000 ? `${Math.round(detail.durationMs / 1000)}s` : `${Math.round(detail.durationMs / 60_000)}m`
+    : ''
 
   const promptLabel = visibleUserIdx.length
     ? `${Math.min(promptPos + 1, visibleUserIdx.length)} / ${visibleUserIdx.length}`
@@ -321,63 +338,66 @@ export default function SessionDetail({ session }: SessionDetailProps) {
   return (
     <div className="flex flex-col h-full">
       <FindInPage open={findOpen} onClose={() => setFindOpen(false)} container={scrollRef.current} />
-      {/* Header info */}
-      <div className="px-3 pt-2 pb-1 flex-shrink-0 border-b border-[var(--c-border)]">
-        <div className="flex items-center justify-between mb-1">
-          <div className="flex items-center gap-1.5 min-w-0">
-            {session.isLive && (
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse flex-shrink-0" />
-            )}
-            <AgentBadge agent={session.agent} className="flex-shrink-0" />
-            <span className="text-[13px] text-[var(--c-text-3)] truncate">
-              {session.projectName}
-            </span>
-            <span className="text-[12px] text-[var(--c-text-3)] opacity-50 flex-shrink-0">·</span>
-            <span className="text-[12px] text-[var(--c-text-3)] flex-shrink-0">{dateStr} {timeStr}</span>
+      {/* Header — title anchor, one identity line, one stat line, folded prompt */}
+      <div className="px-3 pt-2 pb-2 flex-shrink-0 border-b border-[var(--c-border)]">
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0 flex-1">
+            <NameEditor sessionId={session.sessionId} fallback={session.display} inheritedTitle={session.title} />
           </div>
           <div className="flex items-center gap-1 flex-shrink-0">
             <button
               onClick={handleResume}
               title="Resume this session in Terminal"
-              className={`text-[12px] px-2 py-0.5 rounded-md border transition-colors ${opened ? 'border-emerald-500/40 bg-emerald-500/15 text-emerald-400' : 'border-[var(--c-border)] text-[var(--c-text-3)] hover:text-[var(--c-text-2)] hover:border-[var(--c-accent)]/40'}`}
+              aria-label="Resume this session in Terminal"
+              className={`text-[12px] w-6 h-6 flex items-center justify-center rounded-md border transition-colors ${opened ? 'border-emerald-500/40 bg-emerald-500/15 text-emerald-400' : 'border-[var(--c-border)] text-[var(--c-text-3)] hover:text-[var(--c-text-2)] hover:border-[var(--c-accent)]/40'}`}
             >
-              {opened ? '✓ Opened' : '▶ Resume'}
+              {opened ? '✓' : '▶'}
             </button>
             <button
               onClick={handleCopy}
               title="Copy resume command"
-              className={`text-[12px] px-2 py-0.5 rounded-md border transition-colors ${copied ? 'border-emerald-500/40 bg-emerald-500/15 text-emerald-400' : 'border-[var(--c-border)] text-[var(--c-text-3)] hover:text-[var(--c-text-2)] hover:border-[var(--c-accent)]/40'}`}
+              aria-label="Copy resume command"
+              className={`text-[12px] w-6 h-6 flex items-center justify-center rounded-md border transition-colors ${copied ? 'border-emerald-500/40 bg-emerald-500/15 text-emerald-400' : 'border-[var(--c-border)] text-[var(--c-text-3)] hover:text-[var(--c-text-2)] hover:border-[var(--c-accent)]/40'}`}
             >
               {copied ? '✓' : '⧉'}
             </button>
           </div>
         </div>
 
-        <button
-          onClick={copyPath}
-          title={`${session.project} — click to copy`}
-          className="flex items-center gap-1 max-w-full text-left mb-0.5 text-[11px] font-mono text-[var(--c-text-3)] hover:text-[var(--c-text-2)] transition-colors group/path"
-        >
-          <span className="truncate">{session.project}</span>
-          <span className="flex-shrink-0 opacity-0 group-hover/path:opacity-100 transition-opacity">
-            {copiedPath ? '✓' : '⧉'}
-          </span>
-        </button>
+        <div className="flex items-center gap-1.5 mt-1 text-[11px] text-[var(--c-text-3)] flex-wrap">
+          {session.isLive && <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse flex-shrink-0" />}
+          <AgentBadge agent={session.agent} className="flex-shrink-0" />
+          <button
+            onClick={copyPath}
+            title={`${session.project} — click to copy`}
+            className="max-w-[240px] truncate hover:text-[var(--c-text-2)] transition-colors"
+          >
+            {session.projectName}{copiedPath ? ' ✓' : ''}
+          </button>
+          <span className="opacity-40">·</span>
+          <span>{relTime}</span>
+          {tokenTotal > 0 && (
+            <>
+              <span className="opacity-40">·</span>
+              <span className="text-[10px] font-semibold px-1.5 rounded-full bg-emerald-500/15 text-emerald-400">{formatTokens(tokenTotal)} tok</span>
+            </>
+          )}
+        </div>
 
         {detail && (
-          <SessionStats
-            usage={detail.totalTokens}
-            messageCount={detail.messages.length}
-            toolCount={toolCount}
-            durationMs={detail.durationMs}
-          />
+          <div className="mt-1 font-mono text-[10px] text-[var(--c-text-3)]/70">
+            {detail.messages.length} msgs · {toolCount} tools{durationStr && ` · ${durationStr}`} · started {dateStr} {timeStr}
+          </div>
         )}
-      </div>
 
-      {/* Custom name + first prompt */}
-      <div className="px-3 py-2 flex-shrink-0 border-b border-[var(--c-border)]">
-        <NameEditor sessionId={session.sessionId} fallback={session.display} inheritedTitle={session.title} />
-        <p className="text-[13px] text-[var(--c-text-3)] line-clamp-2 italic mt-1">"{session.display}"</p>
+        <details className="mt-1.5 group/prompt">
+          <summary className="list-none cursor-pointer text-[11px] text-[var(--c-text-3)] hover:text-[var(--c-text-2)] transition-colors [&::-webkit-details-marker]:hidden">
+            <span className="inline-block group-open/prompt:rotate-90 transition-transform text-[8px] mr-1">▶</span>
+            opened with a request…
+          </summary>
+          <p className="text-[11.5px] text-[var(--c-text-3)] mt-1 leading-relaxed">{session.display}</p>
+        </details>
+
         <TagEditor sessionId={session.sessionId} />
       </div>
 
