@@ -317,6 +317,20 @@ export interface ProjectTokens {
   project: string
   projectName: string
   tokens: number
+  sessions: number
+  estCostUsd?: number | null
+}
+
+export interface SessionCost {
+  sessionId: string
+  display: string
+  project: string
+  projectName: string
+  agent: string
+  model: string
+  ts: number
+  tokens: number
+  estCostUsd?: number | null
 }
 
 export interface HeaviestSession {
@@ -348,6 +362,8 @@ export interface SessionInsights {
   avgToolCalls: number
   perModel: ModelStat[]
   perProject: ProjectTokens[]
+  /** Per-session token + cost rows, ranked by tokens (capped at 100). */
+  perSession: SessionCost[]
   toolCounts: ToolCount[]
   mcpToolCounts: ToolCount[]
   skillCounts: ToolCount[]
