@@ -306,10 +306,12 @@ impl SessionSource for CodexSource {
                     tool_result: None,
                     is_error: false,
                     tool_use_id: None,
+                    content_chars: 0,
                 }],
                 timestamp: ts,
                 model: None,
                 usage: None,
+                reasoning_chars: 0,
             };
             match (
                 v.get("type").and_then(|t| t.as_str()),
@@ -364,10 +366,12 @@ impl SessionSource for CodexSource {
                             tool_result: None,
                             is_error: false,
                             tool_use_id: None,
+                            content_chars: 0,
                         }],
                         timestamp: ts,
                         model: None,
                         usage: None,
+                        reasoning_chars: 0,
                     });
                 }
                 (Some("turn_context"), _) if model.is_none() => {

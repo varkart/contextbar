@@ -46,7 +46,7 @@ pub struct SessionDetail {
     pub title: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct Message {
     pub role: String,
@@ -54,9 +54,14 @@ pub struct Message {
     pub timestamp: Option<u64>,
     pub model: Option<String>,
     pub usage: Option<TokenUsage>,
+    /// Characters of extended-thinking / reasoning this turn emitted. Kept
+    /// separate from `content` (which drops thinking blocks) so attribution
+    /// can size the "reasoning" slice of output without changing transcripts.
+    #[serde(default)]
+    pub reasoning_chars: u32,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct ContentBlock {
     pub block_type: String,
@@ -70,6 +75,12 @@ pub struct ContentBlock {
     /// tool's output next to its invocation.
     #[serde(default)]
     pub tool_use_id: Option<String>,
+    /// Untruncated character count of this block's payload (text, tool args,
+    /// or tool result), recorded before any preview truncation. Token
+    /// attribution uses it to split a turn's spend across its blocks; the
+    /// visible `text` / `tool_input` / `tool_result` fields may be shorter.
+    #[serde(default)]
+    pub content_chars: u32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]

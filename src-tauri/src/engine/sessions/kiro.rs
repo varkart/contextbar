@@ -197,6 +197,7 @@ fn parse_content(items: &[ContentItem]) -> Vec<ContentBlock> {
                         tool_result: None,
                         is_error: false,
                         tool_use_id: None,
+                        content_chars: 0,
                     });
                 }
             }
@@ -219,6 +220,7 @@ fn parse_content(items: &[ContentItem]) -> Vec<ContentBlock> {
                     tool_result: None,
                     is_error: false,
                     tool_use_id: None,
+                    content_chars: 0,
                 });
             }
             _ => {} // other/future content kinds: skip
@@ -253,6 +255,7 @@ fn parse_jsonl(content: &str) -> Vec<Message> {
             timestamp,
             model: None,
             usage: None,
+            reasoning_chars: 0,
         });
     }
     messages

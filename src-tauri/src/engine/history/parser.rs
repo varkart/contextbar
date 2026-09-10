@@ -101,13 +101,19 @@ pub fn get_session(
                     first_ts.get_or_insert(t);
                     last_ts = Some(t);
                 }
-                let content = parse_content_blocks(msg.content.as_ref(), &mut error_count);
+                let mut reasoning_chars = 0u32;
+                let content = parse_content_blocks(
+                    msg.content.as_ref(),
+                    &mut error_count,
+                    &mut reasoning_chars,
+                );
                 messages.push(Message {
                     role: "user".to_string(),
                     content,
                     timestamp: ts,
                     model: None,
                     usage: None,
+                    reasoning_chars,
                 });
             }
             Some("assistant") => {
@@ -148,13 +154,19 @@ pub fn get_session(
                     tok
                 });
 
-                let content = parse_content_blocks(msg.content.as_ref(), &mut error_count);
+                let mut reasoning_chars = 0u32;
+                let content = parse_content_blocks(
+                    msg.content.as_ref(),
+                    &mut error_count,
+                    &mut reasoning_chars,
+                );
                 messages.push(Message {
                     role: "assistant".to_string(),
                     content,
                     timestamp: ts,
                     model,
                     usage,
+                    reasoning_chars,
                 });
             }
             _ => {}
@@ -200,25 +212,39 @@ fn shorten_model_name(model: &str) -> String {
     stripped.to_string()
 }
 
-fn parse_content_blocks(content: Option<&Value>, error_count: &mut u32) -> Vec<ContentBlock> {
+fn parse_content_blocks(
+    content: Option<&Value>,
+    error_count: &mut u32,
+    reasoning_chars: &mut u32,
+) -> Vec<ContentBlock> {
     let mut blocks = Vec::new();
     match content {
         Some(Value::String(s)) => {
             let sanitized = sanitize_xml(s);
             if !sanitized.trim().is_empty() {
+                let chars = sanitized.chars().count() as u32;
                 blocks.push(ContentBlock {
                     block_type: "text".to_string(),
                     text: Some(sanitized),
-                    tool_name: None,
-                    tool_input: None,
-                    tool_result: None,
-                    is_error: false,
-                    tool_use_id: None,
+                    content_chars: chars,
+                    ..Default::default()
                 });
             }
         }
         Some(Value::Array(arr)) => {
             for item in arr {
+                // Thinking blocks are dropped from `content` (not user-facing),
+                // but their length feeds the "reasoning" output slice.
+                if item.get("type").and_then(|v| v.as_str()) == Some("thinking") {
+                    let n = item
+                        .get("thinking")
+                        .or_else(|| item.get("text"))
+                        .and_then(|v| v.as_str())
+                        .map(|s| s.chars().count() as u32)
+                        .unwrap_or(0);
+                    *reasoning_chars = reasoning_chars.saturating_add(n);
+                    continue;
+                }
                 if let Some(block) = parse_single_block(item, error_count) {
                     blocks.push(block);
                 }
@@ -238,27 +264,28 @@ fn parse_single_block(item: &Value, error_count: &mut u32) -> Option<ContentBloc
             if sanitized.trim().is_empty() {
                 return None;
             }
+            let chars = sanitized.chars().count() as u32;
             Some(ContentBlock {
                 block_type: "text".to_string(),
                 text: Some(sanitized),
-                tool_name: None,
-                tool_input: None,
-                tool_result: None,
-                is_error: false,
-                tool_use_id: None,
+                content_chars: chars,
+                ..Default::default()
             })
         }
         "tool_use" => {
             let name = item.get("name")?.as_str()?.to_string();
-            let input = item.get("input").map(|v| truncate_str(&v.to_string(), 500));
+            let raw = item.get("input").map(|v| v.to_string());
+            let chars = raw
+                .as_deref()
+                .map(|s| s.chars().count() as u32)
+                .unwrap_or(0);
             Some(ContentBlock {
                 block_type: "tool_use".to_string(),
-                text: None,
                 tool_name: Some(name),
-                tool_input: input,
-                tool_result: None,
-                is_error: false,
+                tool_input: raw.as_deref().map(|s| truncate_str(s, 500)),
                 tool_use_id: item.get("id").and_then(|v| v.as_str()).map(str::to_string),
+                content_chars: chars,
+                ..Default::default()
             })
         }
         "tool_result" => {
@@ -276,18 +303,17 @@ fn parse_single_block(item: &Value, error_count: &mut u32) -> Option<ContentBloc
                 .get("tool_use_id")
                 .and_then(|v| v.as_str())
                 .map(str::to_string);
-            let tool_result = extract_result_text(item.get("content"));
+            let (tool_result, result_chars) = extract_result_text(item.get("content"));
             if tool_use_id.is_none() && tool_result.is_none() && !is_error {
                 return None;
             }
             Some(ContentBlock {
                 block_type: "tool_result".to_string(),
-                text: None,
-                tool_name: None,
-                tool_input: None,
                 tool_result,
                 is_error,
                 tool_use_id,
+                content_chars: result_chars,
+                ..Default::default()
             })
         }
         // Skip thinking blocks — internal model cognition, not user-facing content
@@ -298,7 +324,8 @@ fn parse_single_block(item: &Value, error_count: &mut u32) -> Option<ContentBloc
 /// A `tool_result` block's `content` is either a bare string or an array of
 /// `{type:"text", text:"…"}` parts (image parts are ignored). Returns the
 /// joined, sanitized, length-capped text, or None when there's nothing useful.
-fn extract_result_text(content: Option<&Value>) -> Option<String> {
+/// Returns the (preview-truncated) result text and its untruncated char count.
+fn extract_result_text(content: Option<&Value>) -> (Option<String>, u32) {
     let raw = match content {
         Some(Value::String(s)) => s.clone(),
         Some(Value::Array(arr)) => arr
@@ -312,14 +339,17 @@ fn extract_result_text(content: Option<&Value>) -> Option<String> {
             })
             .collect::<Vec<_>>()
             .join("\n"),
-        _ => return None,
+        _ => return (None, 0),
     };
     let cleaned = sanitize_xml(&raw);
     let cleaned = cleaned.trim();
     if cleaned.is_empty() {
-        return None;
+        return (None, 0);
     }
-    Some(truncate_str(cleaned, 2000))
+    (
+        Some(truncate_str(cleaned, 2000)),
+        cleaned.chars().count() as u32,
+    )
 }
 
 fn truncate_str(s: &str, max: usize) -> String {
@@ -440,7 +470,7 @@ mod tests {
 
     #[test]
     fn result_text_strips_system_reminder_noise() {
-        let got = extract_result_text(Some(&json!(
+        let (got, _) = extract_result_text(Some(&json!(
             "real output<system-reminder>ignored</system-reminder>"
         )));
         assert_eq!(got.as_deref(), Some("real output"));

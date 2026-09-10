@@ -263,26 +263,27 @@ fn tool_input_preview(state: &Option<Value>) -> Option<String> {
 // same thing in both.
 
 fn text_content_block(text: String) -> ContentBlock {
+    let chars = text.chars().count() as u32;
     ContentBlock {
         block_type: "text".to_string(),
         text: Some(text),
-        tool_name: None,
-        tool_input: None,
-        tool_result: None,
-        is_error: false,
-        tool_use_id: None,
+        content_chars: chars,
+        ..Default::default()
     }
 }
 
 fn tool_use_content_block(tool_name: Option<String>, state: &Option<Value>) -> ContentBlock {
+    let tool_input = tool_input_preview(state);
+    let chars = tool_input
+        .as_deref()
+        .map(|s| s.chars().count() as u32)
+        .unwrap_or(0);
     ContentBlock {
         block_type: "tool_use".to_string(),
-        text: None,
         tool_name: tool_name.or_else(|| Some("tool".to_string())),
-        tool_input: tool_input_preview(state),
-        tool_result: None,
-        is_error: false,
-        tool_use_id: None,
+        tool_input,
+        content_chars: chars,
+        ..Default::default()
     }
 }
 
@@ -308,6 +309,7 @@ fn message_from_row(msg_type: &str, data: &str) -> Option<Message> {
                 timestamp: None,
                 model: None,
                 usage: None,
+                reasoning_chars: 0,
             })
         }
         "assistant" => {
@@ -336,6 +338,7 @@ fn message_from_row(msg_type: &str, data: &str) -> Option<Message> {
                 timestamp: None,
                 model: d.model.and_then(|m| m.id),
                 usage,
+                reasoning_chars: 0,
             })
         }
         _ => None, // system/shell/synthetic/agent-switched/model-switched/compaction: skip
@@ -390,6 +393,7 @@ fn message_from_v2_row(data: &str, parts: &[String]) -> Option<Message> {
                 timestamp: None,
                 model: None,
                 usage: None,
+                reasoning_chars: 0,
             })
         }
         "assistant" => {
@@ -417,6 +421,7 @@ fn message_from_v2_row(data: &str, parts: &[String]) -> Option<Message> {
                 timestamp: None,
                 model: meta.model_id,
                 usage,
+                reasoning_chars: 0,
             })
         }
         _ => None, // system/shell/synthetic/…: skip
