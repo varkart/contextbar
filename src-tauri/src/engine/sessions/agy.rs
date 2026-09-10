@@ -166,10 +166,12 @@ fn get_from_root(root: &std::path::Path, session_id: &str) -> Option<SessionDeta
                         tool_result: None,
                         is_error: false,
                         tool_use_id: None,
+                        content_chars: 0,
                     }],
                     timestamp: ts,
                     model: None,
                     usage: None,
+                    reasoning_chars: 0,
                 });
             }
             Some("MODEL") if step.step_type.as_deref() == Some("PLANNER_RESPONSE") => {
@@ -184,10 +186,12 @@ fn get_from_root(root: &std::path::Path, session_id: &str) -> Option<SessionDeta
                             tool_result: None,
                             is_error: false,
                             tool_use_id: None,
+                            content_chars: 0,
                         }],
                         timestamp: ts,
                         model: None,
                         usage: None,
+                        reasoning_chars: 0,
                     });
                 }
             }
@@ -210,10 +214,12 @@ fn get_from_root(root: &std::path::Path, session_id: &str) -> Option<SessionDeta
                         tool_result: None,
                         is_error: false,
                         tool_use_id: None,
+                        content_chars: 0,
                     }],
                     timestamp: ts,
                     model: None,
                     usage: None,
+                    reasoning_chars: 0,
                 });
             }
             _ => {} // SYSTEM and anything else: internal noise, skip

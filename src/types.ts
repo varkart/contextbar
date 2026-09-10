@@ -339,12 +339,23 @@ export interface SessionCost {
   estCostUsd?: number | null
 }
 
+export type DriverSide = 'input' | 'output'
+export type DriverKind =
+  | 'tool' | 'mcp' | 'skill' | 'prompt' | 'initial' | 'compaction' | 'growth' | 'reread'
+  | 'edit' | 'write' | 'shell' | 'search' | 'answer' | 'reasoning'
+
 export interface Driver {
-  kind: 'tool' | 'mcp' | 'skill' | 'conversation' | 'output' | 'initial' | 'compaction' | 'prompt'
+  side: DriverSide
+  kind: DriverKind
   name: string
   calls: number
   tokens: number
+  /** Input drivers: fresh context this source added (before the re-read share). */
+  createdTokens?: number | null
+  /** Input drivers: this source's share of cumulative cache re-read. */
+  rereadTokens?: number | null
   approxCostUsd?: number | null
+  /** Share of its own side's tokens, 0..100. */
   pct: number
   hint?: string | null
 }
@@ -352,7 +363,8 @@ export interface Driver {
 export interface SessionDrivers {
   sessionId: string
   model: string
-  totalTokens: number
+  inputTokens: number
+  outputTokens: number
   totalCostUsd?: number | null
   coarse: boolean
   drivers: Driver[]

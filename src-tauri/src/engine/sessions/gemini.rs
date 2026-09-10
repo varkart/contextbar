@@ -148,10 +148,12 @@ fn messages_to_detail(raw: &[Value]) -> (Vec<Message>, TokenUsage) {
                             tool_result: None,
                             is_error: false,
                             tool_use_id: None,
+                            content_chars: 0,
                         }],
                         timestamp: ts,
                         model: None,
                         usage: None,
+                        reasoning_chars: 0,
                     });
                 }
                 continue;
@@ -171,10 +173,12 @@ fn messages_to_detail(raw: &[Value]) -> (Vec<Message>, TokenUsage) {
                 tool_result: None,
                 is_error: false,
                 tool_use_id: None,
+                content_chars: 0,
             }],
             timestamp: ts,
             model: None,
             usage: None,
+            reasoning_chars: 0,
         });
     }
     (out, usage)

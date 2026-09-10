@@ -1,3 +1,4 @@
+pub mod attribution;
 mod index;
 mod parser;
 pub mod stats;
