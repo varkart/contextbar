@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
-import type { SessionInsights, SessionDrivers, SessionCost } from '../types'
+import type { SessionInsights, SessionDrivers, SessionCost, Driver } from '../types'
 import { formatTokens } from '../components/history/SessionStats'
 
 type Pivot = 'repos' | 'sessions' | 'tools' | 'skills' | 'mcp'
@@ -32,8 +32,10 @@ function monthRanges(): Range[] {
 const money = (n?: number | null) => (n == null ? '—' : `$${n.toFixed(2)}`)
 
 const DRIVER_LABEL: Record<string, string> = {
-  tool: 'tool', mcp: 'mcp', skill: 'skill', conversation: 'conv',
-  output: 'output', initial: 'init', compaction: 'compact', prompt: 'prompt',
+  tool: 'tool', mcp: 'mcp', skill: 'skill', prompt: 'prompt',
+  initial: 'init', compaction: 'compact', reread: 're-read',
+  edit: 'edit', write: 'write', shell: 'shell', search: 'search',
+  answer: 'answer', reasoning: 'think',
 }
 
 /** Drill-down under the "Tokens" tile: pick a calendar month, pivot by
@@ -237,22 +239,11 @@ function Bar({ row, pct, showRight }: { row: { name: string; sub: string; tokens
   )
 }
 
-function DriverList({ d, onOpen }: { d: SessionDrivers; onOpen?: () => void }) {
-  const max = Math.max(1, ...d.drivers.map(x => x.tokens))
+function DriverRows({ rows }: { rows: Driver[] }) {
+  const max = Math.max(1, ...rows.map(x => x.tokens))
   return (
-    <div className="pt-1">
-      <div className="flex items-center justify-between text-[10.5px] text-[var(--c-text-3)] mb-1">
-        <span>{d.coarse ? 'Coarse attribution — this agent reports no cache detail' : 'Each turn’s new context blamed on the last tool / skill — approximate'}</span>
-        {onOpen && <button className="text-[var(--c-accent)] hover:underline" onClick={onOpen}>Open transcript ↗</button>}
-      </div>
-      <div className="flex items-center gap-2.5 pb-1 mb-0.5 border-b border-[var(--c-border-sub)] text-[9px] uppercase tracking-wider text-[var(--c-text-3)]">
-        <span className="w-11 shrink-0" />
-        <span className="flex-1 min-w-0">Driver</span>
-        <span className="w-16 text-right shrink-0">Tokens</span>
-        <span className="w-14 text-right shrink-0">Cost</span>
-        <span className="w-10 text-right shrink-0">Share</span>
-      </div>
-      {d.drivers.map(dr => (
+    <>
+      {rows.map(dr => (
         <div key={dr.kind + dr.name} className="py-1">
           <div className="flex items-center gap-2.5">
             <span className="w-11 shrink-0 text-[8.5px] font-bold uppercase text-center px-1 py-px rounded-full bg-[var(--c-surface-2)] text-[var(--c-text-3)]">{DRIVER_LABEL[dr.kind] ?? dr.kind}</span>
@@ -269,13 +260,49 @@ function DriverList({ d, onOpen }: { d: SessionDrivers; onOpen?: () => void }) {
           {dr.hint && <p className="mt-1 ml-[54px] text-[10.5px] text-amber-400/90">⚠ {dr.hint}</p>}
         </div>
       ))}
+    </>
+  )
+}
+
+function DriverList({ d, onOpen }: { d: SessionDrivers; onOpen?: () => void }) {
+  const input = d.drivers.filter(x => x.side === 'input')
+  const output = d.drivers.filter(x => x.side === 'output')
+  return (
+    <div className="pt-1">
+      <div className="flex items-center justify-between text-[10.5px] text-[var(--c-text-3)] mb-1">
+        <span>{d.coarse
+          ? 'Coarse — this agent reports no cache detail; splits are estimated from block sizes'
+          : 'Approximate — each turn’s new context blamed on its last tool / skill; output split by block size'}</span>
+        {onOpen && <button className="text-[var(--c-accent)] hover:underline" onClick={onOpen}>Open transcript ↗</button>}
+      </div>
+
+      <SideHeader label="Input" total={d.inputTokens} />
+      {input.length ? <DriverRows rows={input} /> : <Empty />}
+
+      <SideHeader label="Output" total={d.outputTokens} className="mt-2" />
+      {output.length ? <DriverRows rows={output} /> : <Empty />}
+
       <div className="flex justify-between px-1 pt-2 mt-1 border-t border-[var(--c-border-sub)] text-[11px] text-[var(--c-text-3)]">
         <span>{d.model || 'session'} total</span>
-        <span className="font-mono">{formatTokens(d.totalTokens)} · {money(d.totalCostUsd)}</span>
+        <span className="font-mono">↓{formatTokens(d.inputTokens)} ↑{formatTokens(d.outputTokens)} · {money(d.totalCostUsd)}</span>
       </div>
     </div>
   )
 }
+
+function SideHeader({ label, total, className = '' }: { label: string; total: number; className?: string }) {
+  return (
+    <div className={`flex items-center gap-2.5 pb-1 mb-0.5 border-b border-[var(--c-border-sub)] text-[9px] uppercase tracking-wider text-[var(--c-text-3)] ${className}`}>
+      <span className="w-11 shrink-0" />
+      <span className="flex-1 min-w-0 font-semibold text-[var(--c-text-2)]">{label} · {formatTokens(total)}</span>
+      <span className="w-16 text-right shrink-0">Tokens</span>
+      <span className="w-14 text-right shrink-0">Cost</span>
+      <span className="w-10 text-right shrink-0">Share</span>
+    </div>
+  )
+}
+
+const Empty = () => <p className="text-[11px] text-[var(--c-text-3)] py-1.5 ml-[54px]">nothing attributed</p>
 
 function Chip({ on, onClick, children }: { on: boolean; onClick: () => void; children: React.ReactNode }) {
   return (
