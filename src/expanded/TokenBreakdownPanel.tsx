@@ -155,9 +155,25 @@ export default function TokenBreakdownPanel({ onOpenSession }: { onOpenSession?:
         ) : rows.length === 0 ? (
           <p className="text-[12px] text-[var(--c-text-3)] py-3 text-center">No sessions in {range.label}</p>
         ) : (
-          rows.map(r => (
-            <Bar key={r.key} row={r} pct={(r.weight / max) * 100} showRight={showRight} />
-          ))
+          <>
+            <div className="flex items-center gap-2.5 pb-1 mb-0.5 border-b border-[var(--c-border-sub)] text-[9px] uppercase tracking-wider text-[var(--c-text-3)]">
+              <span className="flex-1 min-w-0">{countsPivot ? 'Name' : 'Name · usage'}</span>
+              {countsPivot ? (
+                <span className="w-20 text-right">Calls</span>
+              ) : (
+                <>
+                  <span className="w-16 text-right">Tokens</span>
+                  <span className="w-14 text-right">Cost</span>
+                  <span className="w-14 text-right">↓ In</span>
+                  <span className="w-14 text-right">↑ Out</span>
+                  <span className="w-12 text-right">Prompts</span>
+                </>
+              )}
+            </div>
+            {rows.map(r => (
+              <Bar key={r.key} row={r} pct={(r.weight / max) * 100} showRight={showRight} />
+            ))}
+          </>
         )}
       </div>
 
@@ -181,6 +197,7 @@ export default function TokenBreakdownPanel({ onOpenSession }: { onOpenSession?:
 
 function Bar({ row, pct, showRight }: { row: { name: string; sub: string; tokens?: number; cost?: number | null; input?: number; output?: number; prompts?: number; calls?: number; onClick?: () => void }; pct: number; showRight: boolean }) {
   const Tag = row.onClick ? 'button' : 'div'
+  const num = 'shrink-0 text-right text-[11px] tabular-nums'
   return (
     <Tag
       onClick={row.onClick}
@@ -195,16 +212,16 @@ function Bar({ row, pct, showRight }: { row: { name: string; sub: string; tokens
           <div className="h-full rounded-full bg-[var(--c-accent)]" style={{ width: `${Math.max(3, pct)}%` }} />
         </div>
       </div>
-      <div className="shrink-0 text-right text-[11px] tabular-nums w-[92px]">
-        <span className="text-[var(--c-text-2)]">{row.tokens != null ? formatTokens(row.tokens) : `${row.calls?.toLocaleString()} calls`}</span>
-        {row.cost != null && <span className="text-[var(--c-text-3)]"> · {money(row.cost)}</span>}
-      </div>
-      {showRight && (
-        <div className="shrink-0 flex items-center gap-2.5 text-[10.5px] tabular-nums text-[var(--c-text-3)] border-l border-[var(--c-border-sub)] pl-2.5">
-          <span title="input tokens">↓{formatTokens(row.input ?? 0)}</span>
-          <span title="output tokens">↑{formatTokens(row.output ?? 0)}</span>
-          <span className="text-[var(--c-text-2)]">{row.prompts ?? 0}p</span>
-        </div>
+      {showRight ? (
+        <>
+          <span className={`${num} w-16 text-[var(--c-text-2)]`}>{formatTokens(row.tokens ?? 0)}</span>
+          <span className={`${num} w-14 text-[var(--c-text-3)]`}>{money(row.cost)}</span>
+          <span className={`${num} w-14 text-[var(--c-text-3)]`}>{formatTokens(row.input ?? 0)}</span>
+          <span className={`${num} w-14 text-[var(--c-text-3)]`}>{formatTokens(row.output ?? 0)}</span>
+          <span className={`${num} w-12 text-[var(--c-text-2)]`}>{row.prompts ?? 0}</span>
+        </>
+      ) : (
+        <span className={`${num} w-20 text-[var(--c-text-2)]`}>{(row.calls ?? 0).toLocaleString()}</span>
       )}
     </Tag>
   )
@@ -214,27 +231,32 @@ function DriverList({ d, onOpen }: { d: SessionDrivers; onOpen?: () => void }) {
   const max = Math.max(1, ...d.drivers.map(x => x.tokens))
   return (
     <div className="pt-1">
-      <div className="flex items-center justify-between text-[10.5px] text-[var(--c-text-3)] mb-1.5">
+      <div className="flex items-center justify-between text-[10.5px] text-[var(--c-text-3)] mb-1">
         <span>{d.coarse ? 'Coarse attribution — this agent reports no cache detail' : 'Each turn’s new context blamed on the last tool / skill — approximate'}</span>
         {onOpen && <button className="text-[var(--c-accent)] hover:underline" onClick={onOpen}>Open transcript ↗</button>}
+      </div>
+      <div className="flex items-center gap-2.5 pb-1 mb-0.5 border-b border-[var(--c-border-sub)] text-[9px] uppercase tracking-wider text-[var(--c-text-3)]">
+        <span className="w-11 shrink-0" />
+        <span className="flex-1 min-w-0">Driver</span>
+        <span className="w-16 text-right shrink-0">Tokens</span>
+        <span className="w-14 text-right shrink-0">Cost</span>
+        <span className="w-10 text-right shrink-0">Share</span>
       </div>
       {d.drivers.map(dr => (
         <div key={dr.kind + dr.name} className="py-1">
           <div className="flex items-center gap-2.5">
-            <span className="shrink-0 text-[8.5px] font-bold uppercase px-1.5 rounded-full bg-[var(--c-surface-2)] text-[var(--c-text-3)]">{DRIVER_LABEL[dr.kind] ?? dr.kind}</span>
+            <span className="w-11 shrink-0 text-[8.5px] font-bold uppercase text-center px-1 py-px rounded-full bg-[var(--c-surface-2)] text-[var(--c-text-3)]">{DRIVER_LABEL[dr.kind] ?? dr.kind}</span>
             <span className="min-w-0 flex-1 truncate text-[12px] text-[var(--c-text-2)]">
               {dr.name}{dr.calls > 0 && <span className="text-[10px] text-[var(--c-text-3)]"> · {dr.calls}×</span>}
             </span>
-            <span className="shrink-0 text-right text-[11px] tabular-nums w-[92px]">
-              <span className="text-[var(--c-text-2)]">{formatTokens(dr.tokens)}</span>
-              <span className="text-[var(--c-text-3)]"> · {money(dr.approxCostUsd)}</span>
-            </span>
-            <span className="shrink-0 w-9 text-right text-[10.5px] tabular-nums text-[var(--c-text-3)]">{Math.round(dr.pct)}%</span>
+            <span className="w-16 shrink-0 text-right text-[11px] tabular-nums text-[var(--c-text-2)]">{formatTokens(dr.tokens)}</span>
+            <span className="w-14 shrink-0 text-right text-[11px] tabular-nums text-[var(--c-text-3)]">{money(dr.approxCostUsd)}</span>
+            <span className="w-10 shrink-0 text-right text-[10.5px] tabular-nums text-[var(--c-text-3)]">{Math.round(dr.pct)}%</span>
           </div>
-          <div className="mt-0.5 h-[5px] rounded-full bg-[var(--c-surface-2)] overflow-hidden">
+          <div className="mt-0.5 ml-[54px] h-[5px] rounded-full bg-[var(--c-surface-2)] overflow-hidden">
             <div className="h-full rounded-full bg-[var(--c-accent)]" style={{ width: `${Math.max(3, (dr.tokens / max) * 100)}%` }} />
           </div>
-          {dr.hint && <p className="mt-1 ml-1 text-[10.5px] text-amber-400/90">⚠ {dr.hint}</p>}
+          {dr.hint && <p className="mt-1 ml-[54px] text-[10.5px] text-amber-400/90">⚠ {dr.hint}</p>}
         </div>
       ))}
       <div className="flex justify-between px-1 pt-2 mt-1 border-t border-[var(--c-border-sub)] text-[11px] text-[var(--c-text-3)]">
