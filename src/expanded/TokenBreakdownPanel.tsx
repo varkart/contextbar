@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
+import { listen } from '@tauri-apps/api/event'
 import type { SessionInsights, SessionDrivers, SessionCost } from '../types'
 import { formatTokens } from '../components/history/SessionStats'
 
@@ -57,11 +58,20 @@ export default function TokenBreakdownPanel({ onOpenSession }: { onOpenSession?:
   useEffect(() => {
     if (byMonth[month]) return
     let live = true
+    invoke('warm_session_stats').catch(() => {})
     invoke<SessionInsights>('get_session_insights', { sinceMs: range.since, untilMs: range.until })
       .then(d => { if (live) setByMonth(m => ({ ...m, [month]: d })) })
       .catch(() => {})
     return () => { live = false }
   }, [month, range.since, range.until, byMonth])
+
+  // The stats warm pass runs in the background; when it finishes parsing new
+  // sessions, drop the cache so every month refetches with the fresh numbers
+  // (this is what fixes prompt counts showing 0 until the parse completes).
+  useEffect(() => {
+    const un = listen('session-insights-updated', () => setByMonth({}))
+    return () => { un.then(f => f()) }
+  }, [])
 
   useEffect(() => {
     if (!session) { setDrivers(null); return }
