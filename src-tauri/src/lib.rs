@@ -366,6 +366,19 @@ async fn get_session(
 }
 
 #[tauri::command]
+async fn get_session_drivers(
+    session_id: String,
+    agent: Option<String>,
+) -> Result<engine::history::stats::SessionDrivers, String> {
+    tokio::task::spawn_blocking(move || {
+        let detail = engine::sessions::get_any(agent.as_deref(), &session_id)?;
+        Ok(engine::history::stats::compute_drivers(&detail))
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
 fn list_session_projects() -> Vec<String> {
     engine::history::list_session_projects()
 }
@@ -2758,6 +2771,7 @@ pub fn run() {
             get_agents,
             list_sessions,
             get_session,
+            get_session_drivers,
             list_session_projects,
             get_history_stats,
             list_worktrees,

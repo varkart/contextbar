@@ -34,6 +34,9 @@ pub struct ProjectTokens {
     pub project: String,
     pub project_name: String,
     pub tokens: u64,
+    pub input_tokens: u64,
+    pub output_tokens: u64,
+    pub prompts: u64,
     pub sessions: u64,
     /// None when no session in the group matched a known pricing entry.
     pub est_cost_usd: Option<f64>,
@@ -52,6 +55,9 @@ pub struct SessionCost {
     pub model: String,
     pub ts: i64,
     pub tokens: u64,
+    pub input_tokens: u64,
+    pub output_tokens: u64,
+    pub prompts: u64,
     pub est_cost_usd: Option<f64>,
 }
 
@@ -249,6 +255,255 @@ fn est_cost(
             + cache_read as f64 / mtok * rin * p.cache_read_multiplier
             + cache_creation as f64 / mtok * rin * p.cache_write_multiplier,
     )
+}
+
+// ── In-session token attribution ("what drove the tokens") ───────────────────
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Driver {
+    /// tool | mcp | skill | conversation | output | initial | compaction | prompt
+    pub kind: String,
+    pub name: String,
+    pub calls: u64,
+    pub tokens: u64,
+    pub approx_cost_usd: Option<f64>,
+    /// Share of the session's attributed tokens, 0..100.
+    pub pct: f64,
+    pub hint: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct SessionDrivers {
+    pub session_id: String,
+    pub model: String,
+    pub total_tokens: u64,
+    pub total_cost_usd: Option<f64>,
+    /// True when the agent emits no cache token counts, so attribution leans on
+    /// plain input deltas and is rougher.
+    pub coarse: bool,
+    pub drivers: Vec<Driver>,
+}
+
+fn fmt_tok(n: u64) -> String {
+    if n >= 1_000_000 {
+        format!("{:.1}M", n as f64 / 1_000_000.0)
+    } else if n >= 1_000 {
+        format!("{}k", (n as f64 / 1_000.0).round() as u64)
+    } else {
+        n.to_string()
+    }
+}
+
+fn skill_invoked_in(msg: &super::types::Message) -> Option<String> {
+    for b in &msg.content {
+        if b.block_type != "tool_use" {
+            continue;
+        }
+        let name = b.tool_name.as_deref().unwrap_or("");
+        if name == "Skill" || name == "skill" {
+            if let Some(s) = b.tool_input.as_deref().and_then(skill_name_from_input) {
+                return Some(s);
+            }
+        }
+    }
+    None
+}
+
+fn driver_hint(kind: &str, name: &str, tokens: u64, calls: u64, total: u64) -> Option<String> {
+    let pct = (tokens * 100).checked_div(total).unwrap_or(0);
+    match kind {
+        "conversation" if total > 0 && tokens * 2 > total => Some(
+            "Most turns re-read cached context — a long session. /compact earlier or split the task."
+                .into(),
+        ),
+        "tool" if matches!(name, "Read" | "Bash" | "Grep" | "shell") && pct >= 40 => Some(format!(
+            "{name} added {pct}% of this session's context — narrow it (offset/limit, head, tighter globs)."
+        )),
+        "mcp" if tokens >= 200_000 => Some(format!(
+            "{name} returned ~{} — cache results or narrow the query.",
+            fmt_tok(tokens)
+        )),
+        "skill" if calls > 0 && tokens / calls >= 8_000 => Some(format!(
+            "{name} loads ~{} of instructions per call ({calls}×).",
+            fmt_tok(tokens / calls)
+        )),
+        "compaction" => {
+            Some("Context was compacted mid-session — the task may be too large for one pass.".into())
+        }
+        "initial" if tokens >= 60_000 => Some(
+            "Large initial context — trim CLAUDE.md and disable unused MCP servers / skills.".into(),
+        ),
+        _ => None,
+    }
+}
+
+/// Attribute a session's token spend to what added context each turn: a tool
+/// result, an MCP payload, a skill file, the opening prompt, or plain
+/// conversation growth. Heuristic — each assistant turn's new context is
+/// blamed on the most recent tool result / skill invocation.
+pub fn compute_drivers(detail: &super::SessionDetail) -> SessionDrivers {
+    let model = detail.model.clone().unwrap_or_default();
+    let msgs = &detail.messages;
+
+    let has_cache = msgs.iter().any(|m| {
+        m.usage
+            .as_ref()
+            .map(|u| u.cache_creation_tokens > 0 || u.cache_read_tokens > 0)
+            .unwrap_or(false)
+    });
+
+    // tool_use_id -> tool name, for pairing a tool_result back to its call.
+    let mut tool_by_id: HashMap<String, String> = HashMap::new();
+    for m in msgs {
+        for b in &m.content {
+            if b.block_type == "tool_use" {
+                if let (Some(id), Some(name)) = (b.tool_use_id.as_ref(), b.tool_name.as_ref()) {
+                    tool_by_id.insert(id.clone(), name.clone());
+                }
+            }
+        }
+    }
+
+    // (kind, name) -> (tokens, calls)
+    let mut acc: HashMap<(String, String), (u64, u64)> = HashMap::new();
+    let mut conv_tokens = 0u64;
+    let mut output_tokens = 0u64;
+    let mut pending_skill: Option<String> = None;
+    let mut prev_assistant_skill: Option<String> = None;
+
+    for (i, msg) in msgs.iter().enumerate() {
+        // A skill invoked on an assistant turn is "pending" for the next one,
+        // where its instructions show up as new cached context.
+        if msg.role == "assistant" {
+            prev_assistant_skill = pending_skill.take();
+            pending_skill = skill_invoked_in(msg);
+        }
+        if msg.role != "assistant" {
+            continue;
+        }
+        let Some(u) = &msg.usage else { continue };
+        output_tokens += u.output_tokens;
+        conv_tokens += u.cache_read_tokens;
+
+        let charge = if has_cache {
+            u.cache_creation_tokens + u.input_tokens
+        } else {
+            u.input_tokens
+        };
+        if charge == 0 {
+            continue;
+        }
+
+        // Classify by the preceding user turn.
+        let (kind, name, calls) = {
+            let prev = i.checked_sub(1).and_then(|k| msgs.get(k));
+            let mut results: Vec<String> = Vec::new();
+            if let Some(p) = prev {
+                for b in &p.content {
+                    if b.block_type == "tool_result" {
+                        if let Some(id) = &b.tool_use_id {
+                            if let Some(tn) = tool_by_id.get(id) {
+                                results.push(tn.clone());
+                            }
+                        }
+                    }
+                }
+            }
+            if let Some(tn) = results.first() {
+                if let Some(server) = tn.strip_prefix("mcp__").and_then(|r| r.split("__").next()) {
+                    ("mcp".to_string(), server.to_string(), results.len() as u64)
+                } else {
+                    ("tool".to_string(), tn.clone(), results.len() as u64)
+                }
+            } else if i <= 1 {
+                (
+                    "initial".to_string(),
+                    "Initial prompt + system".to_string(),
+                    0,
+                )
+            } else if let Some(sk) = prev_assistant_skill.clone() {
+                ("skill".to_string(), sk, 1)
+            } else if has_cache && charge >= 20_000 {
+                (
+                    "compaction".to_string(),
+                    "Context compaction".to_string(),
+                    0,
+                )
+            } else {
+                ("prompt".to_string(), "Your prompts".to_string(), 0)
+            }
+        };
+        let e = acc.entry((kind, name)).or_insert((0, 0));
+        e.0 += charge;
+        e.1 += calls;
+    }
+
+    let mut drivers: Vec<Driver> = acc
+        .into_iter()
+        .map(|((kind, name), (tokens, calls))| Driver {
+            kind,
+            name,
+            calls,
+            tokens,
+            approx_cost_usd: None,
+            pct: 0.0,
+            hint: None,
+        })
+        .collect();
+    if conv_tokens > 0 {
+        drivers.push(Driver {
+            kind: "conversation".into(),
+            name: "Conversation tax (cache re-read)".into(),
+            calls: 0,
+            tokens: conv_tokens,
+            approx_cost_usd: None,
+            pct: 0.0,
+            hint: None,
+        });
+    }
+    if output_tokens > 0 {
+        drivers.push(Driver {
+            kind: "output".into(),
+            name: "Model output".into(),
+            calls: 0,
+            tokens: output_tokens,
+            approx_cost_usd: None,
+            pct: 0.0,
+            hint: None,
+        });
+    }
+
+    let total: u64 = drivers.iter().map(|d| d.tokens).sum();
+    for d in &mut drivers {
+        d.pct = if total > 0 {
+            d.tokens as f64 / total as f64 * 100.0
+        } else {
+            0.0
+        };
+        d.approx_cost_usd = match d.kind.as_str() {
+            "output" => est_cost(0, d.tokens, 0, 0, &model),
+            "conversation" => est_cost(0, 0, d.tokens, 0, &model),
+            _ if has_cache => est_cost(0, 0, 0, d.tokens, &model),
+            _ => est_cost(d.tokens, 0, 0, 0, &model),
+        };
+        d.hint = driver_hint(&d.kind, &d.name, d.tokens, d.calls, total);
+    }
+    drivers.sort_by_key(|d| std::cmp::Reverse(d.tokens));
+
+    SessionDrivers {
+        session_id: detail.session_id.clone(),
+        model,
+        total_tokens: detail.total_tokens.input_tokens + detail.total_tokens.output_tokens,
+        total_cost_usd: drivers
+            .iter()
+            .filter_map(|d| d.approx_cost_usd)
+            .sum::<f64>()
+            .into(),
+        coarse: !has_cache,
+        drivers,
+    }
 }
 
 // ── Usage windows (rolling 5h / 7d meters per agent) ─────────────────────────
@@ -454,19 +709,21 @@ fn upsert_session(
     let tool_calls_json = serde_json::to_string(&tool_calls).unwrap_or_else(|_| "{}".into());
     let skill_calls_json = serde_json::to_string(&skill_calls).unwrap_or_else(|_| "{}".into());
     let t = &detail.total_tokens;
+    let prompt_count = detail.messages.iter().filter(|m| m.role == "user").count() as i64;
 
     let conn = db.0.lock().unwrap();
     let _ = conn.execute(
         "INSERT INTO session_stats
                (session_id, agent, project, project_name, display, title, ts, model,
                 input_tokens, output_tokens, cache_read, cache_creation,
-                msg_count, tool_calls, skill_calls, mtime, size)
-             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17)
+                msg_count, prompt_count, tool_calls, skill_calls, mtime, size)
+             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18)
              ON CONFLICT(session_id) DO UPDATE SET
                ts=excluded.ts, model=excluded.model, title=excluded.title,
                input_tokens=excluded.input_tokens, output_tokens=excluded.output_tokens,
                cache_read=excluded.cache_read, cache_creation=excluded.cache_creation,
-               msg_count=excluded.msg_count, tool_calls=excluded.tool_calls,
+               msg_count=excluded.msg_count, prompt_count=excluded.prompt_count,
+               tool_calls=excluded.tool_calls,
                skill_calls=excluded.skill_calls, mtime=excluded.mtime, size=excluded.size",
         rusqlite::params![
             entry.session_id,
@@ -482,6 +739,7 @@ fn upsert_session(
             t.cache_read_tokens as i64,
             t.cache_creation_tokens as i64,
             detail.messages.len() as i64,
+            prompt_count,
             tool_calls_json,
             skill_calls_json,
             mtime,
@@ -519,6 +777,7 @@ pub fn aggregate(
         output: u64,
         cache_read: u64,
         cache_creation: u64,
+        prompts: u64,
         tool_calls: HashMap<String, u64>,
         skill_calls: HashMap<String, u64>,
     }
@@ -528,7 +787,7 @@ pub fn aggregate(
         let mut stmt = match conn.prepare(
             "SELECT session_id, project, project_name, display, model,
                     input_tokens, output_tokens, cache_read, cache_creation, tool_calls,
-                    skill_calls, agent, ts
+                    skill_calls, agent, ts, prompt_count
              FROM session_stats WHERE ts >= ?1 AND ts < ?2",
         ) {
             Ok(s) => s,
@@ -551,6 +810,7 @@ pub fn aggregate(
                     skill_calls: serde_json::from_str(&r.get::<_, String>(10)?).unwrap_or_default(),
                     agent: r.get(11)?,
                     ts: r.get(12)?,
+                    prompts: r.get::<_, i64>(13)? as u64,
                 })
             },
         )
@@ -625,10 +885,16 @@ pub fn aggregate(
                 project: row.project.clone(),
                 project_name: row.project_name.clone(),
                 tokens: 0,
+                input_tokens: 0,
+                output_tokens: 0,
+                prompts: 0,
                 sessions: 0,
                 est_cost_usd: None,
             });
         p.tokens += session_tokens;
+        p.input_tokens += row.input;
+        p.output_tokens += row.output;
+        p.prompts += row.prompts;
         p.sessions += 1;
         if let Some(c) = session_cost {
             *p.est_cost_usd.get_or_insert(0.0) += c;
@@ -643,6 +909,9 @@ pub fn aggregate(
             model: row.model.clone(),
             ts: row.ts,
             tokens: session_tokens,
+            input_tokens: row.input,
+            output_tokens: row.output,
+            prompts: row.prompts,
             est_cost_usd: session_cost,
         });
 

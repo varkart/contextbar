@@ -265,6 +265,21 @@ fn migrate(conn: &mut Connection) -> Result<(), AppError> {
         conn.pragma_update(None, "user_version", 13)?;
     }
 
+    if version < 14 {
+        // prompt_count = user turns (distinct from msg_count = all turns).
+        // session_drivers caches the per-session token attribution, keyed by
+        // the transcript file's mtime so it recomputes only when it changes.
+        conn.execute_batch(
+            "ALTER TABLE session_stats ADD COLUMN prompt_count INTEGER NOT NULL DEFAULT 0;
+            CREATE TABLE IF NOT EXISTS session_drivers (
+                session_id   TEXT PRIMARY KEY,
+                mtime        INTEGER NOT NULL,
+                drivers_json TEXT NOT NULL
+            );",
+        )?;
+        conn.pragma_update(None, "user_version", 14)?;
+    }
+
     Ok(())
 }
 
