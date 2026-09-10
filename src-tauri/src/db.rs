@@ -265,6 +265,38 @@ fn migrate(conn: &mut Connection) -> Result<(), AppError> {
         conn.pragma_update(None, "user_version", 13)?;
     }
 
+    if version < 14 {
+        // prompt_count = user turns (distinct from msg_count = all turns).
+        // session_drivers caches the per-session token attribution, keyed by
+        // the transcript file's mtime so it recomputes only when it changes.
+        // Resetting mtime forces the next warm pass to re-parse every session
+        // and backfill prompt_count (warm skips files whose mtime/size match).
+        conn.execute_batch(
+            "ALTER TABLE session_stats ADD COLUMN prompt_count INTEGER NOT NULL DEFAULT 0;
+            UPDATE session_stats SET mtime = -1;
+            CREATE TABLE IF NOT EXISTS session_drivers (
+                session_id   TEXT PRIMARY KEY,
+                mtime        INTEGER NOT NULL,
+                drivers_json TEXT NOT NULL
+            );",
+        )?;
+        conn.pragma_update(None, "user_version", 14)?;
+    }
+
+    if version < 15 {
+        // Re-run the warm-pass reset for anyone who took v14 before the
+        // mtime line was added — otherwise prompt_count stays 0 on existing
+        // rows because their files are unchanged.
+        conn.execute_batch("UPDATE session_stats SET mtime = -1;")?;
+        conn.pragma_update(None, "user_version", 15)?;
+    }
+
+    if version < 16 {
+        // prompt_count now counts only user turns with typed text; re-parse.
+        conn.execute_batch("UPDATE session_stats SET mtime = -1;")?;
+        conn.pragma_update(None, "user_version", 16)?;
+    }
+
     Ok(())
 }
 

@@ -317,6 +317,9 @@ export interface ProjectTokens {
   project: string
   projectName: string
   tokens: number
+  inputTokens: number
+  outputTokens: number
+  prompts: number
   sessions: number
   estCostUsd?: number | null
 }
@@ -330,7 +333,29 @@ export interface SessionCost {
   model: string
   ts: number
   tokens: number
+  inputTokens: number
+  outputTokens: number
+  prompts: number
   estCostUsd?: number | null
+}
+
+export interface Driver {
+  kind: 'tool' | 'mcp' | 'skill' | 'conversation' | 'output' | 'initial' | 'compaction' | 'prompt'
+  name: string
+  calls: number
+  tokens: number
+  approxCostUsd?: number | null
+  pct: number
+  hint?: string | null
+}
+
+export interface SessionDrivers {
+  sessionId: string
+  model: string
+  totalTokens: number
+  totalCostUsd?: number | null
+  coarse: boolean
+  drivers: Driver[]
 }
 
 export interface HeaviestSession {
