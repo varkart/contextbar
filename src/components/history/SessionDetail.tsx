@@ -375,30 +375,30 @@ export default function SessionDetail({ session }: SessionDetailProps) {
             {session.projectName}{copiedPath ? ' ✓' : ''}
           </button>
           <span className="opacity-40">·</span>
-          <span>{relTime}</span>
+          <span title={`${dateStr} ${timeStr}`}>{relTime}</span>
           {tokenTotal > 0 && (
             <>
               <span className="opacity-40">·</span>
               <span className="text-[10px] font-semibold px-1.5 rounded-full bg-emerald-500/15 text-emerald-400">{formatTokens(tokenTotal)} tok</span>
             </>
           )}
+          {detail && (
+            <>
+              <span className="opacity-40">·</span>
+              <span>{detail.messages.length} msgs · {toolCount} tools{durationStr && ` · ${durationStr}`}</span>
+            </>
+          )}
         </div>
 
-        {detail && (
-          <div className="mt-1 font-mono text-[10px] text-[var(--c-text-3)]/70">
-            {detail.messages.length} msgs · {toolCount} tools{durationStr && ` · ${durationStr}`} · started {dateStr} {timeStr}
-          </div>
-        )}
+        <TagEditor sessionId={session.sessionId} />
 
-        <details className="mt-1.5 group/prompt">
+        <details className="mt-1 group/prompt">
           <summary className="list-none cursor-pointer text-[11px] text-[var(--c-text-3)] hover:text-[var(--c-text-2)] transition-colors [&::-webkit-details-marker]:hidden">
             <span className="inline-block group-open/prompt:rotate-90 transition-transform text-[8px] mr-1">▶</span>
-            opened with a request…
+            opened with: <span className="italic">“{session.display.slice(0, 72)}{session.display.length > 72 ? '…' : ''}”</span>
           </summary>
-          <p className="text-[11.5px] text-[var(--c-text-3)] mt-1 leading-relaxed">{session.display}</p>
+          <p className="text-[11.5px] text-[var(--c-text-3)] mt-1 leading-relaxed not-italic">{session.display}</p>
         </details>
-
-        <TagEditor sessionId={session.sessionId} />
       </div>
 
       {!loading && !error && turns.length > 0 && (
