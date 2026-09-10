@@ -709,7 +709,19 @@ fn upsert_session(
     let tool_calls_json = serde_json::to_string(&tool_calls).unwrap_or_else(|_| "{}".into());
     let skill_calls_json = serde_json::to_string(&skill_calls).unwrap_or_else(|_| "{}".into());
     let t = &detail.total_tokens;
-    let prompt_count = detail.messages.iter().filter(|m| m.role == "user").count() as i64;
+    // Count real user turns — those carrying typed text — not the `user`-role
+    // envelopes that only wrap a tool_result.
+    let prompt_count = detail
+        .messages
+        .iter()
+        .filter(|m| {
+            m.role == "user"
+                && m.content.iter().any(|b| {
+                    b.block_type == "text"
+                        && b.text.as_deref().is_some_and(|t| !t.trim().is_empty())
+                })
+        })
+        .count() as i64;
 
     let conn = db.0.lock().unwrap();
     let _ = conn.execute(

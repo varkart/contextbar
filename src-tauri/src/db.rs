@@ -291,6 +291,12 @@ fn migrate(conn: &mut Connection) -> Result<(), AppError> {
         conn.pragma_update(None, "user_version", 15)?;
     }
 
+    if version < 16 {
+        // prompt_count now counts only user turns with typed text; re-parse.
+        conn.execute_batch("UPDATE session_stats SET mtime = -1;")?;
+        conn.pragma_update(None, "user_version", 16)?;
+    }
+
     Ok(())
 }
 
