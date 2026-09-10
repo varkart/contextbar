@@ -112,11 +112,25 @@ pub fn classify_input(ctx: &TurnCtx) -> InBucket {
         }
     }
     if ctx.index <= 1 {
-        InBucket::Initial
-    } else if let Some(sk) = &ctx.prev_skill {
-        InBucket::Skill(sk.clone())
-    } else if ctx.has_cache && ctx.charge >= 20_000 {
-        InBucket::Compaction
+        return InBucket::Initial;
+    }
+    if let Some(sk) = &ctx.prev_skill {
+        return InBucket::Skill(sk.clone());
+    }
+    // A real Claude /compact leaves a summary as the next user turn.
+    let prev_text = prev
+        .and_then(|p| p.content.iter().find(|b| b.block_type == "text"))
+        .and_then(|b| b.text.as_deref())
+        .unwrap_or("");
+    if prev_text.contains("session is being continued from a previous conversation")
+        || prev_text.contains("<summary>")
+    {
+        return InBucket::Compaction;
+    }
+    // Larger uncategorised charges are context accumulating without a tool or
+    // skill behind it — long assistant turns, pasted content, plan text.
+    if ctx.has_cache && ctx.charge >= 20_000 {
+        InBucket::Growth
     } else {
         InBucket::Prompt
     }

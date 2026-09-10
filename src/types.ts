@@ -341,7 +341,7 @@ export interface SessionCost {
 
 export type DriverSide = 'input' | 'output'
 export type DriverKind =
-  | 'tool' | 'mcp' | 'skill' | 'prompt' | 'initial' | 'compaction' | 'reread'
+  | 'tool' | 'mcp' | 'skill' | 'prompt' | 'initial' | 'compaction' | 'growth' | 'reread'
   | 'edit' | 'write' | 'shell' | 'search' | 'answer' | 'reasoning'
 
 export interface Driver {
@@ -350,6 +350,10 @@ export interface Driver {
   name: string
   calls: number
   tokens: number
+  /** Input drivers: fresh context this source added (before the re-read share). */
+  createdTokens?: number | null
+  /** Input drivers: this source's share of cumulative cache re-read. */
+  rereadTokens?: number | null
   approxCostUsd?: number | null
   /** Share of its own side's tokens, 0..100. */
   pct: number

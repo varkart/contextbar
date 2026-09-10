@@ -38,7 +38,14 @@ pub struct Driver {
     pub kind: &'static str,
     pub name: String,
     pub calls: u64,
+    /// Total attributed tokens (for input drivers: fresh context + this
+    /// source's share of the per-turn cache re-read).
     pub tokens: u64,
+    /// Input drivers only: the fresh context this source added, before the
+    /// re-read share. `None` for output drivers.
+    pub created_tokens: Option<u64>,
+    /// Input drivers only: this source's share of cumulative cache re-read.
+    pub reread_tokens: Option<u64>,
     pub approx_cost_usd: Option<f64>,
     /// Share of its own side's attributed tokens, 0..100.
     pub pct: f64,
@@ -116,6 +123,8 @@ pub enum InBucket {
     Prompt,
     Initial,
     Compaction,
+    /// Context that accumulated with no clear tool/skill trigger.
+    Growth,
 }
 
 /// Everything a [`TokenAttributor::classify_input`] impl needs about the turn.
@@ -296,6 +305,7 @@ pub fn compute(detail: &SessionDetail) -> SessionDrivers {
             InBucket::Prompt => ("prompt", "Your prompts".into(), 0),
             InBucket::Initial => ("initial", "Initial prompt + system".into(), 0),
             InBucket::Compaction => ("compaction", "Context compaction".into(), 0),
+            InBucket::Growth => ("growth", "Conversation growth".into(), 0),
         };
         let e = input.entry((kind, name)).or_insert((0, 0));
         e.0 += charge;
@@ -303,25 +313,46 @@ pub fn compute(detail: &SessionDetail) -> SessionDrivers {
     }
 
     let mut drivers: Vec<Driver> = Vec::new();
-    for ((kind, name), (tokens, calls)) in input {
+    // Cache re-read is the same context re-sent every turn; spread its cost
+    // across the sources that added that context, weighted by how much each
+    // contributed. So a small file loaded early but kept for 200 turns shows
+    // its true cost, and the breakdown stays about *what* is in context.
+    let created_total: u64 = input.values().map(|(c, _)| *c).sum::<u64>().max(1);
+    let mut reread_left = reread;
+    type InEntry = ((&'static str, String), (u64, u64));
+    let mut entries: Vec<InEntry> = input.into_iter().collect();
+    entries.sort_by_key(|(_, (c, _))| std::cmp::Reverse(*c));
+    let n = entries.len();
+    for (idx, ((kind, name), (created, calls))) in entries.into_iter().enumerate() {
+        let reread_share = if idx + 1 == n {
+            reread_left
+        } else {
+            let s = reread * created / created_total;
+            reread_left = reread_left.saturating_sub(s);
+            s
+        };
         drivers.push(Driver {
             side: "input",
             kind,
             name,
             calls,
-            tokens,
+            tokens: created + reread_share,
+            created_tokens: Some(created),
+            reread_tokens: Some(reread_share),
             approx_cost_usd: None,
             pct: 0.0,
             hint: None,
         });
     }
-    if reread > 0 {
+    if drivers.is_empty() && reread > 0 {
         drivers.push(Driver {
             side: "input",
             kind: "reread",
-            name: "Conversation re-read (cache)".into(),
+            name: "Conversation context (cache)".into(),
             calls: 0,
             tokens: reread,
+            created_tokens: Some(0),
+            reread_tokens: Some(reread),
             approx_cost_usd: None,
             pct: 0.0,
             hint: None,
@@ -334,6 +365,8 @@ pub fn compute(detail: &SessionDetail) -> SessionDrivers {
             name: bucket.label().into(),
             calls,
             tokens,
+            created_tokens: None,
+            reread_tokens: None,
             approx_cost_usd: None,
             pct: 0.0,
             hint: None,
@@ -361,12 +394,20 @@ pub fn compute(detail: &SessionDetail) -> SessionDrivers {
         } else {
             0.0
         };
-        d.approx_cost_usd = match d.kind {
-            "reread" => est_cost(0, 0, d.tokens, 0, &model),
-            _ if d.side == "output" => est_cost(0, d.tokens, 0, 0, &model),
-            "prompt" => est_cost(d.tokens, 0, 0, 0, &model),
-            _ if has_cache => est_cost(0, 0, 0, d.tokens, &model),
-            _ => est_cost(d.tokens, 0, 0, 0, &model),
+        d.approx_cost_usd = if d.side == "output" {
+            est_cost(0, d.tokens, 0, 0, &model)
+        } else if d.side == "input" && has_cache {
+            // created context is priced as a cache write, its re-read share as
+            // cache reads; `prompt` created is plain (uncached) input.
+            let created = d.created_tokens.unwrap_or(0);
+            let reread_s = d.reread_tokens.unwrap_or(0);
+            if d.kind == "prompt" {
+                est_cost(created, 0, reread_s, 0, &model)
+            } else {
+                est_cost(0, 0, reread_s, created, &model)
+            }
+        } else {
+            est_cost(d.tokens, 0, 0, 0, &model)
         };
         d.hint = hint(
             d,
@@ -400,6 +441,18 @@ pub fn compute(detail: &SessionDetail) -> SessionDrivers {
 
 fn hint(d: &Driver, side_total: u64) -> Option<String> {
     let pct = (d.tokens * 100).checked_div(side_total).unwrap_or(0);
+    // A source whose re-read cost dwarfs what it added is dead weight sitting
+    // in the context window for many turns.
+    if let (Some(c), Some(r)) = (d.created_tokens, d.reread_tokens) {
+        if c > 0 && r > c.saturating_mul(15) && pct >= 25 {
+            return Some(format!(
+                "{} added {} but was re-read {} across the session — /compact or start fresh sooner.",
+                d.name,
+                fmt_tok(c),
+                fmt_tok(r)
+            ));
+        }
+    }
     match d.kind {
         "reread" if pct >= 50 => Some(
             "Most input is re-read cached context — a long session. /compact earlier or split the task."
@@ -425,6 +478,9 @@ fn hint(d: &Driver, side_total: u64) -> Option<String> {
         "compaction" => {
             Some("Context was compacted mid-session — the task may be too large for one pass.".into())
         }
+        "growth" if pct >= 40 => Some(
+            "Lots of context with no tool/skill behind it — long turns or pasted material. Trim or split.".into(),
+        ),
         "initial" if d.tokens >= 60_000 => Some(
             "Large initial context — trim CLAUDE.md and disable unused MCP servers / skills.".into(),
         ),
@@ -517,5 +573,44 @@ mod tests {
         assert!(sd.drivers.iter().any(|x| x.side == "input"));
         assert!(sd.drivers.iter().any(|x| x.side == "output"));
         assert!(sd.drivers.iter().any(|x| x.kind == "reasoning"));
+    }
+}
+
+#[cfg(test)]
+mod smoke {
+    #[test]
+    #[ignore]
+    fn drivers_for_real_sessions() {
+        let mut shown = 0;
+        for source in crate::engine::sessions::sources() {
+            for entry in source.list(60) {
+                let Ok(d) = crate::engine::sessions::get_any(Some(&entry.agent), &entry.session_id)
+                else {
+                    continue;
+                };
+                let sd = super::compute(&d);
+                if sd.input_tokens + sd.output_tokens < 100_000 {
+                    continue;
+                }
+                shown += 1;
+                if shown > 8 {
+                    return;
+                }
+                println!(
+                    "\n[{}] {} — in {} / out {} (coarse={})",
+                    d.agent,
+                    d.session_id.get(..8).unwrap_or(&d.session_id),
+                    sd.input_tokens,
+                    sd.output_tokens,
+                    sd.coarse
+                );
+                for dr in &sd.drivers {
+                    println!(
+                        "  {:6} {:9} {:>9}  {:>3.0}%  {}",
+                        dr.side, dr.kind, dr.tokens, dr.pct, dr.name
+                    );
+                }
+            }
+        }
     }
 }

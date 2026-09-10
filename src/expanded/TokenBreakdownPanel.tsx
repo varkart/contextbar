@@ -33,7 +33,7 @@ const money = (n?: number | null) => (n == null ? '—' : `$${n.toFixed(2)}`)
 
 const DRIVER_LABEL: Record<string, string> = {
   tool: 'tool', mcp: 'mcp', skill: 'skill', prompt: 'prompt',
-  initial: 'init', compaction: 'compact', reread: 're-read',
+  initial: 'init', compaction: 'compact', growth: 'growth', reread: 're-read',
   edit: 'edit', write: 'write', shell: 'shell', search: 'search',
   answer: 'answer', reasoning: 'think',
 }
@@ -248,7 +248,13 @@ function DriverRows({ rows }: { rows: Driver[] }) {
           <div className="flex items-center gap-2.5">
             <span className="w-11 shrink-0 text-[8.5px] font-bold uppercase text-center px-1 py-px rounded-full bg-[var(--c-surface-2)] text-[var(--c-text-3)]">{DRIVER_LABEL[dr.kind] ?? dr.kind}</span>
             <span className="min-w-0 flex-1 truncate text-[12px] text-[var(--c-text-2)]">
-              {dr.name}{dr.calls > 0 && <span className="text-[10px] text-[var(--c-text-3)]"> · {dr.calls}×</span>}
+              {dr.name}
+              {dr.calls > 0 && <span className="text-[10px] text-[var(--c-text-3)]"> · {dr.calls}×</span>}
+              {dr.side === 'input' && dr.rereadTokens != null && dr.rereadTokens > 0 && (
+                <span className="text-[10px] text-[var(--c-text-3)]">
+                  {' '}· {formatTokens(dr.createdTokens ?? 0)} new + {formatTokens(dr.rereadTokens)} re-read
+                </span>
+              )}
             </span>
             <span className="w-16 shrink-0 text-right text-[11px] tabular-nums text-[var(--c-text-2)]">{formatTokens(dr.tokens)}</span>
             <span className="w-14 shrink-0 text-right text-[11px] tabular-nums text-[var(--c-text-3)]">{money(dr.approxCostUsd)}</span>
