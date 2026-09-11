@@ -15,7 +15,6 @@ FINAL_GIF=".github/assets/demo.gif"
 WIDTH=760
 HEIGHT=600
 FPS=14
-BG="0x09090b" # app's dark background, so the narrower popover clip doesn't letterbox white
 
 command -v ffmpeg >/dev/null || { echo "ffmpeg not found — brew install ffmpeg"; exit 1; }
 HAVE_GIFSKI=0
@@ -37,8 +36,8 @@ echo "==> Scaling + concatenating scenes into one clip"
 ffmpeg -y -loglevel error \
   -i "$POPOVER" -i "$EXPANDED" \
   -filter_complex "
-    [0:v]scale=${WIDTH}:${HEIGHT}:force_original_aspect_ratio=decrease,pad=${WIDTH}:${HEIGHT}:(ow-iw)/2:(oh-ih)/2:color=${BG},setsar=1,fps=${FPS}[v0];
-    [1:v]scale=${WIDTH}:${HEIGHT}:force_original_aspect_ratio=decrease,pad=${WIDTH}:${HEIGHT}:(ow-iw)/2:(oh-ih)/2:color=${BG},setsar=1,fps=${FPS}[v1];
+    [0:v]scale=${WIDTH}:${HEIGHT}:force_original_aspect_ratio=increase:flags=lanczos,crop=${WIDTH}:${HEIGHT}:(iw-${WIDTH})/2:0,setsar=1,fps=${FPS}[v0];
+    [1:v]scale=${WIDTH}:${HEIGHT}:force_original_aspect_ratio=increase:flags=lanczos,crop=${WIDTH}:${HEIGHT}:0:0,setsar=1,fps=${FPS}[v1];
     [v0][v1]concat=n=2:v=1:a=0[outv]
   " \
   -map "[outv]" "$COMBINED"
