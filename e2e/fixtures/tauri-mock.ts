@@ -123,6 +123,7 @@ export type MockOverrides = {
 export type ExpandedMockData = {
   sessions?: unknown[]
   sessionDetails?: Record<string, unknown>
+  sessionDrivers?: Record<string, unknown>
   repos?: unknown[]
   insights?: unknown
   tokenPoints?: unknown[]
@@ -177,6 +178,14 @@ export async function injectTauriMock(
       }
     }
 
+    // @tauri-apps/api/event's unlisten() reaches for this global directly
+    // (alongside the plugin:event|unlisten invoke below) — without it, any
+    // component that calls an unlisten function (e.g. on unmount) throws and
+    // aborts whatever click/effect triggered it.
+    ;(globalThis as unknown as Record<string, unknown>).__TAURI_EVENT_PLUGIN_INTERNALS__ = {
+      unregisterListener: () => {},
+    }
+
     ;(globalThis as unknown as Record<string, unknown>).__TAURI_INTERNALS__ = {
       transformCallback: (cb: (payload: unknown) => void) => {
         const id = nextCallbackId++
@@ -219,6 +228,13 @@ export async function injectTauriMock(
             return detail
               ? Promise.resolve(JSON.parse(JSON.stringify(detail)))
               : Promise.reject(new Error(`session ${id} not found`))
+          }
+          case 'get_session_drivers': {
+            const id = ((args ?? {}) as { sessionId?: string }).sessionId ?? ''
+            const drivers = (expanded.sessionDrivers ?? {})[id]
+            return drivers
+              ? Promise.resolve(JSON.parse(JSON.stringify(drivers)))
+              : Promise.reject(new Error(`no driver data for ${id}`))
           }
           case 'list_worktrees':
             return Promise.resolve(JSON.parse(JSON.stringify(expanded.repos ?? [])))
