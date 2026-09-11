@@ -346,6 +346,14 @@ export default function SessionDetail({ session }: SessionDetailProps) {
           </div>
           <div className="flex items-center gap-1 flex-shrink-0">
             <button
+              onClick={copyAll}
+              title="Copy the whole conversation as text"
+              aria-label="Copy the whole conversation as text"
+              className={`text-[12px] px-2 h-6 flex items-center justify-center gap-1 rounded-md border transition-colors whitespace-nowrap ${copiedAll ? 'border-emerald-500/40 bg-emerald-500/15 text-emerald-400' : 'border-[var(--c-border)] text-[var(--c-text-3)] hover:text-[var(--c-text-2)] hover:border-[var(--c-accent)]/40'}`}
+            >
+              {copiedAll ? '✓ Copied' : '⧉ Copy conversation'}
+            </button>
+            <button
               onClick={handleResume}
               title="Resume this session in Terminal"
               aria-label="Resume this session in Terminal"
@@ -409,8 +417,6 @@ export default function SessionDetail({ session }: SessionDetailProps) {
           eventsOnly={eventsOnly} setEventsOnly={setEventsOnly}
           stepsExpanded={stepsExpanded}
           onToggleSteps={toggleSteps}
-          onCopyAll={copyAll}
-          copiedAll={copiedAll}
           onJumpTop={jumpTop}
           onJumpBottom={jumpBottom}
           onPrevPrompt={() => jumpPrompt(-1)}
