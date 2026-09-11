@@ -29,9 +29,12 @@ async function saveVideo(page: import('@playwright/test').Page, name: string) {
 
 test('demo scene: menu bar popover', async ({ browser }) => {
   test.setTimeout(90_000)
+  // Record at 2x so downscaling to the final gif width sharpens instead of
+  // upscaling a 1x capture — upscaling is the #1 cause of a blurry demo gif.
   const context = await browser.newContext({
-    recordVideo: { dir: OUT_DIR, size: { width: 380, height: 520 } },
+    recordVideo: { dir: OUT_DIR, size: { width: 760, height: 1040 } },
     viewport: { width: 380, height: 520 },
+    deviceScaleFactor: 2,
   })
   const page = await context.newPage()
   await injectTauriMock(page, {}, tools)
@@ -57,9 +60,11 @@ test('demo scene: menu bar popover', async ({ browser }) => {
 
 test('demo scene: extended view', async ({ browser }) => {
   test.setTimeout(120_000)
+  // 2x capture for the same reason as the popover scene — see above.
   const context = await browser.newContext({
-    recordVideo: { dir: OUT_DIR, size: { width: 1000, height: 700 } },
+    recordVideo: { dir: OUT_DIR, size: { width: 2000, height: 1400 } },
     viewport: { width: 1000, height: 700 },
+    deviceScaleFactor: 2,
   })
   const page = await context.newPage()
   // Skip the first-run "Try ⌘K" coachmark — it overlaps the sidebar and has
