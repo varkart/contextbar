@@ -17,7 +17,8 @@
     "test:e2e:headed": "playwright test --config=e2e/playwright.config.ts --headed",
     "test:e2e:report": "playwright show-report playwright-report",
     "lint": "tsc --noEmit && eslint src --ext ts,tsx --max-warnings 0",
-    "dmg": "npm run tauri build -- --bundles dmg && bash scripts/clean-dmg.sh"
+    "dmg": "npm run tauri build -- --bundles dmg && bash scripts/clean-dmg.sh",
+    "demo:record": "bash scripts/record-demo.sh"
   },
   "dependencies": {
     "@posthog/react": "^1.10.3",
