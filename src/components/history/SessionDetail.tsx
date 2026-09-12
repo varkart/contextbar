@@ -409,8 +409,6 @@ export default function SessionDetail({ session }: SessionDetailProps) {
           eventsOnly={eventsOnly} setEventsOnly={setEventsOnly}
           stepsExpanded={stepsExpanded}
           onToggleSteps={toggleSteps}
-          onCopyAll={copyAll}
-          copiedAll={copiedAll}
           onJumpTop={jumpTop}
           onJumpBottom={jumpBottom}
           onPrevPrompt={() => jumpPrompt(-1)}
@@ -419,33 +417,48 @@ export default function SessionDetail({ session }: SessionDetailProps) {
         />
       )}
 
-      {/* Conversation */}
-      <div ref={scrollRef} onScroll={syncPromptPos} className="relative flex-1 overflow-y-auto">
-        {loading && (
-          <div className="flex items-center justify-center h-20">
-            <div className="w-4 h-4 border-2 border-[var(--c-accent)]/40 border-t-[var(--c-accent)] rounded-full animate-spin" />
+      {/* Conversation — wrapped in its own border so "copy the whole thing"
+          reads as one action on this box, not a filter-bar chip. */}
+      <div className="relative flex-1 min-h-0 flex flex-col m-2 mt-1.5">
+        <div className="relative flex-1 min-h-0 flex flex-col border border-[var(--c-border)] rounded-lg overflow-hidden">
+          {!loading && !error && turns.length > 0 && (
+            <button
+              onClick={copyAll}
+              title="Copy the whole conversation as text"
+              aria-label="Copy the whole conversation as text"
+              className={`absolute -top-2.5 right-3 z-10 text-[10.5px] px-2 py-0.5 rounded-md border bg-[var(--c-bg)] transition-colors whitespace-nowrap ${copiedAll ? 'border-emerald-500/40 bg-emerald-500/15 text-emerald-400' : 'border-[var(--c-border)] text-[var(--c-text-3)] hover:text-[var(--c-text-2)] hover:border-[var(--c-accent)]/40'}`}
+            >
+              {copiedAll ? '✓ Copied' : '⧉ Copy conversation'}
+            </button>
+          )}
+          <div ref={scrollRef} onScroll={syncPromptPos} className="relative flex-1 overflow-y-auto">
+            {loading && (
+              <div className="flex items-center justify-center h-20">
+                <div className="w-4 h-4 border-2 border-[var(--c-accent)]/40 border-t-[var(--c-accent)] rounded-full animate-spin" />
+              </div>
+            )}
+            {error && (
+              <div className="m-3 text-[13px] text-rose-400 bg-rose-500/10 rounded-lg px-3 py-2">
+                {error}
+              </div>
+            )}
+            {turns.map((turn, i) => (
+              <TurnRow
+                key={i}
+                ref={el => { turnRefs.current[i] = el }}
+                turn={turn}
+                isLast={i === turns.length - 1}
+                hidden={!visible[i]}
+              />
+            ))}
+            {nothingVisible && (
+              <p className="text-[13px] text-[var(--c-text-3)] text-center py-6">No turns match the filters</p>
+            )}
+            {detail && turns.length === 0 && !loading && (
+              <p className="text-[13px] text-[var(--c-text-3)] text-center py-6">No messages found</p>
+            )}
           </div>
-        )}
-        {error && (
-          <div className="m-3 text-[13px] text-rose-400 bg-rose-500/10 rounded-lg px-3 py-2">
-            {error}
-          </div>
-        )}
-        {turns.map((turn, i) => (
-          <TurnRow
-            key={i}
-            ref={el => { turnRefs.current[i] = el }}
-            turn={turn}
-            isLast={i === turns.length - 1}
-            hidden={!visible[i]}
-          />
-        ))}
-        {nothingVisible && (
-          <p className="text-[13px] text-[var(--c-text-3)] text-center py-6">No turns match the filters</p>
-        )}
-        {detail && turns.length === 0 && !loading && (
-          <p className="text-[13px] text-[var(--c-text-3)] text-center py-6">No messages found</p>
-        )}
+        </div>
       </div>
     </div>
   )
