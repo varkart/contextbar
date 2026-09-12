@@ -229,13 +229,6 @@ export async function injectTauriMock(
               ? Promise.resolve(JSON.parse(JSON.stringify(detail)))
               : Promise.reject(new Error(`session ${id} not found`))
           }
-          case 'get_session_drivers': {
-            const id = ((args ?? {}) as { sessionId?: string }).sessionId ?? ''
-            const drivers = (expanded.sessionDrivers ?? {})[id]
-            return drivers
-              ? Promise.resolve(JSON.parse(JSON.stringify(drivers)))
-              : Promise.reject(new Error(`no driver data for ${id}`))
-          }
           case 'list_worktrees':
             return Promise.resolve(JSON.parse(JSON.stringify(expanded.repos ?? [])))
           case 'get_open_prs':
