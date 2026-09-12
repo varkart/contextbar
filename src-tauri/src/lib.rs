@@ -500,7 +500,7 @@ fn resume_shell_command(
     project: &str,
     session_id: Option<&str>,
     agent: Option<&str>,
-) -> Result<String, String> {
+) -> Result<(String, std::path::PathBuf), String> {
     let canonical = validate_tool_path(project)?;
     if let Some(id) = session_id {
         if id.is_empty() || !id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-') {
@@ -511,7 +511,7 @@ fn resume_shell_command(
     let resume = source.resume_command(session_id);
     // Single-quote the path; escape embedded single quotes.
     let path_str = canonical.to_string_lossy().replace('\'', r"'\''");
-    Ok(format!("cd '{path_str}' && {resume}"))
+    Ok((format!("cd '{path_str}' && {resume}"), canonical))
 }
 
 /// The shell command `resume_in_terminal` would run, for the frontend's
@@ -524,7 +524,7 @@ fn get_resume_command(
     session_id: Option<String>,
     agent: Option<String>,
 ) -> Result<String, String> {
-    resume_shell_command(&project, session_id.as_deref(), agent.as_deref())
+    resume_shell_command(&project, session_id.as_deref(), agent.as_deref()).map(|(cmd, _)| cmd)
 }
 
 /// Open Terminal.app / iTerm2 / Warp and resume the session's agent in
@@ -540,10 +540,10 @@ fn resume_in_terminal(
     session_id: Option<String>,
     agent: Option<String>,
 ) -> Result<(), String> {
-    let shell_cmd = resume_shell_command(&project, session_id.as_deref(), agent.as_deref())?;
+    let (shell_cmd, canonical) =
+        resume_shell_command(&project, session_id.as_deref(), agent.as_deref())?;
 
     if get_terminal() == "Warp" {
-        let canonical = validate_tool_path(&project)?;
         let uri = format!(
             "warp://action/new_tab?path={}",
             percent_encode_path(&canonical.to_string_lossy())

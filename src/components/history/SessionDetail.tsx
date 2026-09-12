@@ -420,17 +420,17 @@ export default function SessionDetail({ session }: SessionDetailProps) {
       {/* Conversation — wrapped in its own border so "copy the whole thing"
           reads as one action on this box, not a filter-bar chip. */}
       <div className="relative flex-1 min-h-0 flex flex-col m-2 mt-1.5">
+        {!loading && !error && turns.length > 0 && (
+          <button
+            onClick={copyAll}
+            title="Copy the whole conversation as text"
+            aria-label="Copy the whole conversation as text"
+            className={`absolute -top-2.5 right-3 z-10 text-[10.5px] px-2 py-0.5 rounded-md border bg-[var(--c-bg)] transition-colors whitespace-nowrap ${copiedAll ? 'border-emerald-500/40 bg-emerald-500/15 text-emerald-400' : 'border-[var(--c-border)] text-[var(--c-text-3)] hover:text-[var(--c-text-2)] hover:border-[var(--c-accent)]/40'}`}
+          >
+            {copiedAll ? '✓ Copied' : '⧉ Copy conversation'}
+          </button>
+        )}
         <div className="relative flex-1 min-h-0 flex flex-col border border-[var(--c-border)] rounded-lg overflow-hidden">
-          {!loading && !error && turns.length > 0 && (
-            <button
-              onClick={copyAll}
-              title="Copy the whole conversation as text"
-              aria-label="Copy the whole conversation as text"
-              className={`absolute -top-2.5 right-3 z-10 text-[10.5px] px-2 py-0.5 rounded-md border bg-[var(--c-bg)] transition-colors whitespace-nowrap ${copiedAll ? 'border-emerald-500/40 bg-emerald-500/15 text-emerald-400' : 'border-[var(--c-border)] text-[var(--c-text-3)] hover:text-[var(--c-text-2)] hover:border-[var(--c-accent)]/40'}`}
-            >
-              {copiedAll ? '✓ Copied' : '⧉ Copy conversation'}
-            </button>
-          )}
           <div ref={scrollRef} onScroll={syncPromptPos} className="relative flex-1 overflow-y-auto">
             {loading && (
               <div className="flex items-center justify-center h-20">

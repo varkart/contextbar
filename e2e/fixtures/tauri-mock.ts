@@ -286,6 +286,13 @@ export async function injectTauriMock(
           case 'resume_in_terminal':
           case 'open_expanded_window':
             return Promise.resolve(null)
+          case 'get_resume_command': {
+            const { project, sessionId, agent } = (args ?? {}) as { project?: string; sessionId?: string; agent?: string }
+            const resume = agent === 'codex' ? `codex resume ${sessionId ?? ''}`
+              : agent === 'gemini' ? `gemini --resume ${sessionId ?? ''}`
+              : `claude --resume ${sessionId ?? ''}`
+            return Promise.resolve(`cd '${project ?? ''}' && ${resume}`)
+          }
           case 'remove_worktree':
           case 'delete_branch':
             return Promise.resolve(null)
