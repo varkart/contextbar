@@ -123,6 +123,7 @@ export type MockOverrides = {
 export type ExpandedMockData = {
   sessions?: unknown[]
   sessionDetails?: Record<string, unknown>
+  sessionDrivers?: Record<string, unknown>
   repos?: unknown[]
   insights?: unknown
   tokenPoints?: unknown[]
@@ -242,6 +243,13 @@ export async function injectTauriMock(
                 toolCounts: [], mcpToolCounts: [], skillCounts: [], heaviest: null,
               }
             )))
+          case 'get_session_drivers': {
+            const id = ((args ?? {}) as { sessionId?: string }).sessionId ?? ''
+            const drivers = (expanded.sessionDrivers ?? {})[id]
+            return Promise.resolve(JSON.parse(JSON.stringify(
+              drivers ?? { sessionId: id, model: '', inputTokens: 0, outputTokens: 0, estCostUsd: 0, coarse: false, drivers: [] }
+            )))
+          }
           case 'get_token_activity':
             return Promise.resolve(JSON.parse(JSON.stringify(expanded.tokenPoints ?? [])))
           case 'get_prompt_timestamps':
