@@ -12,8 +12,14 @@ cd "$(dirname "$0")/.."
 
 OUT_DIR="e2e/demo/out"
 FINAL_GIF=".github/assets/demo.gif"
-WIDTH=760
-HEIGHT=600
+# Output at 2x the README's display width (width="760" in the <img> tag) so
+# it renders crisp instead of upscaled-blurry on a Retina/2x display — a
+# raster image displays 1 image-px : 1 CSS-px, so a 760px-wide gif gets
+# stretched 2x on any Retina screen. Both scenes are already captured at 2x
+# device scale, so this needs no more recording headroom, just a bigger
+# output target.
+WIDTH=1520
+HEIGHT=1200
 FPS=14
 
 command -v ffmpeg >/dev/null || { echo "ffmpeg not found — brew install ffmpeg"; exit 1; }
