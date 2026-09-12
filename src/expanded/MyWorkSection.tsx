@@ -263,8 +263,8 @@ export default function MyWorkSection({ sessions, repos, loading, goTo, onRefres
       setCopiedResume(p.project)
       setTimeout(() => setCopiedResume(null), 1500)
     } catch {
-      const cmd = `cd "${p.project}" && claude --resume ${latest.sessionId}`
       try {
+        const cmd = await invoke<string>('get_resume_command', { project: p.project, sessionId: latest.sessionId, agent: latest.agent })
         await navigator.clipboard.writeText(cmd)
         setCopiedResume(p.project)
         setTimeout(() => setCopiedResume(null), 1500)

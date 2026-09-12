@@ -492,6 +492,41 @@ fn percent_encode_path(path: &str) -> String {
     out
 }
 
+/// Builds `cd '<project>' && <agent's resume command>` — the one place that
+/// knows how to resume any agent's session in a shell. `resume_in_terminal`
+/// runs this via osascript; `get_resume_command` hands the same string to the
+/// frontend for the copy-to-clipboard fallback, so the two never drift.
+fn resume_shell_command(
+    project: &str,
+    session_id: Option<&str>,
+    agent: Option<&str>,
+) -> Result<(String, std::path::PathBuf), String> {
+    let canonical = validate_tool_path(project)?;
+    if let Some(id) = session_id {
+        if id.is_empty() || !id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-') {
+            return Err("invalid session id".into());
+        }
+    }
+    let source = engine::sessions::source_for(agent.unwrap_or("claude")).ok_or("unknown agent")?;
+    let resume = source.resume_command(session_id);
+    // Single-quote the path; escape embedded single quotes.
+    let path_str = canonical.to_string_lossy().replace('\'', r"'\''");
+    Ok((format!("cd '{path_str}' && {resume}"), canonical))
+}
+
+/// The shell command `resume_in_terminal` would run, for the frontend's
+/// copy-to-clipboard button (and its fallback when Resume can't run it
+/// automatically). Keeps the copy button honest per-agent instead of
+/// duplicating the command shape in TypeScript.
+#[tauri::command]
+fn get_resume_command(
+    project: String,
+    session_id: Option<String>,
+    agent: Option<String>,
+) -> Result<String, String> {
+    resume_shell_command(&project, session_id.as_deref(), agent.as_deref()).map(|(cmd, _)| cmd)
+}
+
 /// Open Terminal.app / iTerm2 / Warp and resume the session's agent in
 /// `project`. Path must live under $HOME. Warp has no scripting interface to
 /// run a command on launch (confirmed: its `commands`/`exec` launch-config
@@ -505,15 +540,8 @@ fn resume_in_terminal(
     session_id: Option<String>,
     agent: Option<String>,
 ) -> Result<(), String> {
-    let canonical = validate_tool_path(&project)?;
-    if let Some(id) = &session_id {
-        if id.is_empty() || !id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-') {
-            return Err("invalid session id".into());
-        }
-    }
-    let source = engine::sessions::source_for(agent.as_deref().unwrap_or("claude"))
-        .ok_or("unknown agent")?;
-    let resume = source.resume_command(session_id.as_deref());
+    let (shell_cmd, canonical) =
+        resume_shell_command(&project, session_id.as_deref(), agent.as_deref())?;
 
     if get_terminal() == "Warp" {
         let uri = format!(
@@ -524,9 +552,6 @@ fn resume_in_terminal(
         return Err("Warp can't run commands automatically — copy and paste".into());
     }
 
-    // Shell layer: single-quote the path; escape embedded single quotes.
-    let path_str = canonical.to_string_lossy().replace('\'', r"'\''");
-    let shell_cmd = format!("cd '{path_str}' && {resume}");
     // AppleScript layer: escape backslashes and double quotes.
     let osa = shell_cmd.replace('\\', "\\\\").replace('"', "\\\"");
     let script = match get_terminal().as_str() {
@@ -2780,6 +2805,7 @@ pub fn run() {
             get_open_prs,
             get_git_cli_status,
             resume_in_terminal,
+            get_resume_command,
             get_file_mtimes,
             list_terminals,
             get_terminal,

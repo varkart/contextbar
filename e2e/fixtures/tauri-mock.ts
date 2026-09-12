@@ -123,6 +123,7 @@ export type MockOverrides = {
 export type ExpandedMockData = {
   sessions?: unknown[]
   sessionDetails?: Record<string, unknown>
+  sessionDrivers?: Record<string, unknown>
   repos?: unknown[]
   insights?: unknown
   tokenPoints?: unknown[]
@@ -175,6 +176,14 @@ export async function injectTauriMock(
         const cb = callbacks.get(id)
         if (cb) cb({ event: name, id, payload })
       }
+    }
+
+    // @tauri-apps/api/event's unlisten() reaches for this global directly
+    // (alongside the plugin:event|unlisten invoke below) — without it, any
+    // component that calls an unlisten function (e.g. on unmount) throws and
+    // aborts whatever click/effect triggered it.
+    ;(globalThis as unknown as Record<string, unknown>).__TAURI_EVENT_PLUGIN_INTERNALS__ = {
+      unregisterListener: () => {},
     }
 
     ;(globalThis as unknown as Record<string, unknown>).__TAURI_INTERNALS__ = {
@@ -242,6 +251,13 @@ export async function injectTauriMock(
                 toolCounts: [], mcpToolCounts: [], skillCounts: [], heaviest: null,
               }
             )))
+          case 'get_session_drivers': {
+            const id = ((args ?? {}) as { sessionId?: string }).sessionId ?? ''
+            const drivers = (expanded.sessionDrivers ?? {})[id]
+            return Promise.resolve(JSON.parse(JSON.stringify(
+              drivers ?? { sessionId: id, model: '', inputTokens: 0, outputTokens: 0, estCostUsd: 0, coarse: false, drivers: [] }
+            )))
+          }
           case 'get_token_activity':
             return Promise.resolve(JSON.parse(JSON.stringify(expanded.tokenPoints ?? [])))
           case 'get_prompt_timestamps':
@@ -270,6 +286,13 @@ export async function injectTauriMock(
           case 'resume_in_terminal':
           case 'open_expanded_window':
             return Promise.resolve(null)
+          case 'get_resume_command': {
+            const { project, sessionId, agent } = (args ?? {}) as { project?: string; sessionId?: string; agent?: string }
+            const resume = agent === 'codex' ? `codex resume ${sessionId ?? ''}`
+              : agent === 'gemini' ? `gemini --resume ${sessionId ?? ''}`
+              : `claude --resume ${sessionId ?? ''}`
+            return Promise.resolve(`cd '${project ?? ''}' && ${resume}`)
+          }
           case 'remove_worktree':
           case 'delete_branch':
             return Promise.resolve(null)
