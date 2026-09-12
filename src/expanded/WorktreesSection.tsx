@@ -398,19 +398,15 @@ export default function WorktreesSection({ repos, loading, sessions, onRemoved, 
 
   const handleResume = async (wt: WorktreeInfo) => {
     const linked = sessions.filter(s => s.project === wt.path)
+    const sessionId = linked.length ? linked[0].sessionId : null
+    const agent = linked.length ? linked[0].agent : null
     try {
-      await invoke('resume_in_terminal', {
-        project: wt.path,
-        sessionId: linked.length ? linked[0].sessionId : null,
-        agent: linked.length ? linked[0].agent : null,
-      })
+      await invoke('resume_in_terminal', { project: wt.path, sessionId, agent })
       setCopied(wt.path)
       setTimeout(() => setCopied(null), 1500)
     } catch {
-      const cmd = linked.length
-        ? `cd "${wt.path}" && claude --resume ${linked[0].sessionId}`
-        : `cd "${wt.path}" && claude`
       try {
+        const cmd = await invoke<string>('get_resume_command', { project: wt.path, sessionId, agent })
         await navigator.clipboard.writeText(cmd)
         setCopied(wt.path)
         setTimeout(() => setCopied(null), 1500)

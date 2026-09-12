@@ -204,8 +204,8 @@ export default function SessionDetail({ session }: SessionDetailProps) {
   }
 
   const handleCopy = async () => {
-    const cmd = `cd "${session.project}" && claude --resume ${session.sessionId}`
     try {
+      const cmd = await invoke<string>('get_resume_command', { project: session.project, sessionId: session.sessionId, agent: session.agent })
       await navigator.clipboard.writeText(cmd)
       setCopied(true)
       setTimeout(() => setCopied(false), 1500)
