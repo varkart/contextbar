@@ -239,76 +239,87 @@ function Bar({ row, pct, showRight }: { row: { name: string; sub: string; tokens
   )
 }
 
-function DriverRows({ rows }: { rows: Driver[] }) {
+// Twin colored columns — Input (blue) and Output (amber) sit side by side so
+// which side a row belongs to is a color, not just a section label you have
+// to keep track of while scrolling.
+const IN_COLOR = '#60a5fa'
+const OUT_COLOR = '#f59e0b'
+
+function DriverColumnRows({ rows, color }: { rows: Driver[]; color: string }) {
   const max = Math.max(1, ...rows.map(x => x.tokens))
+  if (!rows.length) return <p className="text-[11px] text-[var(--c-text-3)] py-1.5">nothing attributed</p>
   return (
     <>
       {rows.map(dr => (
-        <div key={dr.kind + dr.name} className="py-1">
-          <div className="flex items-center gap-2.5">
-            <span className="w-11 shrink-0 text-[8.5px] font-bold uppercase text-center px-1 py-px rounded-full bg-[var(--c-surface-2)] text-[var(--c-text-3)]">{DRIVER_LABEL[dr.kind] ?? dr.kind}</span>
-            <span className="min-w-0 flex-1 truncate text-[12px] text-[var(--c-text-2)]">
+        <div key={dr.kind + dr.name} className="py-1.5 border-l-2 pl-2" style={{ borderColor: color }}>
+          <div className="flex items-baseline justify-between gap-1.5">
+            <span className="min-w-0 truncate text-[11.5px] text-[var(--c-text-2)]">
+              <span className="text-[8px] font-bold uppercase text-[var(--c-text-3)] mr-1">{DRIVER_LABEL[dr.kind] ?? dr.kind}</span>
               {dr.name}
               {dr.calls > 0 && <span className="text-[10px] text-[var(--c-text-3)]"> · {dr.calls}×</span>}
-              {dr.side === 'input' && dr.rereadTokens != null && dr.rereadTokens > 0 && (
-                <span className="text-[10px] text-[var(--c-text-3)]">
-                  {' '}· {formatTokens(dr.createdTokens ?? 0)} new + {formatTokens(dr.rereadTokens)} re-read
-                </span>
-              )}
             </span>
-            <span className="w-16 shrink-0 text-right text-[11px] tabular-nums text-[var(--c-text-2)]">{formatTokens(dr.tokens)}</span>
-            <span className="w-14 shrink-0 text-right text-[11px] tabular-nums text-[var(--c-text-3)]">{money(dr.approxCostUsd)}</span>
-            <span className="w-10 shrink-0 text-right text-[10.5px] tabular-nums text-[var(--c-text-3)]">{Math.round(dr.pct)}%</span>
+            <span className="shrink-0 text-right text-[10.5px] tabular-nums text-[var(--c-text-3)]">{Math.round(dr.pct)}%</span>
           </div>
-          <div className="mt-0.5 ml-[54px] h-[5px] rounded-full bg-[var(--c-surface-2)] overflow-hidden">
-            <div className="h-full rounded-full bg-[var(--c-accent)]" style={{ width: `${Math.max(3, (dr.tokens / max) * 100)}%` }} />
+          {dr.side === 'input' && dr.rereadTokens != null && dr.rereadTokens > 0 && (
+            <div className="text-[10px] text-[var(--c-text-3)]">{formatTokens(dr.createdTokens ?? 0)} new + {formatTokens(dr.rereadTokens)} re-read</div>
+          )}
+          <div className="mt-1 h-[5px] rounded-full bg-[var(--c-surface-2)] overflow-hidden">
+            <div className="h-full rounded-full" style={{ width: `${Math.max(3, (dr.tokens / max) * 100)}%`, background: color }} />
           </div>
-          {dr.hint && <p className="mt-1 ml-[54px] text-[10.5px] text-amber-400/90">⚠ {dr.hint}</p>}
+          <div className="mt-0.5 flex justify-between text-[10.5px] tabular-nums text-[var(--c-text-3)]">
+            <span>{formatTokens(dr.tokens)}</span><span>{money(dr.approxCostUsd)}</span>
+          </div>
+          {dr.hint && <p className="mt-1 text-[10.5px] text-amber-400/90">⚠ {dr.hint}</p>}
         </div>
       ))}
     </>
   )
 }
 
+function DriverColumn({ label, total, cost, color, rows, arrow }: {
+  label: string; total: number; cost: number; color: string; rows: Driver[]; arrow: string
+}) {
+  return (
+    <div className="min-w-0">
+      <div className="pt-1.5 border-t-2" style={{ borderColor: color }}>
+        <div className="text-[10px] font-bold uppercase tracking-wide" style={{ color }}>{arrow} {label}</div>
+        <div className="text-[16px] font-bold text-[var(--c-text)]">
+          {formatTokens(total)} <span className="text-[10.5px] font-normal text-[var(--c-text-3)]">· {money(cost)}</span>
+        </div>
+      </div>
+      <div className="mt-1.5">
+        <DriverColumnRows rows={rows} color={color} />
+      </div>
+    </div>
+  )
+}
+
 function DriverList({ d, onOpen }: { d: SessionDrivers; onOpen?: () => void }) {
   const input = d.drivers.filter(x => x.side === 'input')
   const output = d.drivers.filter(x => x.side === 'output')
+  const inputCost = input.reduce((n, x) => n + (x.approxCostUsd ?? 0), 0)
+  const outputCost = output.reduce((n, x) => n + (x.approxCostUsd ?? 0), 0)
   return (
     <div className="pt-1">
-      <div className="flex items-center justify-between text-[10.5px] text-[var(--c-text-3)] mb-1">
+      <div className="flex items-center justify-between text-[10.5px] text-[var(--c-text-3)] mb-2">
         <span>{d.coarse
           ? 'Coarse — this agent reports no cache detail; splits are estimated from block sizes'
           : 'Approximate — each turn’s new context blamed on its last tool / skill; output split by block size'}</span>
-        {onOpen && <button className="text-[var(--c-accent)] hover:underline" onClick={onOpen}>Open transcript ↗</button>}
+        {onOpen && <button className="text-[var(--c-accent)] hover:underline flex-shrink-0 ml-2" onClick={onOpen}>Open transcript ↗</button>}
       </div>
 
-      <SideHeader label="Input" total={d.inputTokens} />
-      {input.length ? <DriverRows rows={input} /> : <Empty />}
+      <div className="grid grid-cols-2 gap-3">
+        <DriverColumn label="Input" total={d.inputTokens} cost={inputCost} color={IN_COLOR} rows={input} arrow="↓" />
+        <DriverColumn label="Output" total={d.outputTokens} cost={outputCost} color={OUT_COLOR} rows={output} arrow="↑" />
+      </div>
 
-      <SideHeader label="Output" total={d.outputTokens} className="mt-2" />
-      {output.length ? <DriverRows rows={output} /> : <Empty />}
-
-      <div className="flex justify-between px-1 pt-2 mt-1 border-t border-[var(--c-border-sub)] text-[11px] text-[var(--c-text-3)]">
+      <div className="flex justify-between px-1 pt-2 mt-2 border-t border-[var(--c-border-sub)] text-[11px] text-[var(--c-text-3)]">
         <span>{d.model || 'session'} total</span>
         <span className="font-mono">↓{formatTokens(d.inputTokens)} ↑{formatTokens(d.outputTokens)} · {money(d.totalCostUsd)}</span>
       </div>
     </div>
   )
 }
-
-function SideHeader({ label, total, className = '' }: { label: string; total: number; className?: string }) {
-  return (
-    <div className={`flex items-center gap-2.5 pb-1 mb-0.5 border-b border-[var(--c-border-sub)] text-[9px] uppercase tracking-wider text-[var(--c-text-3)] ${className}`}>
-      <span className="w-11 shrink-0" />
-      <span className="flex-1 min-w-0 font-semibold text-[var(--c-text-2)]">{label} · {formatTokens(total)}</span>
-      <span className="w-16 text-right shrink-0">Tokens</span>
-      <span className="w-14 text-right shrink-0">Cost</span>
-      <span className="w-10 text-right shrink-0">Share</span>
-    </div>
-  )
-}
-
-const Empty = () => <p className="text-[11px] text-[var(--c-text-3)] py-1.5 ml-[54px]">nothing attributed</p>
 
 function Chip({ on, onClick, children }: { on: boolean; onClick: () => void; children: React.ReactNode }) {
   return (
