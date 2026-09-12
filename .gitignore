@@ -56,6 +56,7 @@ repo-health-report.md
 coverage/
 playwright-report/
 test-results/
+e2e/demo/out/
 
 # Prototype files (local dev artifacts, never commit)
 *-prototypes.html
