@@ -309,7 +309,7 @@ fn run_version(spec: &VersionSpec, home: &std::path::Path, dr: &DetectionResult)
 }
 
 fn run_command_version(binary: &str, args: &[String], parse: &str) -> Option<String> {
-    let output = std::process::Command::new(binary)
+    let output = crate::doctor::shell_command(binary)
         .args(args)
         .output()
         .ok()?;
