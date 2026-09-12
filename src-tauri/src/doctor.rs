@@ -3,11 +3,23 @@ use crate::installer;
 use crate::models::Agent;
 use serde::Serialize;
 use std::collections::HashSet;
+use std::sync::OnceLock;
 use tauri::{AppHandle, Emitter};
 
 const KEY_PREFIX: &str = "doctor:mcp:";
 
 // ── Shell PATH resolution ──────────────────────────────────────────────────────
+//
+// macOS GUI apps inherit a minimal PATH (typically just /usr/bin:/bin:/usr/sbin:/sbin)
+// — none of Homebrew, npm global, mise/asdf, etc. Any external CLI this app spawns
+// (gh, glab, agy, or a manifest-declared agent binary) needs the user's real shell
+// PATH instead, or detection/execution silently fails for anything installed
+// outside those four directories even though it works fine from a terminal.
+// `shell_command` is the one place that knows this — every Command::new for an
+// external CLI should go through it rather than spawning against the raw inherited
+// environment.
+
+static SHELL_PATH: OnceLock<String> = OnceLock::new();
 
 /// Resolve the user's full shell PATH by spawning a login shell.
 /// macOS GUI apps inherit a minimal PATH; this gives us the real one.
@@ -27,6 +39,26 @@ pub fn get_shell_path() -> String {
         }
         _ => std::env::var("PATH").unwrap_or_default(),
     }
+}
+
+/// Cached shell PATH — resolved once per app run. Spawning a login shell costs
+/// tens of ms; that's fine for an occasional Doctor report but not for a value
+/// now read on every external-CLI detection. The Doctor report still calls
+/// `get_shell_path()` directly so "run the check again" re-resolves live;
+/// everything else (detection, version checks, gh/glab/agy invocations) uses
+/// this cached value instead of re-spawning a shell per call.
+pub fn cached_shell_path() -> &'static str {
+    SHELL_PATH.get_or_init(get_shell_path)
+}
+
+/// Build a `Command` for an external CLI with the user's real shell PATH set,
+/// instead of the minimal one this GUI app inherits. Use this for every
+/// external tool invocation (`gh`, `glab`, `agy`, manifest-declared agent
+/// binaries, ...) rather than `Command::new` directly.
+pub fn shell_command(program: &str) -> std::process::Command {
+    let mut cmd = std::process::Command::new(program);
+    cmd.env("PATH", cached_shell_path());
+    cmd
 }
 
 pub(crate) fn command_on_custom_path(command: &str, path_val: &str) -> bool {
@@ -546,6 +578,35 @@ mod tests {
             source_id: "test".to_string(),
             disabled_tools: vec![],
         }
+    }
+
+    // ── shell_command / cached_shell_path ─────────────────────────────────────
+
+    #[test]
+    fn cached_shell_path_is_nonempty() {
+        // Falls back to the inherited PATH if shell resolution fails, so
+        // this should never be empty in a real environment (including CI).
+        assert!(!cached_shell_path().is_empty());
+    }
+
+    #[test]
+    fn cached_shell_path_is_stable_across_calls() {
+        // Memoized — same value every time, not a fresh shell spawn per call.
+        assert_eq!(cached_shell_path(), cached_shell_path());
+    }
+
+    #[test]
+    fn shell_command_sets_path_env_to_cached_shell_path() {
+        // A binary that only exists via the resolved shell PATH (not the
+        // minimal one this test process may already have) should still be
+        // spawnable — proves the PATH env is actually wired onto the Command,
+        // not just resolved and discarded.
+        let out = shell_command("sh")
+            .args(["-c", "printf '%s' \"$PATH\""])
+            .output()
+            .expect("sh should always be spawnable");
+        assert!(out.status.success());
+        assert_eq!(String::from_utf8_lossy(&out.stdout), cached_shell_path());
     }
 
     // ── command_on_custom_path ────────────────────────────────────────────────────────

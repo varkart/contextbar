@@ -1,9 +1,12 @@
 use crate::models::Agent;
 
-/// Find a binary in PATH without spawning a subprocess.
+/// Find a binary in PATH without spawning a subprocess. Scans the user's real
+/// shell PATH (see `doctor::shell_command`), not this GUI app's minimal
+/// inherited one — otherwise a Homebrew/npm/mise-installed CLI reads as "not
+/// installed" even though it works fine from a terminal.
 pub fn find_in_path(binary: &str) -> Option<String> {
-    let path_var = std::env::var("PATH").ok()?;
-    for dir in std::env::split_paths(&path_var) {
+    let path_var = crate::doctor::cached_shell_path();
+    for dir in std::env::split_paths(path_var) {
         let candidate = dir.join(binary);
         if candidate.is_file() {
             return Some(candidate.to_string_lossy().into_owned());

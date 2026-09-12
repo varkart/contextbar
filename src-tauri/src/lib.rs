@@ -2128,7 +2128,7 @@ fn install_agy_plugin(
         ));
     }
 
-    let output = std::process::Command::new("agy")
+    let output = crate::doctor::shell_command("agy")
         .args(["plugin", "install", &plugin_path.to_string_lossy()])
         .output()
         .map_err(|e| format!("failed to run agy: {e}"))?;

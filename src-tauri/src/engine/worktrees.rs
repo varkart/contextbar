@@ -192,7 +192,7 @@ fn parse_gitlab_slug(url: &str) -> Option<String> {
 /// authenticated locally if the user has ever run `gh auth login`). `host`
 /// targets a GitHub Enterprise instance via `GH_HOST`; `None` means github.com.
 fn github_prs(slug: &str, host: Option<&str>) -> Vec<PullRequestInfo> {
-    let mut cmd = Command::new("gh");
+    let mut cmd = crate::doctor::shell_command("gh");
     cmd.args([
         "pr",
         "list",
@@ -251,7 +251,7 @@ fn github_prs(slug: &str, host: Option<&str>) -> Vec<PullRequestInfo> {
 /// any shape mismatch degrades to an empty list rather than an error, same
 /// as the GitHub path when `gh`'s output doesn't parse.
 fn gitlab_mrs(slug: &str, host: Option<&str>) -> Vec<PullRequestInfo> {
-    let mut cmd = Command::new("glab");
+    let mut cmd = crate::doctor::shell_command("glab");
     cmd.args([
         "mr", "list", "--repo", slug, "--state", "opened", "--output", "json",
     ]);
@@ -341,7 +341,7 @@ pub struct GitCliStatus {
 }
 
 fn detect_gh() -> GitCliInfo {
-    let Ok(ver_out) = Command::new("gh").arg("--version").output() else {
+    let Ok(ver_out) = crate::doctor::shell_command("gh").arg("--version").output() else {
         return GitCliInfo::default();
     };
     if !ver_out.status.success() {
@@ -353,7 +353,10 @@ fn detect_gh() -> GitCliInfo {
         .and_then(|l| l.split_whitespace().nth(2))
         .map(|s| s.to_string());
 
-    let (authenticated, account) = match Command::new("gh").args(["auth", "status"]).output() {
+    let (authenticated, account) = match crate::doctor::shell_command("gh")
+        .args(["auth", "status"])
+        .output()
+    {
         Ok(o) if o.status.success() => {
             let text = String::from_utf8_lossy(&o.stdout);
             let account = text
@@ -375,7 +378,10 @@ fn detect_gh() -> GitCliInfo {
 }
 
 fn detect_glab() -> GitCliInfo {
-    let Ok(ver_out) = Command::new("glab").arg("--version").output() else {
+    let Ok(ver_out) = crate::doctor::shell_command("glab")
+        .arg("--version")
+        .output()
+    else {
         return GitCliInfo::default();
     };
     if !ver_out.status.success() {
@@ -387,7 +393,10 @@ fn detect_glab() -> GitCliInfo {
         .and_then(|l| l.split_whitespace().last())
         .map(|s| s.to_string());
 
-    let (authenticated, account) = match Command::new("glab").args(["auth", "status"]).output() {
+    let (authenticated, account) = match crate::doctor::shell_command("glab")
+        .args(["auth", "status"])
+        .output()
+    {
         Ok(o) if o.status.success() => {
             let text = String::from_utf8_lossy(&o.stdout);
             let account = text
