@@ -620,7 +620,11 @@ export default function MyWorkSection({ sessions, repos, loading, goTo, onRefres
                       <span className="text-[18px] font-bold">{formatTokens(totalUsageTokens)}</span>
                       <span className="text-[12px] text-[var(--c-text-3)]">· ${totalUsageCost.toFixed(2)} estimated</span>
                     </div>
-                    <div className="grid gap-2.5" style={{ gridTemplateColumns: `repeat(${perAgentTotals.length},1fr)` }}>
+                    {/* Capped + wrapping, like Active projects — this has to hold up
+                        whether someone uses 1 agent or all 9 supported ones. Each
+                        tile carries a full chart, so cap tighter than the plainer
+                        project tiles (4 vs 6) to keep the y-axis legible. */}
+                    <div className="grid gap-2.5" style={{ gridTemplateColumns: `repeat(${Math.min(4, perAgentTotals.length)},1fr)` }}>
                       {perAgentTotals.map(([agent, u]) => {
                         const { label, hex } = agentColor(agent)
                         const expanded = expandedAgent === agent
