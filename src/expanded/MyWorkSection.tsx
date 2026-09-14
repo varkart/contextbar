@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { invoke } from '@tauri-apps/api/core'
+import { listen } from '@tauri-apps/api/event'
 import type { RepoWorktrees, SessionEntry, SessionInsights } from '../types'
 import type { Section } from './ExpandedApp'
 import {
@@ -202,16 +203,27 @@ export default function MyWorkSection({ sessions, repos, loading, goTo, onRefres
   )
 
   // Real tokens + cost for the selected window, from the same aggregator
-  // TokenBreakdownPanel uses — not an invented per-token price.
+  // TokenBreakdownPanel uses — not an invented per-token price. Parsing a
+  // session's raw transcript into session_stats happens in a background
+  // "warm" pass, not synchronously — a session from a few days ago can
+  // still be unparsed the first time this fires, so kick a warm pass and
+  // re-fetch when it reports new data landed (same pattern
+  // TokenBreakdownPanel uses), instead of only ever fetching once per
+  // window and silently going stale.
   const [insights, setInsights] = useState<SessionInsights | null>(null)
   useEffect(() => {
     let live = true
+    const fetchInsights = () => {
+      invoke<SessionInsights>('get_session_insights', {
+        sinceMs: start,
+        untilMs: end === Infinity ? undefined : end,
+      }).then(d => { if (live) setInsights(d) }).catch(() => {})
+    }
     setInsights(null)
-    invoke<SessionInsights>('get_session_insights', {
-      sinceMs: start,
-      untilMs: end === Infinity ? undefined : end,
-    }).then(d => { if (live) setInsights(d) }).catch(() => {})
-    return () => { live = false }
+    invoke('warm_session_stats').catch(() => {})
+    fetchInsights()
+    const unlisten = listen('session-insights-updated', fetchInsights)
+    return () => { live = false; unlisten.then(f => f()) }
   }, [start, end])
 
   // Ranked by tokens — perSession already comes back sorted desc, capped at
