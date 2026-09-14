@@ -673,6 +673,11 @@ fn get_session_insights(
 }
 
 #[tauri::command]
+fn get_first_session_ts(db: tauri::State<'_, db::DbState>) -> Option<u64> {
+    engine::history::stats::first_session_ts(&db)
+}
+
+#[tauri::command]
 fn get_token_activity(
     db: tauri::State<'_, db::DbState>,
     since_ms: u64,
@@ -2832,6 +2837,7 @@ pub fn run() {
             get_repo_capabilities,
             set_repo_capability,
             get_session_insights,
+            get_first_session_ts,
             get_token_activity,
             get_commit_activity,
             get_agent_activity,

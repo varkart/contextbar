@@ -350,6 +350,7 @@ export default function ExpandedApp() {
             goTo={goTo}
             onRefresh={refreshAll}
             onOpenSession={openSession}
+            onOpenSessionById={openSessionById}
             onOpenSessionsForProject={viewSessionsForProject}
             onFocusWorktree={focusWorktree}
             showToast={showToast}

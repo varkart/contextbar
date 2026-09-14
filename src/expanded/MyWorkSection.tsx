@@ -1,37 +1,69 @@
 import { useState, useEffect, useMemo } from 'react'
 import { invoke } from '@tauri-apps/api/core'
-import type { RepoWorktrees, SessionEntry } from '../types'
+import type { RepoWorktrees, SessionEntry, SessionInsights } from '../types'
 import type { Section } from './ExpandedApp'
-import { Card, CommitBars, RefreshButton, SkeletonTiles, SkeletonCards } from './InsightWidgets'
+import {
+  Card, CommitBars, RefreshButton, SkeletonTiles, SkeletonCards,
+  DailyBars, ActivityCalendar, ActivityWeekRow, ActivityAgentCount,
+} from './InsightWidgets'
 import AgentBadge from '../components/history/AgentBadge'
 import { formatTokens } from '../components/history/SessionStats'
 import { agentColor } from '../constants/agentColors'
 
 const DAY = 86_400_000
 const PALETTE = ['#6366f1', '#e8a94a', '#d98fd9', '#5fc9b8', '#7aa2e8', '#8fbf6b']
+const MAX_ADVANCED_DAYS = 90
 
-type Tab = 'today' | 'yesterday' | 'week' | 'last7'
+type Tab = 'today' | 'yesterday' | 'week' | 'month' | 'prevMonth' | 'last3' | 'advanced'
 const TABS: { id: Tab; label: string }[] = [
   { id: 'today', label: 'Today' },
   { id: 'yesterday', label: 'Yesterday' },
   { id: 'week', label: 'This Week' },
-  { id: 'last7', label: 'Last 7 Days' },
+  { id: 'month', label: 'This Month' },
+  { id: 'prevMonth', label: 'Previous Month' },
+  { id: 'last3', label: 'Last 3 Months' },
+  { id: 'advanced', label: 'Advanced' },
 ]
 
-// Open-ended windows (today/week/last7) end at Infinity, not a captured
-// Date.now() — otherwise a live session whose timestamp advances past the
-// frozen end silently falls out of the window after every refresh.
-function windowFor(tab: Tab): [number, number] {
+function toISODateLocal(ms: number): string {
+  const d = new Date(ms)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+function parseISODateLocal(s: string): number {
+  const [y, m, d] = s.split('-').map(Number)
+  return new Date(y, m - 1, d).getTime()
+}
+function dateKey(ts: number): string {
+  const d = new Date(ts)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+function startOfMonth(d: Date): Date { return new Date(d.getFullYear(), d.getMonth(), 1) }
+function addMonths(d: Date, n: number): Date { return new Date(d.getFullYear(), d.getMonth() + n, 1) }
+
+// Open-ended windows (today/week/month/last3) end at Infinity, not a
+// captured Date.now() — otherwise a live session whose timestamp advances
+// past the frozen end silently falls out of the window after every refresh.
+function windowFor(tab: Tab, customRange: { start: number; end: number } | null): [number, number] {
   const midnight = new Date()
   midnight.setHours(0, 0, 0, 0)
   const m = midnight.getTime()
-  if (tab === 'today') return [m, Infinity]
-  if (tab === 'yesterday') return [m - DAY, m]
-  if (tab === 'week') {
-    const day = (midnight.getDay() + 6) % 7 // Monday = 0
-    return [m - day * DAY, Infinity]
+  switch (tab) {
+    case 'today': return [m, Infinity]
+    case 'yesterday': return [m - DAY, m]
+    case 'week': {
+      const day = (midnight.getDay() + 6) % 7 // Monday = 0
+      return [m - day * DAY, Infinity]
+    }
+    case 'month': return [startOfMonth(midnight).getTime(), Infinity]
+    case 'prevMonth': {
+      const prev = addMonths(midnight, -1)
+      return [prev.getTime(), startOfMonth(midnight).getTime()]
+    }
+    case 'last3': return [m - (MAX_ADVANCED_DAYS - 1) * DAY, Infinity]
+    case 'advanced':
+      if (customRange) return [customRange.start, customRange.end + DAY]
+      return [m - 29 * DAY, Infinity]
   }
-  return [Date.now() - 7 * DAY, Infinity]
 }
 
 function relativeTime(ts: number): string {
@@ -74,33 +106,68 @@ interface MyWorkSectionProps {
   goTo: (s: Section) => void
   onRefresh: () => void | Promise<unknown>
   onOpenSession: (s: SessionEntry) => void
+  onOpenSessionById: (sessionId: string) => void
   onOpenSessionsForProject: (name: string, path: string) => void
   onFocusWorktree: (path: string) => void
   showToast: (type: 'success' | 'error', message: string) => void
 }
 
-function todayKey(): string {
-  return `contextbar:expanded:peakbanner:${new Date().toISOString().slice(0, 10)}`
-}
-
-export default function MyWorkSection({ sessions, repos, loading, goTo, onRefresh, onOpenSession, onOpenSessionsForProject, onFocusWorktree, showToast }: MyWorkSectionProps) {
-  const [tab, setTab] = useState<Tab>('today')
+export default function MyWorkSection({ sessions, repos, loading, goTo, onRefresh, onOpenSession, onOpenSessionById, onOpenSessionsForProject, onFocusWorktree, showToast }: MyWorkSectionProps) {
+  const [tab, setTab] = useState<Tab>('month')
   const [copiedResume, setCopiedResume] = useState<string | null>(null)
   const [commitTs, setCommitTs] = useState<number[]>([])
   const [vscodeAvailable, setVscodeAvailable] = useState(false)
-  const [peakDismissed, setPeakDismissed] = useState(() => !!localStorage.getItem(todayKey()))
+  const [firstSessionTs, setFirstSessionTs] = useState<number | null>(null)
+  const [customRange, setCustomRange] = useState<{ start: number; end: number } | null>(null)
+  const [showAdvancedPicker, setShowAdvancedPicker] = useState(false)
+  const [monthOffset, setMonthOffset] = useState(0)
 
   useEffect(() => {
-    invoke<number[]>('get_commit_activity', { sinceDays: 14 }).then(setCommitTs).catch(() => {})
     invoke<boolean>('is_vscode_installed').then(setVscodeAvailable).catch(() => {})
-  }, [sessions])
+    invoke<number | null>('get_first_session_ts').then(setFirstSessionTs).catch(() => {})
+  }, [])
+
+  const selectTab = (id: Tab) => {
+    setTab(id)
+    setMonthOffset(0)
+    if (id === 'advanced') {
+      setShowAdvancedPicker(true)
+      if (!customRange) {
+        const end = new Date(); end.setHours(0, 0, 0, 0)
+        const start = new Date(end); start.setDate(start.getDate() - 29)
+        const floor = firstSessionTs ?? start.getTime()
+        setCustomRange({ start: Math.max(start.getTime(), floor), end: end.getTime() })
+      }
+    } else {
+      setShowAdvancedPicker(false)
+    }
+  }
+
+  const applyCustomRange = (startStr: string, endStr: string) => {
+    if (!startStr || !endStr) return
+    let start = parseISODateLocal(startStr)
+    let end = parseISODateLocal(endStr)
+    const today = new Date(); today.setHours(0, 0, 0, 0)
+    const floor = firstSessionTs ?? start
+    if (start < floor) start = floor
+    if (end > today.getTime()) end = today.getTime()
+    if (end < start) end = start
+    const maxEnd = start + (MAX_ADVANCED_DAYS - 1) * DAY
+    if (end > maxEnd) end = maxEnd
+    setCustomRange({ start, end })
+    setShowAdvancedPicker(false)
+    setMonthOffset(0)
+  }
 
   const tabLabel = TABS.find(t => t.id === tab)?.label ?? ''
 
-  // Recomputed on every session refresh so day boundaries stay current
-  // (midnight rollover, rolling last-7-days start).
+  // Recomputed whenever the tab, custom range, or sessions change so day
+  // boundaries stay current (midnight rollover, rolling windows).
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  const [start, end] = useMemo(() => windowFor(tab), [tab, sessions])
+  const [start, end] = useMemo(() => windowFor(tab, customRange), [tab, customRange, sessions])
+  const effectiveEnd = end === Infinity ? Date.now() : end
+  const windowDays = Math.max(1, Math.ceil((effectiveEnd - start) / DAY))
+
   const windowed = useMemo(
     () => sessions.filter(s => s.timestamp >= start && s.timestamp < end),
     [sessions, start, end]
@@ -109,84 +176,80 @@ export default function MyWorkSection({ sessions, repos, loading, goTo, onRefres
 
   const stats = useMemo(() => ({
     sessions: windowed.length,
-    prompts: windowed.reduce((n, s) => n + s.promptCount, 0),
     live: windowed.filter(s => s.isLive).length,
-    projects: projects.length,
-  }), [windowed, projects])
+  }), [windowed])
 
-  // Per-agent usage inside the selected window.
-  const windowedUsage = useMemo(() => {
-    const map = new Map<string, { sessions: number; prompts: number; tokens: number }>()
-    for (const s of windowed) {
-      const u = map.get(s.agent) ?? { sessions: 0, prompts: 0, tokens: 0 }
-      u.sessions += 1
-      u.prompts += s.promptCount
-      u.tokens += s.totalTokens
-      map.set(s.agent, u)
-    }
-    // Sort and share by prompts: token counts are not comparable across
-    // agents (Claude list entries carry 0; Codex reports cumulative context).
-    return [...map.entries()].sort((a, b) => b[1].prompts - a[1].prompts || b[1].sessions - a[1].sessions)
-  }, [windowed])
-
-  // Commits restricted to the selected window; bar chart spans exactly it.
-  const windowCommits = useMemo(
-    () => commitTs.filter(sec => sec * 1000 >= start && sec * 1000 < end),
-    [commitTs, start, end]
-  )
-  const windowDays = Math.max(1, Math.ceil((Date.now() - start) / DAY))
-
-  // Peak-end banner — always summarizes "today", independent of the
-  // selected tab, so it doesn't disappear when browsing other windows.
-  const peakSummary = useMemo(() => {
-    const [start, end] = windowFor('today')
-    const today = sessions.filter(s => s.timestamp >= start && s.timestamp < end)
-    if (!today.length) return null
-    const todayProjects = groupByProject(today)
-    return {
-      sessionCount: today.length,
-      prompts: today.reduce((n, s) => n + s.promptCount, 0),
-      projectCount: todayProjects.length,
-      topProject: todayProjects[0]?.name ?? null,
-    }
-  }, [sessions])
-
-  const dismissPeakBanner = () => {
-    localStorage.setItem(todayKey(), '1')
-    setPeakDismissed(true)
-  }
-
-  // Session share per agent in the selected window
+  // Session share per agent in the selected window — powers the "Agents" stat button.
   const agentMix = useMemo(() => {
     const counts = new Map<string, number>()
     for (const s of windowed) counts.set(s.agent, (counts.get(s.agent) ?? 0) + 1)
     return [...counts.entries()].sort((a, b) => b[1] - a[1])
   }, [windowed])
 
-  // Momentum always looks at the trailing 7 days, independent of the tab.
-  // Cells run today-first: index 0 = today, index 6 = six days ago.
-  const momentum = useMemo(() => {
-    const since = Date.now() - 7 * DAY
-    const recent = sessions.filter(s => s.timestamp >= since)
-    return groupByProject(recent).slice(0, 5).map(p => {
-      const daysActive = new Set(p.sessions.map(s => Math.floor((Date.now() - s.timestamp) / DAY)))
-      const cells = Array.from({ length: 7 }, (_, i) => daysActive.has(i))
-      let streak = 0
-      for (let d = 0; d < 7 && daysActive.has(d); d++) streak++
-      const errors = p.sessions.reduce((n, s) => n + s.errorCount, 0)
-      const tag: 'Smooth' | 'Mixed' | 'Friction' = errors === 0 ? 'Smooth' : errors <= 3 ? 'Mixed' : 'Friction'
-      const activeDayLabels = [...daysActive].sort((a, b) => a - b)
-        .map(d => d === 0 ? 'today' : d === 1 ? 'yesterday' : `${d}d ago`)
-      const tooltip = [
-        `${p.sessions.length} session${p.sessions.length === 1 ? '' : 's'} · ${p.prompts} prompt${p.prompts === 1 ? '' : 's'}`,
-        errors > 0 ? `${errors} error${errors === 1 ? '' : 's'}` : 'no errors',
-        `active: ${activeDayLabels.join(', ')}`,
-        streak > 1 ? `${streak}-day streak` : null,
-        'click to view sessions',
-      ].filter(Boolean).join('\n')
-      return { ...p, cells, streak, tag, tooltip, errors, activeDayLabels }
-    })
-  }, [sessions])
+  // Commits restricted to the selected window; bar chart spans exactly it.
+  useEffect(() => {
+    invoke<number[]>('get_commit_activity', { sinceDays: windowDays }).then(setCommitTs).catch(() => {})
+  }, [windowDays])
+  const windowCommits = useMemo(
+    () => commitTs.filter(sec => sec * 1000 >= start && sec * 1000 < end),
+    [commitTs, start, end]
+  )
+
+  // Real tokens + cost for the selected window, from the same aggregator
+  // TokenBreakdownPanel uses — not an invented per-token price.
+  const [insights, setInsights] = useState<SessionInsights | null>(null)
+  useEffect(() => {
+    let live = true
+    setInsights(null)
+    invoke<SessionInsights>('get_session_insights', {
+      sinceMs: start,
+      untilMs: end === Infinity ? undefined : end,
+    }).then(d => { if (live) setInsights(d) }).catch(() => {})
+    return () => { live = false }
+  }, [start, end])
+
+  // Ranked by tokens — perSession already comes back sorted desc, capped at
+  // 100 server-side, so a handful of sessions with unusually low token
+  // counts in a very active 90-day window could be missing from the tail;
+  // acceptable for a top-5 ranking.
+  const topSessions = useMemo(() => (insights?.perSession ?? []).slice(0, 5), [insights])
+  const topRepos = useMemo(
+    () => [...(insights?.perProject ?? [])].sort((a, b) => b.tokens - a.tokens).slice(0, 5),
+    [insights]
+  )
+  const perAgentTotals = useMemo(() => {
+    const map = new Map<string, { tokens: number; cost: number }>()
+    for (const s of insights?.perSession ?? []) {
+      const u = map.get(s.agent) ?? { tokens: 0, cost: 0 }
+      u.tokens += s.tokens
+      u.cost += s.estCostUsd ?? 0
+      map.set(s.agent, u)
+    }
+    return [...map.entries()].sort((a, b) => b[1].tokens - a[1].tokens)
+  }, [insights])
+  const totalUsageTokens = useMemo(() => perAgentTotals.reduce((n, [, u]) => n + u.tokens, 0), [perAgentTotals])
+  const totalUsageCost = useMemo(() => perAgentTotals.reduce((n, [, u]) => n + u.cost, 0), [perAgentTotals])
+
+  function dailyTokensForAgent(agent: string): number[] {
+    const buckets = Array(windowDays).fill(0)
+    for (const s of insights?.perSession ?? []) {
+      if (s.agent !== agent) continue
+      const idx = Math.floor((s.ts - start) / DAY)
+      if (idx >= 0 && idx < windowDays) buckets[idx] += s.tokens
+    }
+    return buckets
+  }
+
+  // Same perSession rows back every day-level activity view below — no
+  // extra fetch needed since the whole window is already in memory.
+  const sessionCountsByDay = useMemo(() => {
+    const map = new Map<string, number>()
+    for (const s of insights?.perSession ?? []) {
+      const k = dateKey(s.ts)
+      map.set(k, (map.get(k) ?? 0) + 1)
+    }
+    return map
+  }, [insights])
 
   // Needs attention — derived from the worktree scan; omitted entirely when empty.
   const attention = useMemo(() => {
@@ -241,7 +304,7 @@ export default function MyWorkSection({ sessions, repos, loading, goTo, onRefres
 
   // "Active" means a session is genuinely live right now, not just recent —
   // projects worked on but not currently open belong in the windowed stats
-  // above, not in this card grid.
+  // above, not in this tile row.
   const orderedProjects = useMemo(() => {
     return projects
       .filter(p => p.sessions.some(s => s.isLive))
@@ -272,55 +335,77 @@ export default function MyWorkSection({ sessions, repos, loading, goTo, onRefres
     }
   }
 
+  // Activity calendar month navigation — anchored to the window's own end
+  // month (capped at "now") for month/last3/advanced, fixed (no nav) for
+  // prevMonth. An Advanced range entirely in the past opens on the month it
+  // actually covers, not a blank current month. Clamped so you can't browse
+  // before the selected window's own start or past its end.
+  const calendarAnchor = tab === 'prevMonth' ? addMonths(new Date(), -1) : startOfMonth(new Date(effectiveEnd))
+  const calendarMonth = addMonths(calendarAnchor, monthOffset)
+  const windowStartMonth = startOfMonth(new Date(start))
+  const canGoPrevMonth = tab !== 'prevMonth' && addMonths(calendarMonth, -1) >= windowStartMonth
+  const canGoNextMonth = tab !== 'prevMonth' && calendarMonth < startOfMonth(new Date(effectiveEnd))
+
+  const minIso = firstSessionTs != null ? toISODateLocal(firstSessionTs) : undefined
+  const todayIso = toISODateLocal(Date.now())
+
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
-      <div className="px-6 pt-5 pb-3 flex-shrink-0 flex items-start justify-between gap-3">
+      <div className="px-6 pt-5 pb-3 flex-shrink-0 flex items-start justify-between gap-3 border-b border-[var(--c-border-sub)]">
         <div>
           <h2 className="text-[17px] font-semibold tracking-tight">My Work</h2>
           <p className="text-[14px] text-[var(--c-text-2)] mt-0.5">
             Everything happening across your projects
           </p>
         </div>
-        <RefreshButton onClick={onRefresh} busy={loading} />
+        <div className="flex items-center gap-2">
+          <div className="flex gap-1.5 flex-wrap justify-end">
+            {TABS.map(t => (
+              <button
+                key={t.id}
+                onClick={() => selectTab(t.id)}
+                className={`text-[13px] px-3 py-1 rounded-full border transition-colors ${tab === t.id ? 'border-[var(--c-accent)]/50 bg-[var(--c-accent)]/10 text-[var(--c-accent)]' : 'border-[var(--c-border)] text-[var(--c-text-3)] hover:text-[var(--c-text-2)]'}`}
+              >
+                {t.id === 'advanced' && customRange
+                  ? `${new Date(customRange.start).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}–${new Date(customRange.end).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`
+                  : t.label}
+              </button>
+            ))}
+          </div>
+          <RefreshButton onClick={onRefresh} busy={loading} />
+        </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-6 pb-6">
-        {!loading && peakSummary && !peakDismissed && (
-          <div className="flex items-center gap-3 rounded-xl border border-[var(--c-border)] bg-[var(--c-surface-2)]/40 px-4 py-3 mb-4">
-            <div className="flex-1 min-w-0">
-              <b className="text-[14.5px] font-semibold">Today's activity</b>
-              <p className="text-[13.5px] text-[var(--c-text-2)] mt-0.5">
-                {peakSummary.sessionCount} session{peakSummary.sessionCount === 1 ? '' : 's'}
-                {peakSummary.prompts > 0 && `, ${peakSummary.prompts} prompt${peakSummary.prompts === 1 ? '' : 's'}`}
-                {peakSummary.topProject && (
-                  <> across {peakSummary.projectCount} project{peakSummary.projectCount === 1 ? '' : 's'} — most active on{' '}
-                    <b className="text-[var(--c-accent)]">{peakSummary.topProject}</b>
-                  </>
-                )}
-              </p>
-            </div>
-            <button
-              onClick={dismissPeakBanner}
-              aria-label="Dismiss"
-              className="text-[var(--c-text-3)] hover:text-[var(--c-text)] transition-colors flex-shrink-0"
-            >
-              ✕
-            </button>
-          </div>
-        )}
-        {/* Time tabs */}
-        <div className="flex gap-1.5 mb-4">
-          {TABS.map(t => (
-            <button
-              key={t.id}
-              onClick={() => setTab(t.id)}
-              className={`text-[13px] px-3 py-1 rounded-full border transition-colors ${tab === t.id ? 'border-[var(--c-accent)]/50 bg-[var(--c-accent)]/10 text-[var(--c-accent)]' : 'border-[var(--c-border)] text-[var(--c-text-3)] hover:text-[var(--c-text-2)]'}`}
-            >
-              {t.label}
-            </button>
-          ))}
+      {showAdvancedPicker && (
+        <div className="px-6 py-2.5 flex-shrink-0 flex items-center gap-2 flex-wrap border-b border-[var(--c-border-sub)] bg-[var(--c-surface-2)]/30">
+          <input
+            id="my-work-adv-start" type="date" min={minIso} max={todayIso}
+            defaultValue={customRange ? toISODateLocal(customRange.start) : undefined}
+            className="text-[12px] px-2 py-1 rounded-md border border-[var(--c-border)] bg-[var(--c-surface-2)] text-[var(--c-text-2)]"
+          />
+          <span className="text-[12px] text-[var(--c-text-3)]">to</span>
+          <input
+            id="my-work-adv-end" type="date" min={minIso} max={todayIso}
+            defaultValue={customRange ? toISODateLocal(customRange.end) : undefined}
+            className="text-[12px] px-2 py-1 rounded-md border border-[var(--c-border)] bg-[var(--c-surface-2)] text-[var(--c-text-2)]"
+          />
+          <button
+            onClick={() => {
+              const s = (document.getElementById('my-work-adv-start') as HTMLInputElement)?.value
+              const e = (document.getElementById('my-work-adv-end') as HTMLInputElement)?.value
+              applyCustomRange(s, e)
+            }}
+            className="text-[12px] px-2.5 py-1 rounded-md bg-[var(--c-accent)]/15 text-[var(--c-accent)] font-medium hover:bg-[var(--c-accent)]/25"
+          >
+            Apply
+          </button>
+          <span className="text-[11px] text-[var(--c-text-3)]">
+            max 3 months{firstSessionTs != null && ` · no data before ${new Date(firstSessionTs).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`}
+          </span>
         </div>
+      )}
 
+      <div className="flex-1 overflow-y-auto px-6 pb-6 pt-4">
         {loading && (
           <>
             <SkeletonTiles count={4} />
@@ -336,107 +421,88 @@ export default function MyWorkSection({ sessions, repos, loading, goTo, onRefres
 
         {!loading && sessions.length > 0 && (
           <>
-            {/* Stat strip — sessions / live / projects + agent chips */}
-            <div className="rounded-xl border border-[var(--c-border)] bg-[var(--c-surface-2)]/40 grid grid-cols-4 divide-x divide-[var(--c-border)]/60 mb-3">
-              <Stat n={String(stats.sessions)} lbl="Sessions" />
-              <Stat n={String(stats.live)} lbl="Live" color={stats.live > 0 ? 'text-emerald-400' : ''} />
-              <Stat n={String(stats.projects)} lbl="Projects" color="text-[var(--c-accent)]" />
-              <button
-                onClick={() => goTo('agents')}
-                title="Open the Agents section"
-                className="px-3 py-3 text-center rounded-r-xl hover:bg-[var(--c-accent)]/8 transition-colors group/agents"
-              >
-                <div className="text-[18px] font-semibold tabular-nums group-hover/agents:text-[var(--c-accent)] transition-colors">
-                  {agentMix.length}
+            {/* Attention — full-width band, always first, any window */}
+            {attention.length > 0 && (
+              <div className="rounded-xl border p-3 mb-3" style={{ borderColor: 'color-mix(in srgb, #f59e0b 30%, transparent)' }}>
+                <p className="text-[12px] font-bold text-amber-400 mb-2">⚠ Attention ({attention.length})</p>
+                <div className="flex gap-2 flex-wrap">
+                  {attention.map(a => (
+                    <button
+                      key={a.key}
+                      onClick={() => onFocusWorktree(a.path)}
+                      title={`${a.meta}\n${a.why}`}
+                      className="font-mono text-[11px] px-2 py-1 rounded-md bg-[var(--c-surface-2)] hover:bg-[var(--c-surface-2)]/80 transition-colors truncate max-w-[220px]"
+                    >
+                      {a.title}
+                    </button>
+                  ))}
                 </div>
-                <div className="text-[12px] text-[var(--c-text-2)] uppercase tracking-wider mt-0.5">
-                  Agents <span className="opacity-0 group-hover/agents:opacity-100 transition-opacity">→</span>
-                </div>
-              </button>
-            </div>
-
-            {/* Empty window — say so instead of rendering hollow cards */}
-            {windowed.length === 0 && (
-              <div className="rounded-xl border border-dashed border-[var(--c-border)] px-4 py-3 mb-3 text-center">
-                <p className="text-[14px] text-[var(--c-text-2)]">
-                  No sessions {tabLabel.toLowerCase() === 'today' ? 'yet today' : tabLabel.toLowerCase()}.
-                  {(momentum.length > 0 || attention.length > 0) && (
-                    <>{' '}
-                      {[momentum.length > 0 && '7-day momentum', attention.length > 0 && 'repo attention']
-                        .filter(Boolean).join(' and ')} below {momentum.length > 0 && attention.length > 0 ? 'are' : 'is'} window-independent.
-                    </>
-                  )}
-                </p>
               </div>
             )}
 
-            {/* Active projects — the actionable block, directly under the stats */}
+            {/* Active projects — dynamic column count, up to 6 across, shrinks as more show up */}
             {orderedProjects.length > 0 && (
-              <div className="mb-4">
-                <SectionLabel>
-                  Active projects{orderedProjects.length > 9 ? ` · showing 9 of ${orderedProjects.length}` : ''}
-                </SectionLabel>
-                <div className="grid grid-cols-3 gap-3">
-                  {orderedProjects.slice(0, 9).map((p, i) => {
+              <div className="rounded-xl border border-[var(--c-border)] p-3 mb-4">
+                <p className="text-[12px] font-semibold mb-2.5">
+                  Active projects{orderedProjects.length > 12 ? ` · showing 12 of ${orderedProjects.length}` : ''}
+                </p>
+                <div className="grid gap-3" style={{ gridTemplateColumns: `repeat(${Math.min(6, orderedProjects.length)},1fr)` }}>
+                  {orderedProjects.slice(0, 12).map((p, i) => {
                     const branch = branchFor(p.project)
                     const live = p.sessions.some(s => s.isLive)
                     return (
                       <div
                         key={p.project}
-                        className={`rounded-xl border bg-[var(--c-surface-2)]/40 p-3 ${live ? 'border-emerald-500/30' : 'border-[var(--c-border)]'}`}
+                        className={`rounded-xl border bg-[var(--c-surface-2)]/40 p-2.5 min-w-0 ${live ? 'border-emerald-500/30' : 'border-[var(--c-border)]'}`}
                       >
                         <button
                           onClick={() => onOpenSession(p.sessions[0])}
                           title="Open latest transcript in Sessions"
-                          className="w-full flex items-center gap-2 mb-1.5 text-left group/card"
+                          className="w-full flex items-center gap-1.5 mb-1.5 text-left group/card min-w-0"
                         >
                           <span
-                            className="w-6 h-6 rounded-md flex items-center justify-center font-mono font-bold text-[13px] text-black/80 shrink-0"
+                            className="w-5 h-5 rounded-md flex items-center justify-center font-mono font-bold text-[11px] text-black/80 shrink-0"
                             style={{ background: PALETTE[i % PALETTE.length] }}
                           >
                             {p.name.charAt(0).toUpperCase()}
                           </span>
                           <div className="min-w-0 flex-1">
-                            <div className="text-[14.5px] font-semibold truncate group-hover/card:text-[var(--c-accent)] transition-colors">{p.name}</div>
+                            <div className="text-[12.5px] font-semibold truncate group-hover/card:text-[var(--c-accent)] transition-colors">{p.name}</div>
                           </div>
-                          {live && (
-                            <span className="text-[9.5px] font-mono px-1.5 py-px rounded-full bg-emerald-500/15 text-emerald-400 shrink-0">● live</span>
-                          )}
+                          {live && <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />}
                         </button>
-                        {branch && <div className="text-[12px] font-mono text-[var(--c-text-2)] truncate mb-1">⌥ {branch}</div>}
-                        <div className="flex items-center gap-1.5 mb-1.5">
-                          {[...new Set(p.sessions.map(s => s.agent))].map(a => (
+                        {branch && <div className="text-[10px] font-mono text-[var(--c-text-3)] truncate mb-1">⌥ {branch}</div>}
+                        <div className="flex items-center gap-1 mb-1.5 min-w-0">
+                          {[...new Set(p.sessions.map(s => s.agent))].slice(0, 2).map(a => (
                             <AgentBadge key={a} agent={a} />
                           ))}
-                          <span className="text-[12px] text-[var(--c-text-2)] truncate">
-                            {relativeTime(p.lastTs)}
-                          </span>
+                          <span className="text-[10px] text-[var(--c-text-3)] truncate">{relativeTime(p.lastTs)}</span>
                         </div>
-                        <div className="flex gap-1.5">
+                        <div className="flex gap-1 flex-wrap">
                           <button
                             onClick={() => handleResume(p)}
-                            className={`text-[12.5px] px-2.5 py-1 rounded-md font-medium transition-colors ${copiedResume === p.project ? 'bg-emerald-500/20 text-emerald-400' : 'bg-[var(--c-accent)]/15 text-[var(--c-accent)] hover:bg-[var(--c-accent)]/25'}`}
+                            className={`text-[10.5px] px-2 py-0.5 rounded-md font-medium transition-colors ${copiedResume === p.project ? 'bg-emerald-500/20 text-emerald-400' : 'bg-[var(--c-accent)]/15 text-[var(--c-accent)] hover:bg-[var(--c-accent)]/25'}`}
                           >
-                            {copiedResume === p.project ? '✓ Opened' : '▶ Resume'}
+                            {copiedResume === p.project ? '✓' : '▶'}
                           </button>
                           {vscodeAvailable && (
                             <button
                               onClick={() => invoke('open_in_vscode', { path: p.project }).catch(() => showToast('error', 'Could not open VS Code'))}
-                              title="Open project in Visual Studio Code"
-                              className="text-[12.5px] px-2.5 py-1 rounded-md border border-[var(--c-border)] text-[var(--c-text-3)] hover:text-[var(--c-text-2)] transition-colors"
+                              title="Open in VS Code"
+                              className="text-[10.5px] px-2 py-0.5 rounded-md border border-[var(--c-border)] text-[var(--c-text-3)] hover:text-[var(--c-text-2)] transition-colors"
                             >
-                              VS Code
+                              VS
                             </button>
                           )}
                           <button
                             onClick={() => invoke('reveal_in_finder', { path: p.project }).catch(() => showToast('error', 'Could not reveal in Finder'))}
                             title="Reveal in Finder"
                             aria-label="Reveal in Finder"
-                            className="px-2 py-1 rounded-md border border-[var(--c-border)] text-[var(--c-text-3)] hover:text-[var(--c-text-2)] transition-colors"
+                            className="px-1.5 py-0.5 rounded-md border border-[var(--c-border)] text-[var(--c-text-3)] hover:text-[var(--c-text-2)] transition-colors"
                           >
                             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
                               stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
-                              className="w-3.5 h-3.5">
+                              className="w-3 h-3">
                               <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z" />
                             </svg>
                           </button>
@@ -448,159 +514,146 @@ export default function MyWorkSection({ sessions, repos, loading, goTo, onRefres
               </div>
             )}
 
-            {/* Insights — risk first, then windowed charts, then 7-day momentum */}
-            {(windowedUsage.length > 0 || windowCommits.length > 0 || attention.length > 0 || momentum.length > 0) && (() => {
-              const attentionShown = attention.length > 0
-              const usageShown = windowedUsage.length > 0
-              const momentumShown = momentum.length > 0
-              // Only wraps to a second row when all three row-1 cards are
-              // present — that's the one case where "Commits per day" needs
-              // to be pinned under "Usage by agent" instead of drifting to
-              // column 1 by default grid flow.
-              const rowWraps = attentionShown && usageShown && momentumShown
-              const commitsColClass = rowWraps ? 'col-start-2' : ''
-              return (
-            <div>
-            <SectionLabel>Insights</SectionLabel>
-            <div className="grid grid-cols-3 gap-3 items-start">
-              {/* Needs attention */}
-              {attention.length > 0 && (
-                <BentoCard label="Needs attention — any window" accent="text-amber-400">
-                  <div className="space-y-2">
-                    {attention.map(a => (
-                      <button
-                        key={a.key}
-                        onClick={() => onFocusWorktree(a.path)}
-                        className="w-full text-left rounded-lg bg-[var(--c-surface-2)]/60 px-2.5 py-2 hover:bg-[var(--c-surface-2)] transition-colors"
-                      >
-                        <div className="flex items-center gap-2 min-w-0">
-                          <span
-                            className={`w-[7px] h-[7px] rounded-full shrink-0 ${a.kind === 'uncommitted' ? 'bg-rose-400' : 'bg-amber-400'}`}
-                            aria-hidden="true"
-                          />
-                          <span className="text-[13.5px] font-mono font-semibold truncate">{a.title}</span>
-                          <span className={`text-[9.5px] font-mono px-1.5 py-px rounded-full shrink-0 ${a.kind === 'uncommitted' ? 'bg-rose-500/15 text-rose-400' : 'bg-amber-500/15 text-amber-400'}`}>
-                            {a.kind === 'uncommitted' ? 'uncommitted' : 'not merged'}
-                          </span>
-                        </div>
-                        <p className="text-[12px] text-[var(--c-text-2)] mt-1 pl-[15px] truncate">{a.meta}</p>
-                        <p className="text-[12px] text-[var(--c-text-2)] mt-0.5 pl-[15px] leading-snug">{a.why}</p>
-                      </button>
-                    ))}
-                  </div>
-                </BentoCard>
-              )}
+            {/* Empty window — say so instead of rendering hollow cards below */}
+            {windowed.length === 0 && (
+              <div className="rounded-xl border border-dashed border-[var(--c-border)] px-4 py-3 mb-3 text-center">
+                <p className="text-[14px] text-[var(--c-text-2)]">
+                  No sessions {tabLabel.toLowerCase() === 'today' ? 'yet today' : `in ${tabLabel.toLowerCase()}`}.
+                </p>
+              </div>
+            )}
 
-              {/* Usage by agent — follows the selected window */}
-              {windowedUsage.length > 0 && (
-                <BentoCard label={`Usage by agent — ${tabLabel}`}>
-                  <div className="space-y-2.5">
-                    {windowedUsage.map(([agent, u]) => {
-                      const totalPrompts = windowedUsage.reduce((n, [, x]) => n + x.prompts, 0)
-                      const totalSessions = windowedUsage.reduce((n, [, x]) => n + x.sessions, 0)
-                      const pct = totalPrompts > 0
-                        ? (u.prompts / totalPrompts) * 100
-                        : (u.sessions / Math.max(1, totalSessions)) * 100
-                      const { label, hex } = agentColor(agent)
-                      return (
-                        <div key={agent}>
-                          <div className="flex items-baseline justify-between mb-1">
-                            <span className="text-[13px] font-medium flex items-center gap-1.5">
-                              <span className="w-2 h-2 rounded-sm inline-block" style={{ background: hex }} />
-                              {label}
+            {windowed.length > 0 && (
+              <div className="flex flex-col gap-3">
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="rounded-xl border border-[var(--c-border)] bg-[var(--c-surface-2)]/40 text-center py-3">
+                    <div className="text-[22px] font-bold tabular-nums">{stats.sessions}</div>
+                    <div className="text-[11px] text-[var(--c-text-3)] uppercase tracking-wide">Sessions</div>
+                  </div>
+                  <button
+                    onClick={() => goTo('agents')}
+                    className="rounded-xl border border-[var(--c-border)] bg-[var(--c-surface-2)]/40 text-center py-3 hover:bg-[var(--c-accent)]/8 transition-colors"
+                  >
+                    <div className="text-[22px] font-bold tabular-nums text-emerald-400">{stats.live}</div>
+                    <div className="text-[11px] text-[var(--c-text-3)] uppercase tracking-wide">Live · {agentMix.length} agent{agentMix.length === 1 ? '' : 's'}</div>
+                  </button>
+                </div>
+
+                {/* Top 5 sessions / Top 5 repos — side by side, ranked by real tokens */}
+                <div className="grid grid-cols-2 gap-3">
+                  <Card title="Top 5 sessions" sub="Based on token usage">
+                    {topSessions.length === 0 ? (
+                      <p className="text-[12px] text-[var(--c-text-3)] py-1.5">No sessions in this period</p>
+                    ) : (
+                      <div>
+                        {topSessions.map((s, i) => (
+                          <button
+                            key={s.sessionId}
+                            onClick={() => onOpenSessionById(s.sessionId)}
+                            className={`w-full flex items-center gap-2 py-1.5 text-left hover:bg-[var(--c-hover)] -mx-1 px-1 rounded-md ${i < topSessions.length - 1 ? 'border-b border-[var(--c-border-sub)]' : ''}`}
+                          >
+                            <span className="text-[10.5px] font-mono text-[var(--c-text-3)] w-3.5 shrink-0">{i + 1}</span>
+                            <AgentBadge agent={s.agent} />
+                            <span className="text-[12px] flex-1 min-w-0 truncate">
+                              <b>{s.projectName || s.project}</b> · {s.prompts} prompt{s.prompts === 1 ? '' : 's'}
                             </span>
-                            <span className="text-[12px] text-[var(--c-text-2)] tabular-nums">
-                              {u.sessions} sess · {u.prompts} prompts{u.tokens > 0 ? ` · ${formatTokens(u.tokens)}` : ''}
+                            <span className="text-[11px] font-mono text-[var(--c-text-2)] shrink-0">{formatTokens(s.tokens)}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </Card>
+                  <Card title="Top 5 repos worked on" sub="Based on token usage">
+                    {topRepos.length === 0 ? (
+                      <p className="text-[12px] text-[var(--c-text-3)] py-1.5">No activity in this period</p>
+                    ) : (
+                      <div>
+                        {topRepos.map((p, i) => (
+                          <button
+                            key={p.project}
+                            onClick={() => onOpenSessionsForProject(p.projectName || p.project, p.project)}
+                            className={`w-full flex items-center gap-2 py-1.5 text-left hover:bg-[var(--c-hover)] -mx-1 px-1 rounded-md ${i < topRepos.length - 1 ? 'border-b border-[var(--c-border-sub)]' : ''}`}
+                          >
+                            <span className="text-[10.5px] font-mono text-[var(--c-text-3)] w-3.5 shrink-0">{i + 1}</span>
+                            <span
+                              className="w-[18px] h-[18px] rounded-md flex items-center justify-center font-mono font-bold text-[10px] text-black/80 shrink-0"
+                              style={{ background: PALETTE[i % PALETTE.length] }}
+                            >
+                              {(p.projectName || p.project).charAt(0).toUpperCase()}
                             </span>
-                          </div>
-                          <div className="h-1 rounded-full bg-[var(--c-border)] overflow-hidden">
-                            <div className="h-full rounded-full" style={{ width: `${Math.max(3, pct)}%`, background: hex }} />
-                          </div>
-                        </div>
-                      )
-                    })}
-                  </div>
-                </BentoCard>
-              )}
-
-              {/* Momentum — today-first cells, click through to sessions */}
-              {momentum.length > 0 && (
-                <BentoCard label="Momentum — last 7 days · today first">
-                  <div className="space-y-1">
-                    {momentum.map(m => (
-                      <button
-                        key={m.project}
-                        onClick={() => onOpenSessionsForProject(m.name, m.project)}
-                        title={m.tooltip}
-                        aria-label={`${m.name}: ${m.sessions.length} session${m.sessions.length === 1 ? '' : 's'}, active ${m.activeDayLabels.join(', ')}${m.errors > 0 ? `, ${m.errors} error${m.errors === 1 ? '' : 's'}` : ', no errors'}${m.streak > 1 ? `, ${m.streak}-day streak` : ''}. Click to view sessions.`}
-                        className="w-full rounded-md px-1.5 py-1.5 -mx-1.5 hover:bg-[var(--c-surface-2)] transition-colors text-left group/mom"
-                      >
-                        <div className="flex items-center gap-2">
-                          <span className="text-[13px] font-mono font-semibold w-24 truncate group-hover/mom:text-[var(--c-accent)] transition-colors">{m.name}</span>
-                          <div className="flex-1 flex gap-0.5">
-                            {m.cells.map((filled, i) => (
-                              <span key={i} className={`flex-1 h-1.5 rounded-sm ${filled ? 'bg-emerald-400' : 'bg-[var(--c-border)]'}`} />
-                            ))}
-                          </div>
-                          <span className={`text-[9.5px] font-mono px-1.5 py-px rounded-full shrink-0 ${m.tag === 'Smooth' ? 'bg-emerald-500/15 text-emerald-400' : m.tag === 'Mixed' ? 'bg-amber-500/15 text-amber-400' : 'bg-rose-500/15 text-rose-400'}`}>
-                            {m.tag}
-                          </span>
-                        </div>
-                        <p className="text-[9.5px] text-[var(--c-text-2)] mt-0.5 pl-0">
-                          {m.sessions.length} session{m.sessions.length === 1 ? '' : 's'}
-                          {m.errors > 0 && ` · ${m.errors} error${m.errors === 1 ? '' : 's'}`}
-                          {m.streak > 1 && ` · ${m.streak}-day streak`}
-                        </p>
-                      </button>
-                    ))}
-                    <p className="text-[9.5px] text-[var(--c-text-2)] pt-1">← today · 6d ago →</p>
-                  </div>
-                </BentoCard>
-              )}
-
-              {windowCommits.length > 0 && (
-                <div className={commitsColClass}>
-                  <Card title={`Commits per day — ${tabLabel}`} sub="All branches, all repos">
-                    <CommitBars commitSecs={windowCommits} daysBack={windowDays} />
+                            <span className="text-[12px] flex-1 min-w-0 truncate">{p.projectName || p.project}</span>
+                            <span className="text-[11px] font-mono text-[var(--c-text-2)] shrink-0">{formatTokens(p.tokens)}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </Card>
                 </div>
-              )}
-            </div>
-            </div>
-              )
-            })()}
 
+                {/* Usage & cost — per-agent tiles, real tokens + cost */}
+                {perAgentTotals.length > 0 && (
+                  <Card title="Usage & cost">
+                    <div className="flex items-baseline gap-2 mb-3">
+                      <span className="text-[18px] font-bold">{formatTokens(totalUsageTokens)}</span>
+                      <span className="text-[12px] text-[var(--c-text-3)]">· ${totalUsageCost.toFixed(2)} estimated</span>
+                    </div>
+                    <div className="grid gap-2.5" style={{ gridTemplateColumns: `repeat(${perAgentTotals.length},1fr)` }}>
+                      {perAgentTotals.map(([agent, u]) => {
+                        const { label, hex } = agentColor(agent)
+                        return (
+                          <div key={agent} className="rounded-lg border border-[var(--c-border)] bg-[var(--c-surface-2)]/40 p-2.5 min-w-0">
+                            <div className="flex items-center gap-1.5 mb-1">
+                              <span className="w-2 h-2 rounded-sm shrink-0" style={{ background: hex }} />
+                              <span className="text-[12.5px] font-semibold truncate">{label}</span>
+                            </div>
+                            <div className="text-[10.5px] text-[var(--c-text-3)] mb-1.5">
+                              {formatTokens(u.tokens)} · ${u.cost.toFixed(2)}
+                            </div>
+                            <DailyBars
+                              values={dailyTokensForAgent(agent)}
+                              start={start}
+                              color={hex}
+                              height={40}
+                              maxBars={16}
+                              formatValue={v => formatTokens(v)}
+                            />
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </Card>
+                )}
 
+                {windowCommits.length > 0 && (
+                  <Card title="Commits per day" sub="All branches, all repos">
+                    <CommitBars commitSecs={windowCommits} daysBack={windowDays} />
+                  </Card>
+                )}
+
+                {/* Activity — always last; shape follows the selected window */}
+                <Card title="Activity">
+                  {(tab === 'today' || tab === 'yesterday') ? (
+                    <ActivityAgentCount
+                      count={agentMix.length}
+                      label={tab === 'today' ? 'active today' : 'active yesterday'}
+                    />
+                  ) : tab === 'week' ? (
+                    <ActivityWeekRow sessionCounts={sessionCountsByDay} />
+                  ) : (
+                    <ActivityCalendar
+                      sessionCounts={sessionCountsByDay}
+                      monthDate={calendarMonth}
+                      onNavigate={d => setMonthOffset(o => o + d)}
+                      canGoPrev={canGoPrevMonth}
+                      canGoNext={canGoNextMonth}
+                    />
+                  )}
+                </Card>
+              </div>
+            )}
           </>
         )}
       </div>
     </div>
-  )
-}
-
-function Stat({ n, lbl, color }: { n: string; lbl: string; color?: string }) {
-  return (
-    <div className="px-3 py-3 text-center">
-      <div className={`text-[18px] font-semibold tabular-nums ${color ?? ''}`}>{n}</div>
-      <div className="text-[12px] text-[var(--c-text-2)] uppercase tracking-wider mt-0.5">{lbl}</div>
-    </div>
-  )
-}
-
-// Plain semibold titles, not eyebrows — this screen already has two
-// top-level SectionLabel eyebrows; a third style of label per bento card
-// was scaffolding, not hierarchy.
-function BentoCard({ label, accent, children }: { label: string; accent?: string; children: React.ReactNode }) {
-  return (
-    <div className="rounded-xl border border-[var(--c-border)] bg-[var(--c-surface-2)]/40 p-3.5">
-      <p className={`text-[14px] font-semibold mb-2.5 ${accent ?? 'text-[var(--c-text)]'}`}>{label}</p>
-      {children}
-    </div>
-  )
-}
-
-function SectionLabel({ children }: { children: React.ReactNode }) {
-  return (
-    <p className="text-[12px] font-mono text-[var(--c-text-2)] uppercase tracking-wider mb-2">{children}</p>
   )
 }

@@ -292,6 +292,206 @@ export function TokenTrend({ points }: { points: TokenPoint[] }) {
   )
 }
 
+/** Generic daily bar chart with a y-axis (max/half/0) and a hover readout —
+ *  used for per-agent token usage. Downsamples to `maxBars` buckets (summing
+ *  per bucket) when the window is wide, so bars stay readable instead of
+ *  shrinking to hairlines; a wide window still reads as a shape, just not
+ *  single-day resolution. */
+export function DailyBars({ values, start, color, height = 64, maxBars, formatValue, formatExtra }: {
+  values: number[]
+  start: number
+  color: string
+  height?: number
+  maxBars?: number
+  formatValue: (v: number) => string
+  formatExtra?: (bucketStartIdx: number, bucketEndIdx: number) => string | null
+}) {
+  const [hover, setHover] = useState<string | null>(null)
+  const { buckets, groupSize } = useMemo(() => {
+    if (!maxBars || values.length <= maxBars) return { buckets: values, groupSize: 1 }
+    const groupSize = Math.ceil(values.length / maxBars)
+    const buckets: number[] = []
+    for (let i = 0; i < values.length; i += groupSize) {
+      buckets.push(values.slice(i, i + groupSize).reduce((a, b) => a + b, 0))
+    }
+    return { buckets, groupSize }
+  }, [values, maxBars])
+  const max = Math.max(1, ...buckets)
+  const days = values.length
+
+  const dayLabel = (i: number) => new Date(start + i * DAY).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })
+  const bucketLabel = (bi: number) => {
+    const s = bi * groupSize, e = Math.min(days - 1, s + groupSize - 1)
+    return groupSize > 1 ? `${dayLabel(s)} – ${dayLabel(e)}` : dayLabel(s)
+  }
+
+  return (
+    <div onMouseLeave={() => setHover(null)}>
+      <HoverReadout text={hover} placeholder="hover a bar" />
+      <div className="flex items-stretch gap-1.5">
+        <div className="flex flex-col justify-between items-end text-[8px] font-mono text-[var(--c-text-3)] shrink-0" style={{ height }}>
+          <span>{formatValue(max)}</span>
+          <span>{formatValue(max / 2)}</span>
+          <span>0</span>
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-end gap-px border-l border-[var(--c-border-sub)] pl-1" style={{ height }}>
+            {buckets.map((v, i) => (
+              <div
+                key={i}
+                onMouseEnter={() => {
+                  const extra = formatExtra?.(i * groupSize, Math.min(days - 1, i * groupSize + groupSize - 1))
+                  setHover(`${bucketLabel(i)} · ${formatValue(v)}${extra ? ' · ' + extra : ''}`)
+                }}
+                className="flex-1 rounded-sm min-w-[1px]"
+                style={{ height: v === 0 ? '2px' : `${Math.max(4, (v / max) * 100)}%`, background: v === 0 ? 'var(--c-surface-2)' : color }}
+              />
+            ))}
+          </div>
+          <div className="flex justify-between text-[8.5px] font-mono text-[var(--c-text-3)] mt-1 pl-1">
+            <span>{days}d ago</span><span className="font-semibold">today</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+const ACTIVITY_LEVEL_COLORS = [
+  'var(--c-surface-2)',
+  'color-mix(in srgb, #34d399 25%, var(--c-surface-2))',
+  'color-mix(in srgb, #34d399 50%, var(--c-surface-2))',
+  'color-mix(in srgb, #34d399 75%, var(--c-surface-2))',
+  '#34d399',
+]
+const DOW_LABELS = ['S', 'M', 'T', 'W', 'T', 'F', 'S']
+const ACTIVITY_CELL = 13
+
+function activityLevel(sessionCount: number): number {
+  if (sessionCount <= 0) return 0
+  if (sessionCount === 1) return 1
+  if (sessionCount === 2) return 2
+  if (sessionCount <= 4) return 3
+  return 4
+}
+
+function dateKey(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+/** GitHub-contribution-graph visual language (small square, discrete green
+ *  steps, Less→More legend) applied to a real per-day session-count map —
+ *  not GitHub's own 12-months-by-week layout, just the look. `sessionCounts`
+ *  keys are `dateKey()` strings. */
+export function ActivityCalendar({ sessionCounts, monthDate, onNavigate, canGoPrev, canGoNext }: {
+  sessionCounts: Map<string, number>
+  monthDate: Date
+  onNavigate: (delta: number) => void
+  canGoPrev: boolean
+  canGoNext: boolean
+}) {
+  const [hover, setHover] = useState<string | null>(null)
+  const year = monthDate.getFullYear(), month = monthDate.getMonth()
+  const firstDow = new Date(year, month, 1).getDay()
+  const daysInMonth = new Date(year, month + 1, 0).getDate()
+  const today = new Date(); today.setHours(0, 0, 0, 0)
+  const cells: (number | null)[] = Array(firstDow).fill(null).concat(Array.from({ length: daysInMonth }, (_, i) => i + 1))
+  while (cells.length % 7 !== 0) cells.push(null)
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-2">
+        <button
+          onClick={() => onNavigate(-1)} disabled={!canGoPrev} title="Previous month"
+          className="w-5 h-5 rounded-md border border-[var(--c-border)] text-[var(--c-text-2)] text-[11px] disabled:opacity-30 disabled:cursor-default hover:border-[var(--c-text-3)]/50"
+        >‹</button>
+        <span className="text-[12px] font-semibold">{monthDate.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}</span>
+        <button
+          onClick={() => onNavigate(1)} disabled={!canGoNext} title="Next month"
+          className="w-5 h-5 rounded-md border border-[var(--c-border)] text-[var(--c-text-2)] text-[11px] disabled:opacity-30 disabled:cursor-default hover:border-[var(--c-text-3)]/50"
+        >›</button>
+      </div>
+      <div className="text-right h-3 mb-1.5 text-[10px] font-mono text-[var(--c-text-3)]">{hover ?? 'Hover a day for details'}</div>
+      <div className="grid gap-[3px] mb-1" style={{ gridTemplateColumns: `repeat(7,${ACTIVITY_CELL}px)` }}>
+        {DOW_LABELS.map((d, i) => <div key={i} className="text-center text-[8px] text-[var(--c-text-3)]">{d}</div>)}
+      </div>
+      <div className="grid gap-[3px]" style={{ gridTemplateColumns: `repeat(7,${ACTIVITY_CELL}px)` }} onMouseLeave={() => setHover(null)}>
+        {cells.map((d, i) => {
+          if (d === null) return <div key={i} style={{ width: ACTIVITY_CELL, height: ACTIVITY_CELL }} />
+          const date = new Date(year, month, d)
+          const isFuture = date > today
+          const isToday = date.getTime() === today.getTime()
+          const count = sessionCounts.get(dateKey(date)) ?? 0
+          const level = isFuture ? 0 : activityLevel(count)
+          return (
+            <div
+              key={i}
+              onMouseEnter={() => !isFuture && setHover(`${date.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })} · ${count} session${count === 1 ? '' : 's'}`)}
+              title={isFuture ? '' : `${date.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })} · ${count} session${count === 1 ? '' : 's'}`}
+              style={{
+                width: ACTIVITY_CELL, height: ACTIVITY_CELL, borderRadius: 3,
+                background: isFuture ? 'transparent' : ACTIVITY_LEVEL_COLORS[level],
+                border: isToday ? '1.5px solid var(--c-accent)' : isFuture ? '1px dashed color-mix(in srgb, var(--c-text-3) 40%, transparent)' : '1px solid transparent',
+              }}
+            />
+          )
+        })}
+      </div>
+      <div className="flex items-center justify-end gap-[3px] mt-2 text-[9px] text-[var(--c-text-3)]">
+        <span>Less</span>
+        {ACTIVITY_LEVEL_COLORS.map((c, i) => <span key={i} style={{ width: 10, height: 10, borderRadius: 2, background: c, display: 'inline-block' }} />)}
+        <span>More</span>
+      </div>
+    </div>
+  )
+}
+
+/** This-week row (Sun–Sat) — same cells as ActivityCalendar, no month framing. */
+export function ActivityWeekRow({ sessionCounts }: { sessionCounts: Map<string, number> }) {
+  const [hover, setHover] = useState<string | null>(null)
+  const today = new Date(); today.setHours(0, 0, 0, 0)
+  const sun = new Date(today); sun.setDate(today.getDate() - today.getDay())
+  const days = Array.from({ length: 7 }, (_, i) => { const d = new Date(sun); d.setDate(sun.getDate() + i); return d })
+
+  return (
+    <div>
+      <div className="text-right h-3 mb-1.5 text-[10px] font-mono text-[var(--c-text-3)]">{hover ?? 'Hover a day for details'}</div>
+      <div className="grid gap-1 mb-1" style={{ gridTemplateColumns: `repeat(7,${ACTIVITY_CELL}px)` }}>
+        {DOW_LABELS.map((d, i) => <div key={i} className="text-center text-[8px] text-[var(--c-text-3)]">{d}</div>)}
+      </div>
+      <div className="grid gap-1" style={{ gridTemplateColumns: `repeat(7,${ACTIVITY_CELL}px)` }} onMouseLeave={() => setHover(null)}>
+        {days.map((date, i) => {
+          const isFuture = date > today
+          const isToday = date.getTime() === today.getTime()
+          const count = sessionCounts.get(dateKey(date)) ?? 0
+          const level = isFuture ? 0 : activityLevel(count)
+          return (
+            <div
+              key={i}
+              onMouseEnter={() => !isFuture && setHover(`${date.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })} · ${count} session${count === 1 ? '' : 's'}`)}
+              style={{
+                width: ACTIVITY_CELL, height: ACTIVITY_CELL, borderRadius: 3,
+                background: isFuture ? 'transparent' : ACTIVITY_LEVEL_COLORS[level],
+                border: isToday ? '1.5px solid var(--c-accent)' : isFuture ? '1px dashed color-mix(in srgb, var(--c-text-3) 40%, transparent)' : '1px solid transparent',
+              }}
+            />
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+/** Today/Yesterday collapse Activity to the one number those windows answer. */
+export function ActivityAgentCount({ count, label }: { count: number; label: string }) {
+  return (
+    <div className="text-center py-2.5">
+      <div className="text-[32px] font-bold leading-none">{count}</div>
+      <div className="text-[11px] text-[var(--c-text-3)] mt-1">agent{count === 1 ? '' : 's'} {label}</div>
+    </div>
+  )
+}
+
 /** Daily commit bars for the trailing `daysBack` days from raw unix-second timestamps. */
 export function CommitBars({ commitSecs, daysBack = 14 }: { commitSecs: number[]; daysBack?: number }) {
   const [hover, setHover] = useState<string | null>(null)

@@ -904,6 +904,19 @@ pub fn token_activity(db: &DbState, since_ms: u64, projects: Option<&[String]>) 
         .collect()
 }
 
+/// Earliest session timestamp on record, in ms — the floor for the "My Work"
+/// Advanced date-range picker (nothing to show before the user's first
+/// recorded session). `None` when the DB is empty.
+pub fn first_session_ts(db: &DbState) -> Option<u64> {
+    let conn = db.0.lock().unwrap();
+    conn.query_row("SELECT MIN(ts) FROM session_stats", [], |r| {
+        r.get::<_, Option<i64>>(0)
+    })
+    .ok()
+    .flatten()
+    .map(|ts| ts as u64)
+}
+
 #[cfg(test)]
 mod smoke {
     // Runs against the real home dir: `cargo test -- --ignored warm_and_search`.
