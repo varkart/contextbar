@@ -37,6 +37,11 @@ function dateKey(ts: number): string {
   const d = new Date(ts)
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
+function preview(text: string, maxWords = 8): string {
+  const words = text.trim().split(/\s+/).filter(Boolean)
+  if (words.length === 0) return '(no prompt)'
+  return words.length <= maxWords ? words.join(' ') : words.slice(0, maxWords).join(' ') + '…'
+}
 function startOfMonth(d: Date): Date { return new Date(d.getFullYear(), d.getMonth(), 1) }
 function addMonths(d: Date, n: number): Date { return new Date(d.getFullYear(), d.getMonth() + n, 1) }
 
@@ -121,6 +126,7 @@ export default function MyWorkSection({ sessions, repos, loading, goTo, onRefres
   const [customRange, setCustomRange] = useState<{ start: number; end: number } | null>(null)
   const [showAdvancedPicker, setShowAdvancedPicker] = useState(false)
   const [monthOffset, setMonthOffset] = useState(0)
+  const [expandedAgent, setExpandedAgent] = useState<string | null>(null)
 
   useEffect(() => {
     invoke<boolean>('is_vscode_installed').then(setVscodeAvailable).catch(() => {})
@@ -213,10 +219,18 @@ export default function MyWorkSection({ sessions, repos, loading, goTo, onRefres
   // counts in a very active 90-day window could be missing from the tail;
   // acceptable for a top-5 ranking.
   const topSessions = useMemo(() => (insights?.perSession ?? []).slice(0, 5), [insights])
-  const topRepos = useMemo(
-    () => [...(insights?.perProject ?? [])].sort((a, b) => b.tokens - a.tokens).slice(0, 5),
-    [insights]
-  )
+  // Recency, not tokens — `projects` is already grouped from the windowed
+  // SessionEntry list and sorted by lastTs desc; token totals for display
+  // come from the insights aggregator keyed by the same project path.
+  const topRepos = useMemo(() => {
+    const tokensByProject = new Map((insights?.perProject ?? []).map(p => [p.project, p.tokens]))
+    return projects.slice(0, 5).map(p => ({
+      project: p.project,
+      projectName: p.name,
+      tokens: tokensByProject.get(p.project) ?? 0,
+      lastTs: p.lastTs,
+    }))
+  }, [projects, insights])
   const perAgentTotals = useMemo(() => {
     const map = new Map<string, { tokens: number; cost: number }>()
     for (const s of insights?.perSession ?? []) {
@@ -225,7 +239,10 @@ export default function MyWorkSection({ sessions, repos, loading, goTo, onRefres
       u.cost += s.estCostUsd ?? 0
       map.set(s.agent, u)
     }
-    return [...map.entries()].sort((a, b) => b[1].tokens - a[1].tokens)
+    // Drop agents with no real usage in this window instead of showing an
+    // all-empty tile — a session can legitimately land in perSession with
+    // 0 tokens (started, never completed a turn).
+    return [...map.entries()].filter(([, u]) => u.tokens > 0).sort((a, b) => b[1].tokens - a[1].tokens)
   }, [insights])
   const totalUsageTokens = useMemo(() => perAgentTotals.reduce((n, [, u]) => n + u.tokens, 0), [perAgentTotals])
   const totalUsageCost = useMemo(() => perAgentTotals.reduce((n, [, u]) => n + u.cost, 0), [perAgentTotals])
@@ -302,14 +319,13 @@ export default function MyWorkSection({ sessions, repos, loading, goTo, onRefres
     return items.slice(0, 5)
   }, [repos])
 
-  // "Active" means a session is genuinely live right now, not just recent —
-  // projects worked on but not currently open belong in the windowed stats
-  // above, not in this tile row.
-  const orderedProjects = useMemo(() => {
-    return projects
-      .filter(p => p.sessions.some(s => s.isLive))
-      .sort((a, b) => b.lastTs - a.lastTs)
-  }, [projects])
+  // Every project touched in the selected window, most-recent first — not
+  // just ones with a session file that changed in the last 5 minutes
+  // ("live"). That stricter definition made this tile show only 1 project
+  // for someone genuinely working across several, since "live" drops the
+  // instant you stop typing. The green dot still flags sessions that are
+  // live right now; it's no longer a filter.
+  const orderedProjects = projects
 
   const branchFor = (project: string): string | null => {
     for (const repo of repos) {
@@ -550,20 +566,22 @@ export default function MyWorkSection({ sessions, repos, loading, goTo, onRefres
                           <button
                             key={s.sessionId}
                             onClick={() => onOpenSessionById(s.sessionId)}
+                            title={s.display}
                             className={`w-full flex items-center gap-2 py-1.5 text-left hover:bg-[var(--c-hover)] -mx-1 px-1 rounded-md ${i < topSessions.length - 1 ? 'border-b border-[var(--c-border-sub)]' : ''}`}
                           >
                             <span className="text-[10.5px] font-mono text-[var(--c-text-3)] w-3.5 shrink-0">{i + 1}</span>
-                            <AgentBadge agent={s.agent} />
-                            <span className="text-[12px] flex-1 min-w-0 truncate">
-                              <b>{s.projectName || s.project}</b> · {s.prompts} prompt{s.prompts === 1 ? '' : 's'}
+                            <span className="text-[12px] flex-1 min-w-0 truncate">{preview(s.display)}</span>
+                            <span className="flex items-center gap-1.5 shrink-0">
+                              <AgentBadge agent={s.agent} />
+                              <span className="text-[10px] text-[var(--c-text-3)] max-w-[70px] truncate">{s.projectName || s.project}</span>
+                              <span className="text-[11px] font-mono text-[var(--c-text-2)]">{formatTokens(s.tokens)}</span>
                             </span>
-                            <span className="text-[11px] font-mono text-[var(--c-text-2)] shrink-0">{formatTokens(s.tokens)}</span>
                           </button>
                         ))}
                       </div>
                     )}
                   </Card>
-                  <Card title="Top 5 repos worked on" sub="Based on token usage">
+                  <Card title="Top 5 repos worked on" sub="Most recently worked on">
                     {topRepos.length === 0 ? (
                       <p className="text-[12px] text-[var(--c-text-3)] py-1.5">No activity in this period</p>
                     ) : (
@@ -582,6 +600,7 @@ export default function MyWorkSection({ sessions, repos, loading, goTo, onRefres
                               {(p.projectName || p.project).charAt(0).toUpperCase()}
                             </span>
                             <span className="text-[12px] flex-1 min-w-0 truncate">{p.projectName || p.project}</span>
+                            <span className="text-[10.5px] text-[var(--c-text-3)] shrink-0">{relativeTime(p.lastTs)}</span>
                             <span className="text-[11px] font-mono text-[var(--c-text-2)] shrink-0">{formatTokens(p.tokens)}</span>
                           </button>
                         ))}
@@ -600,12 +619,23 @@ export default function MyWorkSection({ sessions, repos, loading, goTo, onRefres
                     <div className="grid gap-2.5" style={{ gridTemplateColumns: `repeat(${perAgentTotals.length},1fr)` }}>
                       {perAgentTotals.map(([agent, u]) => {
                         const { label, hex } = agentColor(agent)
+                        const expanded = expandedAgent === agent
                         return (
-                          <div key={agent} className="rounded-lg border border-[var(--c-border)] bg-[var(--c-surface-2)]/40 p-2.5 min-w-0">
-                            <div className="flex items-center gap-1.5 mb-1">
-                              <span className="w-2 h-2 rounded-sm shrink-0" style={{ background: hex }} />
-                              <span className="text-[12.5px] font-semibold truncate">{label}</span>
-                            </div>
+                          <div
+                            key={agent}
+                            className="rounded-lg border border-[var(--c-border)] bg-[var(--c-surface-2)]/40 p-2.5 min-w-0"
+                            style={expanded ? { gridColumn: '1 / -1' } : undefined}
+                          >
+                            <button
+                              onClick={() => setExpandedAgent(expanded ? null : agent)}
+                              className="w-full flex items-center justify-between gap-1.5 mb-1"
+                            >
+                              <span className="flex items-center gap-1.5 min-w-0">
+                                <span className="w-2 h-2 rounded-sm shrink-0" style={{ background: hex }} />
+                                <span className="text-[12.5px] font-semibold truncate">{label}</span>
+                              </span>
+                              <span className="text-[10px] text-[var(--c-text-3)] shrink-0">{expanded ? '‹ collapse' : 'expand ›'}</span>
+                            </button>
                             <div className="text-[10.5px] text-[var(--c-text-3)] mb-1.5">
                               {formatTokens(u.tokens)} · ${u.cost.toFixed(2)}
                             </div>
@@ -613,8 +643,8 @@ export default function MyWorkSection({ sessions, repos, loading, goTo, onRefres
                               values={dailyTokensForAgent(agent)}
                               start={start}
                               color={hex}
-                              height={40}
-                              maxBars={16}
+                              height={expanded ? 90 : 40}
+                              maxBars={expanded ? undefined : 16}
                               formatValue={v => formatTokens(v)}
                             />
                           </div>
