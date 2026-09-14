@@ -292,30 +292,33 @@ export function TokenTrend({ points }: { points: TokenPoint[] }) {
   )
 }
 
-/** Generic daily bar chart with a y-axis (max/half/0) and a hover readout —
- *  used for per-agent token usage. Downsamples to `maxBars` buckets (summing
- *  per bucket) when the window is wide, so bars stay readable instead of
+/** Generic daily bar chart with a y-axis (max/half/0) and a per-bar hover
+ *  tooltip — value (+ optional $ cost) above the bar, date below it.
+ *  Downsamples to `maxBars` buckets (summing per bucket, `costs` summed in
+ *  lockstep) when the window is wide, so bars stay readable instead of
  *  shrinking to hairlines; a wide window still reads as a shape, just not
  *  single-day resolution. */
-export function DailyBars({ values, start, color, height = 64, maxBars, formatValue, formatExtra }: {
+export function DailyBars({ values, costs, start, color, height = 64, maxBars, formatValue }: {
   values: number[]
+  /** Parallel to `values` — shown as "· $x.xx" next to the value on hover. */
+  costs?: number[]
   start: number
   color: string
   height?: number
   maxBars?: number
   formatValue: (v: number) => string
-  formatExtra?: (bucketStartIdx: number, bucketEndIdx: number) => string | null
 }) {
-  const [hover, setHover] = useState<string | null>(null)
-  const { buckets, groupSize } = useMemo(() => {
-    if (!maxBars || values.length <= maxBars) return { buckets: values, groupSize: 1 }
+  const { buckets, bucketCosts, groupSize } = useMemo(() => {
+    if (!maxBars || values.length <= maxBars) return { buckets: values, bucketCosts: costs, groupSize: 1 }
     const groupSize = Math.ceil(values.length / maxBars)
     const buckets: number[] = []
+    const bucketCosts: number[] = []
     for (let i = 0; i < values.length; i += groupSize) {
       buckets.push(values.slice(i, i + groupSize).reduce((a, b) => a + b, 0))
+      if (costs) bucketCosts.push(costs.slice(i, i + groupSize).reduce((a, b) => a + b, 0))
     }
-    return { buckets, groupSize }
-  }, [values, maxBars])
+    return { buckets, bucketCosts: costs ? bucketCosts : undefined, groupSize }
+  }, [values, costs, maxBars])
   const max = Math.max(1, ...buckets)
   const days = values.length
 
@@ -326,8 +329,7 @@ export function DailyBars({ values, start, color, height = 64, maxBars, formatVa
   }
 
   return (
-    <div onMouseLeave={() => setHover(null)}>
-      <HoverReadout text={hover} placeholder="hover a bar" />
+    <div>
       <div className="flex items-stretch gap-1.5">
         <div className="flex flex-col justify-between items-end text-[8px] font-mono text-[var(--c-text-3)] shrink-0" style={{ height }}>
           <span>{formatValue(max)}</span>
@@ -339,16 +341,19 @@ export function DailyBars({ values, start, color, height = 64, maxBars, formatVa
             {buckets.map((v, i) => (
               <div
                 key={i}
-                onMouseEnter={() => {
-                  const extra = formatExtra?.(i * groupSize, Math.min(days - 1, i * groupSize + groupSize - 1))
-                  setHover(`${bucketLabel(i)} · ${formatValue(v)}${extra ? ' · ' + extra : ''}`)
-                }}
-                className="flex-1 rounded-sm min-w-[1px]"
+                className="relative group flex-1 rounded-sm min-w-[1px]"
                 style={{ height: v === 0 ? '2px' : `${Math.max(4, (v / max) * 100)}%`, background: v === 0 ? 'var(--c-surface-2)' : color }}
-              />
+              >
+                <span className="absolute bottom-full mb-1 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity text-[9px] font-mono text-[var(--c-text-2)] whitespace-nowrap pointer-events-none z-10">
+                  {formatValue(v)}{bucketCosts ? ` · $${bucketCosts[i].toFixed(2)}` : ''}
+                </span>
+                <span className="absolute top-full mt-1 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity text-[9px] font-mono text-[var(--c-text-3)] whitespace-nowrap pointer-events-none z-10">
+                  {bucketLabel(i)}
+                </span>
+              </div>
             ))}
           </div>
-          <div className="flex justify-between text-[8.5px] font-mono text-[var(--c-text-3)] mt-1 pl-1">
+          <div className="flex justify-between text-[8.5px] font-mono text-[var(--c-text-3)] mt-5 pl-1">
             <span>{days}d ago</span><span className="font-semibold">today</span>
           </div>
         </div>
@@ -492,41 +497,49 @@ export function ActivityAgentCount({ count, label }: { count: number; label: str
   )
 }
 
-/** Daily commit bars for the trailing `daysBack` days from raw unix-second timestamps. */
-export function CommitBars({ commitSecs, daysBack = 14 }: { commitSecs: number[]; daysBack?: number }) {
-  const [hover, setHover] = useState<string | null>(null)
-  const { buckets, max, total, start } = useMemo(() => {
+/** Daily commit bars for the trailing `daysBack` days from raw unix-second
+ *  timestamps. Hover a bar: commit count above it, date below it. `start`
+ *  (ms) anchors the buckets to the actual selected window — defaults to
+ *  "ending today" when the caller doesn't have a specific window (e.g. a
+ *  fixed past range like Previous Month wouldn't line up otherwise). */
+export function CommitBars({ commitSecs, daysBack = 14, start }: { commitSecs: number[]; daysBack?: number; start?: number }) {
+  const { buckets, max, total, rangeStart } = useMemo(() => {
     const midnight = new Date()
     midnight.setHours(0, 0, 0, 0)
-    const start = midnight.getTime() - (daysBack - 1) * DAY
+    const rangeStart = start ?? (midnight.getTime() - (daysBack - 1) * DAY)
     const buckets = Array(daysBack).fill(0)
     for (const sec of commitSecs) {
-      const idx = Math.floor((sec * 1000 - start) / DAY)
+      const idx = Math.floor((sec * 1000 - rangeStart) / DAY)
       if (idx >= 0 && idx < daysBack) buckets[idx]++
     }
-    return { buckets, max: Math.max(1, ...buckets), total: buckets.reduce((a: number, b: number) => a + b, 0), start }
-  }, [commitSecs, daysBack])
+    return { buckets, max: Math.max(1, ...buckets), total: buckets.reduce((a: number, b: number) => a + b, 0), rangeStart }
+  }, [commitSecs, daysBack, start])
 
   const dayLabel = (i: number) =>
-    new Date(start + i * DAY).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })
+    new Date(rangeStart + i * DAY).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })
 
   return (
-    <div onMouseLeave={() => setHover(null)}>
-      <HoverReadout text={hover} placeholder="hover a bar" />
+    <div>
       <div className="flex items-end gap-1 h-24">
         {buckets.map((v, i) => (
           <div
             key={i}
-            onMouseEnter={() => setHover(`${dayLabel(i)} · ${v} commit${v === 1 ? '' : 's'}`)}
-            className="flex-1 rounded-sm min-w-[3px] hover:ring-1 hover:ring-emerald-400"
+            className="relative group flex-1 rounded-sm min-w-[3px] hover:ring-1 hover:ring-emerald-400"
             style={{
               height: v === 0 ? '3px' : `${Math.max(8, (v / max) * 100)}%`,
               background: v === 0 ? 'var(--c-surface-2)' : 'linear-gradient(to top, #059669, #34d399)',
             }}
-          />
+          >
+            <span className="absolute bottom-full mb-1 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity text-[9px] font-mono text-[var(--c-text-2)] whitespace-nowrap pointer-events-none z-10">
+              {v} commit{v === 1 ? '' : 's'}
+            </span>
+            <span className="absolute top-full mt-1 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity text-[9px] font-mono text-[var(--c-text-3)] whitespace-nowrap pointer-events-none z-10">
+              {dayLabel(i)}
+            </span>
+          </div>
         ))}
       </div>
-      <div className="flex justify-between text-[9.5px] font-mono text-[var(--c-text-3)] mt-1">
+      <div className="flex justify-between text-[9.5px] font-mono text-[var(--c-text-3)] mt-5">
         <span>{daysBack - 1}d ago</span><span>today · {total} total</span>
       </div>
     </div>

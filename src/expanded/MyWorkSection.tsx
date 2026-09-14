@@ -247,14 +247,18 @@ export default function MyWorkSection({ sessions, repos, loading, goTo, onRefres
   const totalUsageTokens = useMemo(() => perAgentTotals.reduce((n, [, u]) => n + u.tokens, 0), [perAgentTotals])
   const totalUsageCost = useMemo(() => perAgentTotals.reduce((n, [, u]) => n + u.cost, 0), [perAgentTotals])
 
-  function dailyTokensForAgent(agent: string): number[] {
-    const buckets = Array(windowDays).fill(0)
+  function dailyUsageForAgent(agent: string): { tokens: number[]; costs: number[] } {
+    const tokens = Array(windowDays).fill(0)
+    const costs = Array(windowDays).fill(0)
     for (const s of insights?.perSession ?? []) {
       if (s.agent !== agent) continue
       const idx = Math.floor((s.ts - start) / DAY)
-      if (idx >= 0 && idx < windowDays) buckets[idx] += s.tokens
+      if (idx >= 0 && idx < windowDays) {
+        tokens[idx] += s.tokens
+        costs[idx] += s.estCostUsd ?? 0
+      }
     }
-    return buckets
+    return { tokens, costs }
   }
 
   // Same perSession rows back every day-level activity view below — no
@@ -620,6 +624,7 @@ export default function MyWorkSection({ sessions, repos, loading, goTo, onRefres
                       {perAgentTotals.map(([agent, u]) => {
                         const { label, hex } = agentColor(agent)
                         const expanded = expandedAgent === agent
+                        const daily = dailyUsageForAgent(agent)
                         return (
                           <div
                             key={agent}
@@ -640,7 +645,8 @@ export default function MyWorkSection({ sessions, repos, loading, goTo, onRefres
                               {formatTokens(u.tokens)} · ${u.cost.toFixed(2)}
                             </div>
                             <DailyBars
-                              values={dailyTokensForAgent(agent)}
+                              values={daily.tokens}
+                              costs={daily.costs}
                               start={start}
                               color={hex}
                               height={expanded ? 90 : 40}
@@ -656,7 +662,7 @@ export default function MyWorkSection({ sessions, repos, loading, goTo, onRefres
 
                 {windowCommits.length > 0 && (
                   <Card title="Commits per day" sub="All branches, all repos">
-                    <CommitBars commitSecs={windowCommits} daysBack={windowDays} />
+                    <CommitBars commitSecs={windowCommits} daysBack={windowDays} start={start} />
                   </Card>
                 )}
 
