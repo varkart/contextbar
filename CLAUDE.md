@@ -112,11 +112,86 @@ Defined by TOML manifests in `src-tauri/src/engine/manifests/`:
 
 ---
 
-## Adding a New Tool
+## Adding a New Tool (skills + MCP detection)
+
+This is one of **two separate extension points** for a coding agent — see
+below for the other (session history). A tool needs this one to show up in
+the tray popover at all; it needs the other one to appear in Sessions / My
+Work / token stats. Most fully-supported agents have both; some (e.g.
+Copilot, Cursor, Windsurf) currently only have this one, because they don't
+expose a parseable local session store.
 
 1. Create `src-tauri/src/engine/manifests/<name>.toml`
 2. Define `[[detection]]`, `[version]`, `[[skill_sources]]`, `[[mcp_sources]]` sections following the existing manifests
 3. Register it in `all_manifest_strs()` in `src-tauri/src/engine/mod.rs` — manifests are embedded via `include_str!` at compile time, so a file alone is not picked up
+
+---
+
+## Adding a New Coding Agent (session history / My Work / stats)
+
+Every agent with session-history support implements one trait —
+`SessionSource` in `src-tauri/src/engine/sessions/mod.rs`:
+
+```rust
+pub trait SessionSource: Sync {
+    fn agent_id(&self) -> &'static str;
+    /// Newest-first entries, at most `limit`.
+    fn list(&self, limit: usize) -> Vec<SessionEntry>;
+    fn get(&self, session_id: &str) -> Option<SessionDetail>;
+    /// Shell command that resumes work in `project` (id optional).
+    fn resume_command(&self, session_id: Option<&str>) -> String;
+    /// On-disk transcript backing this entry, used by the stats warm pass
+    /// for (mtime, size) staleness checks. None when the source can't map
+    /// an entry to a single file. Default provided — override only when
+    /// sessions do map to one file.
+    fn transcript_file(&self, entry: &SessionEntry) -> Option<std::path::PathBuf> {
+        let _ = entry;
+        None
+    }
+}
+```
+
+This one trait is the entire surface — every feature on Sessions and My Work
+is built on top of `list()`/`get()`, not implemented per-feature per-agent:
+
+- **Session list, live dot, resume button** — `list()`. Each source decides
+  its own "live" rule when building each `SessionEntry` (existing sources
+  use "transcript file modified in the last 5 minutes"); there's no shared
+  trait method for it.
+- **Transcript view** — `get()`, returning a `SessionDetail` (messages +
+  token usage in the source's own format, normalized to the shared
+  `Message`/`ContentBlock`/`TokenUsage` types in `engine/history/types.rs`).
+- **Token/cost stats, Top sessions/repos, Usage & cost, Activity** (My
+  Work) — all read from the `session_stats` SQLite cache, which the
+  background "warm" pass (`engine/history/stats.rs::warm`) populates by
+  calling `source.get()` on anything new or changed (per `transcript_file`'s
+  mtime/size) across **every** registered source — nothing agent-specific
+  needed here once `get()` exists.
+- **Resume** — `resume_command()`.
+
+Steps to add a new agent:
+
+1. Create `src-tauri/src/engine/sessions/<name>.rs` implementing
+   `SessionSource` — `list()` (newest-first, capped at `limit`), `get()`
+   (parse the agent's transcript format into `SessionDetail`),
+   `resume_command()`, and `transcript_file()` if sessions map to a single
+   file (needed for the stats cache to detect changes; skip it and the warm
+   pass just re-parses every time).
+2. Register the module (`pub mod <name>;`) and add an instance to the
+   `sources()` vec, both in `src-tauri/src/engine/sessions/mod.rs`.
+3. Add the agent to `AGENT_COLORS` in `src/constants/agentColors.ts` (label
+   + color) — not required (unknown agents get a deterministic hash-based
+   fallback color via `agentColor()`), but gives it a stable, chosen color
+   instead of whatever the hash lands on.
+4. That's it — Sessions, My Work (Active projects, Top sessions/repos,
+   Usage & cost, Activity), the command palette, and worktree-linked
+   sessions all pick it up automatically; none of them hardcode an agent
+   list.
+
+See `context-bar-ideas/multi-agent-sessions-plan.md` for the original
+implementation writeup (Codex/Gemini) — useful for the "why," but it predates
+`transcript_file()` and the current signature, so follow the trait above,
+not that doc, for the actual shape.
 
 ---
 
