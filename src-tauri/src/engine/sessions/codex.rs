@@ -405,6 +405,18 @@ impl SessionSource for CodexSource {
             None => "codex".to_string(),
         }
     }
+    // Verified locally (`codex --help`, `codex exec --help`): bare
+    // `codex [prompt]` starts an interactive session seeded with `prompt`;
+    // `codex exec [prompt]` runs the same prompt non-interactively and exits.
+    fn headless_command(&self, prompt_file: &Path) -> Option<String> {
+        Some(format!(
+            "codex exec \"$(cat '{}')\"",
+            super::shq(prompt_file)
+        ))
+    }
+    fn seed_interactive_command(&self, prompt_file: &Path) -> Option<String> {
+        Some(format!("codex \"$(cat '{}')\"", super::shq(prompt_file)))
+    }
 }
 
 #[cfg(test)]

@@ -386,6 +386,21 @@ impl SessionSource for GeminiSource {
         // --resume reopens the most recent session in this project.
         "gemini --resume".to_string()
     }
+    // From the gemini-cli docs, NOT locally verified (gemini isn't installed
+    // on the machine this was written on): `-p`/`--prompt` runs one turn
+    // non-interactively. https://google-gemini.github.io/gemini-cli/docs/cli/headless.html
+    // No seed_interactive_command — an equivalent "start interactive, seeded
+    // with an initial message" flag isn't documented, so this falls back to
+    // a bare interactive launch plus a clipboard copy.
+    fn headless_command(&self, prompt_file: &Path) -> Option<String> {
+        Some(format!(
+            "gemini -p \"$(cat '{}')\"",
+            super::shq(prompt_file)
+        ))
+    }
+    fn handoff_caveat(&self) -> Option<&'static str> {
+        Some("Headless summarization is unverified on this build — falls back to the raw transcript if it fails")
+    }
 }
 
 #[cfg(test)]

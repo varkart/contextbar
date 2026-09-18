@@ -9,6 +9,13 @@ pub mod kiro;
 pub mod opencode;
 
 use super::history::{self, SessionDetail, SessionEntry};
+use std::path::Path;
+
+/// Single-quote a path for embedding in a shell command; escapes embedded
+/// single quotes the same way `resume_shell_command` in lib.rs does.
+pub(crate) fn shq(path: &Path) -> String {
+    path.to_string_lossy().replace('\'', r"'\''")
+}
 
 pub trait SessionSource: Sync {
     fn agent_id(&self) -> &'static str;
@@ -22,6 +29,33 @@ pub trait SessionSource: Sync {
     /// an entry to a single file.
     fn transcript_file(&self, entry: &SessionEntry) -> Option<std::path::PathBuf> {
         let _ = entry;
+        None
+    }
+    /// One-shot non-interactive invocation of this agent's CLI, with
+    /// `prompt_file`'s content as the full instruction — used for the
+    /// handoff feature to have the *target* agent of a handoff condense the
+    /// *source* agent's transcript into a briefing, without this app needing
+    /// any model API key of its own. `None` when the agent has no headless/
+    /// print mode; the caller then falls back to the raw transcript.
+    fn headless_command(&self, prompt_file: &Path) -> Option<String> {
+        let _ = prompt_file;
+        None
+    }
+    /// Shell command that starts a NEW interactive session seeded with
+    /// `prompt_file`'s content as the opening message — used to drop a
+    /// handoff briefing straight into the target agent instead of requiring
+    /// a manual paste. `None` when the agent's CLI has no way to seed an
+    /// interactive session; the caller then opens a bare interactive session
+    /// (via `resume_command(None)`) and the frontend copies the briefing to
+    /// the clipboard instead.
+    fn seed_interactive_command(&self, prompt_file: &Path) -> Option<String> {
+        let _ = prompt_file;
+        None
+    }
+    /// Short caveat surfaced in the handoff agent picker when this agent's
+    /// headless/seed support is unverified or has an extra requirement (e.g.
+    /// a separate API key). `None` when there's nothing to flag.
+    fn handoff_caveat(&self) -> Option<&'static str> {
         None
     }
 }
@@ -47,6 +81,15 @@ impl SessionSource for ClaudeSource {
     fn transcript_file(&self, entry: &SessionEntry) -> Option<std::path::PathBuf> {
         let home = dirs::home_dir()?;
         history::session_file(&home, &entry.project, &entry.session_id)
+    }
+    // Verified locally (`claude --help`): bare `claude [prompt]` starts an
+    // interactive session seeded with `prompt`; `-p` runs the same prompt
+    // non-interactively and exits.
+    fn headless_command(&self, prompt_file: &Path) -> Option<String> {
+        Some(format!("claude -p \"$(cat '{}')\"", shq(prompt_file)))
+    }
+    fn seed_interactive_command(&self, prompt_file: &Path) -> Option<String> {
+        Some(format!("claude \"$(cat '{}')\"", shq(prompt_file)))
     }
 }
 

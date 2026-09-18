@@ -527,22 +527,13 @@ fn get_resume_command(
     resume_shell_command(&project, session_id.as_deref(), agent.as_deref()).map(|(cmd, _)| cmd)
 }
 
-/// Open Terminal.app / iTerm2 / Warp and resume the session's agent in
-/// `project`. Path must live under $HOME. Warp has no scripting interface to
-/// run a command on launch (confirmed: its `commands`/`exec` launch-config
-/// fields are silently ignored when triggered via URI — warpdotdev/Warp#9007),
-/// so for Warp we only open a tab at the right directory and return an error;
-/// callers fall back to copying the resume command to the clipboard, which
-/// every Resume button already does on failure.
-#[tauri::command]
-fn resume_in_terminal(
-    project: String,
-    session_id: Option<String>,
-    agent: Option<String>,
-) -> Result<(), String> {
-    let (shell_cmd, canonical) =
-        resume_shell_command(&project, session_id.as_deref(), agent.as_deref())?;
-
+/// Open Terminal.app / iTerm2 / Warp and run `shell_cmd` there, cd'd into
+/// `canonical` first. Warp has no scripting interface to run a command on
+/// launch (confirmed: its `commands`/`exec` launch-config fields are
+/// silently ignored when triggered via URI — warpdotdev/Warp#9007), so for
+/// Warp we only open a tab at the right directory and return an error;
+/// callers fall back to copying the command to the clipboard.
+fn open_terminal_running(canonical: &std::path::Path, shell_cmd: &str) -> Result<(), String> {
     if get_terminal() == "Warp" {
         let uri = format!(
             "warp://action/new_tab?path={}",
@@ -566,6 +557,103 @@ fn resume_in_terminal(
         .spawn()
         .map_err(|e| format!("failed to launch terminal: {e}"))?;
     Ok(())
+}
+
+/// Resume the session's agent in `project`. Path must live under $HOME.
+#[tauri::command]
+fn resume_in_terminal(
+    project: String,
+    session_id: Option<String>,
+    agent: Option<String>,
+) -> Result<(), String> {
+    let (shell_cmd, canonical) =
+        resume_shell_command(&project, session_id.as_deref(), agent.as_deref())?;
+    open_terminal_running(&canonical, &shell_cmd)
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct HandoffCandidateDto {
+    agent_id: String,
+    supports_condensing: bool,
+    supports_seeding: bool,
+    caveat: Option<String>,
+}
+
+/// Agents `session_agent` can hand off to, for the picker — every
+/// registered session source except itself.
+#[tauri::command]
+fn get_handoff_candidates(session_agent: String) -> Vec<HandoffCandidateDto> {
+    engine::handoff::candidates(&session_agent)
+        .into_iter()
+        .map(|c| HandoffCandidateDto {
+            agent_id: c.agent_id.to_string(),
+            supports_condensing: c.supports_condensing,
+            supports_seeding: c.supports_seeding,
+            caveat: c.caveat.map(str::to_string),
+        })
+        .collect()
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct HandoffOutcome {
+    file_name: String,
+    /// True when `target_agent` successfully condensed the transcript;
+    /// false when the file holds the raw transcript instead.
+    condensed: bool,
+    /// True when a new interactive session was opened in `target_agent`.
+    launched: bool,
+    /// Present when the frontend should copy this to the clipboard itself —
+    /// `target_agent` can't be pre-seeded, or the terminal launch failed.
+    clipboard_text: Option<String>,
+    caveat: Option<String>,
+}
+
+/// Condense `session_id` (from `source_agent`) into a handoff briefing via
+/// `target_agent`'s own CLI, write it into `project`, and open a new
+/// `target_agent` session there — seeded with the briefing when the CLI
+/// supports it, otherwise a bare session plus a clipboard copy for the
+/// frontend to paste manually.
+#[tauri::command]
+fn generate_handoff(
+    project: String,
+    source_agent: String,
+    session_id: String,
+    target_agent: String,
+) -> Result<HandoffOutcome, String> {
+    let canonical = validate_tool_path(&project)?;
+    let generated =
+        engine::handoff::generate(&canonical, &source_agent, &session_id, &target_agent)?;
+    let target = engine::sessions::source_for(&target_agent).ok_or("unknown target agent")?;
+
+    let seed_cmd = target.seed_interactive_command(&generated.file_path);
+    let launch_cmd = seed_cmd
+        .clone()
+        .unwrap_or_else(|| target.resume_command(None));
+    let path_str = canonical.to_string_lossy().replace('\'', r"'\''");
+    let shell_cmd = format!("cd '{path_str}' && {launch_cmd}");
+
+    let launched = open_terminal_running(&canonical, &shell_cmd).is_ok();
+    let seeded = seed_cmd.is_some() && launched;
+
+    let file_name = generated
+        .file_path
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_default();
+
+    Ok(HandoffOutcome {
+        file_name,
+        condensed: generated.condensed,
+        launched,
+        clipboard_text: if seeded {
+            None
+        } else {
+            Some(generated.content)
+        },
+        caveat: generated.caveat,
+    })
 }
 
 // ---------------------------------------------------------------------------
@@ -2806,6 +2894,8 @@ pub fn run() {
             get_git_cli_status,
             resume_in_terminal,
             get_resume_command,
+            get_handoff_candidates,
+            generate_handoff,
             get_file_mtimes,
             list_terminals,
             get_terminal,

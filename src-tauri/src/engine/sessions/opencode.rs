@@ -50,7 +50,7 @@ use crate::engine::history::types::{
 use rusqlite::{Connection, OpenFlags};
 use serde_json::Value;
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 pub struct OpencodeSource;
@@ -559,6 +559,18 @@ impl SessionSource for OpencodeSource {
             Some(id) => format!("opencode --session {id}"),
             None => "opencode".to_string(),
         }
+    }
+    // Verified locally (`opencode run --help`): `opencode run -f <file>` runs
+    // non-interactively and exits. No seed_interactive_command override —
+    // `opencode run` never leaves a persistent session, and the bare `opencode`
+    // TUI has no flag to open with an initial message, so there is no way to
+    // auto-seed an interactive opencode session; the caller falls back to a
+    // bare interactive launch plus a clipboard copy.
+    fn headless_command(&self, prompt_file: &Path) -> Option<String> {
+        Some(format!("opencode run -f '{}'", super::shq(prompt_file)))
+    }
+    fn handoff_caveat(&self) -> Option<&'static str> {
+        Some("Can't be pre-seeded with the briefing — you'll paste it in yourself after it opens")
     }
 }
 

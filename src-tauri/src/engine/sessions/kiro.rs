@@ -28,7 +28,7 @@
 
 use super::{file_mtime_ms, rfc3339_to_ms, SessionSource, MAX_SESSION_SPAN_MIN};
 use crate::engine::history::types::{ContentBlock, Message, SessionDetail, SessionEntry};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 pub struct KiroSource;
 
@@ -314,6 +314,22 @@ impl SessionSource for KiroSource {
             Some(id) => format!("kiro-cli chat --resume-id {id}"),
             None => "kiro-cli chat".to_string(),
         }
+    }
+    // From the Kiro CLI docs, NOT locally verified (kiro-cli isn't installed
+    // on the machine this was written on): `chat --no-interactive` runs one
+    // turn and exits. https://kiro.dev/docs/cli/headless/ — headless mode
+    // needs KIRO_API_KEY set separately from interactive/IDE auth, so this
+    // can fail even when `kiro-cli chat` itself works fine interactively; see
+    // handoff_caveat. No seed_interactive_command — an equivalent "start
+    // interactive, seeded with an initial message" flag isn't documented.
+    fn headless_command(&self, prompt_file: &Path) -> Option<String> {
+        Some(format!(
+            "kiro-cli chat --no-interactive \"$(cat '{}')\"",
+            super::shq(prompt_file)
+        ))
+    }
+    fn handoff_caveat(&self) -> Option<&'static str> {
+        Some("Needs KIRO_API_KEY set separately from your IDE login — falls back to the raw transcript if missing")
     }
 
     fn transcript_file(&self, entry: &SessionEntry) -> Option<PathBuf> {

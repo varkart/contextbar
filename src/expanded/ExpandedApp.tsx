@@ -367,6 +367,7 @@ export default function ExpandedApp() {
             scope={sessionsScope}
             onClearScope={() => setSessionsScope(null)}
             agentPreset={sessionsAgentPreset}
+            showToast={showToast}
           />
         )}
         {section === 'worktrees' && (
@@ -565,7 +566,7 @@ function sessionTimeCutoff(f: SessionTimeFilter): number {
   return Date.now() - 7 * 86_400_000
 }
 
-function SessionsSection({ sessions, loading, selected, onSelect, onRefresh, onLoadMore, hasMore, scope, onClearScope, agentPreset }: {
+function SessionsSection({ sessions, loading, selected, onSelect, onRefresh, onLoadMore, hasMore, scope, onClearScope, agentPreset, showToast }: {
   sessions: SessionEntry[]
   loading: boolean
   selected: SessionEntry | null
@@ -576,6 +577,7 @@ function SessionsSection({ sessions, loading, selected, onSelect, onRefresh, onL
   scope: { name: string; paths: string[] } | null
   onClearScope: () => void
   agentPreset: string | null
+  showToast: (type: 'success' | 'error', message: string) => void
 }) {
   const [timeFilter, setTimeFilter] = useState<SessionTimeFilter>('all')
   const [tokenBreakdownOpen, setTokenBreakdownOpen] = useState(false)
@@ -654,7 +656,7 @@ function SessionsSection({ sessions, loading, selected, onSelect, onRefresh, onL
         </div>
         <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
           {selected ? (
-            <SessionDetail key={selected.sessionId} session={selected} />
+            <SessionDetail key={selected.sessionId} session={selected} sessions={sessions} showToast={showToast} />
           ) : (
             <div className="flex-1 flex items-center justify-center">
               <p className="text-[13px] text-[var(--c-text-3)]">Select a session to view its transcript</p>

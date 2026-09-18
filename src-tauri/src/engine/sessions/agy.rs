@@ -16,7 +16,7 @@
 
 use super::{rfc3339_to_ms, SessionSource};
 use crate::engine::history::types::{ContentBlock, Message, SessionDetail, SessionEntry};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 pub struct AgySource;
 
@@ -275,6 +275,22 @@ impl SessionSource for AgySource {
 
     fn transcript_file(&self, entry: &SessionEntry) -> Option<PathBuf> {
         Some(transcript_path(&root()?, &entry.session_id))
+    }
+    // Verified locally (`agy --help`): `-p`/`--print` runs one prompt
+    // non-interactively and exits; `-i`/`--prompt-interactive` runs an
+    // initial prompt interactively and continues the session — agy is the
+    // only agent here with a CLI flag dedicated to exactly this.
+    fn headless_command(&self, prompt_file: &Path) -> Option<String> {
+        Some(format!(
+            "agy --print \"$(cat '{}')\"",
+            super::shq(prompt_file)
+        ))
+    }
+    fn seed_interactive_command(&self, prompt_file: &Path) -> Option<String> {
+        Some(format!(
+            "agy --prompt-interactive \"$(cat '{}')\"",
+            super::shq(prompt_file)
+        ))
     }
 }
 

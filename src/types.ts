@@ -486,3 +486,24 @@ export interface RepoWorktrees {
   /** Skill names under <root>/.claude/skills/. */
   repoSkills: string[]
 }
+
+export interface HandoffCandidate {
+  agentId: string
+  /** Can produce a condensed briefing via its own headless/print mode. */
+  supportsCondensing: boolean
+  /** Can be pre-seeded — a new session opens with the briefing as its first message. */
+  supportsSeeding: boolean
+  /** Shown under the agent in the handoff picker; null when there's nothing to flag. */
+  caveat: string | null
+}
+
+export interface HandoffOutcome {
+  fileName: string
+  /** True when the target agent condensed the transcript; false when the file is the raw transcript instead. */
+  condensed: boolean
+  /** True when a new session was opened in the target agent. */
+  launched: boolean
+  /** Present when the caller should copy this to the clipboard itself. */
+  clipboardText: string | null
+  caveat: string | null
+}

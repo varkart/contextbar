@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { invoke } from '@tauri-apps/api/core'
-import type { SessionEntry, SessionDetail as SessionDetailType, SessionMeta } from '../../types'
+import type { SessionEntry, SessionDetail as SessionDetailType, SessionMeta, HandoffCandidate, HandoffOutcome } from '../../types'
 import { formatTokens } from './SessionStats'
 import AgentBadge from './AgentBadge'
 import FindInPage from '../FindInPage'
@@ -129,9 +129,12 @@ function NameEditor({ sessionId, fallback, inheritedTitle }: { sessionId: string
 
 interface SessionDetailProps {
   session: SessionEntry
+  /** Full session list — used only to rank the handoff picker by which agents this project actually uses most. */
+  sessions: SessionEntry[]
+  showToast: (type: 'success' | 'error', message: string) => void
 }
 
-export default function SessionDetail({ session }: SessionDetailProps) {
+export default function SessionDetail({ session, sessions, showToast }: SessionDetailProps) {
   const [detail, setDetail] = useState<SessionDetailType | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -216,6 +219,58 @@ export default function SessionDetail({ session }: SessionDetailProps) {
 
   const flash = (set: (b: boolean) => void) => { set(true); setTimeout(() => set(false), 1300) }
   const copyPath = () => navigator.clipboard.writeText(session.project).then(() => flash(setCopiedPath), () => {})
+
+  // Handoff — move this session's context to a different coding agent, e.g.
+  // when this one's rate limit/budget is exhausted mid-task.
+  const [handoffOpen, setHandoffOpen] = useState(false)
+  const [handoffCandidates, setHandoffCandidates] = useState<HandoffCandidate[] | null>(null)
+  const [handoffBusy, setHandoffBusy] = useState<string | null>(null)
+
+  // Rank the picker by which agents this project actually uses, most first —
+  // a better default than an arbitrary/alphabetical list when several are installed.
+  const agentUsageRank = useMemo(() => {
+    const counts = new Map<string, number>()
+    for (const s of sessions) counts.set(s.agent, (counts.get(s.agent) ?? 0) + 1)
+    return counts
+  }, [sessions])
+
+  const toggleHandoffPicker = () => {
+    const next = !handoffOpen
+    setHandoffOpen(next)
+    if (next && !handoffCandidates) {
+      invoke<HandoffCandidate[]>('get_handoff_candidates', { sessionAgent: session.agent })
+        .then(list => {
+          const ranked = [...list].sort((a, b) => (agentUsageRank.get(b.agentId) ?? 0) - (agentUsageRank.get(a.agentId) ?? 0))
+          setHandoffCandidates(ranked)
+        })
+        .catch(() => setHandoffCandidates([]))
+    }
+  }
+
+  const chooseHandoffTarget = async (targetAgent: string) => {
+    setHandoffBusy(targetAgent)
+    try {
+      const outcome = await invoke<HandoffOutcome>('generate_handoff', {
+        project: session.project,
+        sourceAgent: session.agent,
+        sessionId: session.sessionId,
+        targetAgent,
+      })
+      if (outcome.clipboardText) {
+        await navigator.clipboard.writeText(outcome.clipboardText).catch(() => {})
+      }
+      const briefing = outcome.condensed ? 'condensed briefing' : 'raw transcript (condensing wasn’t available)'
+      const delivery = outcome.launched
+        ? (outcome.clipboardText ? `opened ${targetAgent} — paste the ${briefing} you now have on your clipboard` : `opened ${targetAgent}, seeded with the ${briefing}`)
+        : `saved ${outcome.fileName} — copied the ${briefing} to your clipboard, open ${targetAgent} yourself and paste it in`
+      showToast('success', delivery)
+    } catch (e) {
+      showToast('error', `Handoff to ${targetAgent} failed: ${String(e)}`)
+    } finally {
+      setHandoffBusy(null)
+      setHandoffOpen(false)
+    }
+  }
 
   const toolCount = detail?.messages.reduce(
     (acc, m) => acc + m.content.filter(b => b.blockType === 'tool_use').length,
@@ -361,6 +416,43 @@ export default function SessionDetail({ session }: SessionDetailProps) {
             >
               {copied ? '✓' : '⧉'}
             </button>
+            <div className="relative">
+              <button
+                onClick={toggleHandoffPicker}
+                title="Hand off this session to a different agent"
+                aria-label="Hand off this session to a different agent"
+                className={`text-[12px] w-6 h-6 flex items-center justify-center rounded-md border transition-colors ${handoffOpen ? 'border-[var(--c-accent)]/50 bg-[var(--c-accent)]/10 text-[var(--c-accent)]' : 'border-[var(--c-border)] text-[var(--c-text-3)] hover:text-[var(--c-text-2)] hover:border-[var(--c-accent)]/40'}`}
+              >
+                ⇄
+              </button>
+              {handoffOpen && (
+                <div className="absolute right-0 top-7 z-20 w-64 rounded-lg border border-[var(--c-border)] bg-[var(--c-surface)] shadow-lg py-1">
+                  <p className="px-2.5 py-1.5 text-[10px] uppercase tracking-wider text-[var(--c-text-3)]">Hand off to</p>
+                  {handoffCandidates === null && (
+                    <p className="px-2.5 py-2 text-[12px] text-[var(--c-text-3)]">Loading…</p>
+                  )}
+                  {handoffCandidates?.length === 0 && (
+                    <p className="px-2.5 py-2 text-[12px] text-[var(--c-text-3)]">No other agents with session history found</p>
+                  )}
+                  {handoffCandidates?.map(c => (
+                    <button
+                      key={c.agentId}
+                      onClick={() => chooseHandoffTarget(c.agentId)}
+                      disabled={handoffBusy !== null}
+                      className="w-full text-left px-2.5 py-1.5 hover:bg-[var(--c-hover)] transition-colors disabled:opacity-50"
+                    >
+                      <div className="flex items-center gap-1.5">
+                        <AgentBadge agent={c.agentId} className="flex-shrink-0" />
+                        {handoffBusy === c.agentId && <span className="text-[10px] text-[var(--c-text-3)]">working…</span>}
+                      </div>
+                      {c.caveat && (
+                        <p className="mt-0.5 text-[10px] text-amber-400/90 leading-snug">{c.caveat}</p>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
