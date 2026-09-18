@@ -1,3 +1,4 @@
+pub mod handoff;
 pub mod history;
 pub mod jsonc;
 pub mod manifest;
