@@ -390,6 +390,108 @@ export function DailyBars({ values, costs, start, color, height = 64, maxBars, f
   )
 }
 
+/** Multi-agent daily bar chart — each bar stacks one color segment per
+ *  active agent (or renders as a single solid color when only one agent is
+ *  active, e.g. a filter chip other than "All"). Shares DailyBars' axis/
+ *  gridline/hover-vs-tick-label conventions so the two charts read the same
+ *  way side by side. Used by Usage & cost and Hours spent, which both need
+ *  "everyone stacked" plus a per-agent filter over the same day grid. */
+export function AgentStackedBars({ seriesByDay, activeAgents, colorFor, start, height = 90, formatValue }: {
+  /** One entry per day; each maps agent id → that agent's value for the day. */
+  seriesByDay: Record<string, number>[]
+  activeAgents: string[]
+  colorFor: (agent: string) => string
+  start: number
+  height?: number
+  formatValue: (v: number) => string
+}) {
+  const totals = useMemo(
+    () => seriesByDay.map(day => activeAgents.reduce((sum, a) => sum + (day[a] ?? 0), 0)),
+    [seriesByDay, activeAgents]
+  )
+  const max = Math.max(1, ...totals)
+  const days = seriesByDay.length
+
+  const dayLabel = (i: number) => new Date(start + i * DAY).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })
+  const tickLabel = (i: number) => dayLabel(i).replace(/^\w+, /, '')
+  const tickIndices = useMemo(() => axisTickIndices(days), [days])
+
+  return (
+    <div>
+      <div className="flex items-stretch gap-1.5">
+        <div className="flex flex-col justify-between items-end text-[8px] font-mono text-[var(--c-text-3)] shrink-0" style={{ height }}>
+          <span>{formatValue(max)}</span>
+          <span>{formatValue(max / 2)}</span>
+          <span>0</span>
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="relative flex items-end gap-px border-l border-[var(--c-border-sub)] pl-1" style={{ height }}>
+            <div className="absolute left-1 right-0 top-0" style={GRIDLINE_STYLE} />
+            <div className="absolute left-1 right-0 top-1/2" style={GRIDLINE_STYLE} />
+            <div className="absolute left-1 right-0 bottom-0" style={GRIDLINE_STYLE} />
+            {totals.map((total, i) => (
+              <div
+                key={i}
+                className="relative group flex-1 rounded-sm min-w-[1px] flex flex-col-reverse overflow-hidden"
+                style={{ height: total === 0 ? '2px' : `${Math.max(4, (total / max) * 100)}%` }}
+              >
+                {total === 0 ? (
+                  <div className="flex-1" style={{ background: 'var(--c-surface-2)' }} />
+                ) : (
+                  activeAgents
+                    .filter(a => (seriesByDay[i][a] ?? 0) > 0)
+                    .map(a => (
+                      <div key={a} style={{ height: `${((seriesByDay[i][a] ?? 0) / total) * 100}%`, background: colorFor(a) }} />
+                    ))
+                )}
+                <span className="absolute bottom-full mb-1 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity text-[9px] font-mono text-[var(--c-text-2)] whitespace-nowrap pointer-events-none z-10">
+                  {formatValue(total)}
+                </span>
+                {!tickIndices.has(i) && (
+                  <span className="absolute top-full mt-1 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity text-[9px] font-mono text-[var(--c-text-3)] whitespace-nowrap pointer-events-none z-10">
+                    {dayLabel(i)}
+                  </span>
+                )}
+              </div>
+            ))}
+          </div>
+          <div className="flex gap-px pl-1 mt-1">
+            {seriesByDay.map((_, i) => (
+              <div key={i} className="flex-1 min-w-[1px] text-center text-[8px] font-mono text-[var(--c-text-3)] truncate">
+                {tickIndices.has(i) ? tickLabel(i) : ' '}
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/** Ranked horizontal bars showing each agent's share of a total — the
+ *  "Usage per agent" tile. Widths are relative to the largest agent, not to
+ *  100%, so the leader always reads as a full-length bar. */
+export function RankedAgentBars({ items }: {
+  items: { agent: string; label: string; color: string; value: number; formatted: string; pct: number }[]
+}) {
+  const max = Math.max(1, ...items.map(i => i.value))
+  return (
+    <div className="flex flex-col gap-1.5">
+      {items.map(item => (
+        <div key={item.agent} className="flex items-center gap-2 text-[11px]">
+          <span className="w-16 shrink-0 truncate">{item.label}</span>
+          <div className="flex-1 h-2.5 rounded-full bg-[var(--c-surface-2)] overflow-hidden">
+            <div className="h-full rounded-full" style={{ width: `${(item.value / max) * 100}%`, background: item.color }} />
+          </div>
+          <span className="w-24 shrink-0 text-right font-mono text-[10px] text-[var(--c-text-3)]">
+            {item.formatted} · {item.pct}%
+          </span>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 const ACTIVITY_LEVEL_COLORS = [
   'var(--c-surface-2)',
   'color-mix(in srgb, #34d399 25%, var(--c-surface-2))',
