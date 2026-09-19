@@ -506,10 +506,6 @@ const ACTIVITY_LEVEL_COLORS = [
   '#34d399',
 ]
 const DOW_LABELS = ['S', 'M', 'T', 'W', 'T', 'F', 'S']
-// Cells scale with the card's width (up to this cap) instead of a fixed
-// small size — a half-row card has plenty of room the old 13px cells left
-// empty.
-const ACTIVITY_GRID_MAX_WIDTH = 260
 
 function activityLevel(sessionCount: number): number {
   if (sessionCount <= 0) return 0
@@ -556,10 +552,10 @@ export function ActivityCalendar({ sessionCounts, monthDate, onNavigate, canGoPr
         >›</button>
       </div>
       <div className="text-right h-3 mb-1.5 text-[10px] font-mono text-[var(--c-text-3)]">{hover ?? 'Hover a day for details'}</div>
-      <div className="grid gap-1 mb-1" style={{ gridTemplateColumns: 'repeat(7, minmax(0, 1fr))', maxWidth: ACTIVITY_GRID_MAX_WIDTH }}>
+      <div className="grid gap-1 mb-1" style={{ gridTemplateColumns: 'repeat(7, minmax(0, 1fr))' }}>
         {DOW_LABELS.map((d, i) => <div key={i} className="text-center text-[9px] text-[var(--c-text-3)]">{d}</div>)}
       </div>
-      <div className="grid gap-1" style={{ gridTemplateColumns: 'repeat(7, minmax(0, 1fr))', maxWidth: ACTIVITY_GRID_MAX_WIDTH }} onMouseLeave={() => setHover(null)}>
+      <div className="grid gap-1" style={{ gridTemplateColumns: 'repeat(7, minmax(0, 1fr))' }} onMouseLeave={() => setHover(null)}>
         {cells.map((d, i) => {
           if (d === null) return <div key={i} style={{ aspectRatio: '1' }} />
           const date = new Date(year, month, d)
@@ -600,10 +596,10 @@ export function ActivityWeekRow({ sessionCounts }: { sessionCounts: Map<string, 
   return (
     <div>
       <div className="text-right h-3 mb-1.5 text-[10px] font-mono text-[var(--c-text-3)]">{hover ?? 'Hover a day for details'}</div>
-      <div className="grid gap-1 mb-1" style={{ gridTemplateColumns: 'repeat(7, minmax(0, 1fr))', maxWidth: ACTIVITY_GRID_MAX_WIDTH }}>
+      <div className="grid gap-1 mb-1" style={{ gridTemplateColumns: 'repeat(7, minmax(0, 1fr))' }}>
         {DOW_LABELS.map((d, i) => <div key={i} className="text-center text-[9px] text-[var(--c-text-3)]">{d}</div>)}
       </div>
-      <div className="grid gap-1" style={{ gridTemplateColumns: 'repeat(7, minmax(0, 1fr))', maxWidth: ACTIVITY_GRID_MAX_WIDTH }} onMouseLeave={() => setHover(null)}>
+      <div className="grid gap-1" style={{ gridTemplateColumns: 'repeat(7, minmax(0, 1fr))' }} onMouseLeave={() => setHover(null)}>
         {days.map((date, i) => {
           const isFuture = date > today
           const isToday = date.getTime() === today.getTime()

@@ -880,18 +880,21 @@ export default function MyWorkSection({ sessions, repos, loading, goTo, onRefres
                       {(() => {
                         const [agent, u] = perAgentTotals[0]
                         const { label, hex } = agentColor(agent)
+                        const avgPerSession = stats.sessions > 0 ? u.tokens / stats.sessions : 0
                         return (
-                          <div className="flex items-center gap-3 py-2">
-                            <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: hex }} />
-                            <div className="min-w-0">
-                              <div className="text-[14px] font-semibold">{label}</div>
-                              <div className="text-[11px] text-[var(--c-text-3)]">Only agent used this window</div>
+                          <>
+                            <div className="flex items-center gap-2 mb-2.5">
+                              <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: hex }} />
+                              <span className="text-[13px] font-semibold">{label}</span>
+                              <span className="text-[11px] text-[var(--c-text-3)]">— only agent used this window</span>
                             </div>
-                            <div className="ml-auto text-right">
-                              <div className="text-[18px] font-bold font-mono">{formatTokens(u.tokens)}</div>
-                              <div className="text-[11px] text-[var(--c-text-3)]">${u.cost.toFixed(2)} estimated</div>
+                            <div className="grid grid-cols-2 gap-2">
+                              <StatBox value={formatTokens(u.tokens)} label="total tokens" color={hex} />
+                              <StatBox value={`$${u.cost.toFixed(2)}`} label="estimated cost" hint="Estimated from this model's published per-token pricing — not a billed amount." />
+                              <StatBox value={stats.sessions} label={`session${stats.sessions === 1 ? '' : 's'}`} />
+                              <StatBox value={formatTokens(avgPerSession)} label="avg tokens / session" />
                             </div>
-                          </div>
+                          </>
                         )
                       })()}
                     </Card>
