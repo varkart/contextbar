@@ -127,7 +127,6 @@ export default function MyWorkSection({ sessions, repos, loading, goTo, onRefres
   const [customRange, setCustomRange] = useState<{ start: number; end: number } | null>(null)
   const [showAdvancedPicker, setShowAdvancedPicker] = useState(false)
   const [monthOffset, setMonthOffset] = useState(0)
-  const [expandedAgent, setExpandedAgent] = useState<string | null>(null)
 
   useEffect(() => {
     invoke<boolean>('is_vscode_installed').then(setVscodeAvailable).catch(() => {})
@@ -632,41 +631,32 @@ export default function MyWorkSection({ sessions, repos, loading, goTo, onRefres
                       <span className="text-[18px] font-bold">{formatTokens(totalUsageTokens)}</span>
                       <span className="text-[12px] text-[var(--c-text-3)]">· ${totalUsageCost.toFixed(2)} estimated</span>
                     </div>
-                    {/* Capped + wrapping, like Active projects — this has to hold up
-                        whether someone uses 1 agent or all 9 supported ones. Each
-                        tile carries a full chart, so cap tighter than the plainer
-                        project tiles (4 vs 6) to keep the y-axis legible. */}
-                    <div className="grid gap-2.5" style={{ gridTemplateColumns: `repeat(${Math.min(4, perAgentTotals.length)},1fr)` }}>
+                    {/* Always full width, full resolution — one per row, no
+                        collapsed/summary state. */}
+                    <div className="flex flex-col gap-2.5">
                       {perAgentTotals.map(([agent, u]) => {
                         const { label, hex } = agentColor(agent)
-                        const expanded = expandedAgent === agent
                         const daily = dailyUsageForAgent(agent)
                         return (
                           <div
                             key={agent}
                             className="rounded-lg border border-[var(--c-border)] bg-[var(--c-surface-2)]/40 p-2.5 min-w-0"
-                            style={expanded ? { gridColumn: '1 / -1' } : undefined}
                           >
-                            <button
-                              onClick={() => setExpandedAgent(expanded ? null : agent)}
-                              className="w-full flex items-center justify-between gap-1.5 mb-1"
-                            >
+                            <div className="flex items-center justify-between gap-1.5 mb-1">
                               <span className="flex items-center gap-1.5 min-w-0">
                                 <span className="w-2 h-2 rounded-sm shrink-0" style={{ background: hex }} />
                                 <span className="text-[12.5px] font-semibold truncate">{label}</span>
                               </span>
-                              <span className="text-[10px] text-[var(--c-text-3)] shrink-0">{expanded ? '‹ collapse' : 'expand ›'}</span>
-                            </button>
-                            <div className="text-[10.5px] text-[var(--c-text-3)] mb-1.5">
-                              {formatTokens(u.tokens)} · ${u.cost.toFixed(2)}
+                              <span className="text-[10.5px] text-[var(--c-text-3)] shrink-0">
+                                {formatTokens(u.tokens)} · ${u.cost.toFixed(2)}
+                              </span>
                             </div>
                             <DailyBars
                               values={daily.tokens}
                               costs={daily.costs}
                               start={start}
                               color={hex}
-                              height={expanded ? 90 : 40}
-                              maxBars={expanded ? undefined : 16}
+                              height={90}
                               formatValue={v => formatTokens(v)}
                             />
                           </div>

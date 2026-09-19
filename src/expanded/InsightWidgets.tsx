@@ -4,6 +4,22 @@ import { formatTokens } from '../components/history/SessionStats'
 
 const DAY = 86_400_000
 
+/** Evenly-spaced bar indices (first, last, and up to 4 in between) to label
+ *  on a bar chart's x-axis, so comparing two points doesn't require hovering
+ *  every bar in between. */
+function axisTickIndices(count: number): Set<number> {
+  if (count <= 1) return new Set([0])
+  const ticks = Math.min(6, count)
+  const idxs = new Set<number>()
+  for (let i = 0; i < ticks; i++) idxs.add(Math.round((i * (count - 1)) / (ticks - 1)))
+  return idxs
+}
+
+/** Dashed gridline — thick + high-contrast enough to actually read against
+ *  the chart background, unlike a 1px `border-dashed` in the subtle border
+ *  color which disappears entirely. */
+const GRIDLINE_STYLE = { borderTop: '2px dashed var(--c-border)' }
+
 export function shortModel(model: string): string {
   return model.replace(/^claude-/, '').replace(/-\d{8}$/, '')
 }
@@ -327,6 +343,8 @@ export function DailyBars({ values, costs, start, color, height = 64, maxBars, f
     const s = bi * groupSize, e = Math.min(days - 1, s + groupSize - 1)
     return groupSize > 1 ? `${dayLabel(s)} – ${dayLabel(e)}` : dayLabel(s)
   }
+  const tickLabel = (bi: number) => dayLabel(bi * groupSize).replace(/^\w+, /, '')
+  const tickIndices = useMemo(() => axisTickIndices(buckets.length), [buckets.length])
 
   return (
     <div>
@@ -337,7 +355,10 @@ export function DailyBars({ values, costs, start, color, height = 64, maxBars, f
           <span>0</span>
         </div>
         <div className="flex-1 min-w-0">
-          <div className="flex items-end gap-px border-l border-[var(--c-border-sub)] pl-1" style={{ height }}>
+          <div className="relative flex items-end gap-px border-l border-[var(--c-border-sub)] pl-1" style={{ height }}>
+            <div className="absolute left-1 right-0 top-0" style={GRIDLINE_STYLE} />
+            <div className="absolute left-1 right-0 top-1/2" style={GRIDLINE_STYLE} />
+            <div className="absolute left-1 right-0 bottom-0" style={GRIDLINE_STYLE} />
             {buckets.map((v, i) => (
               <div
                 key={i}
@@ -347,14 +368,21 @@ export function DailyBars({ values, costs, start, color, height = 64, maxBars, f
                 <span className="absolute bottom-full mb-1 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity text-[9px] font-mono text-[var(--c-text-2)] whitespace-nowrap pointer-events-none z-10">
                   {formatValue(v)}{bucketCosts ? ` · $${bucketCosts[i].toFixed(2)}` : ''}
                 </span>
-                <span className="absolute top-full mt-1 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity text-[9px] font-mono text-[var(--c-text-3)] whitespace-nowrap pointer-events-none z-10">
-                  {bucketLabel(i)}
-                </span>
+                {/* Bars with a permanent x-axis tick already show their date below the chart — repeating it here on hover would overlap it. */}
+                {!tickIndices.has(i) && (
+                  <span className="absolute top-full mt-1 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity text-[9px] font-mono text-[var(--c-text-3)] whitespace-nowrap pointer-events-none z-10">
+                    {bucketLabel(i)}
+                  </span>
+                )}
               </div>
             ))}
           </div>
-          <div className="flex justify-between text-[8.5px] font-mono text-[var(--c-text-3)] mt-5 pl-1">
-            <span>{days}d ago</span><span className="font-semibold">today</span>
+          <div className="flex gap-px pl-1 mt-1">
+            {buckets.map((_, i) => (
+              <div key={i} className="flex-1 min-w-[1px] text-center text-[8px] font-mono text-[var(--c-text-3)] truncate">
+                {tickIndices.has(i) ? tickLabel(i) : ' '}
+              </div>
+            ))}
           </div>
         </div>
       </div>
@@ -517,30 +545,52 @@ export function CommitBars({ commitSecs, daysBack = 14, start }: { commitSecs: n
 
   const dayLabel = (i: number) =>
     new Date(rangeStart + i * DAY).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })
+  const tickLabel = (i: number) => dayLabel(i).replace(/^\w+, /, '')
+  const tickIndices = useMemo(() => axisTickIndices(buckets.length), [buckets.length])
+  const chartHeight = 96
 
   return (
     <div>
-      <div className="flex items-end gap-1 h-24">
-        {buckets.map((v, i) => (
-          <div
-            key={i}
-            className="relative group flex-1 rounded-sm min-w-[3px] hover:ring-1 hover:ring-emerald-400"
-            style={{
-              height: v === 0 ? '3px' : `${Math.max(8, (v / max) * 100)}%`,
-              background: v === 0 ? 'var(--c-surface-2)' : 'linear-gradient(to top, #059669, #34d399)',
-            }}
-          >
-            <span className="absolute bottom-full mb-1 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity text-[9px] font-mono text-[var(--c-text-2)] whitespace-nowrap pointer-events-none z-10">
-              {v} commit{v === 1 ? '' : 's'}
-            </span>
-            <span className="absolute top-full mt-1 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity text-[9px] font-mono text-[var(--c-text-3)] whitespace-nowrap pointer-events-none z-10">
-              {dayLabel(i)}
-            </span>
+      <div className="flex items-stretch gap-1.5">
+        <div className="flex flex-col justify-between items-end text-[8px] font-mono text-[var(--c-text-3)] shrink-0" style={{ height: chartHeight }}>
+          <span>{max}</span>
+          <span>{Math.round(max / 2)}</span>
+          <span>0</span>
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="relative flex items-end gap-1 border-l border-[var(--c-border-sub)] pl-1" style={{ height: chartHeight }}>
+            <div className="absolute left-1 right-0 top-0" style={GRIDLINE_STYLE} />
+            <div className="absolute left-1 right-0 top-1/2" style={GRIDLINE_STYLE} />
+            <div className="absolute left-1 right-0 bottom-0" style={GRIDLINE_STYLE} />
+            {buckets.map((v, i) => (
+              <div
+                key={i}
+                className="relative group flex-1 rounded-sm min-w-[3px] hover:ring-1 hover:ring-emerald-400"
+                style={{
+                  height: v === 0 ? '3px' : `${Math.max(8, (v / max) * 100)}%`,
+                  background: v === 0 ? 'var(--c-surface-2)' : 'linear-gradient(to top, #059669, #34d399)',
+                }}
+              >
+                <span className="absolute bottom-full mb-1 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity text-[9px] font-mono text-[var(--c-text-2)] whitespace-nowrap pointer-events-none z-10">
+                  {v} commit{v === 1 ? '' : 's'}
+                </span>
+                {!tickIndices.has(i) && (
+                  <span className="absolute top-full mt-1 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity text-[9px] font-mono text-[var(--c-text-3)] whitespace-nowrap pointer-events-none z-10">
+                    {dayLabel(i)}
+                  </span>
+                )}
+              </div>
+            ))}
           </div>
-        ))}
-      </div>
-      <div className="flex justify-between text-[9.5px] font-mono text-[var(--c-text-3)] mt-5">
-        <span>{daysBack - 1}d ago</span><span>today · {total} total</span>
+          <div className="flex gap-1 pl-1 mt-1">
+            {buckets.map((_, i) => (
+              <div key={i} className="flex-1 min-w-[3px] text-center text-[8px] font-mono text-[var(--c-text-3)] truncate">
+                {tickIndices.has(i) ? tickLabel(i) : ' '}
+              </div>
+            ))}
+          </div>
+          <div className="text-right text-[9.5px] font-mono text-[var(--c-text-3)] mt-1">{total} total</div>
+        </div>
       </div>
     </div>
   )

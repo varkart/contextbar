@@ -503,7 +503,11 @@ fn resume_shell_command(
 ) -> Result<(String, std::path::PathBuf), String> {
     let canonical = validate_tool_path(project)?;
     if let Some(id) = session_id {
-        if id.is_empty() || !id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-') {
+        if id.is_empty()
+            || !id
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+        {
             return Err("invalid session id".into());
         }
     }
@@ -3010,8 +3014,33 @@ fn show_expanded_window(app: &tauri::AppHandle, section: Option<&str>) {
 mod tests {
     use super::{
         build_json_mcp_entry, github_blob_to_raw, parse_github_repo_url, percent_encode_path,
-        skill_md_in_scope, skill_name_for, validate_skill_content, validate_tool_path,
+        resume_shell_command, skill_md_in_scope, skill_name_for, validate_skill_content,
+        validate_tool_path,
     };
+
+    #[test]
+    fn resume_shell_command_accepts_opencode_underscore_ids() {
+        let home = dirs::home_dir().unwrap();
+        let (cmd, _) = resume_shell_command(
+            home.to_str().unwrap(),
+            Some("ses_f95be6104ffeLwDDmkIqIr9x3C"),
+            Some("opencode"),
+        )
+        .expect("underscore session id should be accepted");
+        assert!(cmd.contains("opencode --session ses_f95be6104ffeLwDDmkIqIr9x3C"));
+    }
+
+    #[test]
+    fn resume_shell_command_rejects_shell_metacharacters_in_session_id() {
+        let home = dirs::home_dir().unwrap();
+        let err = resume_shell_command(
+            home.to_str().unwrap(),
+            Some("abc; rm -rf /"),
+            Some("claude"),
+        )
+        .unwrap_err();
+        assert_eq!(err, "invalid session id");
+    }
 
     #[test]
     fn build_json_mcp_entry_default_shape_unchanged() {
