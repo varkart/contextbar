@@ -1,11 +1,13 @@
 import { useState, useEffect, useMemo } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
-import type { RepoWorktrees, SessionEntry, SessionInsights } from '../types'
+import type { RepoWorktrees, SessionEntry, SessionInsights, AgentActivityPoint } from '../types'
+import type { CommitEntry } from '../types'
 import type { Section } from './ExpandedApp'
 import {
   Card, CommitBars, RefreshButton, SkeletonTiles, SkeletonCards,
-  DailyBars, ActivityCalendar, ActivityWeekRow, ActivityAgentCount,
+  ActivityCalendar, ActivityWeekRow, ActivityAgentCount,
+  AgentStackedBars, RankedAgentBars,
 } from './InsightWidgets'
 import AgentBadge from '../components/history/AgentBadge'
 import { formatTokens } from '../components/history/SessionStats'
@@ -13,6 +15,7 @@ import { agentColor } from '../constants/agentColors'
 
 const DAY = 86_400_000
 const PALETTE = ['#6366f1', '#e8a94a', '#d98fd9', '#5fc9b8', '#7aa2e8', '#8fbf6b']
+const WEEKDAY_LABELS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
 const MAX_ADVANCED_DAYS = 90
 
 type Tab = 'today' | 'yesterday' | 'week' | 'month' | 'prevMonth' | 'last3' | 'advanced'
@@ -121,12 +124,16 @@ interface MyWorkSectionProps {
 export default function MyWorkSection({ sessions, repos, loading, goTo, onRefresh, onOpenSession, onOpenSessionById, onOpenSessionsForProject, onFocusWorktree, showToast }: MyWorkSectionProps) {
   const [tab, setTab] = useState<Tab>('month')
   const [copiedResume, setCopiedResume] = useState<string | null>(null)
-  const [commitTs, setCommitTs] = useState<number[]>([])
+  const [commits, setCommits] = useState<CommitEntry[]>([])
   const [vscodeAvailable, setVscodeAvailable] = useState(false)
   const [firstSessionTs, setFirstSessionTs] = useState<number | null>(null)
   const [customRange, setCustomRange] = useState<{ start: number; end: number } | null>(null)
   const [showAdvancedPicker, setShowAdvancedPicker] = useState(false)
   const [monthOffset, setMonthOffset] = useState(0)
+  const [usageAgentFilter, setUsageAgentFilter] = useState('all')
+  const [hoursAgentFilter, setHoursAgentFilter] = useState('all')
+  const [commitsRepoFilter, setCommitsRepoFilter] = useState('all')
+  const [agentActivity, setAgentActivity] = useState<AgentActivityPoint[]>([])
 
   useEffect(() => {
     invoke<boolean>('is_vscode_installed').then(setVscodeAvailable).catch(() => {})
@@ -194,11 +201,32 @@ export default function MyWorkSection({ sessions, repos, loading, goTo, onRefres
 
   // Commits restricted to the selected window; bar chart spans exactly it.
   useEffect(() => {
-    invoke<number[]>('get_commit_activity', { sinceDays: windowDays }).then(setCommitTs).catch(() => {})
+    invoke<CommitEntry[]>('get_commit_activity', { sinceDays: windowDays }).then(setCommits).catch(() => {})
   }, [windowDays])
+  const windowCommitEntries = useMemo(
+    () => commits.filter(c => c.ts * 1000 >= start && c.ts * 1000 < end),
+    [commits, start, end]
+  )
+  const commitRepos = useMemo(
+    () => [...new Set(windowCommitEntries.map(c => c.repoName))].sort(),
+    [windowCommitEntries]
+  )
   const windowCommits = useMemo(
-    () => commitTs.filter(sec => sec * 1000 >= start && sec * 1000 < end),
-    [commitTs, start, end]
+    () => windowCommitEntries
+      .filter(c => commitsRepoFilter === 'all' || c.repoName === commitsRepoFilter)
+      .map(c => c.ts),
+    [windowCommitEntries, commitsRepoFilter]
+  )
+
+  // Hours spent per agent — live from each source's own list() (no DB cache
+  // involved, same pipeline the per-agent Activity chart in Tools uses), so
+  // it needs its own upper-bound filter the same way commits does above.
+  useEffect(() => {
+    invoke<AgentActivityPoint[]>('get_agent_activity', { sinceMs: start }).then(setAgentActivity).catch(() => {})
+  }, [start])
+  const windowActivity = useMemo(
+    () => agentActivity.filter(p => p.tsMs >= start && p.tsMs < end),
+    [agentActivity, start, end]
   )
 
   // Real tokens + cost for the selected window, from the same aggregator
@@ -258,19 +286,47 @@ export default function MyWorkSection({ sessions, repos, loading, goTo, onRefres
   const totalUsageTokens = useMemo(() => perAgentTotals.reduce((n, [, u]) => n + u.tokens, 0), [perAgentTotals])
   const totalUsageCost = useMemo(() => perAgentTotals.reduce((n, [, u]) => n + u.cost, 0), [perAgentTotals])
 
-  function dailyUsageForAgent(agent: string): { tokens: number[]; costs: number[] } {
-    const tokens = Array(windowDays).fill(0)
-    const costs = Array(windowDays).fill(0)
+  // One entry per day, each mapping agent → tokens that day — feeds the
+  // unified (filterable) Usage & cost chart instead of a DailyBars-per-agent
+  // loop, so "All" renders every agent stacked in one chart.
+  const dailyUsageMatrix = useMemo(() => {
+    const days: Record<string, number>[] = Array.from({ length: windowDays }, () => ({}))
     for (const s of insights?.perSession ?? []) {
-      if (s.agent !== agent) continue
       const idx = Math.floor((s.ts - start) / DAY)
-      if (idx >= 0 && idx < windowDays) {
-        tokens[idx] += s.tokens
-        costs[idx] += s.estCostUsd ?? 0
-      }
+      if (idx >= 0 && idx < windowDays) days[idx][s.agent] = (days[idx][s.agent] ?? 0) + s.tokens
     }
-    return { tokens, costs }
-  }
+    return days
+  }, [insights, start, windowDays])
+  const usageActiveAgents = usageAgentFilter === 'all' ? perAgentTotals.map(([a]) => a) : [usageAgentFilter]
+
+  // Same shape, in hours, from get_agent_activity — see the comment above
+  // its fetch effect for why this doesn't reuse the token-cost aggregator.
+  const hoursAgents = useMemo(() => {
+    const totals = new Map<string, number>()
+    for (const p of windowActivity) totals.set(p.agent, (totals.get(p.agent) ?? 0) + p.minutes)
+    return [...totals.entries()].filter(([, m]) => m > 0).sort((a, b) => b[1] - a[1]).map(([a]) => a)
+  }, [windowActivity])
+  const dailyHoursMatrix = useMemo(() => {
+    const days: Record<string, number>[] = Array.from({ length: windowDays }, () => ({}))
+    for (const p of windowActivity) {
+      const idx = Math.floor((p.tsMs - start) / DAY)
+      if (idx >= 0 && idx < windowDays) days[idx][p.agent] = (days[idx][p.agent] ?? 0) + p.minutes / 60
+    }
+    return days
+  }, [windowActivity, start, windowDays])
+  const hoursActiveAgents = hoursAgentFilter === 'all' ? hoursAgents : [hoursAgentFilter]
+  const totalHours = useMemo(
+    () => windowActivity
+      .filter(p => hoursAgentFilter === 'all' || p.agent === hoursAgentFilter)
+      .reduce((sum, p) => sum + p.minutes, 0) / 60,
+    [windowActivity, hoursAgentFilter]
+  )
+  // Day-level windows (Today/Yesterday) are a single number — an average
+  // over one day is meaningless. Week shows the daily average; month-and-up
+  // also shows a weekly average, since a month of daily numbers is too
+  // noisy to compare at a glance without it.
+  const hoursGranularity: 'day' | 'week' | 'month' =
+    tab === 'today' || tab === 'yesterday' ? 'day' : tab === 'week' ? 'week' : 'month'
 
   // Same perSession rows back every day-level activity view below — no
   // extra fetch needed since the whole window is already in memory.
@@ -282,6 +338,22 @@ export default function MyWorkSection({ sessions, repos, loading, goTo, onRefres
     }
     return map
   }, [insights])
+
+  // "This period" side panel next to the Activity calendar — same
+  // sessionCountsByDay the calendar cells render, so the numbers agree with
+  // what's visually right next to them.
+  const activityStats = useMemo(() => {
+    let streak = 0
+    for (let d = new Date(effectiveEnd); sessionCountsByDay.get(dateKey(d.getTime())); d.setDate(d.getDate() - 1)) {
+      streak++
+    }
+    const byWeekday = new Array(7).fill(0)
+    for (const [key, count] of sessionCountsByDay) byWeekday[new Date(`${key}T00:00:00`).getDay()] += count
+    const topWeekday = byWeekday.some(c => c > 0)
+      ? WEEKDAY_LABELS[byWeekday.indexOf(Math.max(...byWeekday))]
+      : null
+    return { streak, topWeekday, sessions: stats.sessions, topAgent: perAgentTotals[0]?.[0] ?? null }
+  }, [sessionCountsByDay, effectiveEnd, stats.sessions, perAgentTotals])
 
   // Needs attention — derived from the worktree scan; omitted entirely when empty.
   const attention = useMemo(() => {
@@ -624,78 +696,175 @@ export default function MyWorkSection({ sessions, repos, loading, goTo, onRefres
                   </Card>
                 </div>
 
-                {/* Usage & cost — per-agent tiles, real tokens + cost */}
-                {perAgentTotals.length > 0 && (
-                  <Card title="Usage & cost">
-                    <div className="flex items-baseline gap-2 mb-3">
-                      <span className="text-[18px] font-bold">{formatTokens(totalUsageTokens)}</span>
-                      <span className="text-[12px] text-[var(--c-text-3)]">· ${totalUsageCost.toFixed(2)} estimated</span>
-                    </div>
-                    {/* Always full width, full resolution — one per row, no
-                        collapsed/summary state. */}
-                    <div className="flex flex-col gap-2.5">
-                      {perAgentTotals.map(([agent, u]) => {
-                        const { label, hex } = agentColor(agent)
-                        const daily = dailyUsageForAgent(agent)
-                        return (
-                          <div
-                            key={agent}
-                            className="rounded-lg border border-[var(--c-border)] bg-[var(--c-surface-2)]/40 p-2.5 min-w-0"
-                          >
-                            <div className="flex items-center justify-between gap-1.5 mb-1">
-                              <span className="flex items-center gap-1.5 min-w-0">
-                                <span className="w-2 h-2 rounded-sm shrink-0" style={{ background: hex }} />
-                                <span className="text-[12.5px] font-semibold truncate">{label}</span>
-                              </span>
-                              <span className="text-[10.5px] text-[var(--c-text-3)] shrink-0">
-                                {formatTokens(u.tokens)} · ${u.cost.toFixed(2)}
-                              </span>
-                            </div>
-                            <DailyBars
-                              values={daily.tokens}
-                              costs={daily.costs}
-                              start={start}
-                              color={hex}
-                              height={90}
-                              formatValue={v => formatTokens(v)}
-                            />
-                          </div>
-                        )
-                      })}
-                    </div>
-                  </Card>
-                )}
-
-                {windowCommits.length > 0 && (
-                  <Card title="Commits per day" sub="All branches, all repos">
-                    <CommitBars commitSecs={windowCommits} daysBack={windowDays} start={start} />
-                  </Card>
-                )}
-
-                {/* Activity — always last; shape follows the selected window */}
-                <Card title="Activity">
-                  {(tab === 'today' || tab === 'yesterday') ? (
-                    <ActivityAgentCount
-                      count={agentMix.length}
-                      label={tab === 'today' ? 'active today' : 'active yesterday'}
-                    />
-                  ) : tab === 'week' ? (
-                    <ActivityWeekRow sessionCounts={sessionCountsByDay} />
-                  ) : (
-                    <ActivityCalendar
-                      sessionCounts={sessionCountsByDay}
-                      monthDate={calendarMonth}
-                      onNavigate={d => setMonthOffset(o => o + d)}
-                      canGoPrev={canGoPrevMonth}
-                      canGoNext={canGoNextMonth}
-                    />
+                {/* Usage & cost / Commits per day — half row each, so both
+                    fit without one crowding the other out. */}
+                <div className="grid grid-cols-2 gap-3">
+                  {perAgentTotals.length > 0 && (
+                    <Card title="Usage & cost">
+                      <div className="flex items-baseline gap-2 mb-2">
+                        <span className="text-[18px] font-bold">{formatTokens(totalUsageTokens)}</span>
+                        <span className="text-[12px] text-[var(--c-text-3)]">· ${totalUsageCost.toFixed(2)} estimated</span>
+                      </div>
+                      <AgentFilterChips
+                        agents={perAgentTotals.map(([a]) => a)}
+                        value={usageAgentFilter}
+                        onChange={setUsageAgentFilter}
+                      />
+                      <AgentStackedBars
+                        seriesByDay={dailyUsageMatrix}
+                        activeAgents={usageActiveAgents}
+                        colorFor={a => agentColor(a).hex}
+                        start={start}
+                        formatValue={v => formatTokens(v)}
+                      />
+                    </Card>
                   )}
-                </Card>
+
+                  {windowCommitEntries.length > 0 && (
+                    <Card title="Commits per day" sub="All branches, selected repo">
+                      {commitRepos.length > 1 && (
+                        <div className="flex flex-wrap gap-1.5 mb-2">
+                          <FilterChip label="All" active={commitsRepoFilter === 'all'} onClick={() => setCommitsRepoFilter('all')} />
+                          {commitRepos.map(r => (
+                            <FilterChip key={r} label={r} active={commitsRepoFilter === r} onClick={() => setCommitsRepoFilter(r)} />
+                          ))}
+                        </div>
+                      )}
+                      <CommitBars commitSecs={windowCommits} daysBack={windowDays} start={start} />
+                    </Card>
+                  )}
+                </div>
+
+                {/* Usage per agent / Hours spent — half row each. */}
+                <div className="grid grid-cols-2 gap-3">
+                  {perAgentTotals.length > 0 && (
+                    <Card title="Usage per agent" sub="Share of total tokens, this window">
+                      <RankedAgentBars
+                        items={perAgentTotals.map(([agent, u]) => {
+                          const { label, hex } = agentColor(agent)
+                          return {
+                            agent, label, color: hex, value: u.tokens,
+                            formatted: formatTokens(u.tokens),
+                            pct: totalUsageTokens > 0 ? Math.round((u.tokens / totalUsageTokens) * 100) : 0,
+                          }
+                        })}
+                      />
+                    </Card>
+                  )}
+
+                  {hoursAgents.length > 0 && (
+                    <Card title="Hours spent">
+                      <div className="flex items-baseline gap-2 mb-1">
+                        <span className="text-[18px] font-bold">{totalHours.toFixed(1)}h</span>
+                        <span className="text-[12px] text-[var(--c-text-3)]">across all agents</span>
+                      </div>
+                      {hoursGranularity !== 'day' && (
+                        <div className="flex gap-3 mb-2 text-[10.5px] text-[var(--c-text-2)]">
+                          <span><b className="font-mono text-[var(--c-text)]">{(totalHours / windowDays).toFixed(1)}h</b> avg / day</span>
+                          {hoursGranularity === 'month' && (
+                            <span><b className="font-mono text-[var(--c-text)]">{(totalHours / (windowDays / 7)).toFixed(1)}h</b> avg / week</span>
+                          )}
+                        </div>
+                      )}
+                      <AgentFilterChips agents={hoursAgents} value={hoursAgentFilter} onChange={setHoursAgentFilter} />
+                      <AgentStackedBars
+                        seriesByDay={dailyHoursMatrix}
+                        activeAgents={hoursActiveAgents}
+                        colorFor={a => agentColor(a).hex}
+                        start={start}
+                        formatValue={v => `${v.toFixed(1)}h`}
+                      />
+                    </Card>
+                  )}
+                </div>
+
+                {/* Activity / this-period stats — half row each. */}
+                <div className="grid grid-cols-2 gap-3">
+                  <Card title="Activity">
+                    {(tab === 'today' || tab === 'yesterday') ? (
+                      <ActivityAgentCount
+                        count={agentMix.length}
+                        label={tab === 'today' ? 'active today' : 'active yesterday'}
+                      />
+                    ) : tab === 'week' ? (
+                      <ActivityWeekRow sessionCounts={sessionCountsByDay} />
+                    ) : (
+                      <ActivityCalendar
+                        sessionCounts={sessionCountsByDay}
+                        monthDate={calendarMonth}
+                        onNavigate={d => setMonthOffset(o => o + d)}
+                        canGoPrev={canGoPrevMonth}
+                        canGoNext={canGoNextMonth}
+                      />
+                    )}
+                  </Card>
+                  <Card title="This period">
+                    <div className="grid grid-cols-2 gap-2">
+                      <StatBox value={activityStats.streak} label={`day streak${activityStats.streak === 1 ? '' : 's'}`} />
+                      <StatBox value={activityStats.sessions} label="sessions" />
+                      <StatBox value={activityStats.topWeekday ?? '—'} label="most active day" />
+                      <StatBox
+                        value={activityStats.topAgent ? agentColor(activityStats.topAgent).label : '—'}
+                        label="most-used agent"
+                        color={activityStats.topAgent ? agentColor(activityStats.topAgent).hex : undefined}
+                      />
+                    </div>
+                  </Card>
+                </div>
               </div>
             )}
           </>
         )}
       </div>
+    </div>
+  )
+}
+
+function FilterChip({ label, active, onClick, dotColor }: {
+  label: string
+  active: boolean
+  onClick: () => void
+  dotColor?: string
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={`text-[10px] px-2 py-0.5 rounded-full border flex items-center gap-1.5 transition-colors ${
+        active
+          ? 'bg-[var(--c-accent)] border-[var(--c-accent)] text-white'
+          : 'border-[var(--c-border)] text-[var(--c-text-2)] hover:border-[var(--c-text-3)]'
+      }`}
+    >
+      {dotColor && <span className="w-1.5 h-1.5 rounded-sm shrink-0" style={{ background: active ? 'white' : dotColor }} />}
+      {label}
+    </button>
+  )
+}
+
+/** "All" + one chip per agent, single-select. Shared shape for Usage & cost
+ *  and Hours spent — both filter the same way over the same day grid. */
+function AgentFilterChips({ agents, value, onChange }: {
+  agents: string[]
+  value: string
+  onChange: (agent: string) => void
+}) {
+  if (agents.length <= 1) return null
+  return (
+    <div className="flex flex-wrap gap-1.5 mb-2">
+      <FilterChip label="All" active={value === 'all'} onClick={() => onChange('all')} />
+      {agents.map(a => {
+        const { label, hex } = agentColor(a)
+        return <FilterChip key={a} label={label} active={value === a} onClick={() => onChange(a)} dotColor={hex} />
+      })}
+    </div>
+  )
+}
+
+function StatBox({ value, label, color }: { value: string | number; label: string; color?: string }) {
+  return (
+    <div className="rounded-lg border border-[var(--c-border-sub)] p-2.5 flex flex-col justify-center gap-0.5">
+      <span className="text-[17px] font-bold leading-none" style={color ? { color } : undefined}>{value}</span>
+      <span className="text-[9.5px] text-[var(--c-text-3)]">{label}</span>
     </div>
   )
 }
