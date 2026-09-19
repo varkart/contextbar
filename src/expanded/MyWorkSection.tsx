@@ -17,6 +17,9 @@ import { usePaletteIndex } from '../constants/agentColorPalettes'
 const DAY = 86_400_000
 const PALETTE = ['#6366f1', '#e8a94a', '#d98fd9', '#5fc9b8', '#7aa2e8', '#8fbf6b']
 const WEEKDAY_LABELS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
+// Tall enough for one row of project tiles including the optional branch
+// line, short enough to reliably clip a second row before it peeks through.
+const PROJECT_TILE_ROW_HEIGHT = 122
 const MAX_ADVANCED_DAYS = 90
 
 type Tab = 'today' | 'yesterday' | 'week' | 'month' | 'prevMonth' | 'last3' | 'advanced'
@@ -167,6 +170,7 @@ export default function MyWorkSection({ sessions, repos, loading, goTo, onRefres
   const [hoursAgentFilter, setHoursAgentFilter] = useState('all')
   const [commitsRepoFilter, setCommitsRepoFilter] = useState('all')
   const [concurrencyAgentFilter, setConcurrencyAgentFilter] = useState('all')
+  const [projectsExpanded, setProjectsExpanded] = useState(false)
   const [agentActivity, setAgentActivity] = useState<AgentActivityPoint[]>([])
 
   useEffect(() => {
@@ -601,18 +605,34 @@ export default function MyWorkSection({ sessions, repos, loading, goTo, onRefres
               </div>
             )}
 
-            {/* Active projects — width-based columns (auto-fill), up to 6
-                across at full width. Was item-count-based (min(6, N)
-                columns unconditionally), which forced 6 ever-narrower
-                columns on a shrunk window instead of actually reducing the
-                column count — cards got too narrow to hold two agent badges
-                without them overflowing the card. */}
+            {/* Active projects — width-based columns (auto-fill). Collapsed
+                to a single row by default (overflow clipped to one tile's
+                height) regardless of window width, so a narrow window
+                doesn't push the rest of the page down under extra rows of
+                project tiles; "Show all" reveals the rest on demand. */}
             {orderedProjects.length > 0 && (
               <div className="rounded-xl border border-[var(--c-border)] p-3 mb-4">
-                <p className="text-[12px] font-semibold mb-2.5">
-                  Active projects{orderedProjects.length > 12 ? ` · showing 12 of ${orderedProjects.length}` : ''}
-                </p>
-                <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))' }}>
+                <div className="flex items-center justify-between mb-2.5">
+                  <p className="text-[12px] font-semibold">
+                    Active projects{orderedProjects.length > 12 ? ` · showing 12 of ${orderedProjects.length}` : ''}
+                  </p>
+                  {orderedProjects.length > 6 && (
+                    <button
+                      onClick={() => setProjectsExpanded(e => !e)}
+                      className="text-[10.5px] text-[var(--c-text-3)] hover:text-[var(--c-text-2)] transition-colors"
+                    >
+                      {projectsExpanded ? 'Show less' : `Show all (${Math.min(orderedProjects.length, 12)})`}
+                    </button>
+                  )}
+                </div>
+                <div
+                  className="grid gap-3"
+                  style={{
+                    gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))',
+                    maxHeight: projectsExpanded ? 'none' : PROJECT_TILE_ROW_HEIGHT,
+                    overflow: 'hidden',
+                  }}
+                >
                   {orderedProjects.slice(0, 12).map((p, i) => {
                     const branch = branchFor(p.project)
                     const live = p.sessions.some(s => s.isLive)
@@ -800,7 +820,27 @@ export default function MyWorkSection({ sessions, repos, loading, goTo, onRefres
 
                 {/* Usage per agent / Hours spent — half row each. */}
                 <div className="grid grid-cols-2 gap-3">
-                  {perAgentTotals.length > 0 && (
+                  {perAgentTotals.length === 1 ? (
+                    <Card title="Usage per agent">
+                      {(() => {
+                        const [agent, u] = perAgentTotals[0]
+                        const { label, hex } = agentColor(agent)
+                        return (
+                          <div className="flex items-center gap-3 py-2">
+                            <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: hex }} />
+                            <div className="min-w-0">
+                              <div className="text-[14px] font-semibold">{label}</div>
+                              <div className="text-[11px] text-[var(--c-text-3)]">Only agent used this window</div>
+                            </div>
+                            <div className="ml-auto text-right">
+                              <div className="text-[18px] font-bold font-mono">{formatTokens(u.tokens)}</div>
+                              <div className="text-[11px] text-[var(--c-text-3)]">${u.cost.toFixed(2)} estimated</div>
+                            </div>
+                          </div>
+                        )
+                      })()}
+                    </Card>
+                  ) : perAgentTotals.length > 1 && (
                     <Card title="Usage per agent" sub="Share of total tokens, this window">
                       <RankedAgentBars
                         items={perAgentTotals.map(([agent, u]) => {
@@ -898,7 +938,7 @@ export default function MyWorkSection({ sessions, repos, loading, goTo, onRefres
                       />
                     )}
                   </Card>
-                  <Card title="This period">
+                  <Card title={tab === 'advanced' ? 'This period' : tabLabel}>
                     <div className="grid grid-cols-2 gap-2">
                       <StatBox value={activityStats.streak} label={`day streak${activityStats.streak === 1 ? '' : 's'}`} />
                       <StatBox value={activityStats.sessions} label="sessions" />

@@ -370,7 +370,7 @@ export function DailyBars({ values, costs, start, color, height = 64, maxBars, f
                 </span>
                 {/* Bars with a permanent x-axis tick already show their date below the chart — repeating it here on hover would overlap it. */}
                 {!tickIndices.has(i) && (
-                  <span className="absolute top-full mt-1 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity text-[9px] font-mono text-[var(--c-text-3)] whitespace-nowrap pointer-events-none z-10">
+                  <span className="absolute top-full mt-[18px] left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity text-[9px] font-mono text-[var(--c-text-3)] whitespace-nowrap pointer-events-none z-10">
                     {bucketLabel(i)}
                   </span>
                 )}
@@ -432,23 +432,29 @@ export function AgentStackedBars({ seriesByDay, activeAgents, colorFor, start, h
             {totals.map((total, i) => (
               <div
                 key={i}
-                className="relative group flex-1 rounded-sm min-w-[1px] flex flex-col-reverse overflow-hidden"
+                className="relative group flex-1 min-w-[1px]"
                 style={{ height: total === 0 ? '2px' : `${Math.max(4, (total / max) * 100)}%` }}
               >
-                {total === 0 ? (
-                  <div className="flex-1" style={{ background: 'var(--c-surface-2)' }} />
-                ) : (
-                  activeAgents
-                    .filter(a => (seriesByDay[i][a] ?? 0) > 0)
-                    .map(a => (
-                      <div key={a} style={{ height: `${((seriesByDay[i][a] ?? 0) / total) * 100}%`, background: colorFor(a) }} />
-                    ))
-                )}
+                {/* Stack clipped to the bar's rounded shape — kept separate
+                    from the tooltip spans below, which must NOT be clipped
+                    since they're positioned outside this box (bottom-full/
+                    top-full). */}
+                <div className="w-full h-full rounded-sm overflow-hidden flex flex-col-reverse">
+                  {total === 0 ? (
+                    <div className="flex-1" style={{ background: 'var(--c-surface-2)' }} />
+                  ) : (
+                    activeAgents
+                      .filter(a => (seriesByDay[i][a] ?? 0) > 0)
+                      .map(a => (
+                        <div key={a} style={{ height: `${((seriesByDay[i][a] ?? 0) / total) * 100}%`, background: colorFor(a) }} />
+                      ))
+                  )}
+                </div>
                 <span className="absolute bottom-full mb-1 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity text-[9px] font-mono text-[var(--c-text-2)] whitespace-nowrap pointer-events-none z-10">
                   {formatValue(total)}
                 </span>
                 {!tickIndices.has(i) && (
-                  <span className="absolute top-full mt-1 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity text-[9px] font-mono text-[var(--c-text-3)] whitespace-nowrap pointer-events-none z-10">
+                  <span className="absolute top-full mt-[18px] left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity text-[9px] font-mono text-[var(--c-text-3)] whitespace-nowrap pointer-events-none z-10">
                     {dayLabel(i)}
                   </span>
                 )}
@@ -500,7 +506,10 @@ const ACTIVITY_LEVEL_COLORS = [
   '#34d399',
 ]
 const DOW_LABELS = ['S', 'M', 'T', 'W', 'T', 'F', 'S']
-const ACTIVITY_CELL = 13
+// Cells scale with the card's width (up to this cap) instead of a fixed
+// small size — a half-row card has plenty of room the old 13px cells left
+// empty.
+const ACTIVITY_GRID_MAX_WIDTH = 260
 
 function activityLevel(sessionCount: number): number {
   if (sessionCount <= 0) return 0
@@ -547,12 +556,12 @@ export function ActivityCalendar({ sessionCounts, monthDate, onNavigate, canGoPr
         >›</button>
       </div>
       <div className="text-right h-3 mb-1.5 text-[10px] font-mono text-[var(--c-text-3)]">{hover ?? 'Hover a day for details'}</div>
-      <div className="grid gap-[3px] mb-1" style={{ gridTemplateColumns: `repeat(7,${ACTIVITY_CELL}px)` }}>
-        {DOW_LABELS.map((d, i) => <div key={i} className="text-center text-[8px] text-[var(--c-text-3)]">{d}</div>)}
+      <div className="grid gap-1 mb-1" style={{ gridTemplateColumns: 'repeat(7, minmax(0, 1fr))', maxWidth: ACTIVITY_GRID_MAX_WIDTH }}>
+        {DOW_LABELS.map((d, i) => <div key={i} className="text-center text-[9px] text-[var(--c-text-3)]">{d}</div>)}
       </div>
-      <div className="grid gap-[3px]" style={{ gridTemplateColumns: `repeat(7,${ACTIVITY_CELL}px)` }} onMouseLeave={() => setHover(null)}>
+      <div className="grid gap-1" style={{ gridTemplateColumns: 'repeat(7, minmax(0, 1fr))', maxWidth: ACTIVITY_GRID_MAX_WIDTH }} onMouseLeave={() => setHover(null)}>
         {cells.map((d, i) => {
-          if (d === null) return <div key={i} style={{ width: ACTIVITY_CELL, height: ACTIVITY_CELL }} />
+          if (d === null) return <div key={i} style={{ aspectRatio: '1' }} />
           const date = new Date(year, month, d)
           const isFuture = date > today
           const isToday = date.getTime() === today.getTime()
@@ -564,7 +573,7 @@ export function ActivityCalendar({ sessionCounts, monthDate, onNavigate, canGoPr
               onMouseEnter={() => !isFuture && setHover(`${date.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })} · ${count} session${count === 1 ? '' : 's'}`)}
               title={isFuture ? '' : `${date.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })} · ${count} session${count === 1 ? '' : 's'}`}
               style={{
-                width: ACTIVITY_CELL, height: ACTIVITY_CELL, borderRadius: 3,
+                aspectRatio: '1', borderRadius: 4,
                 background: isFuture ? 'transparent' : ACTIVITY_LEVEL_COLORS[level],
                 border: isToday ? '1.5px solid var(--c-accent)' : isFuture ? '1px dashed color-mix(in srgb, var(--c-text-3) 40%, transparent)' : '1px solid transparent',
               }}
@@ -591,10 +600,10 @@ export function ActivityWeekRow({ sessionCounts }: { sessionCounts: Map<string, 
   return (
     <div>
       <div className="text-right h-3 mb-1.5 text-[10px] font-mono text-[var(--c-text-3)]">{hover ?? 'Hover a day for details'}</div>
-      <div className="grid gap-1 mb-1" style={{ gridTemplateColumns: `repeat(7,${ACTIVITY_CELL}px)` }}>
-        {DOW_LABELS.map((d, i) => <div key={i} className="text-center text-[8px] text-[var(--c-text-3)]">{d}</div>)}
+      <div className="grid gap-1 mb-1" style={{ gridTemplateColumns: 'repeat(7, minmax(0, 1fr))', maxWidth: ACTIVITY_GRID_MAX_WIDTH }}>
+        {DOW_LABELS.map((d, i) => <div key={i} className="text-center text-[9px] text-[var(--c-text-3)]">{d}</div>)}
       </div>
-      <div className="grid gap-1" style={{ gridTemplateColumns: `repeat(7,${ACTIVITY_CELL}px)` }} onMouseLeave={() => setHover(null)}>
+      <div className="grid gap-1" style={{ gridTemplateColumns: 'repeat(7, minmax(0, 1fr))', maxWidth: ACTIVITY_GRID_MAX_WIDTH }} onMouseLeave={() => setHover(null)}>
         {days.map((date, i) => {
           const isFuture = date > today
           const isToday = date.getTime() === today.getTime()
@@ -605,7 +614,7 @@ export function ActivityWeekRow({ sessionCounts }: { sessionCounts: Map<string, 
               key={i}
               onMouseEnter={() => !isFuture && setHover(`${date.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })} · ${count} session${count === 1 ? '' : 's'}`)}
               style={{
-                width: ACTIVITY_CELL, height: ACTIVITY_CELL, borderRadius: 3,
+                aspectRatio: '1', borderRadius: 4,
                 background: isFuture ? 'transparent' : ACTIVITY_LEVEL_COLORS[level],
                 border: isToday ? '1.5px solid var(--c-accent)' : isFuture ? '1px dashed color-mix(in srgb, var(--c-text-3) 40%, transparent)' : '1px solid transparent',
               }}
@@ -677,7 +686,7 @@ export function CommitBars({ commitSecs, daysBack = 14, start }: { commitSecs: n
                   {v} commit{v === 1 ? '' : 's'}
                 </span>
                 {!tickIndices.has(i) && (
-                  <span className="absolute top-full mt-1 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity text-[9px] font-mono text-[var(--c-text-3)] whitespace-nowrap pointer-events-none z-10">
+                  <span className="absolute top-full mt-[18px] left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity text-[9px] font-mono text-[var(--c-text-3)] whitespace-nowrap pointer-events-none z-10">
                     {dayLabel(i)}
                   </span>
                 )}
