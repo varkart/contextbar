@@ -601,13 +601,18 @@ export default function MyWorkSection({ sessions, repos, loading, goTo, onRefres
               </div>
             )}
 
-            {/* Active projects — dynamic column count, up to 6 across, shrinks as more show up */}
+            {/* Active projects — width-based columns (auto-fill), up to 6
+                across at full width. Was item-count-based (min(6, N)
+                columns unconditionally), which forced 6 ever-narrower
+                columns on a shrunk window instead of actually reducing the
+                column count — cards got too narrow to hold two agent badges
+                without them overflowing the card. */}
             {orderedProjects.length > 0 && (
               <div className="rounded-xl border border-[var(--c-border)] p-3 mb-4">
                 <p className="text-[12px] font-semibold mb-2.5">
                   Active projects{orderedProjects.length > 12 ? ` · showing 12 of ${orderedProjects.length}` : ''}
                 </p>
-                <div className="grid gap-3" style={{ gridTemplateColumns: `repeat(${Math.min(6, orderedProjects.length)},1fr)` }}>
+                <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))' }}>
                   {orderedProjects.slice(0, 12).map((p, i) => {
                     const branch = branchFor(p.project)
                     const live = p.sessions.some(s => s.isLive)
@@ -633,7 +638,7 @@ export default function MyWorkSection({ sessions, repos, loading, goTo, onRefres
                           {live && <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />}
                         </button>
                         {branch && <div className="text-[10px] font-mono text-[var(--c-text-3)] truncate mb-1">⌥ {branch}</div>}
-                        <div className="flex items-center gap-1 mb-1.5 min-w-0">
+                        <div className="flex items-center flex-wrap gap-1 mb-1.5 min-w-0">
                           {[...new Set(p.sessions.map(s => s.agent))].slice(0, 2).map(a => (
                             <AgentBadge key={a} agent={a} />
                           ))}
