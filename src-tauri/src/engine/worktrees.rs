@@ -665,12 +665,24 @@ fn discover_primary_roots() -> Vec<PathBuf> {
     roots
 }
 
-/// Commit timestamps (unix seconds) across all branches of every known repo
-/// in the last `since_days` days. Day bucketing happens frontend-side in the
-/// user's local timezone.
-pub fn commit_timestamps(since_days: u32) -> Vec<u64> {
+#[derive(serde::Serialize, Clone, Debug, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct CommitEntry {
+    pub repo_name: String,
+    /// Unix seconds.
+    pub ts: u64,
+}
+
+/// Commits across all branches of every known repo in the last `since_days`
+/// days, tagged with the repo they belong to. Day bucketing happens
+/// frontend-side in the user's local timezone.
+pub fn commit_activity(since_days: u32) -> Vec<CommitEntry> {
     let mut out = Vec::new();
     for root in discover_primary_roots() {
+        let repo_name = root
+            .file_name()
+            .map(|n| n.to_string_lossy().to_string())
+            .unwrap_or_else(|| root.to_string_lossy().to_string());
         if let Some(log) = git(
             &root,
             &[
@@ -680,7 +692,14 @@ pub fn commit_timestamps(since_days: u32) -> Vec<u64> {
                 "--format=%ct",
             ],
         ) {
-            out.extend(log.lines().filter_map(|l| l.trim().parse::<u64>().ok()));
+            out.extend(
+                log.lines()
+                    .filter_map(|l| l.trim().parse::<u64>().ok())
+                    .map(|ts| CommitEntry {
+                        repo_name: repo_name.clone(),
+                        ts,
+                    }),
+            );
         }
     }
     out

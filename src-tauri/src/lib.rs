@@ -691,8 +691,8 @@ fn get_token_activity(
 }
 
 #[tauri::command]
-async fn get_commit_activity(since_days: u32) -> Vec<u64> {
-    tokio::task::spawn_blocking(move || engine::worktrees::commit_timestamps(since_days))
+async fn get_commit_activity(since_days: u32) -> Vec<engine::worktrees::CommitEntry> {
+    tokio::task::spawn_blocking(move || engine::worktrees::commit_activity(since_days))
         .await
         .unwrap_or_default()
 }
