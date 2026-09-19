@@ -50,6 +50,34 @@ function preview(text: string, maxWords = 8): string {
 function startOfMonth(d: Date): Date { return new Date(d.getFullYear(), d.getMonth(), 1) }
 function addMonths(d: Date, n: number): Date { return new Date(d.getFullYear(), d.getMonth() + n, 1) }
 
+/** Time-weighted average concurrent sessions per agent per day, from each
+ *  session's (start, end) interval — start = last-activity minus estimated
+ *  duration, end = last-activity. One entry per day (index 0 = `start`'s
+ *  calendar day); each maps agent → that agent's average concurrency that
+ *  day (e.g. two of its sessions open the whole day sums to 2.0, one open
+ *  half the day is 0.5). Valid to sum *across* agents too, since concurrency
+ *  at any instant is additive — "All" can reuse plain per-agent stacking. */
+export function computeDailyConcurrency(
+  activity: { tsMs: number; agent: string; minutes: number }[],
+  start: number,
+  windowDays: number
+): Record<string, number>[] {
+  const days: Record<string, number>[] = Array.from({ length: windowDays }, () => ({}))
+  for (const p of activity) {
+    const sessionStart = p.tsMs - p.minutes * 60_000
+    const sessionEnd = p.tsMs
+    if (sessionEnd <= sessionStart) continue // unknown/zero duration — no overlap to attribute
+    const firstIdx = Math.max(0, Math.floor((sessionStart - start) / DAY))
+    const lastIdx = Math.min(windowDays - 1, Math.floor((sessionEnd - start) / DAY))
+    for (let idx = firstIdx; idx <= lastIdx; idx++) {
+      const dayStart = start + idx * DAY
+      const overlapMs = Math.min(sessionEnd, dayStart + DAY) - Math.max(sessionStart, dayStart)
+      if (overlapMs > 0) days[idx][p.agent] = (days[idx][p.agent] ?? 0) + overlapMs / DAY
+    }
+  }
+  return days
+}
+
 // Open-ended windows (today/week/month/last3) end at Infinity, not a
 // captured Date.now() — otherwise a live session whose timestamp advances
 // past the frozen end silently falls out of the window after every refresh.
@@ -138,6 +166,7 @@ export default function MyWorkSection({ sessions, repos, loading, goTo, onRefres
   const [usageAgentFilter, setUsageAgentFilter] = useState('all')
   const [hoursAgentFilter, setHoursAgentFilter] = useState('all')
   const [commitsRepoFilter, setCommitsRepoFilter] = useState('all')
+  const [concurrencyAgentFilter, setConcurrencyAgentFilter] = useState('all')
   const [agentActivity, setAgentActivity] = useState<AgentActivityPoint[]>([])
 
   useEffect(() => {
@@ -332,6 +361,30 @@ export default function MyWorkSection({ sessions, repos, loading, goTo, onRefres
   // noisy to compare at a glance without it.
   const hoursGranularity: 'day' | 'week' | 'month' =
     tab === 'today' || tab === 'yesterday' ? 'day' : tab === 'week' ? 'week' : 'month'
+
+  // Parallel sessions — see computeDailyConcurrency for the math.
+  const dailyConcurrencyMatrix = useMemo(
+    () => computeDailyConcurrency(windowActivity, start, windowDays),
+    [windowActivity, start, windowDays]
+  )
+  const concurrencyAgents = useMemo(() => {
+    const totals = new Map<string, number>()
+    for (const day of dailyConcurrencyMatrix) {
+      for (const [agent, v] of Object.entries(day)) totals.set(agent, (totals.get(agent) ?? 0) + v)
+    }
+    return [...totals.entries()].filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]).map(([a]) => a)
+  }, [dailyConcurrencyMatrix])
+  const concurrencyActiveAgents = concurrencyAgentFilter === 'all' ? concurrencyAgents : [concurrencyAgentFilter]
+  const concurrencyStats = useMemo(() => {
+    const dailyTotals = dailyConcurrencyMatrix.map(day =>
+      concurrencyActiveAgents.reduce((sum, a) => sum + (day[a] ?? 0), 0)
+    )
+    const avg = dailyTotals.length > 0 ? dailyTotals.reduce((a, b) => a + b, 0) / dailyTotals.length : 0
+    const peak = Math.max(0, ...dailyTotals)
+    const peakDayIdx = dailyTotals.indexOf(peak)
+    const daysWithOverlap = dailyTotals.filter(v => v > 1).length
+    return { avg, peak, peakDayIdx, daysWithOverlap }
+  }, [dailyConcurrencyMatrix, concurrencyActiveAgents])
 
   // Same perSession rows back every day-level activity view below — no
   // extra fetch needed since the whole window is already in memory.
@@ -782,6 +835,43 @@ export default function MyWorkSection({ sessions, repos, loading, goTo, onRefres
                     </Card>
                   )}
                 </div>
+
+                {/* Parallel sessions / concurrency stats — half row each. */}
+                {concurrencyAgents.length > 0 && (
+                  <div className="grid grid-cols-2 gap-3">
+                    <Card title="Parallel sessions" sub="Average sessions running at once">
+                      <div className="flex items-baseline gap-2 mb-2">
+                        <span className="text-[18px] font-bold">{concurrencyStats.avg.toFixed(2)}×</span>
+                        <span className="text-[12px] text-[var(--c-text-3)]">avg concurrent</span>
+                      </div>
+                      <AgentFilterChips agents={concurrencyAgents} value={concurrencyAgentFilter} onChange={setConcurrencyAgentFilter} />
+                      <AgentStackedBars
+                        seriesByDay={dailyConcurrencyMatrix}
+                        activeAgents={concurrencyActiveAgents}
+                        colorFor={a => agentColor(a).hex}
+                        start={start}
+                        formatValue={v => `${v.toFixed(1)}×`}
+                      />
+                    </Card>
+                    <Card title="Concurrency stats">
+                      <div className="grid grid-cols-2 gap-2">
+                        <StatBox value={`${concurrencyStats.peak.toFixed(1)}×`} label="peak concurrent" />
+                        <StatBox value={concurrencyStats.daysWithOverlap} label={`day${concurrencyStats.daysWithOverlap === 1 ? '' : 's'} with overlap`} />
+                        <StatBox
+                          value={concurrencyStats.peakDayIdx >= 0
+                            ? new Date(start + concurrencyStats.peakDayIdx * DAY).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+                            : '—'}
+                          label="busiest day"
+                        />
+                        <StatBox
+                          value={concurrencyAgents[0] ? agentColor(concurrencyAgents[0]).label : '—'}
+                          label="most parallel agent"
+                          color={concurrencyAgents[0] ? agentColor(concurrencyAgents[0]).hex : undefined}
+                        />
+                      </div>
+                    </Card>
+                  </div>
+                )}
 
                 {/* Activity / this-period stats — half row each. */}
                 <div className="grid grid-cols-2 gap-3">
