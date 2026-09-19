@@ -7,7 +7,7 @@ import type { Section } from './ExpandedApp'
 import {
   Card, CommitBars, RefreshButton, SkeletonTiles, SkeletonCards,
   ActivityCalendar, ActivityWeekRow, ActivityAgentCount,
-  AgentStackedBars, RankedAgentBars,
+  AgentStackedBars, RankedAgentBars, DailyBars,
 } from './InsightWidgets'
 import AgentBadge from '../components/history/AgentBadge'
 import { formatTokens } from '../components/history/SessionStats'
@@ -79,6 +79,48 @@ export function computeDailyConcurrency(
     }
   }
   return days
+}
+
+/** Highest number of sessions truly open *at the same instant* on each day —
+ *  a sweep-line over each session's (start, end) interval, not a sum. This
+ *  is deliberately not additive across agents the way computeDailyConcurrency
+ *  is (two agents peaking at different moments of the day don't add up to a
+ *  combined peak), so callers pre-filter `activity` to whichever agent(s)
+ *  they want the peak computed over — "All" means pass every session in and
+ *  sweep them together, not sum each agent's own peak. */
+export function computeDailyMaxConcurrency(
+  activity: { tsMs: number; agent: string; minutes: number }[],
+  start: number,
+  windowDays: number
+): number[] {
+  const result = new Array(windowDays).fill(0)
+  for (let idx = 0; idx < windowDays; idx++) {
+    const dayStart = start + idx * DAY
+    const dayEnd = dayStart + DAY
+    const events: [number, number][] = []
+    for (const p of activity) {
+      const sessionStart = p.tsMs - p.minutes * 60_000
+      const sessionEnd = p.tsMs
+      if (sessionEnd <= sessionStart) continue
+      const clampedStart = Math.max(sessionStart, dayStart)
+      const clampedEnd = Math.min(sessionEnd, dayEnd)
+      if (clampedEnd <= clampedStart) continue
+      events.push([clampedStart, 1])
+      events.push([clampedEnd, -1])
+    }
+    // Ties at the same instant: process the end (-1) before the start (+1),
+    // so a session ending exactly when another begins doesn't count as
+    // briefly overlapping.
+    events.sort((a, b) => a[0] - b[0] || a[1] - b[1])
+    let running = 0
+    let max = 0
+    for (const [, delta] of events) {
+      running += delta
+      if (running > max) max = running
+    }
+    result[idx] = max
+  }
+  return result
 }
 
 // Open-ended windows (today/week/month/last3) end at Infinity, not a
@@ -366,29 +408,42 @@ export default function MyWorkSection({ sessions, repos, loading, goTo, onRefres
   const hoursGranularity: 'day' | 'week' | 'month' =
     tab === 'today' || tab === 'yesterday' ? 'day' : tab === 'week' ? 'week' : 'month'
 
-  // Parallel sessions — see computeDailyConcurrency for the math.
-  const dailyConcurrencyMatrix = useMemo(
-    () => computeDailyConcurrency(windowActivity, start, windowDays),
-    [windowActivity, start, windowDays]
-  )
+  // Parallel sessions — headline metric is the true peak (sweep-line max
+  // overlap, see computeDailyMaxConcurrency), not an average: the question
+  // that actually matters day to day is "did I ever have 2+ sessions open
+  // at once," not a time-weighted number that reads as ~0 for anyone who
+  // mostly works one session at a time. The time-weighted average from
+  // computeDailyConcurrency still backs the small "avg" subtext.
   const concurrencyAgents = useMemo(() => {
     const totals = new Map<string, number>()
-    for (const day of dailyConcurrencyMatrix) {
-      for (const [agent, v] of Object.entries(day)) totals.set(agent, (totals.get(agent) ?? 0) + v)
-    }
-    return [...totals.entries()].filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]).map(([a]) => a)
-  }, [dailyConcurrencyMatrix])
-  const concurrencyActiveAgents = concurrencyAgentFilter === 'all' ? concurrencyAgents : [concurrencyAgentFilter]
+    for (const p of windowActivity) totals.set(p.agent, (totals.get(p.agent) ?? 0) + p.minutes)
+    return [...totals.entries()].filter(([, m]) => m > 0).sort((a, b) => b[1] - a[1]).map(([a]) => a)
+  }, [windowActivity])
+  const concurrencyFilteredActivity = useMemo(
+    () => concurrencyAgentFilter === 'all' ? windowActivity : windowActivity.filter(p => p.agent === concurrencyAgentFilter),
+    [windowActivity, concurrencyAgentFilter]
+  )
+  const dailyMaxConcurrency = useMemo(
+    () => computeDailyMaxConcurrency(concurrencyFilteredActivity, start, windowDays),
+    [concurrencyFilteredActivity, start, windowDays]
+  )
   const concurrencyStats = useMemo(() => {
-    const dailyTotals = dailyConcurrencyMatrix.map(day =>
-      concurrencyActiveAgents.reduce((sum, a) => sum + (day[a] ?? 0), 0)
-    )
-    const avg = dailyTotals.length > 0 ? dailyTotals.reduce((a, b) => a + b, 0) / dailyTotals.length : 0
-    const peak = Math.max(0, ...dailyTotals)
-    const peakDayIdx = dailyTotals.indexOf(peak)
-    const daysWithOverlap = dailyTotals.filter(v => v > 1).length
-    return { avg, peak, peakDayIdx, daysWithOverlap }
-  }, [dailyConcurrencyMatrix, concurrencyActiveAgents])
+    const avgSeries = computeDailyConcurrency(concurrencyFilteredActivity, start, windowDays)
+    const dailyAvgTotals = avgSeries.map(day => Object.values(day).reduce((s, v) => s + v, 0))
+    const avg = dailyAvgTotals.length > 0 ? dailyAvgTotals.reduce((a, b) => a + b, 0) / dailyAvgTotals.length : 0
+    const peak = Math.max(0, ...dailyMaxConcurrency)
+    const peakDayIdx = dailyMaxConcurrency.indexOf(peak)
+    const daysWithOverlap = dailyMaxConcurrency.filter(v => v >= 2).length
+    // Which agent's own sessions most often overlapped with each other —
+    // its own peak-overlap-with-itself, not its share of total activity.
+    const mostParallelAgent = concurrencyAgents.length > 0
+      ? concurrencyAgents.reduce((best, a) => {
+          const ownPeak = Math.max(0, ...computeDailyMaxConcurrency(windowActivity.filter(p => p.agent === a), start, windowDays))
+          return ownPeak > best.peak ? { agent: a, peak: ownPeak } : best
+        }, { agent: concurrencyAgents[0], peak: -1 }).agent
+      : null
+    return { avg, peak, peakDayIdx, daysWithOverlap, mostParallelAgent }
+  }, [concurrencyFilteredActivity, windowActivity, concurrencyAgents, start, windowDays, dailyMaxConcurrency])
 
   // Same perSession rows back every day-level activity view below — no
   // extra fetch needed since the whole window is already in memory.
@@ -863,9 +918,13 @@ export default function MyWorkSection({ sessions, repos, loading, goTo, onRefres
                       </div>
                       {hoursGranularity !== 'day' && (
                         <div className="flex gap-3 mb-2 text-[10.5px] text-[var(--c-text-2)]">
-                          <span><b className="font-mono text-[var(--c-text)]">{(totalHours / windowDays).toFixed(1)}h</b> avg / day</span>
+                          <span title="Total hours in this window divided by the number of days in it.">
+                            <b className="font-mono text-[var(--c-text)]">{(totalHours / windowDays).toFixed(1)}h</b> avg / day
+                          </span>
                           {hoursGranularity === 'month' && (
-                            <span><b className="font-mono text-[var(--c-text)]">{(totalHours / (windowDays / 7)).toFixed(1)}h</b> avg / week</span>
+                            <span title="Total hours in this window divided by the number of weeks in it.">
+                              <b className="font-mono text-[var(--c-text)]">{(totalHours / (windowDays / 7)).toFixed(1)}h</b> avg / week
+                            </span>
                           )}
                         </div>
                       )}
@@ -884,34 +943,53 @@ export default function MyWorkSection({ sessions, repos, loading, goTo, onRefres
                 {/* Parallel sessions / concurrency stats — half row each. */}
                 {concurrencyAgents.length > 0 && (
                   <div className="grid grid-cols-2 gap-3">
-                    <Card title="Parallel sessions" sub="Average sessions running at once">
+                    <Card title="Parallel sessions" sub="Highest number of sessions open at once, per day">
                       <div className="flex items-baseline gap-2 mb-2">
-                        <span className="text-[18px] font-bold">{concurrencyStats.avg.toFixed(2)}×</span>
-                        <span className="text-[12px] text-[var(--c-text-3)]">avg concurrent</span>
+                        <span
+                          className="text-[18px] font-bold"
+                          title="The most sessions you had open at the exact same moment, on this window's busiest day."
+                        >
+                          {concurrencyStats.peak}×
+                        </span>
+                        <span
+                          className="text-[11px] text-[var(--c-text-3)]"
+                          title="Time-weighted average across the whole window — how much of the time multiple sessions overlapped, not just whether they ever did. Below 1.0x means you were mostly working one session at a time."
+                        >
+                          {concurrencyStats.avg.toFixed(2)}× avg concurrent
+                        </span>
                       </div>
                       <AgentFilterChips agents={concurrencyAgents} value={concurrencyAgentFilter} onChange={setConcurrencyAgentFilter} />
-                      <AgentStackedBars
-                        seriesByDay={dailyConcurrencyMatrix}
-                        activeAgents={concurrencyActiveAgents}
-                        colorFor={a => agentColor(a).hex}
+                      <DailyBars
+                        values={dailyMaxConcurrency}
                         start={start}
-                        formatValue={v => `${v.toFixed(1)}×`}
+                        color="var(--c-accent)"
+                        formatValue={v => `${v}×`}
                       />
                     </Card>
                     <Card title="Concurrency stats">
                       <div className="grid grid-cols-2 gap-2">
-                        <StatBox value={`${concurrencyStats.peak.toFixed(1)}×`} label="peak concurrent" />
-                        <StatBox value={concurrencyStats.daysWithOverlap} label={`day${concurrencyStats.daysWithOverlap === 1 ? '' : 's'} with overlap`} />
+                        <StatBox
+                          value={`${concurrencyStats.peak}×`}
+                          label="peak concurrent"
+                          hint="The most sessions open at the same instant on any single day in this window."
+                        />
+                        <StatBox
+                          value={concurrencyStats.daysWithOverlap}
+                          label={`day${concurrencyStats.daysWithOverlap === 1 ? '' : 's'} with overlap`}
+                          hint="Days where 2 or more sessions were genuinely open at the same time, even briefly."
+                        />
                         <StatBox
                           value={concurrencyStats.peakDayIdx >= 0
                             ? new Date(start + concurrencyStats.peakDayIdx * DAY).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
                             : '—'}
                           label="busiest day"
+                          hint="The day this window's peak concurrency happened on."
                         />
                         <StatBox
-                          value={concurrencyAgents[0] ? agentColor(concurrencyAgents[0]).label : '—'}
+                          value={concurrencyStats.mostParallelAgent ? agentColor(concurrencyStats.mostParallelAgent).label : '—'}
                           label="most parallel agent"
-                          color={concurrencyAgents[0] ? agentColor(concurrencyAgents[0]).hex : undefined}
+                          color={concurrencyStats.mostParallelAgent ? agentColor(concurrencyStats.mostParallelAgent).hex : undefined}
+                          hint="Which agent most often had multiple of its own sessions open at once (e.g. two Claude windows running in parallel) — not just the agent you used most."
                         />
                       </div>
                     </Card>
@@ -940,13 +1018,22 @@ export default function MyWorkSection({ sessions, repos, loading, goTo, onRefres
                   </Card>
                   <Card title={tab === 'advanced' ? 'This period' : tabLabel}>
                     <div className="grid grid-cols-2 gap-2">
-                      <StatBox value={activityStats.streak} label={`day streak${activityStats.streak === 1 ? '' : 's'}`} />
-                      <StatBox value={activityStats.sessions} label="sessions" />
-                      <StatBox value={activityStats.topWeekday ?? '—'} label="most active day" />
+                      <StatBox
+                        value={activityStats.streak}
+                        label={`day streak${activityStats.streak === 1 ? '' : 's'}`}
+                        hint="Consecutive days with at least one session, counting back from the end of this window."
+                      />
+                      <StatBox value={activityStats.sessions} label="sessions" hint="Total sessions started in this window, across every agent." />
+                      <StatBox
+                        value={activityStats.topWeekday ?? '—'}
+                        label="most active day"
+                        hint="The day of the week with the most sessions, summed across every week in this window."
+                      />
                       <StatBox
                         value={activityStats.topAgent ? agentColor(activityStats.topAgent).label : '—'}
                         label="most-used agent"
                         color={activityStats.topAgent ? agentColor(activityStats.topAgent).hex : undefined}
+                        hint="The agent with the most tokens used in this window."
                       />
                     </div>
                   </Card>
@@ -1000,9 +1087,9 @@ function AgentFilterChips({ agents, value, onChange }: {
   )
 }
 
-function StatBox({ value, label, color }: { value: string | number; label: string; color?: string }) {
+function StatBox({ value, label, color, hint }: { value: string | number; label: string; color?: string; hint?: string }) {
   return (
-    <div className="rounded-lg border border-[var(--c-border-sub)] p-2.5 flex flex-col justify-center gap-0.5">
+    <div className="rounded-lg border border-[var(--c-border-sub)] p-2.5 flex flex-col justify-center gap-0.5" title={hint}>
       <span className="text-[17px] font-bold leading-none" style={color ? { color } : undefined}>{value}</span>
       <span className="text-[9.5px] text-[var(--c-text-3)]">{label}</span>
     </div>

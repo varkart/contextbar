@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { computeDailyConcurrency } from '../MyWorkSection'
+import { computeDailyConcurrency, computeDailyMaxConcurrency } from '../MyWorkSection'
 
 const DAY = 86_400_000
 const start = Date.UTC(2026, 0, 1) // day 0 = Jan 1
@@ -58,5 +58,61 @@ describe('computeDailyConcurrency', () => {
     expect(days).toHaveLength(3)
     expect(days[0].claude).toBeCloseTo(1.0, 5)
     expect(days[2].claude).toBeCloseTo(1.0, 5)
+  })
+})
+
+describe('computeDailyMaxConcurrency', () => {
+  it('reports 1 for a single session, however long it runs', () => {
+    const activity = [{ tsMs: start + DAY, agent: 'claude', minutes: 24 * 60 }]
+    expect(computeDailyMaxConcurrency(activity, start, 1)).toEqual([1])
+  })
+
+  it('reports 2 when two sessions truly overlap, regardless of how briefly', () => {
+    // Session A: hour 0-2. Session B: hour 1-3. They overlap during hour 1-2.
+    const dayStart = start
+    const activity = [
+      { tsMs: dayStart + 2 * 3600_000, agent: 'claude', minutes: 120 },
+      { tsMs: dayStart + 3 * 3600_000, agent: 'codex', minutes: 120 },
+    ]
+    expect(computeDailyMaxConcurrency(activity, start, 1)).toEqual([2])
+  })
+
+  it('reports 1 when two sessions are sequential, not overlapping', () => {
+    // Session A: hour 0-2. Session B: hour 2-4 — touches but doesn't overlap.
+    const activity = [
+      { tsMs: start + 2 * 3600_000, agent: 'claude', minutes: 120 },
+      { tsMs: start + 4 * 3600_000, agent: 'codex', minutes: 120 },
+    ]
+    expect(computeDailyMaxConcurrency(activity, start, 1)).toEqual([1])
+  })
+
+  it('is not additive across agents — two agents peaking at different times of day stay at 1, not 2', () => {
+    const activity = [
+      { tsMs: start + 2 * 3600_000, agent: 'claude', minutes: 60 }, // hour 1-2
+      { tsMs: start + 20 * 3600_000, agent: 'codex', minutes: 60 }, // hour 19-20, no overlap with claude
+    ]
+    expect(computeDailyMaxConcurrency(activity, start, 1)).toEqual([1])
+  })
+
+  it('counts a true three-way overlap correctly', () => {
+    const activity = [
+      { tsMs: start + 3 * 3600_000, agent: 'claude', minutes: 180 }, // hour 0-3
+      { tsMs: start + 3 * 3600_000, agent: 'codex', minutes: 180 },  // hour 0-3
+      { tsMs: start + 3 * 3600_000, agent: 'opencode', minutes: 180 }, // hour 0-3
+    ]
+    expect(computeDailyMaxConcurrency(activity, start, 1)).toEqual([3])
+  })
+
+  it('scopes the peak to each day independently', () => {
+    const activity = [
+      { tsMs: start + 2 * 3600_000, agent: 'claude', minutes: 120 }, // hour 0-2
+      { tsMs: start + 3 * 3600_000, agent: 'codex', minutes: 120 },  // hour 1-3, overlaps hour 1-2
+      { tsMs: start + DAY + 5 * 3600_000, agent: 'claude', minutes: 60 }, // day 1, alone
+    ]
+    expect(computeDailyMaxConcurrency(activity, start, 2)).toEqual([2, 1])
+  })
+
+  it('returns all zeros for an empty window', () => {
+    expect(computeDailyMaxConcurrency([], start, 3)).toEqual([0, 0, 0])
   })
 })
