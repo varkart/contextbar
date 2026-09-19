@@ -12,6 +12,7 @@ import {
 import AgentBadge from '../components/history/AgentBadge'
 import { formatTokens } from '../components/history/SessionStats'
 import { agentColor } from '../constants/agentColors'
+import { usePaletteIndex } from '../constants/agentColorPalettes'
 
 const DAY = 86_400_000
 const PALETTE = ['#6366f1', '#e8a94a', '#d98fd9', '#5fc9b8', '#7aa2e8', '#8fbf6b']
@@ -122,6 +123,10 @@ interface MyWorkSectionProps {
 }
 
 export default function MyWorkSection({ sessions, repos, loading, goTo, onRefresh, onOpenSession, onOpenSessionById, onOpenSessionsForProject, onFocusWorktree, showToast }: MyWorkSectionProps) {
+  // Unused directly — agentColor() reads the active palette internally, this
+  // just forces a re-render (and thus a fresh agentColor() call) when the
+  // user changes it in Settings while this view is mounted.
+  usePaletteIndex()
   const [tab, setTab] = useState<Tab>('month')
   const [copiedResume, setCopiedResume] = useState<string | null>(null)
   const [commits, setCommits] = useState<CommitEntry[]>([])
