@@ -17,9 +17,10 @@ import { usePaletteIndex } from '../constants/agentColorPalettes'
 const DAY = 86_400_000
 const PALETTE = ['#6366f1', '#e8a94a', '#d98fd9', '#5fc9b8', '#7aa2e8', '#8fbf6b']
 const WEEKDAY_LABELS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
-// Tall enough for one row of project tiles including the optional branch
-// line, short enough to reliably clip a second row before it peeks through.
-const PROJECT_TILE_ROW_HEIGHT = 122
+// Collapsed-state tile count — a whole-tile cap, not a pixel height, so
+// tiles are never partially clipped regardless of real rendered height.
+// Comfortably fits one row at this window's minimum supported width.
+const COLLAPSED_PROJECT_COUNT = 4
 const MAX_ADVANCED_DAYS = 90
 
 type Tab = 'today' | 'yesterday' | 'week' | 'month' | 'prevMonth' | 'last3' | 'advanced'
@@ -119,6 +120,55 @@ export function computeDailyMaxConcurrency(
       if (running > max) max = running
     }
     result[idx] = max
+  }
+  return result
+}
+
+/** Wall-clock hours actually covered per day — the union of every session's
+ *  (start, end) interval, not a sum. A naive per-session sum double-counts
+ *  overlapping time: two sessions both open the same hour (e.g. Claude and
+ *  Kiro running at once) is 1 hour spent, not 2, and summing minutes across
+ *  agents could otherwise report more than 24 hours in a single day. Same
+ *  sweep-line approach as computeDailyMaxConcurrency, but instead of
+ *  tracking the peak simultaneous count, this sums the duration of every
+ *  merged (possibly overlapping) interval. Callers pre-filter `activity` to
+ *  whichever agent(s) they want the total for — "All" means every session,
+ *  a single agent means just that agent's own (still de-duplicating time
+ *  from that agent's own concurrent sessions, if any). */
+export function computeDailyUnionHours(
+  activity: { tsMs: number; agent: string; minutes: number }[],
+  start: number,
+  windowDays: number
+): number[] {
+  const result = new Array(windowDays).fill(0)
+  for (let idx = 0; idx < windowDays; idx++) {
+    const dayStart = start + idx * DAY
+    const dayEnd = dayStart + DAY
+    const intervals: [number, number][] = []
+    for (const p of activity) {
+      const sessionStart = p.tsMs - p.minutes * 60_000
+      const sessionEnd = p.tsMs
+      if (sessionEnd <= sessionStart) continue
+      const clampedStart = Math.max(sessionStart, dayStart)
+      const clampedEnd = Math.min(sessionEnd, dayEnd)
+      if (clampedEnd <= clampedStart) continue
+      intervals.push([clampedStart, clampedEnd])
+    }
+    intervals.sort((a, b) => a[0] - b[0])
+    let coveredMs = 0
+    let curStart = -Infinity
+    let curEnd = -Infinity
+    for (const [s, e] of intervals) {
+      if (s > curEnd) {
+        if (curEnd > curStart) coveredMs += curEnd - curStart
+        curStart = s
+        curEnd = e
+      } else {
+        curEnd = Math.max(curEnd, e)
+      }
+    }
+    if (curEnd > curStart) coveredMs += curEnd - curStart
+    result[idx] = coveredMs / 3_600_000
   }
   return result
 }
@@ -379,28 +429,29 @@ export default function MyWorkSection({ sessions, repos, loading, goTo, onRefres
   }, [insights, start, windowDays])
   const usageActiveAgents = usageAgentFilter === 'all' ? perAgentTotals.map(([a]) => a) : [usageAgentFilter]
 
-  // Same shape, in hours, from get_agent_activity — see the comment above
-  // its fetch effect for why this doesn't reuse the token-cost aggregator.
+  // Hours spent — from get_agent_activity (see the comment above its fetch
+  // effect). Wall-clock hours, via computeDailyUnionHours: summing each
+  // session's own minutes double-counts any time two agents (or two
+  // sessions of the same agent) were open at once, which is exactly the
+  // "42 hours in a day" bug a straight sum produces. "All" unions every
+  // session; a single-agent filter unions just that agent's own sessions,
+  // so the same agent running two windows at once doesn't double-count
+  // either. Because the total is a union, not a sum, it isn't a per-agent
+  // breakdown any more — the chart is one plain series, not stacked.
   const hoursAgents = useMemo(() => {
     const totals = new Map<string, number>()
     for (const p of windowActivity) totals.set(p.agent, (totals.get(p.agent) ?? 0) + p.minutes)
     return [...totals.entries()].filter(([, m]) => m > 0).sort((a, b) => b[1] - a[1]).map(([a]) => a)
   }, [windowActivity])
-  const dailyHoursMatrix = useMemo(() => {
-    const days: Record<string, number>[] = Array.from({ length: windowDays }, () => ({}))
-    for (const p of windowActivity) {
-      const idx = Math.floor((p.tsMs - start) / DAY)
-      if (idx >= 0 && idx < windowDays) days[idx][p.agent] = (days[idx][p.agent] ?? 0) + p.minutes / 60
-    }
-    return days
-  }, [windowActivity, start, windowDays])
-  const hoursActiveAgents = hoursAgentFilter === 'all' ? hoursAgents : [hoursAgentFilter]
-  const totalHours = useMemo(
-    () => windowActivity
-      .filter(p => hoursAgentFilter === 'all' || p.agent === hoursAgentFilter)
-      .reduce((sum, p) => sum + p.minutes, 0) / 60,
+  const hoursFilteredActivity = useMemo(
+    () => hoursAgentFilter === 'all' ? windowActivity : windowActivity.filter(p => p.agent === hoursAgentFilter),
     [windowActivity, hoursAgentFilter]
   )
+  const dailyUnionHours = useMemo(
+    () => computeDailyUnionHours(hoursFilteredActivity, start, windowDays),
+    [hoursFilteredActivity, start, windowDays]
+  )
+  const totalHours = useMemo(() => dailyUnionHours.reduce((a, b) => a + b, 0), [dailyUnionHours])
   // Day-level windows (Today/Yesterday) are a single number — an average
   // over one day is meaningless. Week shows the daily average; month-and-up
   // also shows a weekly average, since a month of daily numbers is too
@@ -661,10 +712,12 @@ export default function MyWorkSection({ sessions, repos, loading, goTo, onRefres
             )}
 
             {/* Active projects — width-based columns (auto-fill). Collapsed
-                to a single row by default (overflow clipped to one tile's
-                height) regardless of window width, so a narrow window
-                doesn't push the rest of the page down under extra rows of
-                project tiles; "Show all" reveals the rest on demand. */}
+                to a fixed number of whole tiles by default (not a clipped
+                pixel height — that clipped into the bottom of the visible
+                row itself whenever the real tile height didn't exactly
+                match the guessed cutoff), so a narrow window doesn't push
+                the rest of the page down under extra rows; "Show all"
+                reveals the rest on demand. */}
             {orderedProjects.length > 0 && (
               <div className="rounded-xl border border-[var(--c-border)] p-3 mb-4">
                 <p className="text-[12px] font-semibold mb-2.5">
@@ -672,13 +725,9 @@ export default function MyWorkSection({ sessions, repos, loading, goTo, onRefres
                 </p>
                 <div
                   className="grid gap-3"
-                  style={{
-                    gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))',
-                    maxHeight: projectsExpanded ? 'none' : PROJECT_TILE_ROW_HEIGHT,
-                    overflow: 'hidden',
-                  }}
+                  style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))' }}
                 >
-                  {orderedProjects.slice(0, 12).map((p, i) => {
+                  {orderedProjects.slice(0, projectsExpanded ? 12 : COLLAPSED_PROJECT_COUNT).map((p, i) => {
                     const branch = branchFor(p.project)
                     const live = p.sessions.some(s => s.isLive)
                     return (
@@ -742,7 +791,7 @@ export default function MyWorkSection({ sessions, repos, loading, goTo, onRefres
                     )
                   })}
                 </div>
-                {orderedProjects.length > 6 && (
+                {orderedProjects.length > COLLAPSED_PROJECT_COUNT && (
                   <div className="flex justify-center mt-2.5">
                     <button
                       onClick={() => setProjectsExpanded(e => !e)}
@@ -916,8 +965,12 @@ export default function MyWorkSection({ sessions, repos, loading, goTo, onRefres
                   {hoursAgents.length > 0 && (
                     <Card title="Hours spent">
                       <div className="flex items-baseline gap-2 mb-1">
-                        <span className="text-[18px] font-bold">{totalHours.toFixed(1)}h</span>
-                        <span className="text-[12px] text-[var(--c-text-3)]">across all agents</span>
+                        <span className="text-[18px] font-bold" title="Wall-clock time covered by these sessions — overlapping sessions aren't double-counted, so this can't exceed 24h/day.">
+                          {totalHours.toFixed(1)}h
+                        </span>
+                        <span className="text-[12px] text-[var(--c-text-3)]">
+                          {hoursAgentFilter === 'all' ? 'across all agents' : `on ${agentColor(hoursAgentFilter).label}`}
+                        </span>
                       </div>
                       {hoursGranularity !== 'day' && (
                         <div className="flex gap-3 mb-2 text-[10.5px] text-[var(--c-text-2)]">
@@ -932,11 +985,10 @@ export default function MyWorkSection({ sessions, repos, loading, goTo, onRefres
                         </div>
                       )}
                       <AgentFilterChips agents={hoursAgents} value={hoursAgentFilter} onChange={setHoursAgentFilter} />
-                      <AgentStackedBars
-                        seriesByDay={dailyHoursMatrix}
-                        activeAgents={hoursActiveAgents}
-                        colorFor={a => agentColor(a).hex}
+                      <DailyBars
+                        values={dailyUnionHours}
                         start={start}
+                        color={hoursAgentFilter === 'all' ? 'var(--c-accent)' : agentColor(hoursAgentFilter).hex}
                         formatValue={v => `${v.toFixed(1)}h`}
                       />
                     </Card>
