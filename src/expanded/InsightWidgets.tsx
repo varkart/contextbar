@@ -80,10 +80,13 @@ export function SkeletonCards({ count = 3 }: { count?: number }) {
   )
 }
 
-export function Card({ title, sub, children }: { title: string; sub?: string; children: React.ReactNode }) {
+export function Card({ title, sub, headerRight, children }: { title: string; sub?: string; headerRight?: React.ReactNode; children: React.ReactNode }) {
   return (
     <div className="rounded-xl border border-[var(--c-border)] bg-[var(--c-surface-2)]/40 p-4">
-      <h3 className="text-[14px] font-semibold mb-0.5">{title}</h3>
+      <div className="flex items-start justify-between gap-2">
+        <h3 className="text-[14px] font-semibold mb-0.5">{title}</h3>
+        {headerRight}
+      </div>
       {sub && <p className="text-[12px] text-[var(--c-text-3)] mb-3">{sub}</p>}
       {children}
     </div>
@@ -478,7 +481,13 @@ export function AgentStackedBars({ seriesByDay, activeAgents, colorFor, start, h
  *  "Usage per agent" tile. Widths are relative to the largest agent, not to
  *  100%, so the leader always reads as a full-length bar. */
 export function RankedAgentBars({ items }: {
-  items: { agent: string; label: string; color: string; value: number; formatted: string; pct: number }[]
+  items: {
+    agent: string; label: string; color: string; value: number; formatted: string; pct: number
+    /** When set, the bar fills as adjacent colored segments (e.g. by model)
+     *  instead of one solid color — the agent's own `color`/label/total/pct
+     *  stay exactly as before, this only changes what fills the bar itself. */
+    segments?: { label: string; value: number; color: string }[]
+  }[]
 }) {
   const max = Math.max(1, ...items.map(i => i.value))
   return (
@@ -486,8 +495,19 @@ export function RankedAgentBars({ items }: {
       {items.map(item => (
         <div key={item.agent} className="flex items-center gap-2 text-[11px]">
           <span className="w-16 shrink-0 truncate">{item.label}</span>
-          <div className="flex-1 h-2.5 rounded-full bg-[var(--c-surface-2)] overflow-hidden">
-            <div className="h-full rounded-full" style={{ width: `${(item.value / max) * 100}%`, background: item.color }} />
+          <div className="flex-1 h-2.5 rounded-full bg-[var(--c-surface-2)] overflow-hidden flex">
+            {item.segments && item.segments.length > 0 ? (
+              item.segments.map(seg => (
+                <div
+                  key={seg.label}
+                  title={`${seg.label}: ${seg.value.toLocaleString()} tokens`}
+                  className="h-full first:rounded-l-full last:rounded-r-full"
+                  style={{ width: `${(seg.value / max) * 100}%`, background: seg.color }}
+                />
+              ))
+            ) : (
+              <div className="h-full rounded-full" style={{ width: `${(item.value / max) * 100}%`, background: item.color }} />
+            )}
           </div>
           <span className="w-24 shrink-0 text-right font-mono text-[10px] text-[var(--c-text-3)]">
             {item.formatted} · {item.pct}%
