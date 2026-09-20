@@ -174,11 +174,20 @@ function AgentPaletteSelector() {
             <button
               key={p.name}
               onClick={() => choose(i)}
-              className={`w-full flex items-center justify-between gap-2 px-3 py-2 text-left hover:bg-[var(--c-hover)] transition-colors ${i === paletteIndex ? 'bg-[var(--c-hover)]' : ''}`}
+              className={`group w-full flex items-center justify-between gap-2 px-3 py-2 text-left hover:bg-[var(--c-hover)] transition-colors ${i === paletteIndex ? 'bg-[var(--c-hover)]' : ''}`}
             >
-              <span className="text-[12.5px]">{p.name}</span>
-              <span className="flex gap-1 shrink-0">
-                {p.colors.map((c, j) => <span key={j} className="w-2.5 h-2.5 rounded-full" style={{ background: c }} />)}
+              <span className="text-[12.5px] shrink-0">{p.name}</span>
+              {/* Circles on rest; on hover they widen into rectangles (wraps
+                  to a second line if needed) — easier to actually judge a
+                  color from a bar than a 10px dot. */}
+              <span className="flex flex-wrap justify-end gap-1">
+                {p.colors.map((c, j) => (
+                  <span
+                    key={j}
+                    className="w-2.5 h-2.5 rounded-full group-hover:w-4 group-hover:h-2.5 group-hover:rounded-[2px] transition-all duration-150"
+                    style={{ background: c }}
+                  />
+                ))}
               </span>
             </button>
           ))}
