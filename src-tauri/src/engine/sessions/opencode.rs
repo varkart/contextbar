@@ -511,24 +511,50 @@ fn get_messages_v2(conn: &Connection, session_id: &str) -> Vec<Message> {
         .collect()
 }
 
+/// input/output come from `session`'s own columns (the same authoritative
+/// source `list_from_db` already uses), not summed from parsed messages —
+/// the message/part schema is the unstable part across OpenCode versions
+/// (see module doc), so a parsing gap there used to silently zero out an
+/// otherwise-real session's tokens instead of just missing some detail.
+/// cache_read/cache_creation have no session-level equivalent, so those
+/// still come from whatever per-message usage did parse (best effort).
+fn session_total_usage(tokens_input: u64, tokens_output: u64, messages: &[Message]) -> TokenUsage {
+    TokenUsage {
+        input_tokens: tokens_input,
+        output_tokens: tokens_output,
+        ..messages.iter().filter_map(|m| m.usage.as_ref()).fold(
+            TokenUsage::default(),
+            |mut acc, u| {
+                acc.cache_read_tokens += u.cache_read_tokens;
+                acc.cache_creation_tokens += u.cache_creation_tokens;
+                acc
+            },
+        )
+    }
+}
+
 fn get_from_db(session_id: &str) -> Option<SessionDetail> {
     let path = db_path()?;
     let conn = open_ro(&path)?;
 
-    let (title, directory, time_created, time_updated) = conn
+    let (title, directory, time_created, time_updated, tokens_input, tokens_output) = conn
         .query_row(
-            "SELECT title, directory, time_created, time_updated FROM session WHERE id = ?1",
+            "SELECT title, directory, time_created, time_updated, tokens_input, tokens_output FROM session WHERE id = ?1",
             [session_id],
             |row| {
                 let title: String = row.get(0)?;
                 let directory: String = row.get(1)?;
                 let created: i64 = row.get(2)?;
                 let updated: i64 = row.get(3)?;
+                let tokens_input: i64 = row.get(4)?;
+                let tokens_output: i64 = row.get(5)?;
                 Ok((
                     title,
                     directory,
                     created.max(0) as u64,
                     updated.max(0) as u64,
+                    tokens_input.max(0) as u64,
+                    tokens_output.max(0) as u64,
                 ))
             },
         )
@@ -540,16 +566,7 @@ fn get_from_db(session_id: &str) -> Option<SessionDetail> {
         get_messages_legacy(&conn, session_id)
     };
 
-    let total_tokens = messages.iter().filter_map(|m| m.usage.as_ref()).fold(
-        TokenUsage::default(),
-        |mut acc, u| {
-            acc.input_tokens += u.input_tokens;
-            acc.output_tokens += u.output_tokens;
-            acc.cache_read_tokens += u.cache_read_tokens;
-            acc.cache_creation_tokens += u.cache_creation_tokens;
-            acc
-        },
-    );
+    let total_tokens = session_total_usage(tokens_input, tokens_output, &messages);
     let model = messages.iter().rev().find_map(|m| m.model.clone());
 
     Some(SessionDetail {
@@ -647,6 +664,41 @@ mod tests {
         assert_eq!(usage.output_tokens, 50);
         assert_eq!(usage.cache_read_tokens, 10);
         assert_eq!(usage.cache_creation_tokens, 5);
+    }
+
+    #[test]
+    fn session_total_usage_prefers_session_columns_over_message_sum() {
+        // Message-level usage under-reports (e.g. a parsing gap on some real
+        // OpenCode DB shape) — the session table's own columns must still
+        // win for input/output, not the incomplete per-message sum.
+        let messages = vec![Message {
+            role: "assistant".to_string(),
+            content: vec![],
+            timestamp: None,
+            model: None,
+            usage: Some(TokenUsage {
+                input_tokens: 5,
+                output_tokens: 5,
+                cache_read_tokens: 3,
+                cache_creation_tokens: 2,
+            }),
+            reasoning_chars: 0,
+        }];
+        let total = session_total_usage(1000, 500, &messages);
+        assert_eq!(total.input_tokens, 1000);
+        assert_eq!(total.output_tokens, 500);
+        // cache fields have no session-level column, so they still come from
+        // whatever per-message usage did parse.
+        assert_eq!(total.cache_read_tokens, 3);
+        assert_eq!(total.cache_creation_tokens, 2);
+    }
+
+    #[test]
+    fn session_total_usage_handles_no_messages() {
+        let total = session_total_usage(42, 7, &[]);
+        assert_eq!(total.input_tokens, 42);
+        assert_eq!(total.output_tokens, 7);
+        assert_eq!(total.cache_read_tokens, 0);
     }
 
     #[test]

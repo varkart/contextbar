@@ -1,9 +1,12 @@
 //! Background aggregation of per-session statistics (tokens, model, tool
-//! calls) into SQLite. Session JSONL files are parsed at most once per
-//! (mtime, size) — re-parsing only happens when a file changes, so the warm
-//! pass is cheap after the first run.
+//! calls) into SQLite. A session backed by a single trackable transcript
+//! file is parsed at most once per (mtime, size) — re-parsing only happens
+//! when that file changes, so the warm pass is cheap after the first run.
+//! A session with no such file (see `warm_reparse_decision`) always
+//! re-parses; there's no cheap way to detect "unchanged" without one.
 
 use super::parser;
+use super::types::TokenUsage;
 use crate::db::DbState;
 use serde::Serialize;
 use std::collections::HashMap;
@@ -385,6 +388,27 @@ fn transcript_text(detail: &super::SessionDetail) -> String {
 /// and upsert one stats row per session (plus its FTS transcript row).
 /// Covers every session source, not just Claude. Returns the number of
 /// (re)parsed sessions. Safe to call repeatedly.
+/// Whether a session should be (re-)parsed this warm pass, and with what
+/// `(mtime, size)` to record for next time. `None` means skip — already
+/// cached and unchanged. A session with no trackable file (`file_meta ==
+/// None`, either because the source's `transcript_file()` doesn't apply —
+/// e.g. OpenCode's sessions live in one shared DB with no per-session file
+/// — or the file it named doesn't exist) always reparses: there's no cheap
+/// way to detect "unchanged" without one, matching the documented fallback
+/// (`transcript_file()`'s own doc comment: "skip it and the warm pass just
+/// re-parses every time"). Getting this case wrong once meant such sessions
+/// were silently skipped from session_stats forever instead — exactly the
+/// bug this function exists to make directly testable.
+fn warm_reparse_decision(
+    file_meta: Option<(i64, i64)>,
+    cached: Option<(i64, i64)>,
+) -> Option<(i64, i64)> {
+    match file_meta {
+        Some((mtime, size)) => (cached != Some((mtime, size))).then_some((mtime, size)),
+        None => Some((0, 0)),
+    }
+}
+
 pub fn warm(db: &DbState) -> usize {
     let Some(home) = dirs::home_dir() else {
         return 0;
@@ -397,20 +421,30 @@ pub fn warm(db: &DbState) -> usize {
         let limit = if is_claude { 2000 } else { 500 };
 
         for entry in source.list(limit) {
-            let Some(path) = source.transcript_file(&entry) else {
-                continue;
-            };
-            let Ok(meta) = std::fs::metadata(&path) else {
-                continue;
-            };
-            let mtime = meta
-                .modified()
-                .ok()
-                .and_then(|m| m.duration_since(std::time::UNIX_EPOCH).ok())
-                .map(|d| d.as_secs() as i64)
-                .unwrap_or(0);
-            let size = meta.len() as i64;
-
+            // `transcript_file()` returning None — either because this
+            // source doesn't override it (e.g. OpenCode, whose sessions
+            // live in one shared DB with no per-session file to track), or
+            // because the file it named doesn't exist on disk (e.g. an Agy
+            // conversation predating the transcript-log feature) — used to
+            // `continue` here, silently skipping the session from
+            // session_stats forever. That contradicted this trait method's
+            // own documented contract ("skip it and the warm pass just
+            // re-parses every time," CLAUDE.md) and made such sessions
+            // permanently invisible to every session_stats-backed tile
+            // (Usage per agent, Usage & cost, Context Efficiency) while
+            // they stayed visible in list()-backed ones (Hours spent,
+            // Parallel sessions) — exactly the symptom that surfaced this.
+            let file_meta = source.transcript_file(&entry).and_then(|p| {
+                std::fs::metadata(&p).ok().map(|meta| {
+                    let mtime = meta
+                        .modified()
+                        .ok()
+                        .and_then(|m| m.duration_since(std::time::UNIX_EPOCH).ok())
+                        .map(|d| d.as_secs() as i64)
+                        .unwrap_or(0);
+                    (mtime, meta.len() as i64)
+                })
+            });
             let cached: Option<(i64, i64)> = {
                 let conn = db.0.lock().unwrap();
                 conn.query_row(
@@ -420,9 +454,9 @@ pub fn warm(db: &DbState) -> usize {
                 )
                 .ok()
             };
-            if cached == Some((mtime, size)) {
+            let Some((mtime, size)) = warm_reparse_decision(file_meta, cached) else {
                 continue;
-            }
+            };
 
             // Claude fast path: source.get() would rescan history.jsonl per
             // session to find the project; we already have it on the entry.
@@ -431,8 +465,31 @@ pub fn warm(db: &DbState) -> usize {
             } else {
                 source.get(&entry.session_id)
             };
-            let Some(detail) = detail else {
-                continue;
+            let detail = match detail {
+                Some(d) => d,
+                // get() also needs the same file transcript_file() named
+                // (when it named one) — if that file is simply missing
+                // rather than corrupt, get() returning None is expected,
+                // not a parse failure to keep silently retrying. Cache what
+                // list() already knows honestly (real project/timestamp,
+                // zero tokens) so the session is at least visible, once —
+                // guarded so a genuine parse failure (file exists, get()
+                // still fails) doesn't get masked the same way, since that
+                // case already returned a real (mtime, size) above and
+                // would naturally retry once the file changes.
+                None if file_meta.is_none() => super::SessionDetail {
+                    agent: source.agent_id().to_string(),
+                    session_id: entry.session_id.clone(),
+                    messages: Vec::new(),
+                    title: None,
+                    total_tokens: TokenUsage::default(),
+                    model: None,
+                    duration_ms: None,
+                    project: entry.project.clone(),
+                    project_name: entry.project_name.clone(),
+                    timestamp: entry.timestamp,
+                },
+                None => continue,
             };
 
             upsert_session(db, &entry, &detail, mtime, size);
@@ -493,7 +550,12 @@ fn upsert_session(
     let drivers_json = serde_json::to_string(&drivers).unwrap_or_else(|_| "{}".into());
     let t = &detail.total_tokens;
     // Count real user turns — those carrying typed text — not the `user`-role
-    // envelopes that only wrap a tool_result.
+    // envelopes that only wrap a tool_result. Kiro's own list()-side prompt
+    // count uses a cheaper, different definition (every recorded turn,
+    // content-agnostic) — see the comment in sessions/kiro.rs — so the two
+    // can legitimately disagree for the same session; not a bug to unify,
+    // this one is the source of truth for every aggregate/tile that reads
+    // session_stats.
     let prompt_count = detail
         .messages
         .iter()
@@ -1008,8 +1070,42 @@ pub fn context_efficiency(
 mod tests {
     use super::{
         codex_skill_from_read, context_efficiency, est_cost, kiro_slash_skill, rates,
-        skill_name_from_input, CachedDriver, CachedSessionDrivers,
+        skill_name_from_input, warm_reparse_decision, CachedDriver, CachedSessionDrivers,
     };
+
+    #[test]
+    fn warm_reparse_decision_skips_when_cached_and_unchanged() {
+        assert_eq!(
+            warm_reparse_decision(Some((100, 200)), Some((100, 200))),
+            None
+        );
+    }
+
+    #[test]
+    fn warm_reparse_decision_reparses_when_file_changed() {
+        assert_eq!(
+            warm_reparse_decision(Some((150, 200)), Some((100, 200))),
+            Some((150, 200))
+        );
+    }
+
+    #[test]
+    fn warm_reparse_decision_reparses_when_never_cached() {
+        assert_eq!(
+            warm_reparse_decision(Some((100, 200)), None),
+            Some((100, 200))
+        );
+    }
+
+    #[test]
+    fn warm_reparse_decision_always_reparses_with_no_trackable_file() {
+        // The exact bug this function exists to prevent: a session with no
+        // trackable file (transcript_file() not overridden, or the file it
+        // named doesn't exist) must never resolve to "skip" — regardless of
+        // whatever happens to already be cached for it.
+        assert_eq!(warm_reparse_decision(None, None), Some((0, 0)));
+        assert_eq!(warm_reparse_decision(None, Some((999, 999))), Some((0, 0)));
+    }
 
     fn test_db() -> crate::db::DbState {
         let mut conn = rusqlite::Connection::open_in_memory().unwrap();
@@ -1249,5 +1345,54 @@ mod smoke {
                 u.sessions_7d
             );
         }
+    }
+
+    /// Regression guard for the exact bug `warm_reparse_decision` was
+    /// extracted to prevent: a session with no trackable file used to be
+    /// silently skipped from `session_stats` forever, even though `list()`
+    /// found it — invisible to every session_stats-backed tile (Usage per
+    /// agent, Usage & cost, Context Efficiency) while still showing up in
+    /// list()-backed ones (Hours spent, Parallel sessions). Run against the
+    /// real home dir: `cargo test -- --ignored warm_covers_every_listed_session`.
+    #[test]
+    #[ignore]
+    fn warm_covers_every_listed_session() {
+        let mut conn = rusqlite::Connection::open_in_memory().unwrap();
+        crate::db::migrate_for_test(&mut conn);
+        let db = crate::db::DbState(std::sync::Arc::new(std::sync::Mutex::new(conn)));
+
+        super::warm(&db);
+
+        let cached: std::collections::HashSet<String> = {
+            let conn = db.0.lock().unwrap();
+            let mut stmt = conn
+                .prepare("SELECT session_id FROM session_stats")
+                .unwrap();
+            stmt.query_map([], |r| r.get::<_, String>(0))
+                .unwrap()
+                .flatten()
+                .collect()
+        };
+
+        let mut missing: Vec<(String, String)> = Vec::new();
+        for source in crate::engine::sessions::sources() {
+            let limit = if source.agent_id() == "claude" {
+                2000
+            } else {
+                500
+            };
+            for entry in source.list(limit) {
+                if !cached.contains(&entry.session_id) {
+                    missing.push((source.agent_id().to_string(), entry.session_id));
+                }
+            }
+        }
+
+        assert!(
+            missing.is_empty(),
+            "{} session(s) list() found but warm() never cached: {:?}",
+            missing.len(),
+            &missing[..missing.len().min(10)]
+        );
     }
 }
