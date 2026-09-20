@@ -121,6 +121,13 @@ fn list_from_root(root: &std::path::Path, limit: usize) -> Vec<SessionEntry> {
                 .unwrap_or(0);
             let duration_minutes = rfc3339_to_ms(&meta.created_at)
                 .and_then(|created| super::session_duration_minutes(created, ts));
+            // Every recorded user turn, regardless of content — cheaper than
+            // scanning the jsonl, but a different definition than
+            // session_stats.prompt_count (get()'s messages, filtered to
+            // turns with actual typed text; see upsert_session). A turn
+            // that's purely a tool-result echo counts here but not there,
+            // so the Sessions list and My Work aggregates can legitimately
+            // show different prompt counts for the same Kiro session.
             let prompt_count = meta
                 .session_state
                 .as_ref()

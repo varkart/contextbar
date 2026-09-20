@@ -327,6 +327,19 @@ fn migrate(conn: &mut Connection) -> Result<(), AppError> {
         conn.pragma_update(None, "user_version", 19)?;
     }
 
+    if version < 20 {
+        // OpenCode's session-level input/output tokens were summed from
+        // parsed messages instead of read from the session table's own
+        // authoritative tokens_input/tokens_output columns — a message/part
+        // parsing gap on some real DB shapes silently zeroed out an
+        // otherwise-real session's tokens (invisible to Usage per agent/
+        // Usage & cost, though still visible to duration-only tiles like
+        // Hours spent, which is how this was actually found). Force a
+        // re-parse to recompute already-cached OpenCode sessions correctly.
+        conn.execute_batch("UPDATE session_stats SET mtime = -1;")?;
+        conn.pragma_update(None, "user_version", 20)?;
+    }
+
     Ok(())
 }
 
@@ -1292,7 +1305,7 @@ mod tests {
         let version: i32 = conn
             .query_row("PRAGMA user_version", [], |r| r.get(0))
             .unwrap();
-        assert_eq!(version, 19);
+        assert_eq!(version, 20);
         let mtime: i64 = conn
             .query_row(
                 "SELECT mtime FROM session_stats WHERE session_id = 's1'",

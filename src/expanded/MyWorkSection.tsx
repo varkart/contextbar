@@ -177,6 +177,43 @@ export function computeDailyUnionHours(
   return result
 }
 
+// Sun/Sat flag per day index in the window. Stepped via setDate (calendar
+// days), not `start + idx * DAY` (raw milliseconds) — a 23h/25h
+// DST-transition day would otherwise drift the computed local time off
+// midnight for every subsequent index, which can shift getDay() onto the
+// wrong calendar day and misclassify weekday vs. weekend right around the
+// transition.
+export function computeWeekendDayFlags(start: number, windowDays: number): boolean[] {
+  return Array.from({ length: windowDays }, (_, idx) => {
+    const d = new Date(start)
+    d.setDate(d.getDate() + idx)
+    const day = d.getDay()
+    return day === 0 || day === 6
+  })
+}
+
+export type DayScope = 'all' | 'weekdays' | 'weekends'
+
+// Zero out the days outside the selected scope, and compute the divisors to
+// average over just the included days — a work-week is 5 days, a weekend is
+// 2, only "all"'s week is 7.
+export function applyDayScope(
+  values: number[],
+  scope: DayScope,
+  weekendFlags: boolean[]
+): { values: number[]; daysDivisor: number; weekDivisor: number } {
+  if (scope === 'all') {
+    return { values, daysDivisor: values.length, weekDivisor: values.length / 7 }
+  }
+  const weekdayCount = weekendFlags.filter(w => !w).length || 1
+  const weekendCount = weekendFlags.filter(w => w).length || 1
+  const keepWeekend = scope === 'weekends'
+  const scoped = values.map((v, idx) => weekendFlags[idx] === keepWeekend ? v : 0)
+  return scope === 'weekdays'
+    ? { values: scoped, daysDivisor: weekdayCount, weekDivisor: weekdayCount / 5 }
+    : { values: scoped, daysDivisor: weekendCount, weekDivisor: weekendCount / 2 }
+}
+
 // Which agent's slice of a ContextEfficiency response the tile is currently
 // showing. Falls back to `overall` rather than `undefined` when `filter`
 // names an agent no longer present in a re-fetched response (e.g. the
@@ -557,30 +594,15 @@ export default function MyWorkSection({ sessions, repos, loading, goTo, onRefres
     () => computeDailyUnionHours(hoursFilteredActivity, start, windowDays),
     [hoursFilteredActivity, start, windowDays]
   )
-  // Sun/Sat flag per day index in the window — used to zero out the days
-  // outside the selected scope in both the chart and the totals, and to
-  // divide averages by the actual number of included days.
-  // Stepped via setDate (calendar days), not `start + idx * DAY` (raw
-  // milliseconds) — a 23h/25h DST-transition day would otherwise drift the
-  // computed local time off midnight for every subsequent index, which can
-  // shift getDay() onto the wrong calendar day and misclassify weekday vs.
-  // weekend right around the transition.
-  const weekendDayFlags = useMemo(
-    () => Array.from({ length: windowDays }, (_, idx) => {
-      const d = new Date(start)
-      d.setDate(d.getDate() + idx)
-      const day = d.getDay()
-      return day === 0 || day === 6
-    }),
-    [start, windowDays]
+  const weekendDayFlags = useMemo(() => computeWeekendDayFlags(start, windowDays), [start, windowDays])
+  const {
+    values: dailyHoursDisplay,
+    daysDivisor: hoursDaysDivisor,
+    weekDivisor: hoursWeekDivisor,
+  } = useMemo(
+    () => applyDayScope(dailyUnionHours, hoursDayScope, weekendDayFlags),
+    [dailyUnionHours, hoursDayScope, weekendDayFlags]
   )
-  const weekdayCount = useMemo(() => weekendDayFlags.filter(w => !w).length || 1, [weekendDayFlags])
-  const weekendCount = useMemo(() => weekendDayFlags.filter(w => w).length || 1, [weekendDayFlags])
-  const dailyHoursDisplay = useMemo(() => {
-    if (hoursDayScope === 'all') return dailyUnionHours
-    const keepWeekend = hoursDayScope === 'weekends'
-    return dailyUnionHours.map((h, idx) => weekendDayFlags[idx] === keepWeekend ? h : 0)
-  }, [dailyUnionHours, hoursDayScope, weekendDayFlags])
   const totalHours = useMemo(() => dailyHoursDisplay.reduce((a, b) => a + b, 0), [dailyHoursDisplay])
   // Day-level windows (Today/Yesterday) are a single number — an average
   // over one day is meaningless. Week shows the daily average; month-and-up
@@ -588,11 +610,6 @@ export default function MyWorkSection({ sessions, repos, loading, goTo, onRefres
   // noisy to compare at a glance without it.
   const hoursGranularity: 'day' | 'week' | 'month' =
     tab === 'today' || tab === 'yesterday' ? 'day' : tab === 'week' ? 'week' : 'month'
-  // A work-week is 5 days, a "weekend" is 2 — only the "all" scope's week is 7.
-  const hoursDaysDivisor =
-    hoursDayScope === 'all' ? windowDays : hoursDayScope === 'weekdays' ? weekdayCount : weekendCount
-  const hoursWeekDivisor =
-    hoursDayScope === 'all' ? windowDays / 7 : hoursDayScope === 'weekdays' ? weekdayCount / 5 : weekendCount / 2
 
   // Parallel sessions — headline metric is the true peak (sweep-line max
   // overlap, see computeDailyMaxConcurrency), not an average: the question
