@@ -28,6 +28,20 @@ pub struct ModelStat {
     pub est_cost_usd: Option<f64>,
 }
 
+/// One agent's token + cost total for the window — a real full aggregate
+/// over every matching session, computed independently of `per_session`'s
+/// sort order.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentTokens {
+    pub agent: String,
+    pub tokens: u64,
+    pub input_tokens: u64,
+    pub output_tokens: u64,
+    pub sessions: u64,
+    pub est_cost_usd: Option<f64>,
+}
+
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ProjectTokens {
@@ -43,7 +57,7 @@ pub struct ProjectTokens {
 }
 
 /// One session's token + cost line, for the drill-down "Sessions" pivot and
-/// the per-repo drill. Ranked by tokens, capped by the aggregator.
+/// the per-repo drill.
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SessionCost {
@@ -82,7 +96,9 @@ pub struct SessionInsights {
     pub avg_tool_calls: f64,
     pub per_model: Vec<ModelStat>,
     pub per_project: Vec<ProjectTokens>,
-    /// Per-session token + cost rows, ranked by tokens (capped at 100).
+    /// Full per-agent totals for the window.
+    pub per_agent: Vec<AgentTokens>,
+    /// Every session in the window, ranked by tokens descending.
     pub per_session: Vec<SessionCost>,
     pub tool_counts: Vec<ToolCount>,
     pub mcp_tool_counts: Vec<ToolCount>,
@@ -230,6 +246,14 @@ fn pricing() -> &'static Pricing {
     })
 }
 
+/// Cache reads are the same content resent, billed at this fraction of a
+/// fresh input token — used to down-weight cache re-read counts wherever raw
+/// tokens would otherwise wildly overstate a long, heavily-cached session's
+/// real context footprint (see [`super::attribution::aggregate_drivers`]).
+pub(crate) fn cache_read_multiplier() -> f64 {
+    pricing().cache_read_multiplier
+}
+
 fn rates(model: &str) -> Option<(f64, f64)> {
     let m = model.to_lowercase();
     pricing()
@@ -260,6 +284,7 @@ pub(crate) fn est_cost(
 // ── In-session token attribution ──────────────────────────────────────────
 // Lives in the `attribution` module (per-agent facade); re-exported here so
 // existing callers keep working.
+use super::attribution::{aggregate_drivers, CachedDriver, CachedSessionDrivers};
 pub use super::attribution::{compute as compute_drivers, SessionDrivers};
 
 // ── Usage windows (rolling 5h / 7d meters per agent) ─────────────────────────
@@ -464,6 +489,8 @@ fn upsert_session(
     }
     let tool_calls_json = serde_json::to_string(&tool_calls).unwrap_or_else(|_| "{}".into());
     let skill_calls_json = serde_json::to_string(&skill_calls).unwrap_or_else(|_| "{}".into());
+    let drivers = CachedSessionDrivers::from(&compute_drivers(detail));
+    let drivers_json = serde_json::to_string(&drivers).unwrap_or_else(|_| "{}".into());
     let t = &detail.total_tokens;
     // Count real user turns — those carrying typed text — not the `user`-role
     // envelopes that only wrap a tool_result.
@@ -513,6 +540,11 @@ fn upsert_session(
             mtime,
             size,
         ],
+    );
+    let _ = conn.execute(
+        "INSERT INTO session_drivers (session_id, mtime, drivers_json) VALUES (?1,?2,?3)
+             ON CONFLICT(session_id) DO UPDATE SET mtime=excluded.mtime, drivers_json=excluded.drivers_json",
+        rusqlite::params![entry.session_id, mtime, drivers_json],
     );
     drop(conn);
 
@@ -605,6 +637,7 @@ pub fn aggregate(
 
     let mut per_model: HashMap<String, ModelStat> = HashMap::new();
     let mut per_project: HashMap<String, ProjectTokens> = HashMap::new();
+    let mut per_agent: HashMap<String, AgentTokens> = HashMap::new();
     let mut per_session: Vec<SessionCost> = Vec::with_capacity(rows.len());
     let mut tools: HashMap<String, u64> = HashMap::new();
     let mut skills: HashMap<String, u64> = HashMap::new();
@@ -668,6 +701,24 @@ pub fn aggregate(
             *p.est_cost_usd.get_or_insert(0.0) += c;
         }
 
+        let a = per_agent
+            .entry(row.agent.clone())
+            .or_insert_with(|| AgentTokens {
+                agent: row.agent.clone(),
+                tokens: 0,
+                input_tokens: 0,
+                output_tokens: 0,
+                sessions: 0,
+                est_cost_usd: None,
+            });
+        a.tokens += session_tokens;
+        a.input_tokens += row.input;
+        a.output_tokens += row.output;
+        a.sessions += 1;
+        if let Some(c) = session_cost {
+            *a.est_cost_usd.get_or_insert(0.0) += c;
+        }
+
         per_session.push(SessionCost {
             session_id: row.session_id.clone(),
             display: row.display.clone(),
@@ -727,13 +778,27 @@ pub fn aggregate(
     per_model.sort_by_key(|m| std::cmp::Reverse(m.sessions));
     out.per_model = per_model;
 
+    // No cap here, same reasoning as per_session below: the frontend looks
+    // up a specific project's tokens by path (Top Repos, keyed off its own
+    // recency-ordered project list, not this one's sort order) rather than
+    // only ever consuming a ranked prefix — a cap silently made that lookup
+    // return "0 tokens" for any project ranked below it.
     let mut per_project: Vec<ProjectTokens> = per_project.into_values().collect();
     per_project.sort_by_key(|p| std::cmp::Reverse(p.tokens));
-    per_project.truncate(50);
     out.per_project = per_project;
 
+    let mut per_agent: Vec<AgentTokens> = per_agent.into_values().collect();
+    per_agent.sort_by_key(|a| std::cmp::Reverse(a.tokens));
+    out.per_agent = per_agent;
+
+    // No cap here: besides the top-5 "Top sessions" view (unaffected either
+    // way — sorted-desc top-N is a subset of any larger prefix), the
+    // frontend also derives full-window aggregates from this list (daily
+    // per-agent token chart, day-level session counts). A cap silently
+    // dropped sessions ranked below it from those, which on a machine
+    // running several agents in parallel could make a heavily-used agent
+    // with many smaller sessions vanish behind one with fewer, larger ones.
     per_session.sort_by_key(|s| std::cmp::Reverse(s.tokens));
-    per_session.truncate(100);
     out.per_session = per_session;
 
     let (mcp, native): (Vec<_>, Vec<_>) =
@@ -783,9 +848,226 @@ pub fn aggregate(
     out
 }
 
+// ── Context efficiency (cross-session attribution) ─────────────────────────
+// Kiro and Agy have no token-usage data in their transcript formats at all
+// (verified against real transcripts, not a version gap) — excluding them
+// here means the tile never shows a broken/empty score for them, rather than
+// leaving that to the frontend to notice.
+const CONTEXT_EFFICIENCY_EXCLUDED_AGENTS: &[&str] = &["kiro", "agy"];
+
+#[derive(Debug, Clone, Serialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentContextEfficiency {
+    pub agent: String,
+    pub sessions: u64,
+    pub input_tokens: u64,
+    pub output_tokens: u64,
+    /// True when any included session had no cache token accounting, so
+    /// attribution leans on plain input deltas and is rougher.
+    pub coarse: bool,
+    /// 0..100. `100 - (compaction% + growth% of input tokens this window)`.
+    /// A first-pass heuristic, not a final spec — sanity-check against real
+    /// windows before treating the exact formula as settled.
+    pub score: f64,
+    /// Aggregated drivers with a hint, sorted by tokens desc, capped at 5.
+    pub top_drivers: Vec<CachedDriver>,
+}
+
+#[derive(Debug, Clone, Serialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct ContextEfficiency {
+    pub sessions_analyzed: u64,
+    pub excluded_agents: Vec<String>,
+    pub overall: AgentContextEfficiency,
+    pub per_agent: Vec<AgentContextEfficiency>,
+}
+
+fn score_from(window: &super::attribution::WindowDrivers) -> f64 {
+    if window.input_tokens == 0 {
+        return 100.0;
+    }
+    let waste: u64 = window
+        .drivers
+        .iter()
+        .filter(|d| d.side == "input" && (d.kind == "compaction" || d.kind == "growth"))
+        .map(|d| d.tokens)
+        .sum();
+    let waste_pct = (waste as f64 / window.input_tokens as f64 * 100.0).clamp(0.0, 100.0);
+    (100.0 - waste_pct).round()
+}
+
+fn agent_context_efficiency(
+    agent: String,
+    sessions: &[&CachedSessionDrivers],
+) -> AgentContextEfficiency {
+    let window = aggregate_drivers(sessions.iter().copied());
+    let mut top_drivers: Vec<_> = window
+        .drivers
+        .iter()
+        .filter(|d| d.hint.is_some())
+        .cloned()
+        .collect();
+    top_drivers.sort_by_key(|d| std::cmp::Reverse(d.tokens));
+    top_drivers.truncate(5);
+    AgentContextEfficiency {
+        agent,
+        sessions: sessions.len() as u64,
+        input_tokens: window.input_tokens,
+        output_tokens: window.output_tokens,
+        coarse: window.coarse,
+        score: score_from(&window),
+        top_drivers,
+    }
+}
+
+/// Aggregate cached per-session attribution (`session_drivers`, populated by
+/// [`upsert_session`]) across `since_ms <= ts < until_ms`, grouped by agent,
+/// excluding agents with no usable token-usage data at all.
+pub fn context_efficiency(
+    db: &DbState,
+    since_ms: u64,
+    until_ms: u64,
+    projects: Option<&[String]>,
+) -> ContextEfficiency {
+    struct Row {
+        agent: String,
+        project: String,
+        drivers: CachedSessionDrivers,
+    }
+
+    let rows: Vec<Row> = {
+        let conn = db.0.lock().unwrap();
+        let mut stmt = match conn.prepare(
+            "SELECT sd.drivers_json, ss.agent, ss.project
+             FROM session_drivers sd JOIN session_stats ss ON ss.session_id = sd.session_id
+             WHERE ss.ts >= ?1 AND ss.ts < ?2",
+        ) {
+            Ok(s) => s,
+            Err(_) => return ContextEfficiency::default(),
+        };
+        stmt.query_map(
+            [since_ms as i64, until_ms.min(i64::MAX as u64) as i64],
+            |r| {
+                let json: String = r.get(0)?;
+                Ok(Row {
+                    agent: r.get(1)?,
+                    project: r.get(2)?,
+                    drivers: serde_json::from_str(&json).unwrap_or_default(),
+                })
+            },
+        )
+        .map(|it| it.flatten().collect())
+        .unwrap_or_default()
+    };
+
+    // Single source of truth for exclusion — filtered here in Rust, not
+    // duplicated as a second hardcoded list in the SQL, so `excluded_agents`
+    // (what the response tells the UI is excluded) can never drift from
+    // what's actually excluded from `overall`/`per_agent`.
+    let rows: Vec<Row> = rows
+        .into_iter()
+        .filter(|r| !CONTEXT_EFFICIENCY_EXCLUDED_AGENTS.contains(&r.agent.as_str()))
+        .collect();
+    let rows: Vec<Row> = match projects {
+        Some(paths) => rows
+            .into_iter()
+            .filter(|r| paths.contains(&r.project))
+            .collect(),
+        None => rows,
+    };
+
+    let mut by_agent: HashMap<String, Vec<&CachedSessionDrivers>> = HashMap::new();
+    for r in &rows {
+        by_agent
+            .entry(r.agent.clone())
+            .or_default()
+            .push(&r.drivers);
+    }
+
+    let all: Vec<&CachedSessionDrivers> = rows.iter().map(|r| &r.drivers).collect();
+    let overall = agent_context_efficiency("all".to_string(), &all);
+
+    let mut per_agent: Vec<AgentContextEfficiency> = by_agent
+        .into_iter()
+        .map(|(agent, sessions)| agent_context_efficiency(agent, &sessions))
+        .collect();
+    per_agent.sort_by(|a, b| a.agent.cmp(&b.agent));
+
+    ContextEfficiency {
+        sessions_analyzed: rows.len() as u64,
+        excluded_agents: CONTEXT_EFFICIENCY_EXCLUDED_AGENTS
+            .iter()
+            .map(|s| s.to_string())
+            .collect(),
+        overall,
+        per_agent,
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{codex_skill_from_read, est_cost, kiro_slash_skill, rates, skill_name_from_input};
+    use super::{
+        codex_skill_from_read, context_efficiency, est_cost, kiro_slash_skill, rates,
+        skill_name_from_input, CachedDriver, CachedSessionDrivers,
+    };
+
+    fn test_db() -> crate::db::DbState {
+        let mut conn = rusqlite::Connection::open_in_memory().unwrap();
+        crate::db::migrate_for_test(&mut conn);
+        crate::db::DbState(std::sync::Arc::new(std::sync::Mutex::new(conn)))
+    }
+
+    fn insert_session_with_drivers(
+        db: &crate::db::DbState,
+        session_id: &str,
+        agent: &str,
+        ts: i64,
+        drivers: CachedSessionDrivers,
+    ) {
+        let conn = db.0.lock().unwrap();
+        conn.execute(
+            "INSERT INTO session_stats (session_id, agent, project, project_name, ts) VALUES (?1,?2,'/p','p',?3)",
+            rusqlite::params![session_id, agent, ts],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO session_drivers (session_id, mtime, drivers_json) VALUES (?1, 1, ?2)",
+            rusqlite::params![session_id, serde_json::to_string(&drivers).unwrap()],
+        )
+        .unwrap();
+    }
+
+    fn growth_drivers(tokens: u64) -> CachedSessionDrivers {
+        CachedSessionDrivers {
+            input_tokens: tokens,
+            output_tokens: 0,
+            coarse: false,
+            drivers: vec![CachedDriver {
+                side: "input".into(),
+                kind: "growth".into(),
+                name: "Conversation growth".into(),
+                calls: 0,
+                tokens,
+                created_tokens: Some(tokens),
+                reread_tokens: Some(0),
+                approx_cost_usd: None,
+                pct: 100.0,
+                hint: None,
+            }],
+        }
+    }
+
+    #[test]
+    fn context_efficiency_excludes_kiro_and_agy() {
+        let db = test_db();
+        insert_session_with_drivers(&db, "s-claude", "claude", 10, growth_drivers(100));
+        insert_session_with_drivers(&db, "s-kiro", "kiro", 10, growth_drivers(9_999));
+
+        let ce = context_efficiency(&db, 0, i64::MAX as u64, None);
+        assert_eq!(ce.sessions_analyzed, 1);
+        assert!(ce.per_agent.iter().all(|a| a.agent != "kiro"));
+        assert_eq!(ce.overall.input_tokens, 100);
+    }
 
     #[test]
     fn pricing_loads_from_bundled_json() {

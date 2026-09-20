@@ -120,12 +120,25 @@ fn messages_to_detail(raw: &[Value]) -> (Vec<Message>, TokenUsage) {
             .get("timestamp")
             .and_then(|t| t.as_str())
             .and_then(rfc3339_to_ms);
-        // Per-message token stats when recorded (newer CLI versions)
-        if let Some(t) = m.get("tokens") {
-            usage.input_tokens += t.get("input").and_then(|v| v.as_u64()).unwrap_or(0);
-            usage.output_tokens += t.get("output").and_then(|v| v.as_u64()).unwrap_or(0);
-            usage.cache_read_tokens += t.get("cached").and_then(|v| v.as_u64()).unwrap_or(0);
-        }
+        // Per-message token stats when recorded (newer CLI versions) — unlike
+        // Codex's cumulative counter, this is already a per-message value, so
+        // it's both summed into the session total below AND attached
+        // directly to whichever Message gets pushed for this record (no
+        // delta math needed). Attaching it is what lets attribution::compute()
+        // actually see Gemini messages — it skips every message with
+        // `usage: None`, which every push here used to hardcode.
+        let msg_usage = m.get("tokens").map(|t| {
+            let u = TokenUsage {
+                input_tokens: t.get("input").and_then(|v| v.as_u64()).unwrap_or(0),
+                output_tokens: t.get("output").and_then(|v| v.as_u64()).unwrap_or(0),
+                cache_read_tokens: t.get("cached").and_then(|v| v.as_u64()).unwrap_or(0),
+                cache_creation_tokens: 0,
+            };
+            usage.input_tokens += u.input_tokens;
+            usage.output_tokens += u.output_tokens;
+            usage.cache_read_tokens += u.cache_read_tokens;
+            u
+        });
         let mtype = m.get("type").and_then(|t| t.as_str()).unwrap_or("");
         let role = match mtype {
             "user" => "user",
@@ -152,7 +165,7 @@ fn messages_to_detail(raw: &[Value]) -> (Vec<Message>, TokenUsage) {
                         }],
                         timestamp: ts,
                         model: None,
-                        usage: None,
+                        usage: msg_usage.clone(),
                         reasoning_chars: 0,
                     });
                 }
@@ -177,7 +190,7 @@ fn messages_to_detail(raw: &[Value]) -> (Vec<Message>, TokenUsage) {
             }],
             timestamp: ts,
             model: None,
-            usage: None,
+            usage: msg_usage,
             reasoning_chars: 0,
         });
     }
@@ -415,6 +428,26 @@ mod tests {
         assert_eq!(detail.len(), 2);
         assert_eq!(detail[0].role, "user");
         assert_eq!(detail[1].role, "assistant");
+    }
+
+    #[test]
+    fn per_message_tokens_are_attached_to_the_message_not_only_summed() {
+        let raw: Vec<Value> = serde_json::from_str(
+            r#"[
+              {"timestamp":"2026-06-16T15:28:50.000Z","type":"user","content":[{"text":"build it"}],"tokens":{"input":100,"output":0,"cached":10}},
+              {"timestamp":"2026-06-16T15:29:10.000Z","type":"gemini","content":[{"text":"done"}],"tokens":{"input":0,"output":50,"cached":0}}
+            ]"#,
+        )
+        .unwrap();
+        let (detail, total) = messages_to_detail(&raw);
+        assert_eq!(detail.len(), 2);
+        let u0 = detail[0].usage.as_ref().expect("first message usage");
+        assert_eq!(u0.input_tokens, 100);
+        assert_eq!(u0.cache_read_tokens, 10);
+        let u1 = detail[1].usage.as_ref().expect("second message usage");
+        assert_eq!(u1.output_tokens, 50);
+        assert_eq!(total.input_tokens, 100);
+        assert_eq!(total.output_tokens, 50);
     }
 
     #[test]
