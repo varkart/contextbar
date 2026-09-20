@@ -4,6 +4,7 @@ import type { ThemePreference } from '../useTheme'
 import type { GitCliStatus, GitCliInfo, CustomGitHost } from '../types'
 import { getCustomGitHosts, setCustomGitHosts } from '../gitHosts'
 import { capture } from '../analytics'
+import { PALETTES, usePaletteIndex, setPaletteIndex } from '../constants/agentColorPalettes'
 
 interface SettingsProps {
   onBack: () => void
@@ -118,6 +119,71 @@ function ThemeSelector({ value, onChange }: { value: ThemePreference; onChange: 
           <span className="text-[13px] font-medium">{label}</span>
         </button>
       ))}
+    </div>
+  )
+}
+
+/** Custom dropdown, not a native <select> — a plain <option> can't show
+ *  color swatches in any browser/webview, and picking a "color palette" by
+ *  name alone defeats the point. Each row previews its actual 9 colors. */
+function AgentPaletteSelector() {
+  const paletteIndex = usePaletteIndex()
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!open) return
+    const onClickOutside = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', onClickOutside)
+    return () => document.removeEventListener('mousedown', onClickOutside)
+  }, [open])
+
+  const active = PALETTES[paletteIndex]
+
+  const choose = (i: number) => {
+    setPaletteIndex(i)
+    capture('settings_agent_palette_changed', { palette: PALETTES[i].name })
+    setOpen(false)
+  }
+
+  return (
+    <div ref={ref} className="relative">
+      <div className="flex items-center justify-between py-1.5">
+        <div>
+          <p className="text-[13px] font-medium">Agent colors</p>
+          <p className="text-[11px] text-[var(--c-text-3)]">Applies to charts and badges across the app</p>
+        </div>
+        <button
+          onClick={() => setOpen(o => !o)}
+          className="flex items-center gap-2 text-[12px] px-2.5 py-1.5 rounded-lg border border-[var(--c-border)] hover:border-[var(--c-text-3)] transition-colors"
+          aria-expanded={open}
+        >
+          <span className="flex gap-0.5">
+            {active.colors.map((c, i) => <span key={i} className="w-2 h-2 rounded-full" style={{ background: c }} />)}
+          </span>
+          <span className="text-[var(--c-text-2)]">{active.name}</span>
+          <span className="text-[var(--c-text-3)]">▾</span>
+        </button>
+      </div>
+
+      {open && (
+        <div className="absolute right-0 top-full mt-1 z-20 w-64 max-h-72 overflow-y-auto rounded-xl border border-[var(--c-border)] bg-[var(--c-bg)] shadow-lg py-1">
+          {PALETTES.map((p, i) => (
+            <button
+              key={p.name}
+              onClick={() => choose(i)}
+              className={`w-full flex items-center justify-between gap-2 px-3 py-2 text-left hover:bg-[var(--c-hover)] transition-colors ${i === paletteIndex ? 'bg-[var(--c-hover)]' : ''}`}
+            >
+              <span className="text-[12.5px]">{p.name}</span>
+              <span className="flex gap-1 shrink-0">
+                {p.colors.map((c, j) => <span key={j} className="w-2.5 h-2.5 rounded-full" style={{ background: c }} />)}
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
@@ -447,6 +513,9 @@ export default function Settings({ updateInfo, checkingUpdate, onCheckUpdateNow,
           capture('settings_theme_changed', { theme: t })
           onThemeChange(t)
         }} />
+        <div className="py-2">
+          <AgentPaletteSelector />
+        </div>
         <div className="divide-y divide-[var(--c-border-sub)]">
           <SettingRow label="Window vibrancy" description="Takes effect when panel reopens">
             <Toggle checked={vibrancy} onChange={handleVibrancy} disabled={vibrancyLoading} />

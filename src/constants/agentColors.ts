@@ -1,3 +1,5 @@
+import { paletteHexFor } from './agentColorPalettes';
+
 // Single source of truth for "how do we represent agent X" across the app —
 // AgentDot, AgentRow, AgentChips, AgentBadge, and My Work's usage bars all
 // read from here. Previously AgentBadge and My Work each kept their own
@@ -32,7 +34,8 @@ function hashId(id: string): number {
 
 export function agentColor(id: string): { label: string; bg: string; text: string; hex: string } {
   const known = AGENT_COLORS[id];
-  if (known) return known;
+  const overrideHex = paletteHexFor(id);
+  if (known) return overrideHex ? { ...known, hex: overrideHex } : known;
   const fallback = FALLBACK_PALETTES[hashId(id) % FALLBACK_PALETTES.length];
   return { label: id.charAt(0).toUpperCase() + id.slice(1), ...fallback };
 }

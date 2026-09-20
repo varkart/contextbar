@@ -388,6 +388,12 @@ export interface AgentActivityPoint {
   minutes: number
 }
 
+export interface CommitEntry {
+  repoName: string
+  /** Unix seconds. */
+  ts: number
+}
+
 export interface SessionInsights {
   sessionsAnalyzed: number
   inputTokens: number

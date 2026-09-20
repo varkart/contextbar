@@ -503,7 +503,11 @@ fn resume_shell_command(
 ) -> Result<(String, std::path::PathBuf), String> {
     let canonical = validate_tool_path(project)?;
     if let Some(id) = session_id {
-        if id.is_empty() || !id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-') {
+        if id.is_empty()
+            || !id
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+        {
             return Err("invalid session id".into());
         }
     }
@@ -673,6 +677,11 @@ fn get_session_insights(
 }
 
 #[tauri::command]
+fn get_first_session_ts(db: tauri::State<'_, db::DbState>) -> Option<u64> {
+    engine::history::stats::first_session_ts(&db)
+}
+
+#[tauri::command]
 fn get_token_activity(
     db: tauri::State<'_, db::DbState>,
     since_ms: u64,
@@ -682,8 +691,8 @@ fn get_token_activity(
 }
 
 #[tauri::command]
-async fn get_commit_activity(since_days: u32) -> Vec<u64> {
-    tokio::task::spawn_blocking(move || engine::worktrees::commit_timestamps(since_days))
+async fn get_commit_activity(since_days: u32) -> Vec<engine::worktrees::CommitEntry> {
+    tokio::task::spawn_blocking(move || engine::worktrees::commit_activity(since_days))
         .await
         .unwrap_or_default()
 }
@@ -2832,6 +2841,7 @@ pub fn run() {
             get_repo_capabilities,
             set_repo_capability,
             get_session_insights,
+            get_first_session_ts,
             get_token_activity,
             get_commit_activity,
             get_agent_activity,
@@ -3004,8 +3014,33 @@ fn show_expanded_window(app: &tauri::AppHandle, section: Option<&str>) {
 mod tests {
     use super::{
         build_json_mcp_entry, github_blob_to_raw, parse_github_repo_url, percent_encode_path,
-        skill_md_in_scope, skill_name_for, validate_skill_content, validate_tool_path,
+        resume_shell_command, skill_md_in_scope, skill_name_for, validate_skill_content,
+        validate_tool_path,
     };
+
+    #[test]
+    fn resume_shell_command_accepts_opencode_underscore_ids() {
+        let home = dirs::home_dir().unwrap();
+        let (cmd, _) = resume_shell_command(
+            home.to_str().unwrap(),
+            Some("ses_f95be6104ffeLwDDmkIqIr9x3C"),
+            Some("opencode"),
+        )
+        .expect("underscore session id should be accepted");
+        assert!(cmd.contains("opencode --session ses_f95be6104ffeLwDDmkIqIr9x3C"));
+    }
+
+    #[test]
+    fn resume_shell_command_rejects_shell_metacharacters_in_session_id() {
+        let home = dirs::home_dir().unwrap();
+        let err = resume_shell_command(
+            home.to_str().unwrap(),
+            Some("abc; rm -rf /"),
+            Some("claude"),
+        )
+        .unwrap_err();
+        assert_eq!(err, "invalid session id");
+    }
 
     #[test]
     fn build_json_mcp_entry_default_shape_unchanged() {
