@@ -667,19 +667,9 @@ export default function MyWorkSection({ sessions, repos, loading, goTo, onRefres
                 project tiles; "Show all" reveals the rest on demand. */}
             {orderedProjects.length > 0 && (
               <div className="rounded-xl border border-[var(--c-border)] p-3 mb-4">
-                <div className="flex items-center justify-between mb-2.5">
-                  <p className="text-[12px] font-semibold">
-                    Active projects{orderedProjects.length > 12 ? ` · showing 12 of ${orderedProjects.length}` : ''}
-                  </p>
-                  {orderedProjects.length > 6 && (
-                    <button
-                      onClick={() => setProjectsExpanded(e => !e)}
-                      className="text-[10.5px] text-[var(--c-text-3)] hover:text-[var(--c-text-2)] transition-colors"
-                    >
-                      {projectsExpanded ? 'Show less' : `Show all (${Math.min(orderedProjects.length, 12)})`}
-                    </button>
-                  )}
-                </div>
+                <p className="text-[12px] font-semibold mb-2.5">
+                  Active projects{orderedProjects.length > 12 ? ` · showing 12 of ${orderedProjects.length}` : ''}
+                </p>
                 <div
                   className="grid gap-3"
                   style={{
@@ -752,6 +742,16 @@ export default function MyWorkSection({ sessions, repos, loading, goTo, onRefres
                     )
                   })}
                 </div>
+                {orderedProjects.length > 6 && (
+                  <div className="flex justify-center mt-2.5">
+                    <button
+                      onClick={() => setProjectsExpanded(e => !e)}
+                      className="text-[10.5px] text-[var(--c-text-3)] hover:text-[var(--c-text-2)] transition-colors"
+                    >
+                      {projectsExpanded ? 'Show less' : `Show all (${Math.min(orderedProjects.length, 12)})`}
+                    </button>
+                  </div>
+                )}
               </div>
             )}
 
