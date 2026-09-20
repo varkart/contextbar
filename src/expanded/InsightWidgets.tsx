@@ -507,6 +507,20 @@ const ACTIVITY_LEVEL_COLORS = [
 ]
 const DOW_LABELS = ['S', 'M', 'T', 'W', 'T', 'F', 'S']
 
+const NAV_BUTTON_CLASS = 'w-6 h-6 flex items-center justify-center rounded-md border border-[var(--c-border)] text-[var(--c-text-2)] disabled:opacity-30 disabled:cursor-default hover:border-[var(--c-text-3)] hover:text-[var(--c-text)] transition-colors'
+
+/** Plain "‹"/"›" glyphs render inconsistently thin/off-center across fonts —
+ *  an explicit stroked chevron reads clearly at any size. */
+function ChevronIcon({ direction }: { direction: 'left' | 'right' }) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+      stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
+      className="w-3.5 h-3.5">
+      <polyline points={direction === 'left' ? '15 18 9 12 15 6' : '9 18 15 12 9 6'} />
+    </svg>
+  )
+}
+
 function activityLevel(sessionCount: number): number {
   if (sessionCount <= 0) return 0
   if (sessionCount === 1) return 1
@@ -541,19 +555,15 @@ export function ActivityCalendar({ sessionCounts, monthDate, onNavigate, canGoPr
   return (
     <div>
       <div className="flex items-center justify-between mb-2">
-        <button
-          onClick={() => onNavigate(-1)} disabled={!canGoPrev} title="Previous month"
-          className="w-5 h-5 rounded-md border border-[var(--c-border)] text-[var(--c-text-2)] text-[11px] disabled:opacity-30 disabled:cursor-default hover:border-[var(--c-text-3)]/50"
-        >‹</button>
-        <span className="text-[12px] font-semibold">{monthDate.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}</span>
-        <button
-          onClick={() => onNavigate(1)} disabled={!canGoNext} title="Next month"
-          className="w-5 h-5 rounded-md border border-[var(--c-border)] text-[var(--c-text-2)] text-[11px] disabled:opacity-30 disabled:cursor-default hover:border-[var(--c-text-3)]/50"
-        >›</button>
+        <span className="text-[13px] font-semibold">{monthDate.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}</span>
+        <span
+          className={`text-[11px] transition-colors ${hover ? 'font-semibold text-[var(--c-accent)]' : 'text-[var(--c-text-3)]'}`}
+        >
+          {hover ?? '⟶ hover a day for details'}
+        </span>
       </div>
-      <div className="text-right h-3 mb-1.5 text-[10px] font-mono text-[var(--c-text-3)]">{hover ?? 'Hover a day for details'}</div>
       <div className="grid gap-1 mb-1" style={{ gridTemplateColumns: 'repeat(7, minmax(0, 1fr))' }}>
-        {DOW_LABELS.map((d, i) => <div key={i} className="text-center text-[9px] text-[var(--c-text-3)]">{d}</div>)}
+        {DOW_LABELS.map((d, i) => <div key={i} className="text-center text-[10px] font-medium text-[var(--c-text-3)]">{d}</div>)}
       </div>
       <div className="grid gap-1" style={{ gridTemplateColumns: 'repeat(7, minmax(0, 1fr))' }} onMouseLeave={() => setHover(null)}>
         {cells.map((d, i) => {
@@ -568,6 +578,7 @@ export function ActivityCalendar({ sessionCounts, monthDate, onNavigate, canGoPr
               key={i}
               onMouseEnter={() => !isFuture && setHover(`${date.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })} · ${count} session${count === 1 ? '' : 's'}`)}
               title={isFuture ? '' : `${date.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })} · ${count} session${count === 1 ? '' : 's'}`}
+              className={isFuture ? '' : 'hover:ring-2 hover:ring-[var(--c-accent)] hover:scale-110 transition-transform cursor-default'}
               style={{
                 aspectRatio: '1', borderRadius: 4,
                 background: isFuture ? 'transparent' : ACTIVITY_LEVEL_COLORS[level],
@@ -577,10 +588,23 @@ export function ActivityCalendar({ sessionCounts, monthDate, onNavigate, canGoPr
           )
         })}
       </div>
-      <div className="flex items-center justify-end gap-[3px] mt-2 text-[9px] text-[var(--c-text-3)]">
-        <span>Less</span>
-        {ACTIVITY_LEVEL_COLORS.map((c, i) => <span key={i} style={{ width: 10, height: 10, borderRadius: 2, background: c, display: 'inline-block' }} />)}
-        <span>More</span>
+      <div className="flex items-center justify-between mt-2">
+        <div className="flex items-center gap-[3px] text-[9px] text-[var(--c-text-3)]">
+          <span>Less</span>
+          {ACTIVITY_LEVEL_COLORS.map((c, i) => <span key={i} style={{ width: 10, height: 10, borderRadius: 2, background: c, display: 'inline-block' }} />)}
+          <span>More</span>
+        </div>
+        {/* Month nav sits here, not up by the title — you decide you want a
+            different month only after scanning this grid, so that's where
+            the controls for it belong. See AGENTS.md "act on user focus." */}
+        <div className="flex items-center gap-1">
+          <button onClick={() => onNavigate(-1)} disabled={!canGoPrev} title="Previous month" aria-label="Previous month" className={NAV_BUTTON_CLASS}>
+            <ChevronIcon direction="left" />
+          </button>
+          <button onClick={() => onNavigate(1)} disabled={!canGoNext} title="Next month" aria-label="Next month" className={NAV_BUTTON_CLASS}>
+            <ChevronIcon direction="right" />
+          </button>
+        </div>
       </div>
     </div>
   )
@@ -595,9 +619,11 @@ export function ActivityWeekRow({ sessionCounts }: { sessionCounts: Map<string, 
 
   return (
     <div>
-      <div className="text-right h-3 mb-1.5 text-[10px] font-mono text-[var(--c-text-3)]">{hover ?? 'Hover a day for details'}</div>
+      <div className={`text-right h-3 mb-1.5 text-[11px] transition-colors ${hover ? 'font-semibold text-[var(--c-accent)]' : 'text-[var(--c-text-3)]'}`}>
+        {hover ?? '⟶ hover a day for details'}
+      </div>
       <div className="grid gap-1 mb-1" style={{ gridTemplateColumns: 'repeat(7, minmax(0, 1fr))' }}>
-        {DOW_LABELS.map((d, i) => <div key={i} className="text-center text-[9px] text-[var(--c-text-3)]">{d}</div>)}
+        {DOW_LABELS.map((d, i) => <div key={i} className="text-center text-[10px] font-medium text-[var(--c-text-3)]">{d}</div>)}
       </div>
       <div className="grid gap-1" style={{ gridTemplateColumns: 'repeat(7, minmax(0, 1fr))' }} onMouseLeave={() => setHover(null)}>
         {days.map((date, i) => {
@@ -609,6 +635,7 @@ export function ActivityWeekRow({ sessionCounts }: { sessionCounts: Map<string, 
             <div
               key={i}
               onMouseEnter={() => !isFuture && setHover(`${date.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })} · ${count} session${count === 1 ? '' : 's'}`)}
+              className={isFuture ? '' : 'hover:ring-2 hover:ring-[var(--c-accent)] hover:scale-110 transition-transform cursor-default'}
               style={{
                 aspectRatio: '1', borderRadius: 4,
                 background: isFuture ? 'transparent' : ACTIVITY_LEVEL_COLORS[level],
