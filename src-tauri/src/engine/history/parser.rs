@@ -51,6 +51,13 @@ pub fn get_session(
     let mut seen_ids: HashSet<String> = HashSet::new();
     let mut total_usage = TokenUsage::default();
     let mut overall_model: Option<String> = None;
+    // `<synthetic>` is Anthropic's own marker for a turn that wasn't a real
+    // model completion (CLI-fabricated content, not an API call) — if it
+    // happens to be the *first* assistant message, "first model wins" would
+    // label the whole session "<synthetic>" even when every later turn (and
+    // its real tokens) came from an actual model. Falls back to it only if
+    // no real model ever appears in the session.
+    let mut synthetic_model_fallback: Option<String> = None;
     let mut title: Option<String> = None;
     let mut custom_title: Option<String> = None;
     let mut first_ts: Option<u64> = None;
@@ -136,8 +143,12 @@ pub fn get_session(
                 }
 
                 let model = msg.model.as_deref().map(shorten_model_name);
-                if overall_model.is_none() {
-                    overall_model = model.clone();
+                if let Some(m) = &model {
+                    if m == "<synthetic>" {
+                        synthetic_model_fallback.get_or_insert_with(|| m.clone());
+                    } else if overall_model.is_none() {
+                        overall_model = Some(m.clone());
+                    }
                 }
 
                 let usage = msg.usage.as_ref().map(|u| {
@@ -177,6 +188,7 @@ pub fn get_session(
         (Some(f), Some(l)) if l > f => Some(l - f),
         _ => None,
     };
+    let overall_model = overall_model.or(synthetic_model_fallback);
 
     Some(SessionDetail {
         agent: "claude".to_string(),
@@ -401,6 +413,42 @@ fn strip_tagged_content(s: &str, tag: &str) -> String {
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn synthetic_first_message_does_not_mislabel_the_whole_session() {
+        // `<synthetic>` marks a turn that wasn't a real model completion. If
+        // it's the session's first assistant message, "first model wins"
+        // would label the entire session `<synthetic>` even though a real
+        // model did the actual work in every later turn.
+        let dir = tempfile::tempdir().unwrap();
+        let project_dir = dir.path().join(".claude").join("projects").join("proj");
+        std::fs::create_dir_all(&project_dir).unwrap();
+        let jsonl = concat!(
+            r#"{"type":"assistant","timestamp":1700000000000,"message":{"id":"m1","content":[{"type":"text","text":"hi"}],"model":"<synthetic>"}}"#,
+            "\n",
+            r#"{"type":"assistant","timestamp":1700000060000,"message":{"id":"m2","content":[{"type":"text","text":"real work"}],"model":"claude-sonnet-4-5-20260101","usage":{"input_tokens":10,"output_tokens":20}}}"#,
+            "\n",
+        );
+        std::fs::write(project_dir.join("s1.jsonl"), jsonl).unwrap();
+
+        let detail = get_session(dir.path(), "s1", "/whatever/proj", 0).unwrap();
+        assert_eq!(detail.model.as_deref(), Some("sonnet-4-5"));
+    }
+
+    #[test]
+    fn synthetic_only_session_falls_back_to_reporting_it_honestly() {
+        let dir = tempfile::tempdir().unwrap();
+        let project_dir = dir.path().join(".claude").join("projects").join("proj");
+        std::fs::create_dir_all(&project_dir).unwrap();
+        let jsonl = concat!(
+            r#"{"type":"assistant","timestamp":1700000000000,"message":{"id":"m1","content":[{"type":"text","text":"hi"}],"model":"<synthetic>"}}"#,
+            "\n",
+        );
+        std::fs::write(project_dir.join("s2.jsonl"), jsonl).unwrap();
+
+        let detail = get_session(dir.path(), "s2", "/whatever/proj", 0).unwrap();
+        assert_eq!(detail.model.as_deref(), Some("<synthetic>"));
+    }
 
     #[test]
     fn tool_use_block_captures_its_id() {

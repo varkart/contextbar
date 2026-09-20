@@ -313,6 +313,16 @@ export interface ModelStat {
   estCostUsd?: number | null
 }
 
+/** Real full per-agent total for the window. */
+export interface AgentTokens {
+  agent: string
+  tokens: number
+  inputTokens: number
+  outputTokens: number
+  sessions: number
+  estCostUsd?: number | null
+}
+
 export interface ProjectTokens {
   project: string
   projectName: string
@@ -370,6 +380,25 @@ export interface SessionDrivers {
   drivers: Driver[]
 }
 
+export interface AgentContextEfficiency {
+  agent: string
+  sessions: number
+  inputTokens: number
+  outputTokens: number
+  coarse: boolean
+  /** 0..100. 100 minus the share of input tokens spent on compaction/growth. */
+  score: number
+  /** Aggregated drivers with a hint, sorted by tokens desc, capped at 5. */
+  topDrivers: Driver[]
+}
+
+export interface ContextEfficiency {
+  sessionsAnalyzed: number
+  excludedAgents: string[]
+  overall: AgentContextEfficiency
+  perAgent: AgentContextEfficiency[]
+}
+
 export interface HeaviestSession {
   sessionId: string
   display: string
@@ -405,7 +434,9 @@ export interface SessionInsights {
   avgToolCalls: number
   perModel: ModelStat[]
   perProject: ProjectTokens[]
-  /** Per-session token + cost rows, ranked by tokens (capped at 100). */
+  /** Full per-agent totals for the window. */
+  perAgent: AgentTokens[]
+  /** Every session in the window, ranked by tokens descending. */
   perSession: SessionCost[]
   toolCounts: ToolCount[]
   mcpToolCounts: ToolCount[]

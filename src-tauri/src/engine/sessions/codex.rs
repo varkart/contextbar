@@ -228,6 +228,40 @@ fn find_session_file(session_id: &str) -> Option<PathBuf> {
     })
 }
 
+/// Codex's `token_count` event reports a cumulative running total, not a
+/// per-turn delta — attribute the delta since the last snapshot to the most
+/// recently pushed assistant message (codex emits `token_count` right after
+/// each turn), rather than leaving every message's `usage` as `None`.
+/// `prev` is advanced to `new` unconditionally so the next call's delta is
+/// always relative to the latest snapshot, even when nothing gets attached.
+fn attach_delta(messages: &mut [Message], prev: &mut TokenUsage, new: TokenUsage) {
+    let delta = TokenUsage {
+        input_tokens: new.input_tokens.saturating_sub(prev.input_tokens),
+        output_tokens: new.output_tokens.saturating_sub(prev.output_tokens),
+        cache_read_tokens: new.cache_read_tokens.saturating_sub(prev.cache_read_tokens),
+        cache_creation_tokens: 0, // codex never reports this
+    };
+    if delta.input_tokens > 0 || delta.output_tokens > 0 || delta.cache_read_tokens > 0 {
+        if let Some(last) = messages.last_mut() {
+            if last.role == "assistant" {
+                match &mut last.usage {
+                    // A second token_count fired with no new message since
+                    // the last one: accumulate rather than overwrite.
+                    Some(u) => {
+                        u.input_tokens += delta.input_tokens;
+                        u.output_tokens += delta.output_tokens;
+                        u.cache_read_tokens += delta.cache_read_tokens;
+                    }
+                    None => last.usage = Some(delta),
+                }
+            }
+            // else: token_count fired before any assistant message existed
+            // yet (rare/malformed) — nothing to attach it to.
+        }
+    }
+    *prev = new;
+}
+
 impl SessionSource for CodexSource {
     fn agent_id(&self) -> &'static str {
         "codex"
@@ -282,6 +316,7 @@ impl SessionSource for CodexSource {
 
         let mut messages: Vec<Message> = Vec::new();
         let mut usage = TokenUsage::default();
+        let mut prev_usage = TokenUsage::default();
         let mut model = None;
         let mut last_ms = start_ms;
         for line in lines {
@@ -329,7 +364,7 @@ impl SessionSource for CodexSource {
                 }
                 (Some("event_msg"), Some("token_count")) => {
                     if let Some(info) = p.pointer("/info/total_token_usage") {
-                        usage = TokenUsage {
+                        let new_usage = TokenUsage {
                             input_tokens: info
                                 .get("input_tokens")
                                 .and_then(|v| v.as_u64())
@@ -344,6 +379,8 @@ impl SessionSource for CodexSource {
                                 .unwrap_or(0),
                             cache_creation_tokens: 0,
                         };
+                        attach_delta(&mut messages, &mut prev_usage, new_usage.clone());
+                        usage = new_usage;
                     }
                 }
                 (Some("response_item"), Some("function_call")) => {
@@ -445,6 +482,85 @@ mod tests {
         assert_eq!(s.prompt_count, 2);
         assert_eq!(s.total_tokens, 1050);
         assert_eq!(s.model.as_deref(), Some("gpt-5-codex"));
+    }
+
+    fn assistant_msg() -> Message {
+        Message {
+            role: "assistant".to_string(),
+            content: vec![],
+            timestamp: None,
+            model: None,
+            usage: None,
+            reasoning_chars: 0,
+        }
+    }
+
+    #[test]
+    fn attach_delta_attaches_the_delta_not_the_cumulative_total() {
+        let mut messages = vec![assistant_msg()];
+        let mut prev = TokenUsage::default();
+        attach_delta(
+            &mut messages,
+            &mut prev,
+            TokenUsage {
+                input_tokens: 1000,
+                output_tokens: 50,
+                cache_read_tokens: 600,
+                cache_creation_tokens: 0,
+            },
+        );
+        let u = messages[0].usage.clone().unwrap();
+        assert_eq!(u.input_tokens, 1000);
+        assert_eq!(u.output_tokens, 50);
+        assert_eq!(u.cache_read_tokens, 600);
+
+        messages.push(assistant_msg());
+        attach_delta(
+            &mut messages,
+            &mut prev,
+            TokenUsage {
+                input_tokens: 1800,
+                output_tokens: 90,
+                cache_read_tokens: 900,
+                cache_creation_tokens: 0,
+            },
+        );
+        // Second message gets only the delta since the first snapshot, not
+        // the new cumulative total.
+        let u = messages[1].usage.clone().unwrap();
+        assert_eq!(u.input_tokens, 800);
+        assert_eq!(u.output_tokens, 40);
+        assert_eq!(u.cache_read_tokens, 300);
+        assert!(messages[0].usage.is_some());
+    }
+
+    #[test]
+    fn attach_delta_accumulates_when_no_new_message_since_last_snapshot() {
+        let mut messages = vec![assistant_msg()];
+        let mut prev = TokenUsage::default();
+        attach_delta(
+            &mut messages,
+            &mut prev,
+            TokenUsage {
+                input_tokens: 100,
+                output_tokens: 10,
+                cache_read_tokens: 0,
+                cache_creation_tokens: 0,
+            },
+        );
+        attach_delta(
+            &mut messages,
+            &mut prev,
+            TokenUsage {
+                input_tokens: 150,
+                output_tokens: 15,
+                cache_read_tokens: 0,
+                cache_creation_tokens: 0,
+            },
+        );
+        let u = messages[0].usage.clone().unwrap();
+        assert_eq!(u.input_tokens, 150);
+        assert_eq!(u.output_tokens, 15);
     }
 
     #[test]

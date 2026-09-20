@@ -16,7 +16,7 @@
 
 use super::stats::est_cost;
 use super::types::{ContentBlock, Message, SessionDetail};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 pub mod agy;
@@ -65,6 +65,178 @@ pub struct SessionDrivers {
     pub coarse: bool,
     /// Both sides, each sorted by tokens descending.
     pub drivers: Vec<Driver>,
+}
+
+/// Owned mirror of [`Driver`] for the `session_drivers` cache table. `Driver`
+/// itself keeps `side`/`kind` as `&'static str` for zero-alloc construction
+/// on the hot per-session path, which can't derive `Deserialize` (no
+/// lifetime to bind to on the way back out of a stored JSON blob).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CachedDriver {
+    pub side: String,
+    pub kind: String,
+    pub name: String,
+    pub calls: u64,
+    pub tokens: u64,
+    pub created_tokens: Option<u64>,
+    pub reread_tokens: Option<u64>,
+    pub approx_cost_usd: Option<f64>,
+    pub pct: f64,
+    pub hint: Option<String>,
+}
+
+impl From<&Driver> for CachedDriver {
+    fn from(d: &Driver) -> Self {
+        CachedDriver {
+            side: d.side.to_string(),
+            kind: d.kind.to_string(),
+            name: d.name.clone(),
+            calls: d.calls,
+            tokens: d.tokens,
+            created_tokens: d.created_tokens,
+            reread_tokens: d.reread_tokens,
+            approx_cost_usd: d.approx_cost_usd,
+            pct: d.pct,
+            hint: d.hint.clone(),
+        }
+    }
+}
+
+/// Owned mirror of [`SessionDrivers`], JSON-cached per session in
+/// `session_drivers` (populated in [`super::stats::upsert_session`]) so a
+/// My Work window can fold many sessions' attribution without re-parsing
+/// every transcript.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct CachedSessionDrivers {
+    pub input_tokens: u64,
+    pub output_tokens: u64,
+    pub coarse: bool,
+    pub drivers: Vec<CachedDriver>,
+}
+
+impl From<&SessionDrivers> for CachedSessionDrivers {
+    fn from(s: &SessionDrivers) -> Self {
+        CachedSessionDrivers {
+            input_tokens: s.input_tokens,
+            output_tokens: s.output_tokens,
+            coarse: s.coarse,
+            drivers: s.drivers.iter().map(CachedDriver::from).collect(),
+        }
+    }
+}
+
+/// Folded attribution across every session in a My Work window.
+pub struct WindowDrivers {
+    pub drivers: Vec<CachedDriver>,
+    pub input_tokens: u64,
+    pub output_tokens: u64,
+    pub coarse: bool,
+}
+
+/// Cross-session fold, reusing the same bucket math and hint thresholds as
+/// the single-session [`compute`] pass.
+pub fn aggregate_drivers<'a>(
+    sessions: impl IntoIterator<Item = &'a CachedSessionDrivers>,
+) -> WindowDrivers {
+    #[derive(Default)]
+    struct Acc {
+        tokens: u64,
+        created: u64,
+        reread: u64,
+        calls: u64,
+        cost: f64,
+    }
+
+    let mut acc: HashMap<(String, String, String), Acc> = HashMap::new();
+    let mut coarse = false;
+    for s in sessions {
+        coarse |= s.coarse;
+        for d in &s.drivers {
+            let key = (d.side.clone(), d.kind.clone(), d.name.clone());
+            let e = acc.entry(key).or_default();
+            e.tokens += d.tokens;
+            e.created += d.created_tokens.unwrap_or(0);
+            e.reread += d.reread_tokens.unwrap_or(0);
+            e.calls += d.calls;
+            e.cost += d.approx_cost_usd.unwrap_or(0.0);
+        }
+    }
+
+    // A cache re-read is the same content resent, billed (and here weighted)
+    // at a fraction of a fresh token — summing raw reread counts across many
+    // sessions in a window lets one long, heavily-cached session (re-sending
+    // a growing prefix on every turn) produce a nonsensical multi-billion
+    // "token" total. Output-side entries have no reread concept (`e.created`/
+    // `e.reread` are always 0 there), so they keep the plain summed total.
+    let reread_weight = super::stats::cache_read_multiplier();
+    let mut drivers: Vec<CachedDriver> = acc
+        .into_iter()
+        .map(|((side, kind, name), e)| {
+            let weighted_tokens = if side == "input" {
+                e.created + (e.reread as f64 * reread_weight).round() as u64
+            } else {
+                e.tokens
+            };
+            CachedDriver {
+                side,
+                kind,
+                name,
+                calls: e.calls,
+                tokens: weighted_tokens,
+                created_tokens: (e.created > 0).then_some(e.created),
+                reread_tokens: (e.reread > 0).then_some(e.reread),
+                approx_cost_usd: (e.cost > 0.0).then_some(e.cost),
+                pct: 0.0,
+                hint: None,
+            }
+        })
+        .collect();
+
+    let in_total: u64 = drivers
+        .iter()
+        .filter(|d| d.side == "input")
+        .map(|d| d.tokens)
+        .sum();
+    let out_total: u64 = drivers
+        .iter()
+        .filter(|d| d.side == "output")
+        .map(|d| d.tokens)
+        .sum();
+    for d in &mut drivers {
+        let side_total = if d.side == "input" {
+            in_total
+        } else {
+            out_total
+        };
+        d.pct = if side_total > 0 {
+            d.tokens as f64 / side_total as f64 * 100.0
+        } else {
+            0.0
+        };
+        d.hint = hint(
+            &d.kind,
+            &d.name,
+            d.tokens,
+            d.calls,
+            d.created_tokens,
+            d.reread_tokens,
+            side_total,
+        );
+    }
+    drivers.sort_by(|a, b| {
+        (a.side != "input")
+            .cmp(&(b.side != "input"))
+            .then(b.tokens.cmp(&a.tokens))
+    });
+
+    WindowDrivers {
+        drivers,
+        input_tokens: in_total,
+        output_tokens: out_total,
+        coarse,
+    }
 }
 
 fn fmt_tok(n: u64) -> String {
@@ -410,12 +582,13 @@ pub fn compute(detail: &SessionDetail) -> SessionDrivers {
             est_cost(d.tokens, 0, 0, 0, &model)
         };
         d.hint = hint(
-            d,
-            if d.side == "input" {
-                in_total
-            } else {
-                out_total
-            },
+            d.kind,
+            &d.name,
+            d.tokens,
+            d.calls,
+            d.created_tokens,
+            d.reread_tokens,
+            side_total,
         );
     }
     drivers.sort_by(|a, b| {
@@ -439,41 +612,54 @@ pub fn compute(detail: &SessionDetail) -> SessionDrivers {
     }
 }
 
-fn hint(d: &Driver, side_total: u64) -> Option<String> {
-    let pct = (d.tokens * 100).checked_div(side_total).unwrap_or(0);
+/// Threshold-based advice for one attributed slice. Takes scalars rather
+/// than `&Driver` so both the single-session [`compute`] pass (whose
+/// `Driver::kind` is a zero-alloc `&'static str`) and the cross-session
+/// [`aggregate_drivers`] fold (whose `CachedDriver::kind` is an owned
+/// `String`, round-tripped through JSON) can share one set of tuned
+/// thresholds without duplicating them.
+pub(crate) fn hint(
+    kind: &str,
+    name: &str,
+    tokens: u64,
+    calls: u64,
+    created_tokens: Option<u64>,
+    reread_tokens: Option<u64>,
+    side_total: u64,
+) -> Option<String> {
+    let pct = (tokens * 100).checked_div(side_total).unwrap_or(0);
     // A source whose re-read cost dwarfs what it added is dead weight sitting
     // in the context window for many turns.
-    if let (Some(c), Some(r)) = (d.created_tokens, d.reread_tokens) {
+    if let (Some(c), Some(r)) = (created_tokens, reread_tokens) {
         if c > 0 && r > c.saturating_mul(15) && pct >= 25 {
             return Some(format!(
                 "{} added {} but was re-read {} across the session — /compact or start fresh sooner.",
-                d.name,
+                name,
                 fmt_tok(c),
                 fmt_tok(r)
             ));
         }
     }
-    match d.kind {
+    match kind {
         "reread" if pct >= 50 => Some(
             "Most input is re-read cached context — a long session. /compact earlier or split the task."
                 .into(),
         ),
-        "tool" if matches!(d.name.as_str(), "Read" | "Bash" | "Grep" | "shell") && pct >= 40 => {
+        "tool" if matches!(name, "Read" | "Bash" | "Grep" | "shell") && pct >= 40 => {
             Some(format!(
-                "{} added {pct}% of this session's context — narrow it (offset/limit, head, tighter globs).",
-                d.name
+                "{name} added {pct}% of this session's context — narrow it (offset/limit, head, tighter globs)."
             ))
         }
-        "mcp" if d.tokens >= 200_000 => Some(format!(
+        "mcp" if tokens >= 200_000 => Some(format!(
             "{} returned ~{} — cache results or narrow the query.",
-            d.name,
-            fmt_tok(d.tokens)
+            name,
+            fmt_tok(tokens)
         )),
-        "skill" if d.calls > 0 && d.tokens / d.calls >= 8_000 => Some(format!(
+        "skill" if calls > 0 && tokens / calls >= 8_000 => Some(format!(
             "{} loads ~{} of instructions per call ({}×).",
-            d.name,
-            fmt_tok(d.tokens / d.calls),
-            d.calls
+            name,
+            fmt_tok(tokens / calls),
+            calls
         )),
         "compaction" => {
             Some("Context was compacted mid-session — the task may be too large for one pass.".into())
@@ -481,7 +667,7 @@ fn hint(d: &Driver, side_total: u64) -> Option<String> {
         "growth" if pct >= 40 => Some(
             "Lots of context with no tool/skill behind it — long turns or pasted material. Trim or split.".into(),
         ),
-        "initial" if d.tokens >= 60_000 => Some(
+        "initial" if tokens >= 60_000 => Some(
             "Large initial context — trim CLAUDE.md and disable unused MCP servers / skills.".into(),
         ),
         "reasoning" if pct >= 40 => Some(
@@ -573,6 +759,163 @@ mod tests {
         assert!(sd.drivers.iter().any(|x| x.side == "input"));
         assert!(sd.drivers.iter().any(|x| x.side == "output"));
         assert!(sd.drivers.iter().any(|x| x.kind == "reasoning"));
+    }
+
+    #[test]
+    fn structural_compaction_marker_produces_compaction_driver() {
+        let d = SessionDetail {
+            agent: "opencode".into(),
+            session_id: "s".into(),
+            messages: vec![
+                Message {
+                    role: "user".into(),
+                    content: vec![blk("text", Some("do it"), None, 5)],
+                    ..Default::default()
+                },
+                Message {
+                    role: "assistant".into(),
+                    content: vec![blk("text", Some("ok"), None, 20)],
+                    usage: Some(TokenUsage {
+                        input_tokens: 500,
+                        output_tokens: 50,
+                        ..Default::default()
+                    }),
+                    ..Default::default()
+                },
+                Message {
+                    role: "compaction".into(),
+                    content: vec![blk("text", Some("Context compacted"), None, 18)],
+                    ..Default::default()
+                },
+                Message {
+                    role: "assistant".into(),
+                    content: vec![blk("text", Some("continuing"), None, 20)],
+                    usage: Some(TokenUsage {
+                        input_tokens: 400,
+                        output_tokens: 50,
+                        ..Default::default()
+                    }),
+                    ..Default::default()
+                },
+            ],
+            total_tokens: TokenUsage::default(),
+            model: Some("gpt-5".into()),
+            duration_ms: None,
+            project: "p".into(),
+            project_name: "p".into(),
+            timestamp: 0,
+            title: None,
+        };
+        let sd = compute(&d);
+        let driver = sd
+            .drivers
+            .iter()
+            .find(|dr| dr.kind == "compaction")
+            .expect("compaction driver present");
+        assert_eq!(
+            driver.hint.as_deref(),
+            Some("Context was compacted mid-session — the task may be too large for one pass.")
+        );
+    }
+
+    #[test]
+    fn aggregate_drivers_sums_tokens_and_recomputes_pct() {
+        let a = CachedSessionDrivers {
+            input_tokens: 100,
+            output_tokens: 0,
+            coarse: false,
+            drivers: vec![CachedDriver {
+                side: "input".into(),
+                kind: "growth".into(),
+                name: "Conversation growth".into(),
+                calls: 0,
+                tokens: 100,
+                created_tokens: Some(100),
+                reread_tokens: Some(0),
+                approx_cost_usd: None,
+                pct: 100.0,
+                hint: None,
+            }],
+        };
+        let b = CachedSessionDrivers {
+            input_tokens: 300,
+            output_tokens: 0,
+            coarse: false,
+            drivers: vec![CachedDriver {
+                side: "input".into(),
+                kind: "growth".into(),
+                name: "Conversation growth".into(),
+                calls: 0,
+                tokens: 300,
+                created_tokens: Some(300),
+                reread_tokens: Some(0),
+                approx_cost_usd: None,
+                pct: 100.0,
+                hint: None,
+            }],
+        };
+        let window = aggregate_drivers([&a, &b]);
+        assert_eq!(window.input_tokens, 400);
+        let growth = window.drivers.iter().find(|d| d.kind == "growth").unwrap();
+        assert_eq!(growth.tokens, 400);
+        // pct is recomputed against the summed total, not copied from either input.
+        assert_eq!(growth.pct, 100.0);
+    }
+
+    #[test]
+    fn aggregate_drivers_down_weights_cache_reread_on_the_input_side() {
+        // A long, heavily-cached session can report cache-read tokens in the
+        // hundreds of millions (real content is small; the growing prefix is
+        // just resent every turn). Summed raw, that swamps every other
+        // driver in a window. Reread must be down-weighted (same ~10% ratio
+        // used for cost), not counted 1:1 like fresh context.
+        let session = CachedSessionDrivers {
+            input_tokens: 1_001_000,
+            output_tokens: 0,
+            coarse: false,
+            drivers: vec![CachedDriver {
+                side: "input".into(),
+                kind: "growth".into(),
+                name: "Conversation growth".into(),
+                calls: 0,
+                tokens: 1_001_000,
+                created_tokens: Some(1_000),
+                reread_tokens: Some(1_000_000),
+                approx_cost_usd: None,
+                pct: 100.0,
+                hint: None,
+            }],
+        };
+        let window = aggregate_drivers([&session]);
+        let growth = window.drivers.iter().find(|d| d.kind == "growth").unwrap();
+        // 1_000 created + 1_000_000 * 0.1 reread = 101_000, not 1_001_000.
+        assert_eq!(growth.tokens, 101_000);
+        assert_eq!(window.input_tokens, 101_000);
+    }
+
+    #[test]
+    fn aggregate_drivers_keeps_output_tokens_unweighted() {
+        let session = CachedSessionDrivers {
+            input_tokens: 0,
+            output_tokens: 5_000,
+            coarse: false,
+            drivers: vec![CachedDriver {
+                side: "output".into(),
+                kind: "edit".into(),
+                name: "File edits".into(),
+                calls: 3,
+                tokens: 5_000,
+                created_tokens: None,
+                reread_tokens: None,
+                approx_cost_usd: None,
+                pct: 100.0,
+                hint: None,
+            }],
+        };
+        let window = aggregate_drivers([&session]);
+        let edit = window.drivers.iter().find(|d| d.kind == "edit").unwrap();
+        assert_eq!(edit.tokens, 5_000);
+        assert_eq!(window.output_tokens, 5_000);
     }
 }
 

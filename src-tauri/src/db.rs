@@ -297,6 +297,36 @@ fn migrate(conn: &mut Connection) -> Result<(), AppError> {
         conn.pragma_update(None, "user_version", 16)?;
     }
 
+    if version < 17 {
+        // session_drivers (added in v14) is now actually populated inside
+        // upsert_session(); force a full re-parse so it backfills for every
+        // already-cached session, not just ones that change from here on.
+        conn.execute_batch("UPDATE session_stats SET mtime = -1;")?;
+        conn.pragma_update(None, "user_version", 17)?;
+    }
+
+    if version < 18 {
+        // Gemini sessions now attach each message's own token usage instead
+        // of only summing it into the session total — previously every
+        // Gemini `Message` hardcoded `usage: None`, so attribution::compute()
+        // skipped all of them and session_drivers cached an empty driver
+        // list for every Gemini session. Force a re-parse to backfill real
+        // drivers for Gemini sessions already cached under the old parser.
+        conn.execute_batch("UPDATE session_stats SET mtime = -1;")?;
+        conn.pragma_update(None, "user_version", 18)?;
+    }
+
+    if version < 19 {
+        // Claude sessions picked their overall model from the *first*
+        // assistant message only — if that turn happened to be `<synthetic>`
+        // (Anthropic's marker for a CLI-fabricated, non-API-call turn),
+        // the whole session got labeled "<synthetic>" even when every real
+        // turn afterward used an actual model. Force a re-parse to relabel
+        // already-cached sessions correctly.
+        conn.execute_batch("UPDATE session_stats SET mtime = -1;")?;
+        conn.pragma_update(None, "user_version", 19)?;
+    }
+
     Ok(())
 }
 
@@ -1245,6 +1275,33 @@ mod tests {
     }
 
     // ── schema ────────────────────────────────────────────────────────────────
+
+    #[test]
+    fn v17_migration_resets_mtime_to_backfill_session_drivers() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        migrate(&mut conn).unwrap();
+        conn.execute(
+            "INSERT INTO session_stats (session_id, project, project_name, ts, mtime) VALUES ('s1', '/p', 'p', 1, 1234)",
+            [],
+        )
+        .unwrap();
+        conn.pragma_update(None, "user_version", 16).unwrap();
+
+        migrate(&mut conn).unwrap();
+
+        let version: i32 = conn
+            .query_row("PRAGMA user_version", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(version, 19);
+        let mtime: i64 = conn
+            .query_row(
+                "SELECT mtime FROM session_stats WHERE session_id = 's1'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(mtime, -1);
+    }
 
     #[test]
     fn schema_has_dedup_key_column() {

@@ -96,6 +96,12 @@ pub fn classify_output_with(
 /// user's own prompt text.
 pub fn classify_input(ctx: &TurnCtx) -> InBucket {
     let prev = ctx.index.checked_sub(1).and_then(|k| ctx.messages.get(k));
+    // A structural compaction marker (OpenCode's own message kind) is a firm
+    // signal — check it before the text-match heuristic below, which exists
+    // for agents (Claude) with no such marker of their own.
+    if prev.map(|p| p.role.as_str()) == Some("compaction") {
+        return InBucket::Compaction;
+    }
     if let Some(p) = prev {
         for b in &p.content {
             if b.block_type == "tool_result" {

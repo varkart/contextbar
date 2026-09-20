@@ -83,6 +83,11 @@ const isEmptyAssistant = (m: HistoryMessage) =>
   m.role === 'assistant' &&
   !m.content.some(b => (b.blockType === 'text' && b.text?.trim()) || b.blockType === 'tool_use')
 
+/** OpenCode's structural compaction marker (used by the attribution engine to
+ *  detect context compaction deterministically). Not a real turn — the
+ *  role-collapse below would otherwise render it as a fake assistant bubble. */
+const isCompactionMarker = (m: HistoryMessage) => m.role === 'compaction'
+
 /** Merge consecutive tool-only assistant messages into the assistant turn
  *  before them. Codex / agy emit one tool step per message; without this a
  *  tool-heavy stretch becomes a wall of empty avatar rows. */
@@ -152,7 +157,7 @@ export function buildTurns(messages: HistoryMessage[]): TranscriptTurn[] {
   // Drop protocol-only user turns and empty (thinking-stripped) assistant
   // turns first, so a stretch of one-tool-per-message assistant turns reads
   // as adjacent and merges into a single work block.
-  const stream = messages.filter(m => !isProtocolOnly(m) && !isEmptyAssistant(m))
+  const stream = messages.filter(m => !isProtocolOnly(m) && !isEmptyAssistant(m) && !isCompactionMarker(m))
 
   const turns: TranscriptTurn[] = []
   for (const m of mergeToolOnly(stream)) {

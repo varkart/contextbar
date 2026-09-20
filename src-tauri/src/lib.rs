@@ -677,6 +677,21 @@ fn get_session_insights(
 }
 
 #[tauri::command]
+fn get_context_efficiency(
+    db: tauri::State<'_, db::DbState>,
+    since_ms: u64,
+    until_ms: Option<u64>,
+    projects: Option<Vec<String>>,
+) -> engine::history::stats::ContextEfficiency {
+    engine::history::stats::context_efficiency(
+        &db,
+        since_ms,
+        until_ms.unwrap_or(u64::MAX),
+        projects.as_deref(),
+    )
+}
+
+#[tauri::command]
 fn get_first_session_ts(db: tauri::State<'_, db::DbState>) -> Option<u64> {
     engine::history::stats::first_session_ts(&db)
 }
@@ -691,8 +706,11 @@ fn get_token_activity(
 }
 
 #[tauri::command]
-async fn get_commit_activity(since_days: u32) -> Vec<engine::worktrees::CommitEntry> {
-    tokio::task::spawn_blocking(move || engine::worktrees::commit_activity(since_days))
+async fn get_commit_activity(
+    since_ms: u64,
+    until_ms: Option<u64>,
+) -> Vec<engine::worktrees::CommitEntry> {
+    tokio::task::spawn_blocking(move || engine::worktrees::commit_activity(since_ms, until_ms))
         .await
         .unwrap_or_default()
 }
@@ -2841,6 +2859,7 @@ pub fn run() {
             get_repo_capabilities,
             set_repo_capability,
             get_session_insights,
+            get_context_efficiency,
             get_first_session_ts,
             get_token_activity,
             get_commit_activity,

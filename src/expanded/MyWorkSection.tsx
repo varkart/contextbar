@@ -1,13 +1,13 @@
 import { useState, useEffect, useMemo } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
-import type { RepoWorktrees, SessionEntry, SessionInsights, AgentActivityPoint } from '../types'
+import type { RepoWorktrees, SessionEntry, SessionInsights, AgentActivityPoint, ContextEfficiency, AgentContextEfficiency } from '../types'
 import type { CommitEntry } from '../types'
 import type { Section } from './ExpandedApp'
 import {
   Card, CommitBars, RefreshButton, SkeletonTiles, SkeletonCards,
   ActivityCalendar, ActivityWeekRow, ActivityAgentCount,
-  AgentStackedBars, RankedAgentBars, DailyBars,
+  AgentStackedBars, RankedAgentBars, DailyBars, HBar,
 } from './InsightWidgets'
 import AgentBadge from '../components/history/AgentBadge'
 import { formatTokens } from '../components/history/SessionStats'
@@ -21,6 +21,10 @@ const WEEKDAY_LABELS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 
 // tiles are never partially clipped regardless of real rendered height.
 // Comfortably fits one row at this window's minimum supported width.
 const COLLAPSED_PROJECT_COUNT = 4
+// Collapsed-state pill count for the Attention band — "Show more details"
+// switches to a full list with every item's reasoning visible, not just
+// these truncated pills.
+const COLLAPSED_ATTENTION_COUNT = 5
 const MAX_ADVANCED_DAYS = 90
 
 type Tab = 'today' | 'yesterday' | 'week' | 'month' | 'prevMonth' | 'last3' | 'advanced'
@@ -173,6 +177,19 @@ export function computeDailyUnionHours(
   return result
 }
 
+// Which agent's slice of a ContextEfficiency response the tile is currently
+// showing. Falls back to `overall` rather than `undefined` when `filter`
+// names an agent no longer present in a re-fetched response (e.g. the
+// window changed and that agent had no sessions in it).
+export function selectContextEfficiency(
+  data: ContextEfficiency | null,
+  filter: string
+): AgentContextEfficiency | null {
+  if (!data) return null
+  if (filter === 'all') return data.overall
+  return data.perAgent.find(a => a.agent === filter) ?? data.overall
+}
+
 // Open-ended windows (today/week/month/last3) end at Infinity, not a
 // captured Date.now() — otherwise a live session whose timestamp advances
 // past the frozen end silently falls out of the window after every refresh.
@@ -259,10 +276,14 @@ export default function MyWorkSection({ sessions, repos, loading, goTo, onRefres
   const [showAdvancedPicker, setShowAdvancedPicker] = useState(false)
   const [monthOffset, setMonthOffset] = useState(0)
   const [usageAgentFilter, setUsageAgentFilter] = useState('all')
+  const [usageModelFilter, setUsageModelFilter] = useState('all')
   const [hoursAgentFilter, setHoursAgentFilter] = useState('all')
   const [commitsRepoFilter, setCommitsRepoFilter] = useState('all')
   const [concurrencyAgentFilter, setConcurrencyAgentFilter] = useState('all')
+  const [ctxAgentFilter, setCtxAgentFilter] = useState('all')
+  const [hoursDayScope, setHoursDayScope] = useState<'all' | 'weekdays' | 'weekends'>('all')
   const [projectsExpanded, setProjectsExpanded] = useState(false)
+  const [attentionExpanded, setAttentionExpanded] = useState(false)
   const [agentActivity, setAgentActivity] = useState<AgentActivityPoint[]>([])
 
   useEffect(() => {
@@ -330,9 +351,17 @@ export default function MyWorkSection({ sessions, repos, loading, goTo, onRefres
   }, [windowed])
 
   // Commits restricted to the selected window; bar chart spans exactly it.
+  // Absolute timestamps, not a day count back from now — a window like
+  // "previous month" doesn't end at the current moment, so `sinceDays`
+  // relative to now would silently fetch the wrong days.
   useEffect(() => {
-    invoke<CommitEntry[]>('get_commit_activity', { sinceDays: windowDays }).then(setCommits).catch(() => {})
-  }, [windowDays])
+    let live = true
+    invoke<CommitEntry[]>('get_commit_activity', {
+      sinceMs: start,
+      untilMs: end === Infinity ? undefined : end,
+    }).then(d => { if (live) setCommits(d) }).catch(() => {})
+    return () => { live = false }
+  }, [start, end])
   const windowCommitEntries = useMemo(
     () => commits.filter(c => c.ts * 1000 >= start && c.ts * 1000 < end),
     [commits, start, end]
@@ -341,6 +370,14 @@ export default function MyWorkSection({ sessions, repos, loading, goTo, onRefres
     () => [...new Set(windowCommitEntries.map(c => c.repoName))].sort(),
     [windowCommitEntries]
   )
+  // Switching windows can make the currently-selected repo disappear from
+  // this window entirely (e.g. it only ever appears in a different month) —
+  // without this, the filter would keep silently showing 0 commits instead
+  // of falling back to "All" the way selectContextEfficiency already does
+  // for its own agent filter.
+  useEffect(() => {
+    if (commitsRepoFilter !== 'all' && !commitRepos.includes(commitsRepoFilter)) setCommitsRepoFilter('all')
+  }, [commitRepos, commitsRepoFilter])
   const windowCommits = useMemo(
     () => windowCommitEntries
       .filter(c => commitsRepoFilter === 'all' || c.repoName === commitsRepoFilter)
@@ -352,7 +389,9 @@ export default function MyWorkSection({ sessions, repos, loading, goTo, onRefres
   // involved, same pipeline the per-agent Activity chart in Tools uses), so
   // it needs its own upper-bound filter the same way commits does above.
   useEffect(() => {
-    invoke<AgentActivityPoint[]>('get_agent_activity', { sinceMs: start }).then(setAgentActivity).catch(() => {})
+    let live = true
+    invoke<AgentActivityPoint[]>('get_agent_activity', { sinceMs: start }).then(d => { if (live) setAgentActivity(d) }).catch(() => {})
+    return () => { live = false }
   }, [start])
   const windowActivity = useMemo(
     () => agentActivity.filter(p => p.tsMs >= start && p.tsMs < end),
@@ -383,10 +422,25 @@ export default function MyWorkSection({ sessions, repos, loading, goTo, onRefres
     return () => { live = false; unlisten.then(f => f()) }
   }, [start, end])
 
-  // Ranked by tokens — perSession already comes back sorted desc, capped at
-  // 100 server-side, so a handful of sessions with unusually low token
-  // counts in a very active 90-day window could be missing from the tail;
-  // acceptable for a top-5 ranking.
+  // Context efficiency — same warm/fetch pattern as insights above; `warm()`
+  // is also where the underlying session_drivers cache this reads gets
+  // populated, so the same 'session-insights-updated' event covers both.
+  const [ctxEfficiency, setCtxEfficiency] = useState<ContextEfficiency | null>(null)
+  useEffect(() => {
+    let live = true
+    const fetchCtx = () => {
+      invoke<ContextEfficiency>('get_context_efficiency', {
+        sinceMs: start,
+        untilMs: end === Infinity ? undefined : end,
+      }).then(d => { if (live) setCtxEfficiency(d) }).catch(() => {})
+    }
+    setCtxEfficiency(null)
+    fetchCtx()
+    const unlisten = listen('session-insights-updated', fetchCtx)
+    return () => { live = false; unlisten.then(f => f()) }
+  }, [start, end])
+
+  // perSession already comes back sorted by tokens descending.
   const topSessions = useMemo(() => (insights?.perSession ?? []).slice(0, 5), [insights])
   // Recency, not tokens — `projects` is already grouped from the windowed
   // SessionEntry list and sorted by lastTs desc; token totals for display
@@ -400,34 +454,83 @@ export default function MyWorkSection({ sessions, repos, loading, goTo, onRefres
       lastTs: p.lastTs,
     }))
   }, [projects, insights])
-  const perAgentTotals = useMemo(() => {
-    const map = new Map<string, { tokens: number; cost: number }>()
+  // From insights.perAgent, computed server-side over every session in the
+  // window. (Previously this reduced perSession client-side — safe now that
+  // perSession is uncapped, but perAgent is the more direct source anyway.)
+  const perAgentTotals = useMemo((): [string, { tokens: number; cost: number; sessions: number }][] =>
+    (insights?.perAgent ?? [])
+      .filter(a => a.tokens > 0)
+      .map(a => [a.agent, { tokens: a.tokens, cost: a.estCostUsd ?? 0, sessions: a.sessions }]),
+  [insights])
+  // Whole-window total, independent of Usage & cost's own model filter below
+  // — Usage per agent's own % shares shouldn't silently shift just because
+  // a different card's filter changed.
+  const perAgentTotalTokens = useMemo(() => perAgentTotals.reduce((n, [, u]) => n + u.tokens, 0), [perAgentTotals])
+  // Every model seen in the window, most-used first (server-ordered by
+  // session count) — so even a window where only one model was actually
+  // used still shows the filter (a single chip next to "All"), rather than
+  // Usage & cost giving no indication a model breakdown exists at all.
+  const usageModels = useMemo(() => (insights?.perModel ?? []).map(m => m.model), [insights])
+  useEffect(() => {
+    if (usageModelFilter !== 'all' && !usageModels.includes(usageModelFilter)) setUsageModelFilter('all')
+  }, [usageModels, usageModelFilter])
+  // Same color for a given model everywhere it appears (every agent's bar
+  // segment, the legend) — assigned once from usageModels' own most-used-
+  // first order, not per-agent, so "sonnet-4-5" doesn't get a different
+  // color depending on which agent's row it's drawn in.
+  const modelColor = useMemo(() => {
+    const map = new Map<string, string>()
+    usageModels.forEach((m, i) => map.set(m, PALETTE[i % PALETTE.length]))
+    return map
+  }, [usageModels])
+  // Per-agent token totals broken down by model — from perSession (now
+  // uncapped, so this is a complete reduction, not the earlier capped-list
+  // bug class). insights.perModel only has cross-agent model totals, not
+  // per-agent, so this has to be computed here.
+  const tokensByAgentAndModel = useMemo(() => {
+    const map = new Map<string, Map<string, number>>()
     for (const s of insights?.perSession ?? []) {
-      const u = map.get(s.agent) ?? { tokens: 0, cost: 0 }
-      u.tokens += s.tokens
-      u.cost += s.estCostUsd ?? 0
-      map.set(s.agent, u)
+      const byModel = map.get(s.agent) ?? new Map<string, number>()
+      byModel.set(s.model, (byModel.get(s.model) ?? 0) + s.tokens)
+      map.set(s.agent, byModel)
     }
-    // Drop agents with no real usage in this window instead of showing an
-    // all-empty tile — a session can legitimately land in perSession with
-    // 0 tokens (started, never completed a turn).
-    return [...map.entries()].filter(([, u]) => u.tokens > 0).sort((a, b) => b[1].tokens - a[1].tokens)
+    return map
   }, [insights])
-  const totalUsageTokens = useMemo(() => perAgentTotals.reduce((n, [, u]) => n + u.tokens, 0), [perAgentTotals])
-  const totalUsageCost = useMemo(() => perAgentTotals.reduce((n, [, u]) => n + u.cost, 0), [perAgentTotals])
+  // Model filter narrows the actual totals/chart (a real filter, not just
+  // which segments render) — agent filter below stays visual-only, matching
+  // its existing behavior, so the two compose without either one silently
+  // overriding the other's meaning.
+  const usageModelFilteredSessions = useMemo(
+    () => usageModelFilter === 'all'
+      ? (insights?.perSession ?? [])
+      : (insights?.perSession ?? []).filter(s => s.model === usageModelFilter),
+    [insights, usageModelFilter]
+  )
+  const totalUsageTokens = useMemo(
+    () => usageModelFilteredSessions.reduce((n, s) => n + s.tokens, 0),
+    [usageModelFilteredSessions]
+  )
+  const totalUsageCost = useMemo(
+    () => usageModelFilteredSessions.reduce((n, s) => n + (s.estCostUsd ?? 0), 0),
+    [usageModelFilteredSessions]
+  )
 
   // One entry per day, each mapping agent → tokens that day — feeds the
   // unified (filterable) Usage & cost chart instead of a DailyBars-per-agent
   // loop, so "All" renders every agent stacked in one chart.
   const dailyUsageMatrix = useMemo(() => {
     const days: Record<string, number>[] = Array.from({ length: windowDays }, () => ({}))
-    for (const s of insights?.perSession ?? []) {
+    for (const s of usageModelFilteredSessions) {
       const idx = Math.floor((s.ts - start) / DAY)
       if (idx >= 0 && idx < windowDays) days[idx][s.agent] = (days[idx][s.agent] ?? 0) + s.tokens
     }
     return days
-  }, [insights, start, windowDays])
-  const usageActiveAgents = usageAgentFilter === 'all' ? perAgentTotals.map(([a]) => a) : [usageAgentFilter]
+  }, [usageModelFilteredSessions, start, windowDays])
+  const usageAgents = useMemo(() => perAgentTotals.map(([a]) => a), [perAgentTotals])
+  useEffect(() => {
+    if (usageAgentFilter !== 'all' && !usageAgents.includes(usageAgentFilter)) setUsageAgentFilter('all')
+  }, [usageAgents, usageAgentFilter])
+  const usageActiveAgents = usageAgentFilter === 'all' ? usageAgents : [usageAgentFilter]
 
   // Hours spent — from get_agent_activity (see the comment above its fetch
   // effect). Wall-clock hours, via computeDailyUnionHours: summing each
@@ -443,6 +546,9 @@ export default function MyWorkSection({ sessions, repos, loading, goTo, onRefres
     for (const p of windowActivity) totals.set(p.agent, (totals.get(p.agent) ?? 0) + p.minutes)
     return [...totals.entries()].filter(([, m]) => m > 0).sort((a, b) => b[1] - a[1]).map(([a]) => a)
   }, [windowActivity])
+  useEffect(() => {
+    if (hoursAgentFilter !== 'all' && !hoursAgents.includes(hoursAgentFilter)) setHoursAgentFilter('all')
+  }, [hoursAgents, hoursAgentFilter])
   const hoursFilteredActivity = useMemo(
     () => hoursAgentFilter === 'all' ? windowActivity : windowActivity.filter(p => p.agent === hoursAgentFilter),
     [windowActivity, hoursAgentFilter]
@@ -451,13 +557,42 @@ export default function MyWorkSection({ sessions, repos, loading, goTo, onRefres
     () => computeDailyUnionHours(hoursFilteredActivity, start, windowDays),
     [hoursFilteredActivity, start, windowDays]
   )
-  const totalHours = useMemo(() => dailyUnionHours.reduce((a, b) => a + b, 0), [dailyUnionHours])
+  // Sun/Sat flag per day index in the window — used to zero out the days
+  // outside the selected scope in both the chart and the totals, and to
+  // divide averages by the actual number of included days.
+  // Stepped via setDate (calendar days), not `start + idx * DAY` (raw
+  // milliseconds) — a 23h/25h DST-transition day would otherwise drift the
+  // computed local time off midnight for every subsequent index, which can
+  // shift getDay() onto the wrong calendar day and misclassify weekday vs.
+  // weekend right around the transition.
+  const weekendDayFlags = useMemo(
+    () => Array.from({ length: windowDays }, (_, idx) => {
+      const d = new Date(start)
+      d.setDate(d.getDate() + idx)
+      const day = d.getDay()
+      return day === 0 || day === 6
+    }),
+    [start, windowDays]
+  )
+  const weekdayCount = useMemo(() => weekendDayFlags.filter(w => !w).length || 1, [weekendDayFlags])
+  const weekendCount = useMemo(() => weekendDayFlags.filter(w => w).length || 1, [weekendDayFlags])
+  const dailyHoursDisplay = useMemo(() => {
+    if (hoursDayScope === 'all') return dailyUnionHours
+    const keepWeekend = hoursDayScope === 'weekends'
+    return dailyUnionHours.map((h, idx) => weekendDayFlags[idx] === keepWeekend ? h : 0)
+  }, [dailyUnionHours, hoursDayScope, weekendDayFlags])
+  const totalHours = useMemo(() => dailyHoursDisplay.reduce((a, b) => a + b, 0), [dailyHoursDisplay])
   // Day-level windows (Today/Yesterday) are a single number — an average
   // over one day is meaningless. Week shows the daily average; month-and-up
   // also shows a weekly average, since a month of daily numbers is too
   // noisy to compare at a glance without it.
   const hoursGranularity: 'day' | 'week' | 'month' =
     tab === 'today' || tab === 'yesterday' ? 'day' : tab === 'week' ? 'week' : 'month'
+  // A work-week is 5 days, a "weekend" is 2 — only the "all" scope's week is 7.
+  const hoursDaysDivisor =
+    hoursDayScope === 'all' ? windowDays : hoursDayScope === 'weekdays' ? weekdayCount : weekendCount
+  const hoursWeekDivisor =
+    hoursDayScope === 'all' ? windowDays / 7 : hoursDayScope === 'weekdays' ? weekdayCount / 5 : weekendCount / 2
 
   // Parallel sessions — headline metric is the true peak (sweep-line max
   // overlap, see computeDailyMaxConcurrency), not an average: the question
@@ -470,6 +605,9 @@ export default function MyWorkSection({ sessions, repos, loading, goTo, onRefres
     for (const p of windowActivity) totals.set(p.agent, (totals.get(p.agent) ?? 0) + p.minutes)
     return [...totals.entries()].filter(([, m]) => m > 0).sort((a, b) => b[1] - a[1]).map(([a]) => a)
   }, [windowActivity])
+  useEffect(() => {
+    if (concurrencyAgentFilter !== 'all' && !concurrencyAgents.includes(concurrencyAgentFilter)) setConcurrencyAgentFilter('all')
+  }, [concurrencyAgents, concurrencyAgentFilter])
   const concurrencyFilteredActivity = useMemo(
     () => concurrencyAgentFilter === 'all' ? windowActivity : windowActivity.filter(p => p.agent === concurrencyAgentFilter),
     [windowActivity, concurrencyAgentFilter]
@@ -495,6 +633,15 @@ export default function MyWorkSection({ sessions, repos, loading, goTo, onRefres
       : null
     return { avg, peak, peakDayIdx, daysWithOverlap, mostParallelAgent }
   }, [concurrencyFilteredActivity, windowActivity, concurrencyAgents, start, windowDays, dailyMaxConcurrency])
+
+  // Context efficiency — kiro/agy are already absent from the response
+  // server-side (no usable token-usage data in their transcripts), so the
+  // agent chip list here never needs to exclude them itself.
+  const ctxAgents = useMemo(() => (ctxEfficiency?.perAgent ?? []).map(a => a.agent), [ctxEfficiency])
+  const ctxActive = useMemo(
+    () => selectContextEfficiency(ctxEfficiency, ctxAgentFilter),
+    [ctxEfficiency, ctxAgentFilter]
+  )
 
   // Same perSession rows back every day-level activity view below — no
   // extra fetch needed since the whole window is already in memory.
@@ -571,7 +718,7 @@ export default function MyWorkSection({ sessions, repos, loading, goTo, onRefres
       if (kindOrder !== 0) return kindOrder
       return a.kind === 'uncommitted' ? b.idleDays - a.idleDays : b.ahead - a.ahead
     })
-    return items.slice(0, 5)
+    return items
   }, [repos])
 
   // Every project touched in the selected window, most-recent first — not
@@ -692,22 +839,54 @@ export default function MyWorkSection({ sessions, repos, loading, goTo, onRefres
 
         {!loading && sessions.length > 0 && (
           <>
-            {/* Attention — full-width band, always first, any window */}
+            {/* Attention — full-width band, always first, any window.
+                Collapsed pills truncate their reasoning behind a hover
+                tooltip; "Show more details" switches to a list where every
+                item's full reasoning is visible without hovering, same fix
+                already applied to the Activity calendar hover text. */}
             {attention.length > 0 && (
               <div className="rounded-xl border p-3 mb-3" style={{ borderColor: 'color-mix(in srgb, #f59e0b 30%, transparent)' }}>
                 <p className="text-[12px] font-bold text-amber-400 mb-2">⚠ Attention ({attention.length})</p>
-                <div className="flex gap-2 flex-wrap">
-                  {attention.map(a => (
+                {!attentionExpanded ? (
+                  <div className="flex gap-2 flex-wrap">
+                    {attention.slice(0, COLLAPSED_ATTENTION_COUNT).map(a => (
+                      <button
+                        key={a.key}
+                        onClick={() => onFocusWorktree(a.path)}
+                        title={`${a.meta}\n${a.why}`}
+                        className="font-mono text-[11px] px-2 py-1 rounded-md bg-[var(--c-surface-2)] hover:bg-[var(--c-surface-2)]/80 transition-colors truncate max-w-[220px]"
+                      >
+                        {a.title}
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="flex flex-col gap-1.5">
+                    {attention.map(a => (
+                      <button
+                        key={a.key}
+                        onClick={() => onFocusWorktree(a.path)}
+                        className="text-left rounded-md bg-[var(--c-surface-2)] hover:bg-[var(--c-surface-2)]/80 transition-colors px-2.5 py-1.5"
+                      >
+                        <div className="flex items-baseline justify-between gap-2">
+                          <span className="font-mono text-[11.5px] truncate">{a.title}</span>
+                          <span className="text-[10px] text-[var(--c-text-3)] shrink-0">{a.meta}</span>
+                        </div>
+                        <div className="text-[11px] text-[var(--c-text-2)] mt-0.5">{a.why}</div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {attention.length > COLLAPSED_ATTENTION_COUNT || attentionExpanded ? (
+                  <div className="flex justify-center mt-2.5">
                     <button
-                      key={a.key}
-                      onClick={() => onFocusWorktree(a.path)}
-                      title={`${a.meta}\n${a.why}`}
-                      className="font-mono text-[11px] px-2 py-1 rounded-md bg-[var(--c-surface-2)] hover:bg-[var(--c-surface-2)]/80 transition-colors truncate max-w-[220px]"
+                      onClick={() => setAttentionExpanded(e => !e)}
+                      className="text-[10.5px] text-[var(--c-text-3)] hover:text-[var(--c-text-2)] transition-colors"
                     >
-                      {a.title}
+                      {attentionExpanded ? 'Show less' : 'Show more details'}
                     </button>
-                  ))}
-                </div>
+                  </div>
+                ) : null}
               </div>
             )}
 
@@ -725,7 +904,11 @@ export default function MyWorkSection({ sessions, repos, loading, goTo, onRefres
                 </p>
                 <div
                   className="grid gap-3"
-                  style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))' }}
+                  // auto-fit (not auto-fill): empty tracks collapse instead of
+                  // reserving space, so a handful of tiles on a wide window
+                  // stretch to fill it (bigger, per the ask), while narrow
+                  // windows still wrap down to the 130px floor per tile.
+                  style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))' }}
                 >
                   {orderedProjects.slice(0, projectsExpanded ? 12 : COLLAPSED_PROJECT_COUNT).map((p, i) => {
                     const branch = branchFor(p.project)
@@ -893,10 +1076,23 @@ export default function MyWorkSection({ sessions, repos, loading, goTo, onRefres
                         <span className="text-[12px] text-[var(--c-text-3)]">· ${totalUsageCost.toFixed(2)} estimated</span>
                       </div>
                       <AgentFilterChips
-                        agents={perAgentTotals.map(([a]) => a)}
+                        agents={usageAgents}
                         value={usageAgentFilter}
                         onChange={setUsageAgentFilter}
+                        alwaysShow
                       />
+                      {usageModels.length > 0 && (
+                        // Shown even for a single model — unlike the agent
+                        // chips above (which hide entirely at 1 agent), this
+                        // is also how the window shows which models it
+                        // actually supports/saw, not just a filter control.
+                        <div className="flex flex-wrap gap-1.5 mb-2">
+                          <FilterChip label="All models" active={usageModelFilter === 'all'} onClick={() => setUsageModelFilter('all')} />
+                          {usageModels.map(m => (
+                            <FilterChip key={m} label={m} active={usageModelFilter === m} onClick={() => setUsageModelFilter(m)} />
+                          ))}
+                        </div>
+                      )}
                       <AgentStackedBars
                         seriesByDay={dailyUsageMatrix}
                         activeAgents={usageActiveAgents}
@@ -929,7 +1125,11 @@ export default function MyWorkSection({ sessions, repos, loading, goTo, onRefres
                       {(() => {
                         const [agent, u] = perAgentTotals[0]
                         const { label, hex } = agentColor(agent)
-                        const avgPerSession = stats.sessions > 0 ? u.tokens / stats.sessions : 0
+                        // This agent's own session count, not stats.sessions
+                        // (every agent's raw windowed session count, which
+                        // can include a second agent's not-yet-warmed
+                        // sessions even when perAgentTotals shows only one).
+                        const avgPerSession = u.sessions > 0 ? u.tokens / u.sessions : 0
                         return (
                           <>
                             <div className="flex items-center gap-2 mb-2.5">
@@ -940,53 +1140,113 @@ export default function MyWorkSection({ sessions, repos, loading, goTo, onRefres
                             <div className="grid grid-cols-2 gap-2">
                               <StatBox value={formatTokens(u.tokens)} label="total tokens" color={hex} />
                               <StatBox value={`$${u.cost.toFixed(2)}`} label="estimated cost" hint="Estimated from this model's published per-token pricing — not a billed amount." />
-                              <StatBox value={stats.sessions} label={`session${stats.sessions === 1 ? '' : 's'}`} />
+                              <StatBox value={u.sessions} label={`session${u.sessions === 1 ? '' : 's'}`} />
                               <StatBox value={formatTokens(avgPerSession)} label="avg tokens / session" />
                             </div>
+                            {(() => {
+                              // Single-agent view has no per-agent bar to
+                              // segment by model — rank this one agent's own
+                              // models directly instead, same data/colors as
+                              // the multi-agent view's segments use.
+                              const byModel = tokensByAgentAndModel.get(agent)
+                              const models = byModel ? [...byModel.entries()].sort((a, b) => b[1] - a[1]) : []
+                              if (models.length <= 1) return null
+                              const modelTotal = models.reduce((n, [, t]) => n + t, 0)
+                              return (
+                                <div className="mt-3">
+                                  <p className="text-[10.5px] text-[var(--c-text-3)] mb-1.5">Model mix</p>
+                                  <RankedAgentBars
+                                    items={models.map(([model, tokens]) => ({
+                                      agent: model, label: model, color: modelColor.get(model) ?? hex, value: tokens,
+                                      formatted: formatTokens(tokens),
+                                      pct: modelTotal > 0 ? Math.round((tokens / modelTotal) * 100) : 0,
+                                    }))}
+                                  />
+                                </div>
+                              )
+                            })()}
                           </>
                         )
                       })()}
                     </Card>
                   ) : perAgentTotals.length > 1 && (
-                    <Card title="Usage per agent" sub="Share of total tokens, this window">
+                    <Card
+                      title="Usage per agent"
+                      sub={usageModels.length > 1 ? 'Share of total tokens, this window — bar segments show model mix' : 'Share of total tokens, this window'}
+                    >
                       <RankedAgentBars
                         items={perAgentTotals.map(([agent, u]) => {
                           const { label, hex } = agentColor(agent)
+                          // Only worth segmenting when there's an actual mix
+                          // to show — with one model total, segmenting would
+                          // still render a single-color bar, just in the
+                          // model palette instead of this agent's own color.
+                          const byModel = usageModels.length > 1 ? tokensByAgentAndModel.get(agent) : undefined
+                          const segments = byModel
+                            ? [...byModel.entries()]
+                                .sort((a, b) => b[1] - a[1])
+                                .map(([model, tokens]) => ({ label: model, value: tokens, color: modelColor.get(model) ?? hex }))
+                            : undefined
                           return {
                             agent, label, color: hex, value: u.tokens,
                             formatted: formatTokens(u.tokens),
-                            pct: totalUsageTokens > 0 ? Math.round((u.tokens / totalUsageTokens) * 100) : 0,
+                            pct: perAgentTotalTokens > 0 ? Math.round((u.tokens / perAgentTotalTokens) * 100) : 0,
+                            segments,
                           }
                         })}
                       />
+                      {usageModels.length > 1 && (
+                        <div className="flex flex-wrap gap-x-3 gap-y-1 mt-2.5">
+                          {usageModels.map(m => (
+                            <span key={m} className="flex items-center gap-1 text-[10px] text-[var(--c-text-3)]">
+                              <span className="w-2 h-2 rounded-full shrink-0" style={{ background: modelColor.get(m) }} />
+                              {m}
+                            </span>
+                          ))}
+                        </div>
+                      )}
                     </Card>
                   )}
 
                   {hoursAgents.length > 0 && (
-                    <Card title="Hours spent">
+                    <Card
+                      title="Hours spent"
+                      headerRight={
+                        <SegmentedControl
+                          options={[
+                            { value: 'all', label: 'All' },
+                            { value: 'weekdays', label: 'Weekdays' },
+                            { value: 'weekends', label: 'Weekends' },
+                          ]}
+                          value={hoursDayScope}
+                          onChange={setHoursDayScope}
+                        />
+                      }
+                    >
                       <div className="flex items-baseline gap-2 mb-1">
                         <span className="text-[18px] font-bold" title="Wall-clock time covered by these sessions — overlapping sessions aren't double-counted, so this can't exceed 24h/day.">
                           {totalHours.toFixed(1)}h
                         </span>
                         <span className="text-[12px] text-[var(--c-text-3)]">
                           {hoursAgentFilter === 'all' ? 'across all agents' : `on ${agentColor(hoursAgentFilter).label}`}
+                          {hoursDayScope !== 'all' && ` · ${hoursDayScope} only`}
                         </span>
                       </div>
                       {hoursGranularity !== 'day' && (
                         <div className="flex gap-3 mb-2 text-[10.5px] text-[var(--c-text-2)]">
-                          <span title="Total hours in this window divided by the number of days in it.">
-                            <b className="font-mono text-[var(--c-text)]">{(totalHours / windowDays).toFixed(1)}h</b> avg / day
+                          <span title={`Total hours in this window divided by the number of ${hoursDayScope === 'all' ? 'days' : hoursDayScope} in it.`}>
+                            <b className="font-mono text-[var(--c-text)]">{(totalHours / hoursDaysDivisor).toFixed(1)}h</b> avg / day
                           </span>
                           {hoursGranularity === 'month' && (
-                            <span title="Total hours in this window divided by the number of weeks in it.">
-                              <b className="font-mono text-[var(--c-text)]">{(totalHours / (windowDays / 7)).toFixed(1)}h</b> avg / week
+                            <span title={hoursDayScope === 'all' ? 'Total hours in this window divided by the number of weeks in it.' : `Total hours divided by the number of ${hoursDayScope === 'weekdays' ? '5-day work-weeks' : '2-day weekends'} in this window.`}>
+                              <b className="font-mono text-[var(--c-text)]">{(totalHours / hoursWeekDivisor).toFixed(1)}h</b> avg / week
                             </span>
                           )}
                         </div>
                       )}
                       <AgentFilterChips agents={hoursAgents} value={hoursAgentFilter} onChange={setHoursAgentFilter} />
                       <DailyBars
-                        values={dailyUnionHours}
+                        values={dailyHoursDisplay}
                         start={start}
                         color={hoursAgentFilter === 'all' ? 'var(--c-accent)' : agentColor(hoursAgentFilter).hex}
                         formatValue={v => `${v.toFixed(1)}h`}
@@ -1051,6 +1311,48 @@ export default function MyWorkSection({ sessions, repos, loading, goTo, onRefres
                   </div>
                 )}
 
+                {/* Context efficiency — how much of this window's input tokens
+                    went to compaction/growth vs. real work. Claude, OpenCode,
+                    Codex only; Kiro/Agy have no token-usage data in their
+                    transcript formats and are excluded server-side. */}
+                {ctxAgents.length > 0 && ctxActive && (
+                  <Card title="Context efficiency" sub="How much of this window's context was real work vs. compaction/growth">
+                    <div className="grid grid-cols-2 gap-2 mb-2">
+                      <StatBox
+                        value={`${Math.round(ctxActive.score)}`}
+                        label="efficiency score"
+                        hint="100 minus the share of input tokens spent on context compaction and unattributed conversation growth."
+                      />
+                      <StatBox
+                        value={ctxActive.sessions}
+                        label={`session${ctxActive.sessions === 1 ? '' : 's'} analyzed`}
+                      />
+                    </div>
+                    <AgentFilterChips agents={ctxAgents} value={ctxAgentFilter} onChange={setCtxAgentFilter} />
+                    {ctxActive.topDrivers.slice(0, 3).map(d => (
+                      // Tip text is shown inline below the bar, not just on
+                      // hover — hover-only info here would repeat the same
+                      // discoverability problem already fixed for the
+                      // Activity calendar earlier: nobody finds it by accident.
+                      <div key={`${d.side}-${d.kind}-${d.name}`} className="mb-2">
+                        <HBar
+                          name={d.name}
+                          value={formatTokens(d.tokens)}
+                          pct={d.pct}
+                          color={d.side === 'input' ? '#60a5fa' : '#f59e0b'}
+                        />
+                        {d.hint && <p className="mt-1 text-[10.5px] text-amber-400/90">⚠ {d.hint}</p>}
+                      </div>
+                    ))}
+                    {ctxActive.topDrivers.length === 0 && (
+                      <p className="text-[11px] text-[var(--c-text-3)]">No context-efficiency concerns detected this window.</p>
+                    )}
+                    {ctxActive.coarse && (
+                      <p className="text-[10px] text-[var(--c-text-3)] mt-1.5">Approximate — includes an agent with coarse token accounting.</p>
+                    )}
+                  </Card>
+                )}
+
                 {/* Activity / this-period stats — half row each. */}
                 <div className="grid grid-cols-2 gap-3">
                   <Card title="Activity">
@@ -1102,15 +1404,44 @@ export default function MyWorkSection({ sessions, repos, loading, goTo, onRefres
   )
 }
 
-function FilterChip({ label, active, onClick, dotColor }: {
+/** iOS-style segmented control — a pill-shaped group of mutually exclusive
+ *  options with the active one highlighted, for a small fixed set of scopes
+ *  (e.g. All / Weekdays / Weekends) where a boolean switch or a row of
+ *  independent filter chips would both be less obviously "pick exactly one
+ *  of these" than a single connected control. */
+function SegmentedControl<T extends string>({ options, value, onChange }: {
+  options: { value: T; label: string }[]
+  value: T
+  onChange: (next: T) => void
+}) {
+  return (
+    <div className="inline-flex rounded-full bg-[var(--c-surface-2)] border border-[var(--c-border)] p-0.5 shrink-0">
+      {options.map(opt => (
+        <button
+          key={opt.value}
+          onClick={() => onChange(opt.value)}
+          className={`text-[10.5px] px-2 py-0.5 rounded-full transition-colors ${
+            value === opt.value ? 'bg-[var(--c-accent)] text-white' : 'text-[var(--c-text-3)] hover:text-[var(--c-text-2)]'
+          }`}
+        >
+          {opt.label}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+function FilterChip({ label, active, onClick, dotColor, title }: {
   label: string
   active: boolean
   onClick: () => void
   dotColor?: string
+  title?: string
 }) {
   return (
     <button
       onClick={onClick}
+      title={title}
       className={`text-[10px] px-2 py-0.5 rounded-full border flex items-center gap-1.5 transition-colors ${
         active
           ? 'bg-[var(--c-accent)] border-[var(--c-accent)] text-white'
@@ -1125,12 +1456,16 @@ function FilterChip({ label, active, onClick, dotColor }: {
 
 /** "All" + one chip per agent, single-select. Shared shape for Usage & cost
  *  and Hours spent — both filter the same way over the same day grid. */
-function AgentFilterChips({ agents, value, onChange }: {
+function AgentFilterChips({ agents, value, onChange, alwaysShow }: {
   agents: string[]
   value: string
   onChange: (agent: string) => void
+  /** Show even with 0-1 agents — for a tile where the chip row also doubles
+   *  as "here's what this app supports," not just a filter for 2+ options. */
+  alwaysShow?: boolean
 }) {
-  if (agents.length <= 1) return null
+  if (agents.length <= 1 && !alwaysShow) return null
+  if (agents.length === 0) return null
   return (
     <div className="flex flex-wrap gap-1.5 mb-2">
       <FilterChip label="All" active={value === 'all'} onClick={() => onChange('all')} />

@@ -341,7 +341,19 @@ fn message_from_row(msg_type: &str, data: &str) -> Option<Message> {
                 reasoning_chars: 0,
             })
         }
-        _ => None, // system/shell/synthetic/agent-switched/model-switched/compaction: skip
+        // A structural compaction marker — better signal than the text-match
+        // heuristic other agents rely on. Payload fields (`reason`/`summary`/
+        // `recent`) are routinely empty in practice, so a static marker text
+        // is simpler and more robust than trying to surface them.
+        "compaction" => Some(Message {
+            role: "compaction".to_string(),
+            content: vec![text_content_block("Context compacted".to_string())],
+            timestamp: None,
+            model: None,
+            usage: None,
+            reasoning_chars: 0,
+        }),
+        _ => None, // system/shell/synthetic/agent-switched/model-switched: skip
     }
 }
 
@@ -424,6 +436,19 @@ fn message_from_v2_row(data: &str, parts: &[String]) -> Option<Message> {
                 reasoning_chars: 0,
             })
         }
+        // Unverified against a live v2 DB (only the legacy `type` string is
+        // confirmed by a real test fixture below) — the module doc's "role
+        // replaces type 1:1" claim is the basis for this. If wrong, this arm
+        // is simply unreachable and v2 compaction rows keep falling into the
+        // catch-all below, same as today — a no-op, not a regression.
+        "compaction" => Some(Message {
+            role: "compaction".to_string(),
+            content: vec![text_content_block("Context compacted".to_string())],
+            timestamp: None,
+            model: None,
+            usage: None,
+            reasoning_chars: 0,
+        }),
         _ => None, // system/shell/synthetic/…: skip
     }
 }
@@ -628,11 +653,16 @@ mod tests {
     fn skips_system_and_control_messages() {
         assert!(message_from_row("system", r#"{"text":"noise"}"#).is_none());
         assert!(message_from_row("agent-switched", r#"{"agent":"build"}"#).is_none());
-        assert!(message_from_row(
+    }
+
+    #[test]
+    fn compaction_row_becomes_structural_marker() {
+        let msg = message_from_row(
             "compaction",
-            r#"{"reason":"auto","summary":"","recent":""}"#
+            r#"{"reason":"auto","summary":"","recent":""}"#,
         )
-        .is_none());
+        .unwrap();
+        assert_eq!(msg.role, "compaction");
     }
 
     #[test]
@@ -756,6 +786,13 @@ mod tests {
     fn skips_v2_system_role() {
         let meta = serde_json::json!({ "role": "system" }).to_string();
         assert!(message_from_v2_row(&meta, &[]).is_none());
+    }
+
+    #[test]
+    fn v2_compaction_role_becomes_structural_marker() {
+        let meta = serde_json::json!({ "role": "compaction" }).to_string();
+        let msg = message_from_v2_row(&meta, &[]).unwrap();
+        assert_eq!(msg.role, "compaction");
     }
 
     /// End-to-end against an in-memory DB matching the current (1.18.27)

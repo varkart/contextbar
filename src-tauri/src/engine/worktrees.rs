@@ -1,10 +1,11 @@
 //! Git worktree discovery across the repos the user works in.
 //!
-//! Repos are discovered from the Claude Code session history index (the same
-//! project list the Sessions view uses), deduplicated by the repo's common git
-//! dir so multiple worktrees of one repo collapse into a single group.
-//! Everything is read-only except `remove_worktree`, which refuses to touch a
-//! worktree that is dirty or not fully merged into the base branch.
+//! Repos are discovered from every agent's session history (`SessionSource`
+//! project paths across `engine::sessions::sources()` — the same aggregate
+//! the Sessions view uses), deduplicated by the repo's common git dir so
+//! multiple worktrees of one repo collapse into a single group. Everything
+//! is read-only except `remove_worktree`, which refuses to touch a worktree
+//! that is dirty or not fully merged into the base branch.
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
@@ -639,7 +640,21 @@ fn list_remote_only_branches(
 /// history. Worktrees of one repo share a common git dir, which dedupes them;
 /// the primary checkout is that dir's parent.
 fn discover_primary_roots() -> Vec<PathBuf> {
-    let projects = super::history::list_session_projects();
+    // Every agent's own project paths, not just Claude's — a repo touched
+    // only via OpenCode/Kiro/Codex/Gemini/Agy must still show up here, or it
+    // silently disappears from the worktrees view and the commits chart
+    // (and its repo filter) even though it correctly appears elsewhere
+    // (Active projects, Top repos) via this same session aggregate.
+    let mut seen_projects: HashSet<String> = HashSet::new();
+    let mut projects: Vec<String> = Vec::new();
+    for source in crate::engine::sessions::sources() {
+        for entry in source.list(4000) {
+            if seen_projects.insert(entry.project.clone()) {
+                projects.push(entry.project);
+            }
+        }
+    }
+
     let mut seen_repos: HashSet<PathBuf> = HashSet::new();
     let mut roots = Vec::new();
 
@@ -673,25 +688,37 @@ pub struct CommitEntry {
     pub ts: u64,
 }
 
-/// Commits across all branches of every known repo in the last `since_days`
-/// days, tagged with the repo they belong to. Day bucketing happens
-/// frontend-side in the user's local timezone.
-pub fn commit_activity(since_days: u32) -> Vec<CommitEntry> {
+/// Commits across all branches of every known repo with `since_ms <= ts <
+/// until_ms` (pass `None` for an open-ended upper bound), tagged with the
+/// repo they belong to. Day bucketing happens frontend-side in the user's
+/// local timezone.
+///
+/// Takes absolute timestamps, not a day count back from "now" — a window
+/// like "previous month" doesn't end at the current moment, so a relative
+/// `--since=N days ago` would silently fetch the wrong days (recent ones,
+/// not the requested past ones). `@<unix-seconds>` is git's own approxidate
+/// syntax for an absolute instant, so `--since`/`--until` take exactly the
+/// window boundaries instead of relative-to-now durations.
+pub fn commit_activity(since_ms: u64, until_ms: Option<u64>) -> Vec<CommitEntry> {
     let mut out = Vec::new();
+    let since_secs = since_ms / 1000;
+    let until_arg = until_ms.map(|u| format!("--until=@{}", u / 1000));
     for root in discover_primary_roots() {
         let repo_name = root
             .file_name()
             .map(|n| n.to_string_lossy().to_string())
             .unwrap_or_else(|| root.to_string_lossy().to_string());
-        if let Some(log) = git(
-            &root,
-            &[
-                "log",
-                "--all",
-                &format!("--since={since_days} days ago"),
-                "--format=%ct",
-            ],
-        ) {
+        let mut args = vec![
+            "log".to_string(),
+            "--all".to_string(),
+            format!("--since=@{since_secs}"),
+            "--format=%ct".to_string(),
+        ];
+        if let Some(u) = &until_arg {
+            args.push(u.clone());
+        }
+        let args_ref: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
+        if let Some(log) = git(&root, &args_ref) {
             out.extend(
                 log.lines()
                     .filter_map(|l| l.trim().parse::<u64>().ok())
