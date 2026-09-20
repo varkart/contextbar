@@ -138,6 +138,7 @@ export default function SessionDetail({ session }: SessionDetailProps) {
   const [copied, setCopied] = useState(false)
   const [copiedPath, setCopiedPath] = useState(false)
   const [copiedAll, setCopiedAll] = useState(false)
+  const [resumeCmd, setResumeCmd] = useState<string | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
   const [findOpen, setFindOpen] = useState(false)
 
@@ -191,6 +192,20 @@ export default function SessionDetail({ session }: SessionDetailProps) {
       })
   }, [session.sessionId])
 
+  // Fetched once up front, not inside handleCopy, so the click handler can
+  // call navigator.clipboard.writeText synchronously. The Clipboard API
+  // requires an active user gesture; awaiting an IPC round-trip first (the
+  // old code did `await invoke(...)` then `await navigator.clipboard.
+  // writeText(...)`) lets that gesture expire in the Tauri webview, so the
+  // write silently failed — copyPath/copyAll never had this bug because
+  // they write already-in-memory strings with no `await` beforehand.
+  useEffect(() => {
+    setResumeCmd(null)
+    invoke<string>('get_resume_command', { project: session.project, sessionId: session.sessionId, agent: session.agent })
+      .then(setResumeCmd)
+      .catch(() => {})
+  }, [session.sessionId, session.project, session.agent])
+
   const [opened, setOpened] = useState(false)
 
   const handleResume = async () => {
@@ -203,15 +218,15 @@ export default function SessionDetail({ session }: SessionDetailProps) {
     }
   }
 
-  const handleCopy = async () => {
-    try {
-      const cmd = await invoke<string>('get_resume_command', { project: session.project, sessionId: session.sessionId, agent: session.agent })
-      await navigator.clipboard.writeText(cmd)
-      setCopied(true)
-      setTimeout(() => setCopied(false), 1500)
-    } catch {
-      // clipboard may require focus
-    }
+  const handleCopy = () => {
+    if (!resumeCmd) return
+    navigator.clipboard.writeText(resumeCmd).then(
+      () => {
+        setCopied(true)
+        setTimeout(() => setCopied(false), 1500)
+      },
+      () => { /* clipboard may require focus */ }
+    )
   }
 
   const flash = (set: (b: boolean) => void) => { set(true); setTimeout(() => set(false), 1300) }

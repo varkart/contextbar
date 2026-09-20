@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { computeDailyConcurrency, computeDailyMaxConcurrency } from '../MyWorkSection'
+import { computeDailyConcurrency, computeDailyMaxConcurrency, computeDailyUnionHours } from '../MyWorkSection'
 
 const DAY = 86_400_000
 const start = Date.UTC(2026, 0, 1) // day 0 = Jan 1
@@ -114,5 +114,59 @@ describe('computeDailyMaxConcurrency', () => {
 
   it('returns all zeros for an empty window', () => {
     expect(computeDailyMaxConcurrency([], start, 3)).toEqual([0, 0, 0])
+  })
+})
+
+describe('computeDailyUnionHours', () => {
+  it('reports one session\'s own duration when there is no overlap', () => {
+    const activity = [{ tsMs: start + 3 * 3600_000, agent: 'claude', minutes: 180 }] // hour 0-3
+    expect(computeDailyUnionHours(activity, start, 1)).toEqual([3])
+  })
+
+  it('does not double-count two fully-overlapping sessions of different agents', () => {
+    // The exact bug reported: Claude and Kiro both open hour 0-2 at once —
+    // total wall-clock time spent is 2 hours, not 4.
+    const activity = [
+      { tsMs: start + 2 * 3600_000, agent: 'claude', minutes: 120 },
+      { tsMs: start + 2 * 3600_000, agent: 'kiro', minutes: 120 },
+    ]
+    expect(computeDailyUnionHours(activity, start, 1)).toEqual([2])
+  })
+
+  it('sums non-overlapping sessions normally', () => {
+    const activity = [
+      { tsMs: start + 2 * 3600_000, agent: 'claude', minutes: 120 }, // hour 0-2
+      { tsMs: start + 5 * 3600_000, agent: 'codex', minutes: 60 },   // hour 4-5
+    ]
+    expect(computeDailyUnionHours(activity, start, 1)).toEqual([3])
+  })
+
+  it('merges a partial overlap into one continuous span instead of summing both durations', () => {
+    // Session A: hour 0-2. Session B: hour 1-3. Union is hour 0-3 = 3h,
+    // not the naive sum of 2h + 2h = 4h.
+    const activity = [
+      { tsMs: start + 2 * 3600_000, agent: 'claude', minutes: 120 },
+      { tsMs: start + 3 * 3600_000, agent: 'codex', minutes: 120 },
+    ]
+    expect(computeDailyUnionHours(activity, start, 1)).toEqual([3])
+  })
+
+  it('never exceeds 24 hours in a single day no matter how many sessions overlap', () => {
+    const activity = Array.from({ length: 5 }, (_, i) => ({
+      tsMs: start + DAY,
+      agent: `agent-${i}`,
+      minutes: 24 * 60,
+    }))
+    expect(computeDailyUnionHours(activity, start, 1)).toEqual([24])
+  })
+
+  it('splits a session spanning two days into each day\'s own covered hours', () => {
+    // Starts 12h before day 1 begins, runs 24h — 12h in day 0, 12h in day 1.
+    const activity = [{ tsMs: start + DAY + 12 * 3600_000, agent: 'claude', minutes: 24 * 60 }]
+    expect(computeDailyUnionHours(activity, start, 2)).toEqual([12, 12])
+  })
+
+  it('ignores a zero/unknown-duration session', () => {
+    expect(computeDailyUnionHours([{ tsMs: start, agent: 'claude', minutes: 0 }], start, 1)).toEqual([0])
   })
 })
