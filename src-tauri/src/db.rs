@@ -340,6 +340,25 @@ fn migrate(conn: &mut Connection) -> Result<(), AppError> {
         conn.pragma_update(None, "user_version", 20)?;
     }
 
+    if version < 21 {
+        // Sources with no per-session trackable file (e.g. OpenCode, whose
+        // sessions all live in one shared DB) always re-parse every session
+        // on every warm() call — correct per transcript_file()'s documented
+        // fallback, but wasteful when nothing actually changed, especially
+        // for someone using such an agent for hours a day (warm() fires on
+        // every My Work tab switch). source_stat tracks one (mtime, size)
+        // per whole source, so warm() can skip the entire per-session loop
+        // when that single file is unchanged since the last pass.
+        conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS source_stat (
+                agent TEXT PRIMARY KEY,
+                mtime INTEGER NOT NULL,
+                size  INTEGER NOT NULL
+            );",
+        )?;
+        conn.pragma_update(None, "user_version", 21)?;
+    }
+
     Ok(())
 }
 
@@ -1305,7 +1324,7 @@ mod tests {
         let version: i32 = conn
             .query_row("PRAGMA user_version", [], |r| r.get(0))
             .unwrap();
-        assert_eq!(version, 20);
+        assert_eq!(version, 21);
         let mtime: i64 = conn
             .query_row(
                 "SELECT mtime FROM session_stats WHERE session_id = 's1'",
@@ -1314,6 +1333,17 @@ mod tests {
             )
             .unwrap();
         assert_eq!(mtime, -1);
+    }
+
+    #[test]
+    fn schema_has_source_stat_table() {
+        let db = test_db();
+        let conn = db.0.lock().unwrap();
+        conn.execute(
+            "INSERT INTO source_stat (agent, mtime, size) VALUES ('opencode', 100, 200)",
+            [],
+        )
+        .expect("source_stat table should exist after migration");
     }
 
     #[test]

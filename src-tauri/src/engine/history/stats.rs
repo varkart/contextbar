@@ -388,6 +388,29 @@ fn transcript_text(detail: &super::SessionDetail) -> String {
 /// and upsert one stats row per session (plus its FTS transcript row).
 /// Covers every session source, not just Claude. Returns the number of
 /// (re)parsed sessions. Safe to call repeatedly.
+/// (mtime, size) for a file, in the form `session_stats`/`source_stat`
+/// store it — `None` if the file doesn't exist or its metadata can't be read.
+fn stat_mtime_size(path: &std::path::Path) -> Option<(i64, i64)> {
+    let meta = std::fs::metadata(path).ok()?;
+    let mtime = meta
+        .modified()
+        .ok()
+        .and_then(|m| m.duration_since(std::time::UNIX_EPOCH).ok())
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0);
+    Some((mtime, meta.len() as i64))
+}
+
+/// Whether a whole-source `bulk_file()` is unchanged since the last warm
+/// pass — if so, every session in that source can be skipped without even
+/// calling `list()`. `current == None` (file missing / unreadable right
+/// now) is never treated as "unchanged" — always fall through and let the
+/// normal per-session path try, rather than trusting a stale cached row
+/// when the file itself can't currently be confirmed.
+fn bulk_file_unchanged(current: Option<(i64, i64)>, cached: Option<(i64, i64)>) -> bool {
+    current.is_some() && current == cached
+}
+
 /// Whether a session should be (re-)parsed this warm pass, and with what
 /// `(mtime, size)` to record for next time. `None` means skip — already
 /// cached and unchanged. A session with no trackable file (`file_meta ==
@@ -420,6 +443,38 @@ pub fn warm(db: &DbState) -> usize {
         // Large limit — listing is cheap; parsing is what the cache guards.
         let limit = if is_claude { 2000 } else { 500 };
 
+        // A source whose sessions all live in one shared file (bulk_file(),
+        // e.g. OpenCode's DB) has no per-session file to check staleness
+        // against, so every session in it would otherwise get re-listed and
+        // re-parsed on every single warm() call, even when nothing changed
+        // — real cost for someone using such an agent for hours a day,
+        // since warm() fires on every My Work tab switch. Check the one
+        // shared file first: if it's unchanged since the last pass, nothing
+        // in this source needs (re-)parsing at all.
+        if let Some(bulk_path) = source.bulk_file() {
+            let bulk_meta = stat_mtime_size(&bulk_path);
+            let cached_bulk: Option<(i64, i64)> = {
+                let conn = db.0.lock().unwrap();
+                conn.query_row(
+                    "SELECT mtime, size FROM source_stat WHERE agent = ?1",
+                    [source.agent_id()],
+                    |r| Ok((r.get(0)?, r.get(1)?)),
+                )
+                .ok()
+            };
+            if bulk_file_unchanged(bulk_meta, cached_bulk) {
+                continue;
+            }
+            if let Some((mtime, size)) = bulk_meta {
+                let conn = db.0.lock().unwrap();
+                let _ = conn.execute(
+                    "INSERT INTO source_stat (agent, mtime, size) VALUES (?1, ?2, ?3)
+                     ON CONFLICT(agent) DO UPDATE SET mtime=excluded.mtime, size=excluded.size",
+                    rusqlite::params![source.agent_id(), mtime, size],
+                );
+            }
+        }
+
         for entry in source.list(limit) {
             // `transcript_file()` returning None — either because this
             // source doesn't override it (e.g. OpenCode, whose sessions
@@ -434,17 +489,9 @@ pub fn warm(db: &DbState) -> usize {
             // (Usage per agent, Usage & cost, Context Efficiency) while
             // they stayed visible in list()-backed ones (Hours spent,
             // Parallel sessions) — exactly the symptom that surfaced this.
-            let file_meta = source.transcript_file(&entry).and_then(|p| {
-                std::fs::metadata(&p).ok().map(|meta| {
-                    let mtime = meta
-                        .modified()
-                        .ok()
-                        .and_then(|m| m.duration_since(std::time::UNIX_EPOCH).ok())
-                        .map(|d| d.as_secs() as i64)
-                        .unwrap_or(0);
-                    (mtime, meta.len() as i64)
-                })
-            });
+            let file_meta = source
+                .transcript_file(&entry)
+                .and_then(|p| stat_mtime_size(&p));
             let cached: Option<(i64, i64)> = {
                 let conn = db.0.lock().unwrap();
                 conn.query_row(
@@ -1069,8 +1116,8 @@ pub fn context_efficiency(
 #[cfg(test)]
 mod tests {
     use super::{
-        codex_skill_from_read, context_efficiency, est_cost, kiro_slash_skill, rates,
-        skill_name_from_input, warm_reparse_decision, CachedDriver, CachedSessionDrivers,
+        bulk_file_unchanged, codex_skill_from_read, context_efficiency, est_cost, kiro_slash_skill,
+        rates, skill_name_from_input, warm_reparse_decision, CachedDriver, CachedSessionDrivers,
     };
 
     #[test]
@@ -1105,6 +1152,22 @@ mod tests {
         // whatever happens to already be cached for it.
         assert_eq!(warm_reparse_decision(None, None), Some((0, 0)));
         assert_eq!(warm_reparse_decision(None, Some((999, 999))), Some((0, 0)));
+    }
+
+    #[test]
+    fn bulk_file_unchanged_true_only_when_current_matches_cached() {
+        assert!(bulk_file_unchanged(Some((100, 200)), Some((100, 200))));
+        assert!(!bulk_file_unchanged(Some((150, 200)), Some((100, 200))));
+        assert!(!bulk_file_unchanged(Some((100, 200)), None));
+    }
+
+    #[test]
+    fn bulk_file_unchanged_false_when_file_cannot_be_stat_now() {
+        // A file that can't currently be confirmed (missing/unreadable) is
+        // never treated as "unchanged," even if some old cached row happens
+        // to be present — always fall through to the normal per-session path.
+        assert!(!bulk_file_unchanged(None, Some((100, 200))));
+        assert!(!bulk_file_unchanged(None, None));
     }
 
     fn test_db() -> crate::db::DbState {
