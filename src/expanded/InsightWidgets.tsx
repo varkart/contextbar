@@ -399,7 +399,7 @@ export function DailyBars({ values, costs, start, color, height = 64, maxBars, f
  *  gridline/hover-vs-tick-label conventions so the two charts read the same
  *  way side by side. Used by Usage & cost and Hours spent, which both need
  *  "everyone stacked" plus a per-agent filter over the same day grid. */
-export function AgentStackedBars({ seriesByDay, activeAgents, colorFor, start, height = 90, formatValue }: {
+export function AgentStackedBars({ seriesByDay, activeAgents, colorFor, start, height = 90, formatValue, tooltipFor }: {
   /** One entry per day; each maps agent id → that agent's value for the day. */
   seriesByDay: Record<string, number>[]
   activeAgents: string[]
@@ -407,6 +407,9 @@ export function AgentStackedBars({ seriesByDay, activeAgents, colorFor, start, h
   start: number
   height?: number
   formatValue: (v: number) => string
+  /** Overrides the hover tooltip text for day `i` (default: `formatValue(total)`)
+   *  — e.g. to show a per-agent breakdown instead of just the day's total. */
+  tooltipFor?: (i: number) => string
 }) {
   const totals = useMemo(
     () => seriesByDay.map(day => activeAgents.reduce((sum, a) => sum + (day[a] ?? 0), 0)),
@@ -454,7 +457,7 @@ export function AgentStackedBars({ seriesByDay, activeAgents, colorFor, start, h
                   )}
                 </div>
                 <span className="absolute bottom-full mb-1 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity text-[9px] font-mono text-[var(--c-text-2)] whitespace-nowrap pointer-events-none z-10">
-                  {formatValue(total)}
+                  {tooltipFor ? tooltipFor(i) : formatValue(total)}
                 </span>
                 {!tickIndices.has(i) && (
                   <span className="absolute top-full mt-[18px] left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity text-[9px] font-mono text-[var(--c-text-3)] whitespace-nowrap pointer-events-none z-10">

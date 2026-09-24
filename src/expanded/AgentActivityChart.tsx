@@ -2,6 +2,9 @@ import { useState, useEffect, useMemo } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import type { AgentActivityPoint } from '../types'
 import { agentColor } from '../constants/agentColors'
+import { AgentStackedBars } from './InsightWidgets'
+
+const DAY = 86_400_000
 
 type Range = '7d' | '30d' | '3mo' | '6mo' | '1yr'
 
@@ -38,11 +41,13 @@ function fmtMinutes(m: number): string {
  * Estimated active time per agent, per day — stacked bars over a selectable
  * lookback window. "Estimated" because duration is a first-prompt→last-
  * prompt span per session (capped at 4h), not tracked wall-clock time.
+ * Shares AgentStackedBars with Usage & cost / Hours spent on My Work, so
+ * the axis labels, dotted gridlines, and per-bar hover positioning (value
+ * above, date below) all read the same way across the app.
  */
 export default function AgentActivityChart() {
   const [range, setRange] = useState<Range>('30d')
   const [points, setPoints] = useState<AgentActivityPoint[] | 'loading'>('loading')
-  const [hover, setHover] = useState<string | null>(null)
 
   useEffect(() => {
     setPoints('loading')
@@ -52,12 +57,15 @@ export default function AgentActivityChart() {
       .catch(() => setPoints([]))
   }, [range])
 
-  const { days, agentsPresent, maxMinutes, totalsByAgent } = useMemo(() => {
+  const { start, seriesByDay, agentsPresent, totalsByAgent, breakdownByDay } = useMemo(() => {
     const nDays = RANGE_DAYS[range]
-    const dayKeys = Array.from({ length: nDays }, (_, i) => {
-      const d = new Date(Date.now() - (nDays - 1 - i) * 86_400_000)
-      return d.toLocaleDateString('en-CA')
-    })
+    // Local midnight `nDays - 1` days ago — day index 0 of the grid below.
+    const anchor = new Date()
+    anchor.setHours(0, 0, 0, 0)
+    anchor.setDate(anchor.getDate() - (nDays - 1))
+    const start = anchor.getTime()
+    const dayKeys = Array.from({ length: nDays }, (_, i) => dayKey(start + i * DAY))
+
     const byDay = new Map<string, Map<string, number>>(dayKeys.map(k => [k, new Map()]))
     const agents = new Set<string>()
     const totals = new Map<string, number>()
@@ -71,22 +79,21 @@ export default function AgentActivityChart() {
         totals.set(p.agent, (totals.get(p.agent) ?? 0) + p.minutes)
       }
     }
-    const days = dayKeys.map(key => {
-      const bucket = byDay.get(key)!
-      const total = [...bucket.values()].reduce((a, b) => a + b, 0)
-      return { key, bucket, total }
-    })
-    const maxMinutes = Math.max(1, ...days.map(d => d.total))
     const agentsPresent = [...agents].sort((a, b) => (totals.get(b) ?? 0) - (totals.get(a) ?? 0))
-    return { days, agentsPresent, maxMinutes, totalsByAgent: totals }
+    const seriesByDay = dayKeys.map(key => Object.fromEntries(byDay.get(key) ?? []))
+    const breakdownByDay = dayKeys.map((_, i) => {
+      const bucket = byDay.get(dayKeys[i])!
+      const parts = agentsPresent
+        .filter(a => (bucket.get(a) ?? 0) > 0)
+        .map(a => `${agentColor(a).label} ${fmtMinutes(bucket.get(a) ?? 0)}`)
+      return parts.length ? parts.join(', ') : 'no activity'
+    })
+    return { start, seriesByDay, agentsPresent, totalsByAgent: totals, breakdownByDay }
   }, [points, range])
 
-  const fmtDayLabel = (key: string) =>
-    new Date(`${key}T00:00:00`).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
-
   return (
-    <div onMouseLeave={() => setHover(null)}>
-      <div className="flex gap-1 mb-1 items-center">
+    <div>
+      <div className="flex gap-1 mb-2 items-center">
         {(Object.keys(RANGE_DAYS) as Range[]).map(r => (
           <button
             key={r}
@@ -96,11 +103,6 @@ export default function AgentActivityChart() {
             {RANGE_LABEL[r]}
           </button>
         ))}
-        <div className="flex-1 text-right h-4 mb-0.5">
-          <span className={`text-[11.5px] font-mono ${hover ? 'text-[var(--c-text-2)]' : 'text-[var(--c-text-3)] opacity-50'}`}>
-            {hover ?? 'hover a day'}
-          </span>
-        </div>
       </div>
 
       {points === 'loading' ? (
@@ -111,35 +113,14 @@ export default function AgentActivityChart() {
         <p className="text-[13px] text-[var(--c-text-3)] h-24 flex items-center justify-center">No session activity in this range</p>
       ) : (
         <>
-          <div className="flex items-end gap-px h-24">
-            {days.map(({ key, bucket, total }) => (
-              <div
-                key={key}
-                onMouseEnter={() => {
-                  const breakdown = agentsPresent
-                    .filter(a => (bucket.get(a) ?? 0) > 0)
-                    .map(a => `${agentColor(a).label} ${fmtMinutes(bucket.get(a) ?? 0)}`)
-                    .join(', ')
-                  setHover(`${fmtDayLabel(key)} · ${breakdown || 'no activity'}`)
-                }}
-                className="flex-1 min-w-[1px] flex flex-col-reverse rounded-sm overflow-hidden hover:ring-1 hover:ring-[var(--c-accent)]"
-                style={{ height: total === 0 ? '3px' : `${Math.max(6, (total / maxMinutes) * 100)}%` }}
-              >
-                {total === 0 ? (
-                  <div className="flex-1" style={{ background: 'var(--c-surface-2)' }} />
-                ) : (
-                  agentsPresent
-                    .filter(a => (bucket.get(a) ?? 0) > 0)
-                    .map(a => (
-                      <div
-                        key={a}
-                        style={{ height: `${((bucket.get(a) ?? 0) / total) * 100}%`, background: agentColor(a).hex }}
-                      />
-                    ))
-                )}
-              </div>
-            ))}
-          </div>
+          <AgentStackedBars
+            seriesByDay={seriesByDay}
+            activeAgents={agentsPresent}
+            colorFor={a => agentColor(a).hex}
+            start={start}
+            formatValue={fmtMinutes}
+            tooltipFor={i => breakdownByDay[i]}
+          />
           <div className="flex gap-3 flex-wrap mt-2 text-[11.5px] text-[var(--c-text-3)]">
             {agentsPresent.map(a => (
               <span key={a} className="flex items-center gap-1">
