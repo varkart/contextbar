@@ -602,6 +602,10 @@ impl SessionSource for OpencodeSource {
             None => "opencode".to_string(),
         }
     }
+
+    fn bulk_file(&self) -> Option<std::path::PathBuf> {
+        db_path()
+    }
 }
 
 #[cfg(test)]

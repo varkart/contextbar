@@ -577,12 +577,32 @@ fn resume_in_terminal(
 // ---------------------------------------------------------------------------
 
 /// Kick off a background parse of any new/changed session files into the
-/// session_stats cache. Emits `session-insights-updated` when new data landed.
+/// session_stats cache. Emits `session-insights-updated` when new data
+/// landed. Guarded against overlapping runs: this fires on every My Work
+/// tab/window switch, and rapid switching used to spawn a new warm() thread
+/// each time — every one of them doing real (if now much cheaper, see
+/// bulk_file()) work concurrently for no benefit, since they'd all converge
+/// on the same result. A run already in flight covers whatever a new
+/// request would have found anyway.
+static WARM_IN_PROGRESS: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
 #[tauri::command]
 fn warm_session_stats(app: tauri::AppHandle) {
+    if WARM_IN_PROGRESS
+        .compare_exchange(
+            false,
+            true,
+            std::sync::atomic::Ordering::SeqCst,
+            std::sync::atomic::Ordering::SeqCst,
+        )
+        .is_err()
+    {
+        return;
+    }
     std::thread::spawn(move || {
         let db = app.state::<db::DbState>();
         let parsed = engine::history::stats::warm(&db);
+        WARM_IN_PROGRESS.store(false, std::sync::atomic::Ordering::SeqCst);
         if parsed > 0 {
             let _ = app.emit("session-insights-updated", ());
         }

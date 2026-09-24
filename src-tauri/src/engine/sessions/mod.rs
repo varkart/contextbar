@@ -24,6 +24,17 @@ pub trait SessionSource: Sync {
         let _ = entry;
         None
     }
+    /// The one file this entire source's sessions live in (e.g. OpenCode's
+    /// shared SQLite DB), if any — distinct from `transcript_file`, which is
+    /// per-entry. When set, the warm pass can skip re-listing and
+    /// re-parsing *every* session in this source on a call where nothing
+    /// changed, by checking this single file's (mtime, size) first, instead
+    /// of falling back to "no cheap way to detect unchanged, always
+    /// re-parse" per session (the correct fallback when there's truly
+    /// nothing to check, but wasteful when one file covers everything).
+    fn bulk_file(&self) -> Option<std::path::PathBuf> {
+        None
+    }
 }
 
 struct ClaudeSource;
