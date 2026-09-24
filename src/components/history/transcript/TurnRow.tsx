@@ -73,7 +73,19 @@ const TurnRow = forwardRef<HTMLDivElement, TurnRowProps>(function TurnRow(
           aria-label={collapsed ? 'Expand turn' : 'Collapse turn'}
           aria-expanded={!collapsed}
           title={collapsed ? 'Expand turn' : 'Collapse turn'}
-          className={`w-14 shrink-0 text-left text-[9px] font-bold tracking-wide pt-0.5 group/turn ${user ? 'text-[var(--c-accent)]' : 'text-[var(--c-text-3)]'}`}
+          // Sticky, not static — on a long turn, the role label used to sit
+          // wherever the flex row's natural height put it (the middle, for
+          // a long one), scrolling out of view along with everything else,
+          // so a reader mid-message had no way to tell whose turn they were
+          // reading. `sticky` pins it near the scroll container's top while
+          // this row is in view; `self-start` (not the row's default
+          // stretch) is what lets it move independently of the row's full
+          // height. It can't drift into the next turn — sticky is bounded
+          // by its own parent (this row), so it releases right at this
+          // row's own bottom edge as the next turn's row begins, and
+          // reverses the same way scrolling back up. Verified with a
+          // throwaway HTML prototype before porting here.
+          className={`w-14 shrink-0 self-start sticky top-2 text-left text-[9px] font-bold tracking-wide pt-0.5 group/turn ${user ? 'text-[var(--c-accent)]' : 'text-[var(--c-text-3)]'}`}
         >
           <span className="flex items-center gap-1">
             <span className={`inline-block text-[7px] leading-none text-[var(--c-text-3)] group-hover/turn:text-[var(--c-text-2)] transition-transform ${collapsed ? '' : 'rotate-90'}`}>▶</span>
