@@ -1,0 +1,64 @@
+name: Watch coding-agent CLI versions
+
+# Daily check of each supported agent CLI's latest published version against
+# the version its session/config parser was last verified with
+# (scripts/agent-versions.json). A major or minor bump opens/updates a single
+# tracking issue, and sends a phone push when the NTFY_TOPIC secret is set.
+
+on:
+  schedule:
+    - cron: '0 13 * * *' # daily 13:00 UTC
+  workflow_dispatch:
+
+permissions:
+  issues: write
+  contents: read
+
+jobs:
+  check-versions:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Unit-test the checker
+        run: python3 -I scripts/test_check_agent_versions.py
+
+      - name: Compare latest versions to baselines
+        id: check
+        run: python3 -I scripts/check-agent-versions.py
+
+      - name: Open or update tracking issue
+        if: steps.check.outputs.drift == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPORT: ${{ steps.check.outputs.report }}
+        run: |
+          title="Coding-agent CLI version drift detected"
+          body=$(cat <<BODY
+          The daily check found a supported agent CLI has a newer major/minor version than its parser was last verified against.
+
+          ${REPORT}
+
+          To resolve: re-verify the listed parser against the new version (see \`.local/THIRD_PARTY_DEPENDENCIES.md\`), fix any breakage, then update \`verified\` and \`verified_date\` in \`scripts/agent-versions.json\`.
+          BODY
+          )
+          existing=$(gh issue list --state open --search "\"$title\" in:title" --json number -q '.[0].number')
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --body "$body"
+          else
+            gh issue create --title "$title" --label maintenance --body "$body" \
+              || gh issue create --title "$title" --body "$body"
+          fi
+
+      - name: Push notification
+        if: steps.check.outputs.drift == 'true'
+        env:
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+        run: |
+          if [ -z "$NTFY_TOPIC" ]; then
+            echo "NTFY_TOPIC not set — skipping phone push."
+            exit 0
+          fi
+          curl -fsS -H "Title: Context Bar: agent CLI version drift" -H "Priority: high" -H "Tags: warning" \
+            -d "A supported agent CLI has a new major/minor version. See the tracking issue in varkart/contextbar." \
+            "https://ntfy.sh/$NTFY_TOPIC"

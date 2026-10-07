@@ -1,0 +1,38 @@
+{
+  "_comment": "Baselines for the daily agent-version watch (scripts/check-agent-versions.py). `verified` is the version whose on-disk session/config format was last checked against our parsers; null means never verified. `source` says where the latest published version is read from; null means no public feed, so it must be checked by hand.",
+  "opencode": {
+    "source": { "type": "npm", "package": "opencode-ai" },
+    "verified": "1.18.27",
+    "verified_date": "2026-09-05",
+    "parser": "src-tauri/src/engine/sessions/opencode.rs",
+    "notes": "SQLite opencode.db; session_message moved to message+part once already"
+  },
+  "kiro": {
+    "source": { "type": "json", "url": "https://prod.download.cli.kiro.dev/stable/latest/manifest.json", "field": "version" },
+    "verified": null,
+    "verified_date": null,
+    "parser": "src-tauri/src/engine/sessions/kiro.rs",
+    "notes": "Flat files ~/.kiro/sessions/cli/{id}.json + .jsonl; transcripts carry no token counts"
+  },
+  "codex": {
+    "source": { "type": "npm", "package": "@openai/codex" },
+    "verified": null,
+    "verified_date": null,
+    "parser": "src-tauri/src/engine/sessions/codex.rs",
+    "notes": "JSONL rollouts; parser tolerates unknown event types"
+  },
+  "gemini": {
+    "source": { "type": "npm", "package": "@google/gemini-cli" },
+    "verified": null,
+    "verified_date": null,
+    "parser": "src-tauri/src/engine/sessions/gemini.rs",
+    "notes": "Two on-disk formats coexist (.json snapshot, .jsonl stream)"
+  },
+  "agy": {
+    "source": null,
+    "verified": null,
+    "verified_date": null,
+    "parser": "src-tauri/src/engine/sessions/agy.rs",
+    "notes": "No public version feed; check by hand. Binary conversations/<id>.db is not parsed"
+  }
+}
