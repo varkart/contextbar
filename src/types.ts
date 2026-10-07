@@ -542,5 +542,7 @@ export interface HandoffOutcome {
   launched: boolean
   /** Present when the caller should copy this to the clipboard itself. */
   clipboardText: string | null
+  /** True when clipboardText is a shell command to paste into a terminal rather than the briefing. */
+  clipboardIsCommand: boolean
   caveat: string | null
 }

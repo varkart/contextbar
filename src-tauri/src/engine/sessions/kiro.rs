@@ -327,11 +327,18 @@ impl SessionSource for KiroSource {
     // turn and exits. https://kiro.dev/docs/cli/headless/ — headless mode
     // needs KIRO_API_KEY set separately from interactive/IDE auth, so this
     // can fail even when `kiro-cli chat` itself works fine interactively; see
-    // handoff_caveat. No seed_interactive_command — an equivalent "start
-    // interactive, seeded with an initial message" flag isn't documented.
+    // handoff_caveat. Seeding uses the positional initial prompt that
+    // `kiro-cli chat` inherits from `q chat [INPUT]` (stays interactive); also
+    // unverified locally.
     fn headless_command(&self, prompt_file: &Path) -> Option<String> {
         Some(format!(
             "kiro-cli chat --no-interactive \"$(cat '{}')\"",
+            super::shq(prompt_file)
+        ))
+    }
+    fn seed_interactive_command(&self, prompt_file: &Path) -> Option<String> {
+        Some(format!(
+            "kiro-cli chat \"$(cat '{}')\"",
             super::shq(prompt_file)
         ))
     }

@@ -38,6 +38,7 @@ const outcome: HandoffOutcome = {
   condensed: true,
   launched: true,
   clipboardText: null,
+  clipboardIsCommand: false,
   caveat: null,
 }
 

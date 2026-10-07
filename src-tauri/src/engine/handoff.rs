@@ -171,7 +171,12 @@ pub fn generate(
     };
 
     let file_name = handoff_filename(source_agent, target_agent);
-    let file_path = project.join(&file_name);
+    let dir = dirs::data_dir()
+        .map(|d| d.join("contextbar").join("handoffs"))
+        .unwrap_or_else(|| project.to_path_buf());
+    std::fs::create_dir_all(&dir)
+        .map_err(|e| format!("failed to create {}: {e}", dir.display()))?;
+    let file_path = dir.join(&file_name);
     std::fs::write(&file_path, &content)
         .map_err(|e| format!("failed to write {file_name}: {e}"))?;
 
@@ -346,11 +351,10 @@ mod tests {
     }
 
     #[test]
-    fn opencode_supports_condensing_but_not_seeding() {
+    fn opencode_supports_condensing_and_seeding() {
         let list = candidates("__none__");
         let oc = list.iter().find(|c| c.agent_id == "opencode").unwrap();
         assert!(oc.supports_condensing);
-        assert!(!oc.supports_seeding);
-        assert!(oc.caveat.is_some());
+        assert!(oc.supports_seeding);
     }
 }

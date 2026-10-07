@@ -607,17 +607,18 @@ impl SessionSource for OpencodeSource {
         db_path()
     }
 
-    // Verified locally (`opencode run --help`): `opencode run -f <file>` runs
-    // non-interactively and exits. No seed_interactive_command override —
-    // `opencode run` never leaves a persistent session, and the bare `opencode`
-    // TUI has no flag to open with an initial message, so there is no way to
-    // auto-seed an interactive opencode session; the caller falls back to a
-    // bare interactive launch plus a clipboard copy.
+    // Verified locally (`opencode --help` / `opencode run --help`):
+    // `opencode run -f <file>` runs non-interactively and exits, so it is used
+    // for condensing; the bare TUI takes `--prompt <text>` to open with an
+    // initial message, which is used for seeding the new session.
     fn headless_command(&self, prompt_file: &Path) -> Option<String> {
         Some(format!("opencode run -f '{}'", super::shq(prompt_file)))
     }
-    fn handoff_caveat(&self) -> Option<&'static str> {
-        Some("Can't be pre-seeded with the briefing — you'll paste it in yourself after it opens")
+    fn seed_interactive_command(&self, prompt_file: &Path) -> Option<String> {
+        Some(format!(
+            "opencode --prompt \"$(cat '{}')\"",
+            super::shq(prompt_file)
+        ))
     }
 }
 

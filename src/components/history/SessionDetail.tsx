@@ -275,7 +275,9 @@ export default function SessionDetail({ session, sessions, showToast }: SessionD
         await navigator.clipboard.writeText(outcome.clipboardText).catch(() => {})
       }
       const briefing = outcome.condensed ? 'condensed briefing' : 'raw transcript (condensing wasn’t available)'
-      const delivery = outcome.launched
+      const delivery = outcome.clipboardIsCommand
+        ? `your terminal can't run commands for us — paste the command on your clipboard into a ${targetAgent} terminal and press Enter (briefing saved as ${outcome.fileName})`
+        : outcome.launched
         ? (outcome.clipboardText ? `opened ${targetAgent} — paste the ${briefing} you now have on your clipboard` : `opened ${targetAgent}, seeded with the ${briefing}`)
         : `saved ${outcome.fileName} — copied the ${briefing} to your clipboard, open ${targetAgent} yourself and paste it in`
       showToast('success', delivery)
@@ -409,7 +411,7 @@ export default function SessionDetail({ session, sessions, showToast }: SessionD
     <div className="flex flex-col h-full">
       <FindInPage open={findOpen} onClose={() => setFindOpen(false)} container={scrollRef.current} />
       {/* Header — title anchor, one identity line, one stat line, folded prompt */}
-      <div className="px-3 pt-2 pb-2 flex-shrink-0 border-b border-[var(--c-border)]">
+      <div className="relative z-30 px-3 pt-2 pb-2 flex-shrink-0 border-b border-[var(--c-border)]">
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0 flex-1">
             <NameEditor sessionId={session.sessionId} fallback={session.display} inheritedTitle={session.title} />
@@ -441,7 +443,7 @@ export default function SessionDetail({ session, sessions, showToast }: SessionD
                 ⇄
               </button>
               {handoffOpen && (
-                <div className="absolute right-0 top-7 z-20 w-64 rounded-lg border border-[var(--c-border)] bg-[var(--c-surface)] shadow-lg py-1">
+                <div className="absolute right-0 top-7 z-40 w-64 rounded-lg border border-[var(--c-border)] bg-[var(--c-surface)] shadow-lg py-1">
                   <p className="px-2.5 py-1.5 text-[10px] uppercase tracking-wider text-[var(--c-text-3)]">Hand off to</p>
                   {handoffCandidates === null && (
                     <p className="px-2.5 py-2 text-[12px] text-[var(--c-text-3)]">Loading…</p>
@@ -449,16 +451,25 @@ export default function SessionDetail({ session, sessions, showToast }: SessionD
                   {handoffCandidates?.length === 0 && (
                     <p className="px-2.5 py-2 text-[12px] text-[var(--c-text-3)]">No other agents with session history found</p>
                   )}
+                  {handoffBusy && (
+                    <p className="px-2.5 py-1.5 text-[11px] text-[var(--c-accent)] flex items-center gap-1.5" role="status">
+                      <span className="inline-block w-3 h-3 rounded-full border-2 border-[var(--c-accent)]/30 border-t-[var(--c-accent)] animate-spin" />
+                      Preparing briefing with {handoffBusy} — a terminal will open when it's ready…
+                    </p>
+                  )}
                   {handoffCandidates?.map(c => (
                     <button
                       key={c.agentId}
                       onClick={() => chooseHandoffTarget(c.agentId)}
                       disabled={handoffBusy !== null}
-                      className="w-full text-left px-2.5 py-1.5 hover:bg-[var(--c-hover)] transition-colors disabled:opacity-50"
+                      title={`Hand off to ${c.agentId}`}
+                      className={`group w-full text-left px-2.5 py-1.5 mx-0 border-l-2 transition-colors cursor-pointer disabled:cursor-wait ${handoffBusy === c.agentId ? 'border-[var(--c-accent)] bg-[var(--c-accent)]/10' : 'border-transparent hover:border-[var(--c-accent)] hover:bg-[var(--c-accent)]/10 disabled:opacity-50 disabled:hover:bg-transparent disabled:hover:border-transparent'}`}
                     >
                       <div className="flex items-center gap-1.5">
                         <AgentBadge agent={c.agentId} className="flex-shrink-0" />
-                        {handoffBusy === c.agentId && <span className="text-[10px] text-[var(--c-text-3)]">working…</span>}
+                        <span className="ml-auto text-[10px] text-[var(--c-text-3)] group-hover:text-[var(--c-accent)] transition-colors">
+                          {handoffBusy === c.agentId ? 'working…' : 'Hand off →'}
+                        </span>
                       </div>
                       {c.caveat && (
                         <p className="mt-0.5 text-[10px] text-amber-400/90 leading-snug">{c.caveat}</p>
