@@ -531,23 +531,49 @@ fn get_resume_command(
     resume_shell_command(&project, session_id.as_deref(), agent.as_deref()).map(|(cmd, _)| cmd)
 }
 
-/// Open Terminal.app / iTerm2 / Warp and resume the session's agent in
-/// `project`. Path must live under $HOME. Warp has no scripting interface to
-/// run a command on launch (confirmed: its `commands`/`exec` launch-config
-/// fields are silently ignored when triggered via URI — warpdotdev/Warp#9007),
-/// so for Warp we only open a tab at the right directory and return an error;
-/// callers fall back to copying the resume command to the clipboard, which
-/// every Resume button already does on failure.
-#[tauri::command]
-fn resume_in_terminal(
-    project: String,
-    session_id: Option<String>,
-    agent: Option<String>,
-) -> Result<(), String> {
-    let (shell_cmd, canonical) =
-        resume_shell_command(&project, session_id.as_deref(), agent.as_deref())?;
+/// TOML basic-string escaping for the few characters a path or shell command
+/// can contain that would break a `"..."` value.
+fn toml_escape(s: &str) -> String {
+    s.replace('\\', "\\\\")
+        .replace('"', "\\\"")
+        .replace('\n', "\\n")
+}
 
+/// Writes `~/.warp/tab_configs/contextbar_launch.toml` (overwritten each time)
+/// and opens it via `warp://tab_config/contextbar_launch`, which runs
+/// `shell_cmd` in a new tab at `dir`.
+fn open_warp_tab_config(dir: &std::path::Path, shell_cmd: &str) -> Result<(), String> {
+    let home = dirs::home_dir().ok_or("no home dir")?;
+    let cfg_dir = home.join(".warp").join("tab_configs");
+    if !cfg_dir.is_dir() {
+        return Err("Warp tab configs unavailable".into());
+    }
+    let toml = format!(
+        "name = \"Context Bar launch\"\n\n[[panes]]\nid = \"main\"\ntype = \"terminal\"\ndirectory = \"{}\"\ncommands = [\"{}\"]\n",
+        toml_escape(&dir.to_string_lossy()),
+        toml_escape(shell_cmd)
+    );
+    std::fs::write(cfg_dir.join("contextbar_launch.toml"), toml)
+        .map_err(|e| format!("failed to write Warp tab config: {e}"))?;
+    std::process::Command::new("open")
+        .arg("warp://tab_config/contextbar_launch")
+        .spawn()
+        .map_err(|e| format!("failed to open Warp: {e}"))?;
+    Ok(())
+}
+
+/// Open Terminal.app / iTerm2 / Warp and run `shell_cmd` there, cd'd into
+/// `canonical` first. Warp ignores commands passed via `warp://action/new_tab`
+/// and launch configs, but runs the `commands` of a Tab Config opened with
+/// `warp://tab_config/<name>`, so for Warp we write a throwaway tab config and
+/// open that. If that can't be set up we only open a tab at the right
+/// directory and return an error; callers fall back to copying the command to
+/// the clipboard.
+fn open_terminal_running(canonical: &std::path::Path, shell_cmd: &str) -> Result<(), String> {
     if get_terminal() == "Warp" {
+        if open_warp_tab_config(canonical, shell_cmd).is_ok() {
+            return Ok(());
+        }
         let uri = format!(
             "warp://action/new_tab?path={}",
             percent_encode_path(&canonical.to_string_lossy())
@@ -570,6 +596,162 @@ fn resume_in_terminal(
         .spawn()
         .map_err(|e| format!("failed to launch terminal: {e}"))?;
     Ok(())
+}
+
+/// Resume the session's agent in `project`. Path must live under $HOME.
+#[tauri::command]
+fn resume_in_terminal(
+    project: String,
+    session_id: Option<String>,
+    agent: Option<String>,
+) -> Result<(), String> {
+    let (shell_cmd, canonical) =
+        resume_shell_command(&project, session_id.as_deref(), agent.as_deref())?;
+    open_terminal_running(&canonical, &shell_cmd)
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct HandoffCandidateDto {
+    agent_id: String,
+    supports_condensing: bool,
+    supports_seeding: bool,
+    caveat: Option<String>,
+}
+
+/// Agents `session_agent` can hand off to, for the picker — every
+/// registered session source except itself.
+#[tauri::command]
+fn get_handoff_candidates(session_agent: String) -> Vec<HandoffCandidateDto> {
+    engine::handoff::candidates(&session_agent)
+        .into_iter()
+        .map(|c| HandoffCandidateDto {
+            agent_id: c.agent_id.to_string(),
+            supports_condensing: c.supports_condensing,
+            supports_seeding: c.supports_seeding,
+            caveat: c.caveat.map(str::to_string),
+        })
+        .collect()
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct HandoffOutcome {
+    file_name: String,
+    /// True when `target_agent` successfully condensed the transcript;
+    /// false when the file holds the raw transcript instead.
+    condensed: bool,
+    /// True when a new interactive session was opened in `target_agent`.
+    launched: bool,
+    /// Present when the frontend should copy this to the clipboard itself —
+    /// `target_agent` can't be pre-seeded, or the terminal launch failed.
+    clipboard_text: Option<String>,
+    /// True when `clipboard_text` is a shell command to paste into a
+    /// terminal rather than the briefing itself.
+    clipboard_is_command: bool,
+    caveat: Option<String>,
+}
+
+/// Condense `session_id` (from `source_agent`) into a handoff briefing via
+/// `target_agent`'s own CLI, write it into `project`, and open a new
+/// `target_agent` session there — seeded with the briefing when the CLI
+/// supports it, otherwise a bare session plus a clipboard copy for the
+/// frontend to paste manually.
+#[tauri::command]
+async fn generate_handoff(
+    project: String,
+    source_agent: String,
+    session_id: String,
+    target_agent: String,
+) -> Result<HandoffOutcome, String> {
+    // Condensing shells out to the target agent's CLI and can take many
+    // seconds; run it off the async runtime so the UI stays responsive.
+    tokio::task::spawn_blocking(move || {
+        generate_handoff_blocking(&project, &source_agent, &session_id, &target_agent)
+    })
+    .await
+    .map_err(|e| format!("handoff task failed: {e}"))?
+}
+
+/// Best-effort copy to the macOS clipboard via `pbcopy`.
+fn copy_to_clipboard(text: &str) {
+    use std::io::Write;
+    if let Ok(mut child) = std::process::Command::new("pbcopy")
+        .stdin(std::process::Stdio::piped())
+        .spawn()
+    {
+        if let Some(stdin) = child.stdin.as_mut() {
+            let _ = stdin.write_all(text.as_bytes());
+        }
+        let _ = child.wait();
+    }
+}
+
+fn generate_handoff_blocking(
+    project: &str,
+    source_agent: &str,
+    session_id: &str,
+    target_agent: &str,
+) -> Result<HandoffOutcome, String> {
+    if session_id.is_empty()
+        || !session_id
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+    {
+        return Err("invalid session id".into());
+    }
+    let canonical = validate_tool_path(project)?;
+    let generated = engine::handoff::generate(&canonical, source_agent, session_id, target_agent)?;
+    let target = engine::sessions::source_for(target_agent).ok_or("unknown target agent")?;
+
+    let seed_cmd = target.seed_interactive_command(&generated.file_path);
+    let launch_cmd = seed_cmd
+        .clone()
+        .unwrap_or_else(|| target.resume_command(None));
+    let path_str = canonical.to_string_lossy().replace('\'', r"'\''");
+    let shell_cmd = format!("cd '{path_str}' && {launch_cmd}");
+
+    let launched = open_terminal_running(&canonical, &shell_cmd).is_ok();
+    let seeded = seed_cmd.is_some() && launched;
+
+    let file_name = generated
+        .file_path
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_default();
+
+    // Terminal couldn't run the command itself (e.g. Warp) — hand the user
+    // the command to paste instead of the briefing text. For an agent that
+    // can't be seeded, the command first copies the briefing file to the
+    // clipboard so a second paste drops it into the freshly started agent.
+    let (clipboard_text, clipboard_is_command) = if launched {
+        ((!seeded).then_some(generated.content), false)
+    } else if seed_cmd.is_some() {
+        (Some(shell_cmd), true)
+    } else {
+        let file = engine::sessions::shq(&generated.file_path);
+        (
+            Some(format!(
+                "cd '{path_str}' && pbcopy < '{file}' && {launch_cmd}"
+            )),
+            true,
+        )
+    };
+
+    // Copy from here rather than the webview: by now the window has lost
+    // focus/user activation, so navigator.clipboard.writeText would reject.
+    if let Some(text) = &clipboard_text {
+        copy_to_clipboard(text);
+    }
+
+    Ok(HandoffOutcome {
+        file_name,
+        condensed: generated.condensed,
+        launched,
+        clipboard_text,
+        clipboard_is_command,
+        caveat: generated.caveat,
+    })
 }
 
 // ---------------------------------------------------------------------------
@@ -2853,6 +3035,8 @@ pub fn run() {
             get_git_cli_status,
             resume_in_terminal,
             get_resume_command,
+            get_handoff_candidates,
+            generate_handoff,
             get_file_mtimes,
             list_terminals,
             get_terminal,
@@ -3140,6 +3324,12 @@ mod tests {
         assert_eq!(entry["type"], "remote");
         assert_eq!(entry["url"], "https://mcp.example.com");
         assert!(entry.get("command").is_none());
+    }
+
+    #[test]
+    fn toml_escape_handles_quotes_backslashes_and_newlines() {
+        assert_eq!(super::toml_escape(r#"a"b\c"#), r#"a\"b\\c"#);
+        assert_eq!(super::toml_escape("a\nb"), "a\\nb");
     }
 
     #[test]

@@ -35,7 +35,7 @@ beforeEach(() => {
 
 describe('SessionDetail copy-resume-command button', () => {
   it('writes the prefetched command to the clipboard synchronously on click', async () => {
-    render(<SessionDetail session={session} />)
+    render(<SessionDetail session={session} sessions={[session]} showToast={vi.fn()} />)
 
     // Let the prefetch (get_resume_command) resolve before clicking — this
     // is the fix: the fetch happens up front, not inside the click handler.
@@ -57,7 +57,7 @@ describe('SessionDetail copy-resume-command button', () => {
       if (cmd === 'get_resume_command') return new Promise(() => {})
       return Promise.resolve(undefined)
     })
-    render(<SessionDetail session={session} />)
+    render(<SessionDetail session={session} sessions={[session]} showToast={vi.fn()} />)
 
     fireEvent.click(screen.getByLabelText('Copy resume command'))
 

@@ -50,7 +50,7 @@ use crate::engine::history::types::{
 use rusqlite::{Connection, OpenFlags};
 use serde_json::Value;
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 pub struct OpencodeSource;
@@ -605,6 +605,25 @@ impl SessionSource for OpencodeSource {
 
     fn bulk_file(&self) -> Option<std::path::PathBuf> {
         db_path()
+    }
+
+    // Verified locally (`opencode --help` / `opencode run --help`):
+    // `opencode run -f <file>` runs non-interactively and exits, so it is used
+    // for condensing; the bare TUI takes `--prompt <text>` to open with an
+    // initial message, which is used for seeding the new session.
+    fn headless_command(&self, prompt_file: &Path) -> Option<String> {
+        // `-f` is variadic, so the message must come first; `opencode run`
+        // errors with "You must provide a message" given only an attachment.
+        Some(format!(
+            "opencode run \"Follow the instructions in the attached file.\" -f '{}'",
+            super::shq(prompt_file)
+        ))
+    }
+    fn seed_interactive_command(&self, prompt_file: &Path) -> Option<String> {
+        Some(format!(
+            "opencode --prompt \"$(cat '{}')\"",
+            super::shq(prompt_file)
+        ))
     }
 }
 
