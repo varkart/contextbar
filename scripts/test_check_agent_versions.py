@@ -29,23 +29,50 @@ class ReportTests(unittest.TestCase):
     def baselines(self):
         return {
             "_comment": "ignored",
-            "opencode": {"source": {"type": "npm", "package": "x"}, "verified": "1.18.27", "parser": "p.rs"},
-            "kiro": {"source": {"type": "npm", "package": "y"}, "verified": None, "parser": "k.rs"},
-            "agy": {"source": None, "verified": None, "parser": "a.rs"},
+            "opencode": {
+                "sources": [
+                    {"label": "npm", "type": "npm", "package": "x"},
+                    {"label": "brew core", "type": "brew", "kind": "formula", "name": "oc"},
+                ],
+                "verified": "1.18.27",
+                "parser": "p.rs",
+            },
+            "kiro": {"sources": [{"type": "npm", "package": "y"}], "verified": None, "parser": "k.rs"},
+            "agy": {"sources": [], "verified": None, "parser": "a.rs"},
         }
 
-    def run_report(self, versions):
-        return mod.build_report(self.baselines(), fetch=lambda source: versions[source["package"]])
+    def fetcher(self, versions):
+        def fetch(source):
+            return versions[source.get("package") or source["name"]]
+
+        return fetch
 
     def test_patch_bump_is_not_drift(self):
-        drift, info, errors = self.run_report({"x": "1.18.35", "y": "2.28.0"})
+        drift, info, errors = mod.build_report(
+            self.baselines(), fetch=self.fetcher({"x": "1.18.35", "oc": "1.18.31", "y": "2.28.0"})
+        )
         self.assertEqual(drift, [])
         self.assertEqual(len(info), 2)  # unverified kiro + feedless agy
 
-    def test_major_bump_is_drift(self):
-        drift, _, _ = self.run_report({"x": "2.0.20", "y": "2.28.0"})
+    def test_major_bump_on_any_channel_is_drift(self):
+        # npm is still on 1.x but Homebrew core ships 2.x — must still flag.
+        drift, _, _ = mod.build_report(
+            self.baselines(), fetch=self.fetcher({"x": "1.18.35", "oc": "2.0.20", "y": "2.28.0"})
+        )
         self.assertEqual(len(drift), 1)
         self.assertIn("major", drift[0])
+        self.assertIn("brew core", drift[0])
+        self.assertIn("npm `1.18.35`", drift[0])
+
+    def test_one_failing_channel_does_not_hide_drift_on_another(self):
+        def fetch(source):
+            if source["type"] == "npm" and source["package"] == "x":
+                raise OSError("down")
+            return {"oc": "2.0.20", "y": "2.28.0"}[source.get("package") or source["name"]]
+
+        drift, _, errors = mod.build_report(self.baselines(), fetch=fetch)
+        self.assertEqual(len(drift), 1)
+        self.assertEqual(len(errors), 1)
 
     def test_fetch_error_is_reported_not_raised(self):
         def boom(source):
@@ -53,7 +80,7 @@ class ReportTests(unittest.TestCase):
 
         drift, _, errors = mod.build_report(self.baselines(), fetch=boom)
         self.assertEqual(drift, [])
-        self.assertEqual(len(errors), 2)
+        self.assertEqual(len(errors), 3)
 
 
 if __name__ == "__main__":

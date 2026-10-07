@@ -42,12 +42,18 @@ def fetch_json(url):
 
 
 def latest_version(source):
-    if source["type"] == "npm":
+    kind = source["type"]
+    if kind == "npm":
         pkg = source["package"].replace("/", "%2F")
         return fetch_json(f"https://registry.npmjs.org/{pkg}/latest")["version"]
-    if source["type"] == "json":
+    if kind == "json":
         return fetch_json(source["url"])[source["field"]]
-    raise ValueError(f"unknown source type {source['type']}")
+    if kind == "brew":
+        data = fetch_json(f"https://formulae.brew.sh/api/{source['kind']}/{source['name']}.json")
+        return data["versions"]["stable"] if source["kind"] == "formula" else data["version"]
+    if kind == "github_release":
+        return fetch_json(f"https://api.github.com/repos/{source['repo']}/releases/latest")["tag_name"]
+    raise ValueError(f"unknown source type {kind}")
 
 
 def build_report(baselines, fetch=None):
@@ -56,27 +62,40 @@ def build_report(baselines, fetch=None):
     for name, meta in baselines.items():
         if name.startswith("_"):
             continue
-        if not meta.get("source"):
+        sources = meta.get("sources") or []
+        if not sources:
             info.append(f"- **{name}**: no public version feed — check by hand")
             continue
-        try:
-            latest = fetch(meta["source"])
-        except (urllib.error.URLError, OSError, KeyError, ValueError) as e:
-            errors.append(f"- **{name}**: could not read latest version ({e})")
-            continue
-        latest_t = parse_version(latest)
         verified_t = parse_version(meta.get("verified"))
-        if latest_t is None:
-            errors.append(f"- **{name}**: unparseable version {latest!r}")
-        elif verified_t is None:
-            info.append(f"- **{name}**: latest {latest}, never verified against `{meta['parser']}`")
-        else:
-            kind = classify(verified_t, latest_t)
-            if kind in ("major", "minor"):
-                drift.append(
-                    f"- **{name}**: verified `{meta['verified']}` ({meta.get('verified_date')}), "
-                    f"latest `{latest}` — **{kind}** bump. Re-verify `{meta['parser']}`. {meta.get('notes', '')}".rstrip()
+        seen, worst = [], None
+        for source in sources:
+            label = source.get("label", source["type"])
+            try:
+                latest = fetch(source)
+            except (urllib.error.URLError, OSError, KeyError, ValueError) as e:
+                errors.append(f"- **{name}** ({label}): could not read latest version ({e})")
+                continue
+            latest_t = parse_version(latest)
+            if latest_t is None:
+                errors.append(f"- **{name}** ({label}): unparseable version {latest!r}")
+                continue
+            seen.append(f"{label} `{latest}`")
+            if verified_t is not None:
+                kind = classify(verified_t, latest_t)
+                if kind in ("major", "minor") and (worst is None or kind == "major"):
+                    worst = (kind, label, latest)
+        if verified_t is None:
+            if seen:
+                info.append(
+                    f"- **{name}**: {', '.join(seen)} — never verified against `{meta['parser']}`"
                 )
+        elif worst:
+            kind, label, latest = worst
+            drift.append(
+                f"- **{name}**: verified `{meta['verified']}` ({meta.get('verified_date')}), "
+                f"{label} has `{latest}` — **{kind}** bump. Channels: {', '.join(seen)}. "
+                f"Re-verify `{meta['parser']}`. {meta.get('notes', '')}".rstrip()
+            )
     return drift, info, errors
 
 
@@ -101,7 +120,9 @@ def main():
             f.write(f"drift={'true' if drift else 'false'}\n")
             f.write("report<<REPORT_EOF\n" + report + "\nREPORT_EOF\n")
     # Every feed failing means the check itself is broken — fail loudly.
-    checked = sum(1 for k, v in baselines.items() if not k.startswith("_") and v.get("source"))
+    checked = sum(
+        len(v.get("sources") or []) for k, v in baselines.items() if not k.startswith("_")
+    )
     if checked and len(errors) >= checked:
         sys.exit(1)
 
