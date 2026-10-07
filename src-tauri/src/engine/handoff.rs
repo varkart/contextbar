@@ -70,6 +70,28 @@ fn format_transcript(detail: &SessionDetail) -> String {
     out
 }
 
+/// Longest condense/seed it will attempt to pass as a single shell argument —
+/// well under macOS's ~1 MB ARG_MAX and any target model's context window.
+const MAX_TRANSCRIPT_CHARS: usize = 200_000;
+
+/// How long to wait for the target agent's headless run before giving up and
+/// falling back to the raw transcript.
+const CONDENSE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(180);
+
+/// Keeps the newest `MAX_TRANSCRIPT_CHARS` of an oversized transcript — the
+/// most recent work matters most for a handoff — with a note about the cut.
+fn cap_transcript(transcript: String) -> String {
+    let total = transcript.chars().count();
+    if total <= MAX_TRANSCRIPT_CHARS {
+        return transcript;
+    }
+    let tail: String = transcript
+        .chars()
+        .skip(total - MAX_TRANSCRIPT_CHARS)
+        .collect();
+    format!("[Earlier part of this transcript omitted for length — showing the most recent portion.]\n\n{tail}")
+}
+
 fn condense_prompt(source_agent: &str, transcript: &str) -> String {
     format!(
         "You're receiving a coding session transcript from a different AI \
@@ -125,7 +147,7 @@ fn handoff_filename(source_agent: &str, target_agent: &str) -> String {
 
 /// Runs `source_agent`'s session through `target_agent`'s headless mode to
 /// produce a condensed handoff briefing (or falls back to the raw
-/// transcript), writes it into `project`, and returns the result. Does not
+/// transcript), writes it to the app data directory, and returns the result. Does not
 /// launch a terminal — the `generate_handoff` Tauri command does that
 /// afterward, since terminal launching is OS-integration code that lives in
 /// lib.rs alongside `resume_in_terminal`.
@@ -141,28 +163,50 @@ pub fn generate(
         .ok_or("session not found for handoff")?;
     let target = sessions::source_for(target_agent).ok_or("unknown target agent")?;
 
-    let transcript = format_transcript(&detail);
+    let transcript = cap_transcript(format_transcript(&detail));
     let caveat = target.handoff_caveat().map(str::to_string);
 
-    let tmp_prompt = std::env::temp_dir().join(format!(
-        "handoff-condense-request-{}-{}.md",
-        std::process::id(),
-        session_id.replace(['/', '\\'], "_")
-    ));
+    let unique = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_nanos())
+        .unwrap_or(0);
+    let tmp_prompt = std::env::temp_dir().join(format!("handoff-condense-request-{unique}.md"));
+    let tmp_output = std::env::temp_dir().join(format!("handoff-condense-output-{unique}.md"));
     let condensed_text: Option<String> = (|| {
         std::fs::write(&tmp_prompt, condense_prompt(source_agent, &transcript)).ok()?;
         let cmd = target.headless_command(&tmp_prompt)?;
-        let output = crate::doctor::shell_command("sh")
+        let out_file = std::fs::File::create(&tmp_output).ok()?;
+        let mut child = crate::doctor::shell_command("sh")
             .arg("-c")
             .arg(&cmd)
-            .output()
+            .current_dir(project)
+            .stdin(std::process::Stdio::null())
+            .stdout(out_file)
+            .stderr(std::process::Stdio::null())
+            .spawn()
             .ok()?;
-        if !output.status.success() {
+        let deadline = std::time::Instant::now() + CONDENSE_TIMEOUT;
+        let status = loop {
+            match child.try_wait().ok()? {
+                Some(status) => break status,
+                None if std::time::Instant::now() >= deadline => {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    return None;
+                }
+                None => std::thread::sleep(std::time::Duration::from_millis(200)),
+            }
+        };
+        if !status.success() {
             return None;
         }
-        let text = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        let text = std::fs::read_to_string(&tmp_output)
+            .ok()?
+            .trim()
+            .to_string();
         (!text.is_empty()).then_some(text)
     })();
+    let _ = std::fs::remove_file(&tmp_output);
     let _ = std::fs::remove_file(&tmp_prompt);
 
     let (content, condensed) = match condensed_text {
@@ -324,6 +368,16 @@ mod tests {
         let text = format_transcript(&d);
         assert!(text.contains('…'));
         assert!(text.len() < 2500);
+    }
+
+    #[test]
+    fn cap_transcript_keeps_short_and_trims_long_from_the_front() {
+        assert_eq!(cap_transcript("short".into()), "short");
+        let long = format!("{}END", "x".repeat(MAX_TRANSCRIPT_CHARS + 50));
+        let capped = cap_transcript(long);
+        assert!(capped.starts_with("[Earlier part"));
+        assert!(capped.ends_with("END"));
+        assert!(capped.chars().count() < MAX_TRANSCRIPT_CHARS + 200);
     }
 
     #[test]

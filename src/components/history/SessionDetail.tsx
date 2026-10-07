@@ -436,6 +436,7 @@ export default function SessionDetail({ session, sessions, showToast }: SessionD
             <div className="relative">
               <button
                 onClick={toggleHandoffPicker}
+                disabled={handoffBusy !== null}
                 title="Hand off this session to a different agent"
                 aria-label="Hand off this session to a different agent"
                 className={`text-[12px] w-6 h-6 flex items-center justify-center rounded-md border transition-colors ${handoffOpen ? 'border-[var(--c-accent)]/50 bg-[var(--c-accent)]/10 text-[var(--c-accent)]' : 'border-[var(--c-border)] text-[var(--c-text-3)] hover:text-[var(--c-text-2)] hover:border-[var(--c-accent)]/40'}`}

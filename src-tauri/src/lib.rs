@@ -673,12 +673,33 @@ async fn generate_handoff(
     .map_err(|e| format!("handoff task failed: {e}"))?
 }
 
+/// Best-effort copy to the macOS clipboard via `pbcopy`.
+fn copy_to_clipboard(text: &str) {
+    use std::io::Write;
+    if let Ok(mut child) = std::process::Command::new("pbcopy")
+        .stdin(std::process::Stdio::piped())
+        .spawn()
+    {
+        if let Some(stdin) = child.stdin.as_mut() {
+            let _ = stdin.write_all(text.as_bytes());
+        }
+        let _ = child.wait();
+    }
+}
+
 fn generate_handoff_blocking(
     project: &str,
     source_agent: &str,
     session_id: &str,
     target_agent: &str,
 ) -> Result<HandoffOutcome, String> {
+    if session_id.is_empty()
+        || !session_id
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+    {
+        return Err("invalid session id".into());
+    }
     let canonical = validate_tool_path(project)?;
     let generated = engine::handoff::generate(&canonical, source_agent, session_id, target_agent)?;
     let target = engine::sessions::source_for(target_agent).ok_or("unknown target agent")?;
@@ -716,6 +737,12 @@ fn generate_handoff_blocking(
             true,
         )
     };
+
+    // Copy from here rather than the webview: by now the window has lost
+    // focus/user activation, so navigator.clipboard.writeText would reject.
+    if let Some(text) = &clipboard_text {
+        copy_to_clipboard(text);
+    }
 
     Ok(HandoffOutcome {
         file_name,
