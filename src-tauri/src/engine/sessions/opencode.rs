@@ -40,6 +40,14 @@
 //! holds regardless of its exact shape (tool state itself is a further
 //! tagged union we don't need to fully model for a read-only view).
 //!
+//! - **2.x** (confirmed from source at v2.0.20, not yet from a live DB):
+//!   `session` is renamed `session_v2` (nullable `title`, plus `cost` and
+//!   cache-token columns), and messages are back in `session_message`
+//!   (`type`/`seq`/`data`, same tagged union as Legacy, plus new
+//!   `location-switched`/`skill`/`idle` types that are skipped). A DB
+//!   upgraded from 1.x may hold both session tables, so every table present
+//!   is read and the message store is chosen per session.
+//!
 //! OpenCode's schema has moved before and can move again — see
 //! `.local/THIRD_PARTY_DEPENDENCIES.md` for the recheck plan.
 
@@ -89,8 +97,12 @@ fn now_ms() -> u64 {
 
 fn model_id_from_json(raw: Option<&str>) -> Option<String> {
     let raw = raw?;
-    let v: Value = serde_json::from_str(raw).ok()?;
-    v.get("id")?.as_str().map(str::to_string)
+    // A JSON `{id, providerID}` object in every version seen so far; fall
+    // back to the raw text if a future version stores a bare model id.
+    match serde_json::from_str::<Value>(raw) {
+        Ok(v) => v.get("id")?.as_str().map(str::to_string),
+        Err(_) => (!raw.trim().is_empty()).then(|| raw.trim().to_string()),
+    }
 }
 
 fn table_exists(conn: &Connection, name: &str) -> bool {
@@ -109,33 +121,74 @@ fn uses_new_schema(conn: &Connection) -> bool {
     table_exists(conn, "message") && table_exists(conn, "part")
 }
 
-const LIST_SQL_NEW: &str = "SELECT s.id, s.title, s.directory, s.time_created, s.time_updated, s.tokens_input, s.tokens_output, s.model,
-            COUNT(CASE WHEN json_extract(m.data, '$.role') = 'user' THEN 1 END)
-     FROM session s
-     LEFT JOIN message m ON m.session_id = s.id
-     GROUP BY s.id
-     ORDER BY s.time_updated DESC
-     LIMIT ?1";
+/// Which session-metadata tables this DB has. OpenCode 2.x renames `session`
+/// to `session_v2`; a DB upgraded from 1.x can briefly hold both, so every
+/// table present is read rather than picking one.
+fn session_tables(conn: &Connection) -> Vec<&'static str> {
+    ["session_v2", "session"]
+        .into_iter()
+        .filter(|t| table_exists(conn, t))
+        .collect()
+}
 
-const LIST_SQL_LEGACY: &str = "SELECT s.id, s.title, s.directory, s.time_created, s.time_updated, s.tokens_input, s.tokens_output, s.model,
-            COUNT(CASE WHEN sm.type = 'user' THEN 1 END)
-     FROM session s
-     LEFT JOIN session_message sm ON sm.session_id = s.id
-     GROUP BY s.id
-     ORDER BY s.time_updated DESC
-     LIMIT ?1";
+/// One normalized `(id, title, directory, time_created, time_updated,
+/// tokens_input, tokens_output, model)` row source across whichever session
+/// tables exist. `title` is nullable in `session_v2`; a session present in
+/// both tables is taken from `session_v2`.
+fn session_rows_sql(conn: &Connection) -> Option<String> {
+    let cols = "id, COALESCE(title, '') AS title, directory, time_created, time_updated, tokens_input, tokens_output, model";
+    let tables = session_tables(conn);
+    match tables.as_slice() {
+        [] => None,
+        [only] => Some(format!("SELECT {cols} FROM {only}")),
+        _ => Some(format!(
+            "SELECT {cols} FROM session_v2 UNION ALL SELECT {cols} FROM session WHERE id NOT IN (SELECT id FROM session_v2)"
+        )),
+    }
+}
+
+/// User-prompt count for session alias `s`, summed over whichever message
+/// stores exist (`message` for 1.18.x, `session_message` for older 1.x and
+/// 2.x) — a given session only has rows in one of them.
+fn prompt_count_expr(conn: &Connection) -> String {
+    let mut parts = Vec::new();
+    if table_exists(conn, "message") {
+        parts.push(
+            "(SELECT COUNT(*) FROM message m WHERE m.session_id = s.id AND json_extract(m.data, '$.role') = 'user')",
+        );
+    }
+    if table_exists(conn, "session_message") {
+        parts.push(
+            "(SELECT COUNT(*) FROM session_message sm WHERE sm.session_id = s.id AND sm.type = 'user')",
+        );
+    }
+    if parts.is_empty() {
+        "0".to_string()
+    } else {
+        parts.join(" + ")
+    }
+}
+
+fn list_sql(conn: &Connection) -> Option<String> {
+    let rows = session_rows_sql(conn)?;
+    let prompts = prompt_count_expr(conn);
+    Some(format!(
+        "SELECT s.id, s.title, s.directory, s.time_created, s.time_updated, s.tokens_input, s.tokens_output, s.model, {prompts}
+         FROM ({rows}) s
+         ORDER BY s.time_updated DESC
+         LIMIT ?1"
+    ))
+}
 
 fn list_from_db(limit: usize) -> Vec<SessionEntry> {
     let Some(path) = db_path() else { return vec![] };
     let Some(conn) = open_ro(&path) else {
         return vec![];
     };
-    let sql = if uses_new_schema(&conn) {
-        LIST_SQL_NEW
-    } else {
-        LIST_SQL_LEGACY
+    let Some(sql) = list_sql(&conn) else {
+        return vec![];
     };
-    let Ok(mut stmt) = conn.prepare(sql) else {
+    let Ok(mut stmt) = conn.prepare(&sql) else {
         return vec![];
     };
     let Ok(rows) = stmt.query_map([limit as i64], |row| {
@@ -533,13 +586,35 @@ fn session_total_usage(tokens_input: u64, tokens_output: u64, messages: &[Messag
     }
 }
 
+/// Picks the message store per session, not per database: a DB upgraded
+/// across OpenCode versions can hold some sessions in `session_message`
+/// (2.x, and older 1.x) and others in `message`/`part` (1.18.x).
+fn get_messages(conn: &Connection, session_id: &str) -> Vec<Message> {
+    let has_session_message_rows = table_exists(conn, "session_message")
+        && conn
+            .query_row(
+                "SELECT 1 FROM session_message WHERE session_id = ?1 LIMIT 1",
+                [session_id],
+                |_| Ok(()),
+            )
+            .is_ok();
+    if has_session_message_rows || !uses_new_schema(conn) {
+        get_messages_legacy(conn, session_id)
+    } else {
+        get_messages_v2(conn, session_id)
+    }
+}
+
 fn get_from_db(session_id: &str) -> Option<SessionDetail> {
     let path = db_path()?;
     let conn = open_ro(&path)?;
 
+    let rows_sql = session_rows_sql(&conn)?;
     let (title, directory, time_created, time_updated, tokens_input, tokens_output) = conn
         .query_row(
-            "SELECT title, directory, time_created, time_updated, tokens_input, tokens_output FROM session WHERE id = ?1",
+            &format!(
+                "SELECT title, directory, time_created, time_updated, tokens_input, tokens_output FROM ({rows_sql}) WHERE id = ?1"
+            ),
             [session_id],
             |row| {
                 let title: String = row.get(0)?;
@@ -560,11 +635,7 @@ fn get_from_db(session_id: &str) -> Option<SessionDetail> {
         )
         .ok()?;
 
-    let messages: Vec<Message> = if uses_new_schema(&conn) {
-        get_messages_v2(&conn, session_id)
-    } else {
-        get_messages_legacy(&conn, session_id)
-    };
+    let messages = get_messages(&conn, session_id);
 
     let total_tokens = session_total_usage(tokens_input, tokens_output, &messages);
     let model = messages.iter().rev().find_map(|m| m.model.clone());
@@ -900,7 +971,8 @@ mod tests {
 
         assert!(uses_new_schema(&conn));
 
-        let mut stmt = conn.prepare(LIST_SQL_NEW).unwrap();
+        let sql = list_sql(&conn).unwrap();
+        let mut stmt = conn.prepare(&sql).unwrap();
         let row = stmt
             .query_row([20i64], |row| {
                 let id: String = row.get(0)?;
@@ -918,6 +990,127 @@ mod tests {
             messages[0].content[0].text.as_deref(),
             Some("fix the login bug")
         );
+    }
+
+    // Columns copied from the v2.0.20 migration (`20260804233008_loose_psylocke`)
+    // — from OpenCode's source, not yet from a live 2.x database.
+    const V2_SCHEMA: &str = "CREATE TABLE session_v2 (
+            id TEXT PRIMARY KEY, project_id TEXT NOT NULL, directory TEXT NOT NULL, title TEXT,
+            cost REAL DEFAULT 0 NOT NULL, tokens_input INTEGER DEFAULT 0 NOT NULL,
+            tokens_output INTEGER DEFAULT 0 NOT NULL, tokens_reasoning INTEGER DEFAULT 0 NOT NULL,
+            tokens_cache_read INTEGER DEFAULT 0 NOT NULL, tokens_cache_write INTEGER DEFAULT 0 NOT NULL,
+            model TEXT, time_created INTEGER NOT NULL, time_updated INTEGER NOT NULL
+        );
+        CREATE TABLE session_message (
+            id TEXT PRIMARY KEY, session_id TEXT NOT NULL, type TEXT NOT NULL, seq INTEGER NOT NULL,
+            time_created INTEGER NOT NULL, time_updated INTEGER NOT NULL, data TEXT NOT NULL
+        );";
+
+    fn seed_v2_session(conn: &Connection, id: &str, title: Option<&str>) {
+        conn.execute(
+            "INSERT INTO session_v2 (id, project_id, directory, title, model, tokens_input, tokens_output, time_created, time_updated)
+             VALUES (?1, 'proj', '/Users/test/proj/beta', ?2, '{\"id\":\"deepseek-v4\",\"providerID\":\"deepseek\"}', 700, 90, 1000, 5000)",
+            rusqlite::params![id, title],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO session_message (id, session_id, type, seq, time_created, time_updated, data)
+             VALUES (?1, ?2, 'user', 1, 1000, 1000, '{\"text\":\"add retry logic\"}')",
+            rusqlite::params![format!("{id}-u"), id],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO session_message (id, session_id, type, seq, time_created, time_updated, data)
+             VALUES (?1, ?2, 'assistant', 2, 2000, 2000, '{\"model\":{\"id\":\"deepseek-v4\"},\"content\":[{\"type\":\"text\",\"text\":\"done\"}]}')",
+            rusqlite::params![format!("{id}-a"), id],
+        )
+        .unwrap();
+    }
+
+    /// 2.x renames `session` to `session_v2` — listing and reading must work
+    /// with no `session` table at all, and a NULL title must not drop the row.
+    #[test]
+    fn list_and_get_work_on_a_2x_database_without_a_session_table() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(V2_SCHEMA).unwrap();
+        seed_v2_session(&conn, "ses_v2", None);
+
+        assert_eq!(session_tables(&conn), vec!["session_v2"]);
+        let sql = list_sql(&conn).expect("a 2.x database has a session table");
+        let (id, title, prompts): (String, String, i64) = conn
+            .prepare(&sql)
+            .unwrap()
+            .query_row([20i64], |r| Ok((r.get(0)?, r.get(1)?, r.get(8)?)))
+            .unwrap();
+        assert_eq!((id.as_str(), title.as_str(), prompts), ("ses_v2", "", 1));
+
+        let messages = get_messages(&conn, "ses_v2");
+        assert_eq!(messages.len(), 2);
+        assert_eq!(messages[0].role, "user");
+        assert_eq!(messages[1].role, "assistant");
+    }
+
+    /// A database upgraded from 1.18.x holds old sessions in `session` +
+    /// `message`/`part` and new ones in `session_v2` + `session_message`.
+    /// Both must list, each reading its own message store.
+    #[test]
+    fn upgraded_database_lists_and_reads_both_generations() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(V2_SCHEMA).unwrap();
+        conn.execute_batch(
+            "CREATE TABLE session (
+                id TEXT PRIMARY KEY, project_id TEXT, title TEXT NOT NULL, directory TEXT NOT NULL,
+                model TEXT, tokens_input INTEGER DEFAULT 0, tokens_output INTEGER DEFAULT 0,
+                time_created INTEGER NOT NULL, time_updated INTEGER NOT NULL
+            );
+            CREATE TABLE message (
+                id TEXT PRIMARY KEY, session_id TEXT NOT NULL,
+                time_created INTEGER NOT NULL, time_updated INTEGER NOT NULL, data TEXT NOT NULL
+            );
+            CREATE TABLE part (
+                id TEXT PRIMARY KEY, message_id TEXT NOT NULL, session_id TEXT NOT NULL,
+                time_created INTEGER NOT NULL, time_updated INTEGER NOT NULL, data TEXT NOT NULL
+            );
+            INSERT INTO session VALUES ('ses_old', 'p', 'old work', '/Users/test/proj/alpha',
+                '{\"id\":\"kimi-k3\"}', 100, 50, 1000, 2000);
+            INSERT INTO message VALUES ('m1', 'ses_old', 1000, 1000, '{\"role\":\"user\"}');
+            INSERT INTO part VALUES ('p1', 'm1', 'ses_old', 1000, 1000, '{\"type\":\"text\",\"text\":\"old prompt\"}');",
+        )
+        .unwrap();
+        seed_v2_session(&conn, "ses_new", Some("new work"));
+
+        assert_eq!(session_tables(&conn), vec!["session_v2", "session"]);
+        let sql = list_sql(&conn).unwrap();
+        let mut stmt = conn.prepare(&sql).unwrap();
+        let rows: Vec<(String, i64)> = stmt
+            .query_map([20i64], |r| Ok((r.get(0)?, r.get(8)?)))
+            .unwrap()
+            .filter_map(Result::ok)
+            .collect();
+        // Newest first: ses_new (updated 5000) then ses_old (2000).
+        assert_eq!(
+            rows,
+            vec![("ses_new".to_string(), 1), ("ses_old".to_string(), 1)]
+        );
+
+        let old = get_messages(&conn, "ses_old");
+        assert_eq!(old[0].content[0].text.as_deref(), Some("old prompt"));
+        let new = get_messages(&conn, "ses_new");
+        assert_eq!(new[0].content[0].text.as_deref(), Some("add retry logic"));
+    }
+
+    #[test]
+    fn model_id_accepts_json_object_or_bare_string() {
+        assert_eq!(
+            model_id_from_json(Some(r#"{"id":"kimi-k3","providerID":"moonshot"}"#)).as_deref(),
+            Some("kimi-k3")
+        );
+        assert_eq!(
+            model_id_from_json(Some("kimi-k3")).as_deref(),
+            Some("kimi-k3")
+        );
+        assert_eq!(model_id_from_json(Some("  ")), None);
+        assert_eq!(model_id_from_json(None), None);
     }
 }
 
