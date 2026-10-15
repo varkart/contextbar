@@ -293,3 +293,18 @@ describe('AllSkillsView — remove everywhere from the list row', () => {
     expect((removeCalls[0][1] as { agentId: string }).agentId).toBe('claude')
   })
 })
+
+describe('AllSkillsView — opened from an agent page (initialAgentId)', () => {
+  const claude = makeTool('claude', 'Claude Code', [
+    makeSkill({ name: 'claude-on', active: true }),
+    makeSkill({ name: 'claude-off', active: false }),
+  ])
+  const cursor = makeTool('cursor', 'Cursor', [makeSkill({ name: 'cursor-only', active: true })])
+
+  it('preselects that agent and the Active status', () => {
+    render(<AllSkillsView agents={[claude, cursor]} onBack={vi.fn()} onSelectSkill={vi.fn()} initialAgentId="claude" />)
+    expect(screen.getByText('claude-on')).toBeInTheDocument()
+    expect(screen.queryByText('claude-off')).not.toBeInTheDocument()
+    expect(screen.queryByText('cursor-only')).not.toBeInTheDocument()
+  })
+})
