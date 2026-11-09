@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>NSDocumentsFolderUsageDescription</key>
+  <string>Context Bar reads the git repos your coding agents work in to show worktrees and commit activity.</string>
+  <key>NSDesktopFolderUsageDescription</key>
+  <string>Context Bar reads the git repos your coding agents work in to show worktrees and commit activity.</string>
+  <key>NSDownloadsFolderUsageDescription</key>
+  <string>Context Bar reads the git repos your coding agents work in to show worktrees and commit activity.</string>
+</dict>
+</plist>
