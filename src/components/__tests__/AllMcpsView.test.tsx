@@ -227,3 +227,18 @@ describe('AllMcpsView — remove everywhere from the list row', () => {
     expect((removeCalls[0][1] as { agentId: string }).agentId).toBe('claude')
   })
 })
+
+describe('AllMcpsView — opened from an agent page (initialAgentId)', () => {
+  const claude = makeTool('claude', 'Claude Code', [
+    makeMcp({ name: 'claude-on', active: true }),
+    makeMcp({ name: 'claude-off', active: false }),
+  ])
+  const cursor = makeTool('cursor', 'Cursor', [makeMcp({ name: 'cursor-only', active: true })])
+
+  it('preselects that agent and the Active status', () => {
+    render(<AllMcpsView agents={[claude, cursor]} onBack={vi.fn()} onSelectMcp={vi.fn()} initialAgentId="claude" />)
+    expect(screen.getByText('claude-on')).toBeInTheDocument()
+    expect(screen.queryByText('claude-off')).not.toBeInTheDocument()
+    expect(screen.queryByText('cursor-only')).not.toBeInTheDocument()
+  })
+})

@@ -55,6 +55,7 @@ export default function ViewManager({
   usedMcpNames,
   usageAnalyzed,
   allSkillsBackView,
+  allMcpsBackView,
 }: any) {
   if (view === 'doctor') {
     return <DoctorView onBack={() => goTo('settings')} />
@@ -146,6 +147,7 @@ export default function ViewManager({
         compact={compact}
         usedNames={usedMcpNames}
         usageAnalyzed={usageAnalyzed}
+        initialAgentId={allMcpsBackView === 'agent-detail' ? selectedAgent?.id : undefined}
       />
     )
   }
