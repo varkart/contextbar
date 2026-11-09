@@ -686,11 +686,11 @@ export default function WorktreesSection({ repos, loading, sessions, onRemoved, 
                 <button
                   onClick={() => setRemoteOpen(prev => ({ ...prev, [repo.repoPath]: !prev[repo.repoPath] }))}
                   aria-expanded={!!remoteOpen[repo.repoPath]}
-                  title="Remote branches with no local copy checked out or pulled down"
+                  title="Branches that exist on the remote (e.g. GitHub) but have no local copy on this Mac"
                   className={`flex items-center gap-1 text-[12px] px-2.5 py-1 rounded-md border transition-colors ${remoteOpen[repo.repoPath] ? 'border-[var(--c-accent)]/50 bg-[var(--c-accent)]/10 text-[var(--c-accent)]' : 'border-[var(--c-border)] text-[var(--c-text-3)] hover:text-[var(--c-text-2)] hover:border-[var(--c-text-3)]/50'}`}
                 >
                   <span className={`text-[8.5px] transition-transform ${remoteOpen[repo.repoPath] ? 'rotate-90' : ''}`} aria-hidden="true">▶</span>
-                  Remote
+                  Remote only
                   {repo.remoteBranches.length > 0 && (
                     <span className="text-[var(--c-text-3)]">{repo.remoteBranches.length}</span>
                   )}
