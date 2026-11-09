@@ -2779,7 +2779,7 @@ pub fn run() {
                 .icon(tauri::include_image!("icons/tray_icon@2x.png"))
                 .icon_as_template(true)
                 .menu(&menu)
-                .tooltip("Context Bar\nUnified view of AI tool skills and MCP servers.")
+                .tooltip("Context Bar\nAgentic context management.")
                 .show_menu_on_left_click(false)
                 .on_tray_icon_event(|tray, event| {
                     tauri_plugin_positioner::on_tray_event(tray.app_handle(), &event);
