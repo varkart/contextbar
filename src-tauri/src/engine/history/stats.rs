@@ -1353,6 +1353,19 @@ mod tests {
         let (rin, rout) = rates("claude-opus-4-1").unwrap();
         assert!(rin > 0.0 && rout > rin);
         assert!(rates("gpt-5-codex").is_none());
+        // Models OpenCode records (provider-prefixed ids) must price too —
+        // they used to fall through to None and show as $0.
+        for id in [
+            "deepseek-ai/deepseek-v4-flash-0731",
+            "moonshotai/kimi-k3",
+            "z-ai/glm-5.2",
+            "gemini-3.8-flash",
+        ] {
+            assert!(rates(id).is_some(), "{id} should have a price");
+        }
+        // The free tier shares a name with the paid model; it must win.
+        assert_eq!(rates("z-ai/glm-5.2:free"), Some((0.0, 0.0)));
+        assert_eq!(rates("z-ai/glm-5.2"), Some((1.4, 4.4)));
         // 1M input + 1M output on sonnet ≈ input+output rates
         let cost = est_cost(1_000_000, 1_000_000, 0, 0, "claude-sonnet-4-5").unwrap();
         let (sin, sout) = rates("sonnet").unwrap();

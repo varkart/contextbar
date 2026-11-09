@@ -2,8 +2,10 @@
 """Refresh src-tauri/resources/pricing.json from LiteLLM's community price table.
 
 Picks the newest Anthropic model per family (opus/sonnet/haiku) and converts
-per-token costs to USD per MTok. Run by .github/workflows/update-pricing.yml;
-safe to run locally: python3 scripts/update-pricing.py
+per-token costs to USD per MTok, then adds the non-Anthropic models in EXTRAS
+(the ones other agents, e.g. OpenCode, record in session transcripts). Run by
+.github/workflows/update-pricing.yml; safe to run locally:
+python3 scripts/update-pricing.py
 """
 
 import json
@@ -20,20 +22,48 @@ SOURCE = (
 OUT = Path(__file__).resolve().parent.parent / "src-tauri" / "resources" / "pricing.json"
 FAMILIES = ["opus", "sonnet", "haiku"]
 
+# Non-Anthropic models, matched as a substring of the lowercased model id at
+# runtime (first match wins, so more specific patterns go first — e.g. the
+# free tier before the paid model it shares a name with). Each is
+# (match, LiteLLM key to read first-party rates from, fallback (in, out) per
+# MTok used when the key is missing). A None key means a fixed price.
+EXTRAS = [
+    ("glm-5.2:free", None, (0.0, 0.0)),
+    ("deepseek-v4-flash", "deepseek/deepseek-v4-flash", (0.30, 1.20)),
+    ("kimi-k3", "moonshot/kimi-k3", (3.0, 15.0)),
+    ("glm-5.2", "zai/glm-5.2", (1.4, 4.4)),
+    ("gemini-3.8-flash", "gemini-3.8-flash", (0.75, 3.75)),
+]
+
 
 def version_key(name: str) -> tuple:
-    """Sortable version proxy: all numbers in the model id, then the id."""
-    return tuple(int(n) for n in re.findall(r"\d+", name)) + (name,)
+    """Sortable version proxy: the numbers in the model id, then the id.
+
+    The numbers and the id are kept in separate tuple slots. Concatenating
+    them put a str where another id had an int (e.g. `claude-opus-4-1` vs
+    `claude-opus-4-5-20251101`), which made max() raise TypeError.
+    """
+    return (tuple(int(n) for n in re.findall(r"\d+", name)), name)
 
 
-def main() -> None:
-    # Optional argv[1]: path to an already-downloaded table (offline/dev use)
-    if len(sys.argv) > 1:
-        table = json.loads(Path(sys.argv[1]).read_text())
-    else:
-        with urllib.request.urlopen(SOURCE, timeout=60) as resp:
-            table = json.load(resp)
+def extra_models(table: dict) -> list:
+    models = []
+    for match, key, (fallback_in, fallback_out) in EXTRAS:
+        info = table.get(key) if key else None
+        if info and info.get("input_cost_per_token") is not None and info.get("output_cost_per_token") is not None:
+            inp = round(float(info["input_cost_per_token"]) * 1e6, 4)
+            out = round(float(info["output_cost_per_token"]) * 1e6, 4)
+            origin = key
+        else:
+            inp, out = fallback_in, fallback_out
+            origin = "fixed" if key is None else f"fallback (missing {key})"
+        models.append(
+            {"match": match, "inputPerMtok": inp, "outputPerMtok": out, "$from": origin}
+        )
+    return models
 
+
+def build_payload(table: dict) -> dict:
     models = []
     read_mults, write_mults = [], []
     for family in FAMILIES:
@@ -66,7 +96,9 @@ def main() -> None:
         if info.get("cache_creation_input_token_cost"):
             write_mults.append(float(info["cache_creation_input_token_cost"]) / inp)
 
-    payload = {
+    models.extend(extra_models(table))
+
+    return {
         "$comment": (
             "Approximate public API list prices in USD per MTok. Auto-refreshed "
             "weekly from LiteLLM's model_prices_and_context_window.json by "
@@ -79,6 +111,18 @@ def main() -> None:
         "cacheWriteMultiplier": round(sum(write_mults) / len(write_mults), 4) if write_mults else 1.25,
         "models": models,
     }
+
+
+def main() -> None:
+    # Optional argv[1]: path to an already-downloaded table (offline/dev use)
+    if len(sys.argv) > 1:
+        table = json.loads(Path(sys.argv[1]).read_text())
+    else:
+        with urllib.request.urlopen(SOURCE, timeout=60) as resp:
+            table = json.load(resp)
+
+    payload = build_payload(table)
+    models = payload["models"]
     OUT.write_text(json.dumps(payload, indent=2) + "\n")
     print(f"wrote {OUT}")
     for m in models:
