@@ -1,24 +1,27 @@
 {
   "$comment": "Approximate public API list prices in USD per MTok. Auto-refreshed weekly from LiteLLM's model_prices_and_context_window.json by .github/workflows/update-pricing.yml (opens a PR). Cache multipliers apply to the input rate.",
-  "updated": "2026-10-07",
-  "source": "defaults",
-  "cacheReadMultiplier": 0.1,
+  "updated": "2026-11-09",
+  "source": "litellm",
+  "cacheReadMultiplier": 0.0667,
   "cacheWriteMultiplier": 1.25,
   "models": [
     {
       "match": "opus",
-      "inputPerMtok": 15.0,
-      "outputPerMtok": 75.0
+      "inputPerMtok": 4.0,
+      "outputPerMtok": 20.0,
+      "$from": "claude-opus-5-5"
     },
     {
       "match": "sonnet",
-      "inputPerMtok": 3.0,
-      "outputPerMtok": 15.0
+      "inputPerMtok": 2.0,
+      "outputPerMtok": 10.0,
+      "$from": "claude-sonnet-5-5"
     },
     {
       "match": "haiku",
-      "inputPerMtok": 1.0,
-      "outputPerMtok": 5.0
+      "inputPerMtok": 0.1,
+      "outputPerMtok": 0.5,
+      "$from": "claude-haiku-5-5"
     },
     {
       "match": "glm-5.2:free",
