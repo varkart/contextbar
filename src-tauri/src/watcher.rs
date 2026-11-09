@@ -1,6 +1,6 @@
+use notify::{RecursiveMode, Watcher};
 use notify_debouncer_mini::{new_debouncer, DebouncedEventKind};
 use serde::Serialize;
-use notify::{RecursiveMode, Watcher};
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
@@ -279,7 +279,10 @@ mod tests {
 
         armed.arm(&mut w, &target);
         armed.arm(&mut w, &target);
-        assert_eq!(w.0, vec![(home.path().to_path_buf(), RecursiveMode::NonRecursive)]);
+        assert_eq!(
+            w.0,
+            vec![(home.path().to_path_buf(), RecursiveMode::NonRecursive)]
+        );
 
         std::fs::create_dir(&target).unwrap();
         armed.arm(&mut w, &target);
