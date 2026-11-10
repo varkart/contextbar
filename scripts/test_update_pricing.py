@@ -21,6 +21,15 @@ class VersionKeyTests(unittest.TestCase):
         ids = ["claude-opus-4-1", "claude-opus-4-5-20251101", "claude-opus-5-5"]
         self.assertEqual(max(ids, key=mod.version_key), "claude-opus-5-5")
 
+    def test_date_stamp_is_not_read_as_a_minor_version(self):
+        ids = ["claude-opus-4-20250514", "claude-opus-4-5"]
+        self.assertEqual(max(ids, key=mod.version_key), "claude-opus-4-5")
+
+    def test_date_breaks_ties_between_the_same_version(self):
+        self.assertGreater(
+            mod.version_key("claude-opus-4-5-20251101"), mod.version_key("claude-opus-4-5")
+        )
+
     def test_newer_minor_beats_older(self):
         self.assertGreater(
             mod.version_key("claude-sonnet-4-5"), mod.version_key("claude-sonnet-4-1")
@@ -54,6 +63,7 @@ class BuildPayloadTests(unittest.TestCase):
     def test_free_tier_is_listed_before_the_paid_model_with_the_same_name(self):
         matches = [m["match"] for m in mod.build_payload(self.table())["models"]]
         self.assertLess(matches.index("glm-5.2:free"), matches.index("glm-5.2"))
+        self.assertLess(matches.index("glm-5.2-free"), matches.index("glm-5.2"))
         free = next(m for m in mod.build_payload(self.table())["models"] if m["match"] == "glm-5.2:free")
         self.assertEqual((free["inputPerMtok"], free["outputPerMtok"]), (0.0, 0.0))
 

@@ -28,7 +28,8 @@ FAMILIES = ["opus", "sonnet", "haiku"]
 # (match, LiteLLM key to read first-party rates from, fallback (in, out) per
 # MTok used when the key is missing). A None key means a fixed price.
 EXTRAS = [
-    ("glm-5.2:free", None, (0.0, 0.0)),
+    ("glm-5.2:free", None, (0.0, 0.0)),  # OpenRouter spelling
+    ("glm-5.2-free", None, (0.0, 0.0)),  # OpenCode Zen spelling
     ("deepseek-v4-flash", "deepseek/deepseek-v4-flash", (0.30, 1.20)),
     ("kimi-k3", "moonshot/kimi-k3", (3.0, 15.0)),
     ("glm-5.2", "zai/glm-5.2", (1.4, 4.4)),
@@ -37,13 +38,19 @@ EXTRAS = [
 
 
 def version_key(name: str) -> tuple:
-    """Sortable version proxy: the numbers in the model id, then the id.
+    """Sortable version proxy: version numbers, then date stamps, then the id.
 
-    The numbers and the id are kept in separate tuple slots. Concatenating
-    them put a str where another id had an int (e.g. `claude-opus-4-1` vs
+    The parts are kept in separate tuple slots. Concatenating them put a str
+    where another id had an int (e.g. `claude-opus-4-1` vs
     `claude-opus-4-5-20251101`), which made max() raise TypeError.
+
+    8-digit runs are release dates, not versions: read as a version,
+    `claude-opus-4-20250514` would sort as 4.20250514 and beat 4.5.
     """
-    return (tuple(int(n) for n in re.findall(r"\d+", name)), name)
+    runs = re.findall(r"\d+", name)
+    versions = tuple(int(n) for n in runs if len(n) < 8)
+    dates = tuple(int(n) for n in runs if len(n) >= 8)
+    return (versions, dates, name)
 
 
 def extra_models(table: dict) -> list:

@@ -30,6 +30,12 @@
       "$from": "fixed"
     },
     {
+      "match": "glm-5.2-free",
+      "inputPerMtok": 0.0,
+      "outputPerMtok": 0.0,
+      "$from": "fixed"
+    },
+    {
       "match": "deepseek-v4-flash",
       "inputPerMtok": 0.3,
       "outputPerMtok": 1.2,
