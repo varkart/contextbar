@@ -80,7 +80,9 @@ function computeBulkChanges(groups: McpGroup[], mode: BulkMode) {
 
 export default function AllMcpsView({ agents, onSelectMcp, onAddMcp, onInstalled, compact, usedNames, usageAnalyzed = 0, initialAgentId }: Props) {
   const [query, setQuery] = useState('')
-  const [statusFilter, setStatusFilter] = useState<StatusFilterValue>(initialAgentId ? 'active' : 'all')
+  const [statusFilter, setStatusFilter] = useState<StatusFilterValue>(() =>
+    agents.find(a => a.id === initialAgentId)?.mcps.some(m => m.active) ? 'active' : 'all'
+  )
   const [togglingKey, setTogglingKey] = useState<{ name: string; toolId: string } | null>(null)
   const [pendingRemoveGroup, setPendingRemoveGroup] = useState<string | null>(null)
   const [removingGroup, setRemovingGroup] = useState<string | null>(null)
@@ -180,7 +182,11 @@ export default function AllMcpsView({ agents, onSelectMcp, onAddMcp, onInstalled
     }
     if (statusFilter !== 'all') {
       const wantActive = statusFilter === 'active'
-      result = result.filter(g => g.variants.some(v => v.active) === wantActive)
+      // Judge status on the selected agents' copies only — an MCP inactive
+      // on Claude but active on Cursor isn't "Active" in Claude's view.
+      result = result.filter(g =>
+        g.variants.some(v => (allSelected || selectedTools.has(v.toolId)) && v.active) === wantActive
+      )
     }
     return result
   }, [groups, query, selectedTools, allSelected, statusFilter])

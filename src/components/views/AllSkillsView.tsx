@@ -80,7 +80,9 @@ function computeBulkChanges(groups: SkillGroup[], mode: BulkMode) {
 
 export default function AllSkillsView({ agents, onSelectSkill, onAddSkill, onInstalled, compact, usedNames, usageAnalyzed = 0, initialAgentId }: Props) {
   const [query, setQuery] = useState('')
-  const [statusFilter, setStatusFilter] = useState<StatusFilterValue>(initialAgentId ? 'active' : 'all')
+  const [statusFilter, setStatusFilter] = useState<StatusFilterValue>(() =>
+    agents.find(a => a.id === initialAgentId)?.skills.some(s => s.active) ? 'active' : 'all'
+  )
   const [togglingKey, setTogglingKey] = useState<{ name: string; toolId: string } | null>(null)
   const [pendingRemoveGroup, setPendingRemoveGroup] = useState<string | null>(null)
   const [removingGroup, setRemovingGroup] = useState<string | null>(null)
@@ -176,7 +178,11 @@ export default function AllSkillsView({ agents, onSelectSkill, onAddSkill, onIns
     }
     if (statusFilter !== 'all') {
       const wantActive = statusFilter === 'active'
-      result = result.filter(g => g.variants.some(v => v.active) === wantActive)
+      // Judge status on the selected agents' copies only — a skill inactive
+      // on Claude but active on Cursor isn't "Active" in Claude's view.
+      result = result.filter(g =>
+        g.variants.some(v => (allSelected || selectedTools.has(v.toolId)) && v.active) === wantActive
+      )
     }
     return result
   }, [groups, query, selectedTools, allSelected, statusFilter])

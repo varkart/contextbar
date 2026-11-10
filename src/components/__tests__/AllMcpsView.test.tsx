@@ -241,4 +241,18 @@ describe('AllMcpsView — opened from an agent page (initialAgentId)', () => {
     expect(screen.queryByText('claude-off')).not.toBeInTheDocument()
     expect(screen.queryByText('cursor-only')).not.toBeInTheDocument()
   })
+
+  it('treats an item as Active only if it is active on the selected agent', () => {
+    const c = makeTool('claude', 'Claude Code', [makeMcp({ name: 'shared', active: false }), makeMcp({ name: 'claude-on', active: true })])
+    const cur = makeTool('cursor', 'Cursor', [makeMcp({ name: 'shared', active: true })])
+    render(<AllMcpsView agents={[c, cur]} onBack={vi.fn()} onSelectMcp={vi.fn()} initialAgentId="claude" />)
+    expect(screen.getByText('claude-on')).toBeInTheDocument()
+    expect(screen.queryByText('shared')).not.toBeInTheDocument()
+  })
+
+  it('falls back to All status when nothing is active on that agent', () => {
+    const c = makeTool('claude', 'Claude Code', [makeMcp({ name: 'claude-off', active: false })])
+    render(<AllMcpsView agents={[c]} onBack={vi.fn()} onSelectMcp={vi.fn()} initialAgentId="claude" />)
+    expect(screen.getByText('claude-off')).toBeInTheDocument()
+  })
 })

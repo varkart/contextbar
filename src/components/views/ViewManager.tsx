@@ -132,7 +132,8 @@ export default function ViewManager({
         compact={compact}
         usedNames={usedSkillNames}
         usageAnalyzed={usageAnalyzed}
-        initialAgentId={allSkillsBackView === 'agent-detail' ? selectedAgent?.id : undefined}
+        // Empty agent → "Browse skills" is for discovering other agents' skills, so don't narrow.
+        initialAgentId={allSkillsBackView === 'agent-detail' && selectedAgent?.skills.length ? selectedAgent.id : undefined}
       />
     )
   }
@@ -147,7 +148,7 @@ export default function ViewManager({
         compact={compact}
         usedNames={usedMcpNames}
         usageAnalyzed={usageAnalyzed}
-        initialAgentId={allMcpsBackView === 'agent-detail' ? selectedAgent?.id : undefined}
+        initialAgentId={allMcpsBackView === 'agent-detail' && selectedAgent?.mcps.length ? selectedAgent.id : undefined}
       />
     )
   }
