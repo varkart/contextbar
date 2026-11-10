@@ -79,6 +79,9 @@ function buildBreadcrumbs(
     case 'logs':
       return [{ label: 'Logs' }]
 
+    case 'kb':
+      return [{ label: 'Todos & Notes' }]
+
     case 'add-skill':
       return [{ label: 'Add Skill' }]
 

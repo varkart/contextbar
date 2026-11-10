@@ -18,6 +18,7 @@ export type View =
   | 'logs'
   | 'doctor'
   | 'config-backup'
+  | 'kb'
 
 export type AgentsListMode = 'default'
 
@@ -42,6 +43,7 @@ const _VIEW_REGISTRY: Record<View, true> = {
   'logs': true,
   'doctor': true,
   'config-backup': true,
+  'kb': true,
 }
 
 /** Every registered view. Used by tests to assert Escape is handled for all of them. */
@@ -102,7 +104,7 @@ export function escapeTransition(
   if (view === 'add-skill') return { type: 'navigate', to: addSkillBackView }
   if (view === 'add-mcp') return { type: 'navigate', to: addMcpBackView }
   if (view === 'agents-list') return { type: 'navigate', to: 'main' }
-  if (view === 'settings' || view === 'notifications' || view === 'logs' || view === 'doctor')
+  if (view === 'settings' || view === 'notifications' || view === 'logs' || view === 'doctor' || view === 'kb')
     return { type: 'navigate', to: 'main' }
   if (view === 'config-backup')
     return { type: 'navigate', to: selectedAgent ? 'agent-detail' : 'main' }

@@ -1,15 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { Agent } from '../types'
 import {
-  ago, agentsWithKbSkill, dayLabel, doneTodos, duration, kbApi, noteTitle, notePreview, notes as notesOf,
+  KB_NOTE_KEY, KB_TAB_KEY, ago, agentsWithKbSkill, dayLabel, doneTodos, duration, kbApi, noteTitle, notePreview, notes as notesOf,
   openTodos, timeLabel, useKb, type KbHistoryEvent, type KbItem, type KbKind,
 } from '../kb'
 
 export type KbTab = 'todos' | 'notes' | 'history'
 
-/** Shared with the popover: it sets these before opening this window. */
-export const KB_TAB_KEY = 'contextbar:kb:tab'
-export const KB_NOTE_KEY = 'contextbar:kb:note'
 
 function readTab(): KbTab {
   const t = localStorage.getItem(KB_TAB_KEY)

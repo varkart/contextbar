@@ -36,6 +36,17 @@ export interface KbPatch {
 
 export const KB_SKILL_NAME = 'context-bar'
 
+/** Expanded-window tab and note selection; the popover sets these before
+ *  opening the window, and the window listens for the storage event. */
+export const KB_TAB_KEY = 'contextbar:kb:tab'
+export const KB_NOTE_KEY = 'contextbar:kb:note'
+
+export function openKbInWindow(tab: 'todos' | 'notes' | 'history', noteId?: string) {
+  localStorage.setItem(KB_TAB_KEY, tab)
+  if (noteId) localStorage.setItem(KB_NOTE_KEY, noteId)
+  return invoke('open_expanded_window', { section: 'kb' }).catch(() => {})
+}
+
 export const kbApi = {
   list: () => invoke<KbItem[]>('kb_list'),
   history: (limit?: number) => invoke<KbHistoryEvent[]>('kb_history', { limit }),
@@ -56,14 +67,14 @@ export function useKb() {
 
   const refresh = useCallback(() => {
     return kbApi.list()
-      .then(list => { setItems(list); setError(null) })
+      .then(list => { setItems(Array.isArray(list) ? list : []); setError(null) })
       .catch(e => setError(String(e)))
       .finally(() => setLoading(false))
   }, [])
 
   useEffect(() => {
     refresh()
-    const unlisten = listen('kb-changed', () => { refresh() })
+    const unlisten = listen('kb-changed', () => { refresh() }).catch(() => () => {})
     window.addEventListener('focus', refresh)
     return () => {
       unlisten.then(fn => fn())

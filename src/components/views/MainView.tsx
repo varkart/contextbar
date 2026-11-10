@@ -4,6 +4,8 @@ import type { Agent, Notification } from '../../types';
 import AgentDot from '../AgentDot';
 import HintBanner from '../HintBanner';
 import { useHints } from '../../hooks/useHints';
+import { KbTile, QuickAdd } from '../KbPopover';
+import { useKb } from '../../kb';
 
 interface MainViewProps {
   loading: boolean;
@@ -298,8 +300,10 @@ export default function MainView({
   onOpenAgentsList,
   onOpenSkillsPage,
   onOpenMcpsPage,
+  onGoTo,
 }: MainViewProps) {
   const { shouldShow, markShown, dismiss } = useHints();
+  const kb = useKb();
   const [bannerVisible, setBannerVisible] = useState(() => {
     if (shouldShow) { markShown(); return true; }
     return false;
@@ -339,8 +343,11 @@ export default function MainView({
               }
             />
           ))}
+          <KbTile items={kb.items} loading={kb.loading} onClick={() => onGoTo('kb')} />
         </div>
       </div>
+
+      <QuickAdd onAdded={kb.upsert} />
 
       {bannerVisible && (
         <HintBanner
