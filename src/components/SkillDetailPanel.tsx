@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
@@ -7,6 +7,7 @@ import { capture } from '../analytics'
 import { SkillInstalledOn } from './InstalledOnSection'
 import { agentColor } from '../constants/agentColors'
 import SourceLink from './SourceLink'
+import FolderAccessNotice, { isFolderAccessError } from './FolderAccessNotice'
 
 interface SkillDetailPanelProps {
   skill: Skill
@@ -195,7 +196,7 @@ export default function SkillDetailPanel({ skill: initialSkill, agentId, onToggl
       .finally(() => setLoadingMd(false))
   }
 
-  useEffect(() => {
+  const loadFileTree = useCallback(() => {
     setLoading(true)
     setError(null)
     invoke<FileEntry>('read_skill_dir', { path: skill.path })
@@ -203,6 +204,8 @@ export default function SkillDetailPanel({ skill: initialSkill, agentId, onToggl
       .catch(e => setError(String(e)))
       .finally(() => setLoading(false))
   }, [skill.path])
+
+  useEffect(() => { loadFileTree() }, [loadFileTree])
 
   useEffect(() => {
     setCachedSource(null)
@@ -345,8 +348,9 @@ export default function SkillDetailPanel({ skill: initialSkill, agentId, onToggl
               {[1,2,3].map(i => <div key={i} className="h-3 bg-[var(--c-skeleton)] rounded w-3/4"/>)}
             </div>
           )}
-          {error && (
-            <p className="text-[13px] text-red-400 px-2 py-2">{error}</p>
+          {error && (isFolderAccessError(error)
+            ? <div className="px-2 py-2"><FolderAccessNotice path={skill.path} onRetry={loadFileTree} /></div>
+            : <p className="text-[13px] text-red-400 px-2 py-2">{error}</p>
           )}
           {fileTree && !loading && (
             fileTree.isDir
@@ -394,8 +398,9 @@ export default function SkillDetailPanel({ skill: initialSkill, agentId, onToggl
                 ))}
               </div>
             )}
-            {mdError && !loadingMd && (
-              <p className="text-[12px] text-rose-400 bg-rose-500/10 rounded-lg px-3 py-2">{mdError}</p>
+            {mdError && !loadingMd && (isFolderAccessError(mdError)
+              ? <FolderAccessNotice path={mdFile.path} onRetry={() => handleOpenMarkdown(mdFile)} />
+              : <p className="text-[12px] text-rose-400 bg-rose-500/10 rounded-lg px-3 py-2">{mdError}</p>
             )}
             {mdContent && !loadingMd && (
               <div className="text-[13px] text-[var(--c-text-2)] leading-relaxed overflow-x-hidden skill-md">

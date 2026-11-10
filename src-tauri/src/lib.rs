@@ -167,6 +167,13 @@ fn open_accessibility_settings() {
 }
 
 #[tauri::command]
+fn open_files_and_folders_settings() {
+    let _ = std::process::Command::new("open")
+        .arg("x-apple.systempreferences:com.apple.preference.security?Privacy_FilesAndFolders")
+        .spawn();
+}
+
+#[tauri::command]
 fn get_shortcut() -> String {
     read_settings()
         .get("globalShortcut")
@@ -225,6 +232,45 @@ fn set_vibrancy(enabled: bool) -> Result<(), String> {
 // ---------------------------------------------------------------------------
 // IPC commands – file system / opener
 // ---------------------------------------------------------------------------
+
+/// macOS privacy service guarding `path`, if it's inside Documents, Desktop
+/// or Downloads.
+fn protected_folder_service(path: &std::path::Path) -> Option<&'static str> {
+    let home = dirs::home_dir()?;
+    [
+        ("Documents", "SystemPolicyDocumentsFolder"),
+        ("Desktop", "SystemPolicyDesktopFolder"),
+        ("Downloads", "SystemPolicyDownloadsFolder"),
+    ]
+    .into_iter()
+    .find(|(dir, _)| path.starts_with(home.join(dir)))
+    .map(|(_, service)| service)
+}
+
+/// Ask macOS again for access to the protected folder holding `path` (e.g.
+/// a skill symlinked into ~/Documents). Once the user has answered "Don't
+/// Allow", macOS never re-prompts on its own, so this resets Context Bar's
+/// own decision for that one folder, then touches the path so the
+/// Allow / Don't Allow prompt appears. Returns whether access now works.
+#[tauri::command]
+async fn request_folder_access(app: tauri::AppHandle, path: String) -> Result<bool, String> {
+    let canonical = validate_tool_path(&path)?;
+    let service =
+        protected_folder_service(&canonical).ok_or("not inside Documents, Desktop or Downloads")?;
+    let bundle_id = app.config().identifier.clone();
+    tokio::task::spawn_blocking(move || {
+        if std::fs::read_dir(&canonical).is_ok() {
+            return true;
+        }
+        let _ = std::process::Command::new("/usr/bin/tccutil")
+            .args(["reset", service, &bundle_id])
+            .output();
+        // Blocks until the user answers the prompt.
+        std::fs::read_dir(&canonical).is_ok()
+    })
+    .await
+    .map_err(|e| e.to_string())
+}
 
 #[tauri::command]
 fn read_skill_dir(path: String) -> Result<crate::models::FileEntry, String> {
@@ -2895,6 +2941,7 @@ pub fn run() {
             get_vibrancy,
             set_vibrancy,
             read_skill_dir,
+            request_folder_access,
             read_markdown_file,
             open_path,
             reveal_in_finder,
@@ -2939,6 +2986,7 @@ pub fn run() {
             quit_app,
             check_accessibility,
             open_accessibility_settings,
+            open_files_and_folders_settings,
         ])
         .run(tauri::generate_context!())
         .expect("error running Context Bar");
