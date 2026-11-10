@@ -877,3 +877,209 @@ mod tests {
         assert!(s.contains("/Users/x/.context-bar/kb/index.md"));
     }
 }
+
+// ---------------------------------------------------------------------------
+// IPC commands, tray badge and file watching
+// ---------------------------------------------------------------------------
+
+pub mod commands {
+    use super::*;
+    use tauri::{AppHandle, Emitter};
+
+    pub const TRAY_ID: &str = "main";
+
+    fn kb_root() -> Result<PathBuf, String> {
+        root().ok_or_else(|| "cannot resolve home dir".to_string())
+    }
+
+    /// Open todo count next to the menu bar icon; hidden at zero.
+    pub fn refresh_badge(app: &AppHandle) {
+        let Some(root) = root() else { return };
+        let n = open_todo_count(&root);
+        if let Some(tray) = app.tray_by_id(TRAY_ID) {
+            let title = (n > 0).then(|| n.to_string());
+            let _ = tray.set_title(title.as_deref());
+        }
+    }
+
+    fn changed(app: &AppHandle) {
+        refresh_badge(app);
+        let _ = app.emit("kb-changed", ());
+    }
+
+    #[tauri::command]
+    pub async fn kb_list() -> Result<Vec<KbItem>, String> {
+        let root = kb_root()?;
+        tokio::task::spawn_blocking(move || list(&root))
+            .await
+            .map_err(|e| e.to_string())
+    }
+
+    #[tauri::command]
+    pub async fn kb_history(limit: Option<usize>) -> Result<Vec<HistoryEvent>, String> {
+        let root = kb_root()?;
+        tokio::task::spawn_blocking(move || history(&root, limit.unwrap_or(500)))
+            .await
+            .map_err(|e| e.to_string())
+    }
+
+    #[tauri::command]
+    pub fn kb_create(
+        app: AppHandle,
+        kind: Kind,
+        title: String,
+        body: Option<String>,
+        tags: Option<Vec<String>>,
+    ) -> Result<KbItem, String> {
+        let item = create(
+            &kb_root()?,
+            kind,
+            &title,
+            body.as_deref().unwrap_or(""),
+            tags.unwrap_or_default(),
+        )?;
+        changed(&app);
+        Ok(item)
+    }
+
+    #[tauri::command]
+    pub fn kb_update(
+        app: AppHandle,
+        kind: Kind,
+        id: String,
+        patch: Patch,
+    ) -> Result<KbItem, String> {
+        let item = update(&kb_root()?, kind, &id, patch)?;
+        changed(&app);
+        Ok(item)
+    }
+
+    #[tauri::command]
+    pub fn kb_set_done(app: AppHandle, id: String, done: bool) -> Result<KbItem, String> {
+        let item = set_done(&kb_root()?, &id, done)?;
+        changed(&app);
+        Ok(item)
+    }
+
+    #[tauri::command]
+    pub fn kb_delete(app: AppHandle, kind: Kind, id: String) -> Result<(), String> {
+        delete(&kb_root()?, kind, &id)?;
+        changed(&app);
+        Ok(())
+    }
+
+    #[tauri::command]
+    pub fn kb_undelete(app: AppHandle, kind: Kind, id: String) -> Result<KbItem, String> {
+        let item = undelete(&kb_root()?, kind, &id)?;
+        changed(&app);
+        Ok(item)
+    }
+
+    /// Writes the `context-bar` skill into each agent's skills folder.
+    /// Overwrites only a previous copy of this same skill.
+    #[tauri::command]
+    pub fn kb_install_skill(app: AppHandle, agent_ids: Vec<String>) -> Result<Vec<String>, String> {
+        let root = kb_root()?;
+        std::fs::create_dir_all(&root).map_err(|e| e.to_string())?;
+        write_index(&root);
+        let content = skill_content(&root);
+        let mut paths = Vec::new();
+        let mut errors = Vec::new();
+        for agent_id in &agent_ids {
+            let target = match crate::skill_dir_for(agent_id) {
+                Ok(t) => t,
+                Err(e) => {
+                    errors.push(format!("{agent_id}: {e}"));
+                    continue;
+                }
+            };
+            let path = if target.flat_files {
+                target.dir.join(format!("{SKILL_NAME}.md"))
+            } else {
+                target.dir.join(SKILL_NAME).join("SKILL.md")
+            };
+            if let Ok(existing) = std::fs::read_to_string(&path) {
+                if !existing.contains(&format!("name: {SKILL_NAME}\n")) {
+                    errors.push(format!(
+                        "{agent_id}: a different '{SKILL_NAME}' skill already exists"
+                    ));
+                    continue;
+                }
+            }
+            match write_atomic(&path, &content) {
+                Ok(()) => paths.push(path.to_string_lossy().into_owned()),
+                Err(e) => errors.push(format!("{agent_id}: {e}")),
+            }
+        }
+        let _ = app.emit("agents-changed", ());
+        if paths.is_empty() && !errors.is_empty() {
+            return Err(errors.join("; "));
+        }
+        Ok(paths)
+    }
+
+    /// Watches the kb folder so edits made outside the app (an editor, or an
+    /// agent adding a todo) refresh the UI, badge and index.
+    pub fn watch(app: AppHandle) {
+        use notify_debouncer_mini::{new_debouncer, notify::RecursiveMode};
+        let Some(root) = root() else { return };
+        for kind in [Kind::Todo, Kind::Note] {
+            let _ = std::fs::create_dir_all(root.join(kind.dir()));
+        }
+        write_index(&root);
+        refresh_badge(&app);
+        std::thread::spawn(move || {
+            let (tx, rx) = std::sync::mpsc::channel();
+            let Ok(mut debouncer) = new_debouncer(std::time::Duration::from_millis(400), tx) else {
+                return;
+            };
+            if debouncer
+                .watcher()
+                .watch(&root, RecursiveMode::Recursive)
+                .is_err()
+            {
+                return;
+            }
+            let real_root = root.canonicalize().unwrap_or_else(|_| root.clone());
+            while let Ok(Ok(events)) = rx.recv() {
+                let relevant = events.iter().any(|e| {
+                    let rel = e
+                        .path
+                        .strip_prefix(&real_root)
+                        .or_else(|_| e.path.strip_prefix(&root));
+                    rel.is_ok_and(is_item_path)
+                });
+                if relevant {
+                    write_index(&root);
+                    changed(&app);
+                }
+            }
+        });
+    }
+
+    /// `todos/x.md` or `notes/x.md`; not index, history, trash or temp files.
+    pub(super) fn is_item_path(rel: &Path) -> bool {
+        let mut parts = rel.components().map(|c| c.as_os_str().to_string_lossy());
+        let (Some(dir), Some(file), None) = (parts.next(), parts.next(), parts.next()) else {
+            return false;
+        };
+        (dir == "todos" || dir == "notes") && !file.starts_with('.') && file.ends_with(".md")
+    }
+}
+
+#[cfg(test)]
+mod watch_tests {
+    use super::commands::is_item_path;
+    use std::path::Path;
+
+    #[test]
+    fn only_item_files_trigger_refresh() {
+        assert!(is_item_path(Path::new("todos/a.md")));
+        assert!(is_item_path(Path::new("notes/b.md")));
+        assert!(!is_item_path(Path::new("index.md")));
+        assert!(!is_item_path(Path::new("history.jsonl")));
+        assert!(!is_item_path(Path::new("todos/.a.md.tmp")));
+        assert!(!is_item_path(Path::new(".trash/todos/a.md")));
+        assert!(!is_item_path(Path::new("todos")));
+    }
+}
