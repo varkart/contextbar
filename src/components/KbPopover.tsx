@@ -103,7 +103,8 @@ export default function KbPopoverView() {
   const add = () => {
     const v = text.trim()
     if (!v) return
-    kbApi.create('todo', v).then(item => { upsert(item); setText('') }).catch(() => {})
+    const op = seg === 'todos' ? kbApi.create('todo', v) : kbApi.create('note', '', v)
+    op.then(item => { upsert(item); setText('') }).catch(() => {})
   }
 
   const segBtn = (id: 'todos' | 'notes', label: string) => (
@@ -123,15 +124,16 @@ export default function KbPopoverView() {
           {segBtn('todos', `Todos ${open.length}`)}
           {segBtn('notes', `Notes ${noteList.length}`)}
         </div>
+        <input
+          value={text}
+          onChange={e => setText(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter') add() }}
+          placeholder={seg === 'todos' ? 'Add a todo… (Enter)' : 'Jot a note… (Enter)'}
+          aria-label={seg === 'todos' ? 'Add a todo' : 'Jot a note'}
+          className="mb-1.5 px-2.5 py-1.5 rounded-md border border-[var(--c-border)] bg-[var(--c-surface)] text-[12.5px] outline-none focus:border-[var(--c-accent)]"
+        />
         {seg === 'todos' ? (
           <>
-            <input
-              value={text}
-              onChange={e => setText(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter') add() }}
-              placeholder="Add a todo… (Enter)"
-              className="mb-1.5 px-2.5 py-1.5 rounded-md border border-[var(--c-border)] bg-[var(--c-surface)] text-[12.5px] outline-none focus:border-[var(--c-accent)]"
-            />
             {!loading && open.length === 0 && <p className="text-[12px] text-[var(--c-text-3)] py-2">All done. Nothing open.</p>}
             {open.map(t => (
               <div key={t.id} className="flex items-center gap-2.5 py-1.5 border-b border-[var(--c-border)]/50">

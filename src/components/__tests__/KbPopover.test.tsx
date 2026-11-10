@@ -63,3 +63,22 @@ describe('KbPopoverView', () => {
     expect(screen.getByText(/Archived \(1\)/)).toBeInTheDocument()
   })
 })
+
+describe('KbPopoverView notes', () => {
+  beforeEach(() => mockInvoke.mockReset())
+
+  it('adds a note from the Notes tab', async () => {
+    mockInvoke.mockImplementation(async (cmd: string) => {
+      if (cmd === 'kb_list') return []
+      if (cmd === 'kb_create') return item({ id: 'n', kind: 'note', body: 'idea' })
+      return null
+    })
+    render(<KbPopoverView />)
+    fireEvent.click(screen.getByText(/^Notes/))
+    const input = screen.getByLabelText('Jot a note')
+    fireEvent.change(input, { target: { value: 'idea' } })
+    fireEvent.keyDown(input, { key: 'Enter' })
+    await waitFor(() => expect(mockInvoke).toHaveBeenCalledWith('kb_create', { kind: 'note', title: '', body: 'idea', tags: [] }))
+    expect(await screen.findByText('idea')).toBeInTheDocument()
+  })
+})
