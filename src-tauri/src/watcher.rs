@@ -118,25 +118,29 @@ impl Armed {
     /// that ancestor is ~, and a recursive watch there would cover all of
     /// ~/Documents, ~/Desktop and ~/Downloads — a macOS privacy prompt and a
     /// rescan on every file write anywhere in the home folder.
-    fn arm(&mut self, watcher: &mut dyn Watcher, target: &Path) {
+    ///
+    /// Returns true when `target` itself just became watched — its contents
+    /// may already have been written before the watch existed.
+    fn arm(&mut self, watcher: &mut dyn Watcher, target: &Path) -> bool {
         if self.recursive.contains(target) {
-            return;
+            return false;
         }
         if target.exists() {
             if watcher.watch(target, RecursiveMode::Recursive).is_ok() {
                 self.recursive.insert(target.to_path_buf());
+                return true;
             }
-            return;
+            return false;
         }
         let Some(ancestor) = target.ancestors().skip(1).find(|p| p.exists()) else {
-            return;
+            return false;
         };
-        if self.shallow.contains(ancestor) {
-            return;
-        }
-        if watcher.watch(ancestor, RecursiveMode::NonRecursive).is_ok() {
+        if !self.shallow.contains(ancestor)
+            && watcher.watch(ancestor, RecursiveMode::NonRecursive).is_ok()
+        {
             self.shallow.insert(ancestor.to_path_buf());
         }
+        false
     }
 }
 
@@ -168,6 +172,16 @@ pub fn start(app: AppHandle) {
                 .join("Application Support")
                 .join("Windsurf")
                 .join("User"),
+            home.join("Library")
+                .join("Application Support")
+                .join("ClaudeCode"),
+            // Config read by the manifests outside the dirs above.
+            home.join(".claude.json"),
+            home.join(".agents"),
+            home.join(".config").join("opencode"),
+            home.join(".kiro"),
+            home.join(".aws").join("amazonq"),
+            home.join(".q"),
         ];
 
         let mut armed = Armed::default();
@@ -190,9 +204,11 @@ pub fn start(app: AppHandle) {
                 continue;
             }
 
-            // A missing tool dir may have just been created under a watched ancestor.
+            // A missing tool dir may have just been created under a watched
+            // ancestor. Arm every target (no short-circuit).
+            let mut newly_watched = false;
             for target in &watch_targets {
-                armed.arm(debouncer.watcher(), target);
+                newly_watched |= armed.arm(debouncer.watcher(), target);
             }
 
             // Ancestor watches (e.g. ~ itself) also see unrelated churn like
@@ -200,7 +216,7 @@ pub fn start(app: AppHandle) {
             let in_target = events
                 .iter()
                 .any(|e| watch_targets.iter().any(|t| e.path.starts_with(t)));
-            if !in_target {
+            if !in_target && !newly_watched {
                 continue;
             }
 
@@ -277,16 +293,16 @@ mod tests {
         let mut armed = Armed::default();
         let mut w = Recorder::default();
 
-        armed.arm(&mut w, &target);
-        armed.arm(&mut w, &target);
+        assert!(!armed.arm(&mut w, &target));
+        assert!(!armed.arm(&mut w, &target));
         assert_eq!(
             w.0,
             vec![(home.path().to_path_buf(), RecursiveMode::NonRecursive)]
         );
 
         std::fs::create_dir(&target).unwrap();
-        armed.arm(&mut w, &target);
-        armed.arm(&mut w, &target);
+        assert!(armed.arm(&mut w, &target), "newly watched, caller rescans");
+        assert!(!armed.arm(&mut w, &target));
         assert_eq!(w.0.len(), 2);
         assert_eq!(w.0[1], (target, RecursiveMode::Recursive));
     }
