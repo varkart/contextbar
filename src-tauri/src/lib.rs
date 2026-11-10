@@ -7,6 +7,7 @@ pub(crate) mod doctor;
 pub(crate) mod engine;
 pub(crate) mod error;
 pub(crate) mod installer;
+pub(crate) mod kb;
 mod mcp_client;
 pub(crate) mod models;
 pub(crate) mod permissions;
