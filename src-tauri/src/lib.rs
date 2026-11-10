@@ -254,22 +254,72 @@ fn protected_folder_service(path: &std::path::Path) -> Option<&'static str> {
 /// Allow / Don't Allow prompt appears. Returns whether access now works.
 #[tauri::command]
 async fn request_folder_access(app: tauri::AppHandle, path: String) -> Result<bool, String> {
-    let canonical = validate_tool_path(&path)?;
+    let home = dirs::home_dir().ok_or("cannot resolve home dir")?;
+    // canonicalize can itself be refused inside a blocked folder, so fall
+    // back to following symlinks by hand (the links live outside it).
+    let resolved = std::path::Path::new(&path)
+        .canonicalize()
+        .unwrap_or_else(|_| resolve_symlinks_lexically(std::path::Path::new(&path)));
+    if !resolved.starts_with(&home) {
+        return Err("access denied: path outside home directory".to_string());
+    }
     let service =
-        protected_folder_service(&canonical).ok_or("not inside Documents, Desktop or Downloads")?;
+        protected_folder_service(&resolved).ok_or("not inside Documents, Desktop or Downloads")?;
     let bundle_id = app.config().identifier.clone();
     tokio::task::spawn_blocking(move || {
-        if std::fs::read_dir(&canonical).is_ok() {
-            return true;
+        match probe_access(&resolved) {
+            Ok(()) => return true,
+            // Only a privacy denial is worth resetting; anything else
+            // (missing file, etc.) won't be fixed by a prompt.
+            Err(e) if e.kind() != std::io::ErrorKind::PermissionDenied => return false,
+            Err(_) => {}
         }
         let _ = std::process::Command::new("/usr/bin/tccutil")
             .args(["reset", service, &bundle_id])
             .output();
         // Blocks until the user answers the prompt.
-        std::fs::read_dir(&canonical).is_ok()
+        probe_access(&resolved).is_ok()
     })
     .await
     .map_err(|e| e.to_string())
+}
+
+/// Read a directory's listing, or open a file — whichever `path` is.
+fn probe_access(path: &std::path::Path) -> std::io::Result<()> {
+    const ENOTDIR: i32 = 20;
+    match std::fs::read_dir(path) {
+        Ok(_) => Ok(()),
+        Err(e) if e.raw_os_error() == Some(ENOTDIR) => std::fs::File::open(path).map(|_| ()),
+        Err(e) => Err(e),
+    }
+}
+
+/// Follow symlinks in `path` without stat-ing anything past them.
+fn resolve_symlinks_lexically(path: &std::path::Path) -> std::path::PathBuf {
+    let mut current = path.to_path_buf();
+    for _ in 0..8 {
+        let link = current
+            .ancestors()
+            .find(|a| std::fs::symlink_metadata(a).is_ok_and(|m| m.file_type().is_symlink()))
+            .map(|a| a.to_path_buf());
+        let Some(link) = link else { break };
+        let Ok(target) = std::fs::read_link(&link) else {
+            break;
+        };
+        let target = match link.parent() {
+            Some(parent) if target.is_relative() => parent.join(target),
+            _ => target,
+        };
+        let rest = current
+            .strip_prefix(&link)
+            .unwrap_or(std::path::Path::new(""));
+        current = if rest.as_os_str().is_empty() {
+            target
+        } else {
+            target.join(rest)
+        };
+    }
+    current
 }
 
 #[tauri::command]
@@ -3104,6 +3154,42 @@ mod tests {
         resume_shell_command, skill_md_in_scope, skill_name_for, validate_skill_content,
         validate_tool_path,
     };
+    use super::{probe_access, resolve_symlinks_lexically};
+
+    #[test]
+    fn probe_access_handles_files_and_dirs() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("SKILL.md");
+        std::fs::write(&file, "x").unwrap();
+        assert!(probe_access(dir.path()).is_ok());
+        assert!(
+            probe_access(&file).is_ok(),
+            "a file must not fail as ENOTDIR"
+        );
+        assert!(probe_access(&dir.path().join("missing")).is_err());
+    }
+
+    #[test]
+    fn resolve_symlinks_lexically_follows_relative_and_nested_links() {
+        let root = tempfile::tempdir().unwrap();
+        let real = root.path().join("docs").join("skills").join("canvas");
+        std::fs::create_dir_all(&real).unwrap();
+        let skills = root.path().join("claude-skills");
+        std::fs::create_dir(&skills).unwrap();
+        std::os::unix::fs::symlink("../docs/skills/canvas", skills.join("canvas")).unwrap();
+
+        let resolved = resolve_symlinks_lexically(&skills.join("canvas").join("SKILL.md"));
+        assert_eq!(
+            resolved
+                .canonicalize()
+                .unwrap_or(resolved.clone())
+                .parent()
+                .unwrap()
+                .canonicalize()
+                .unwrap(),
+            real.canonicalize().unwrap()
+        );
+    }
 
     #[test]
     fn resume_shell_command_accepts_opencode_underscore_ids() {
