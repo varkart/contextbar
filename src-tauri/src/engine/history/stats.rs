@@ -566,6 +566,15 @@ fn cached_row_has_data(conn: &rusqlite::Connection, session_id: &str) -> bool {
     .unwrap_or(false)
 }
 
+fn cached_msg_count(conn: &rusqlite::Connection, session_id: &str) -> i64 {
+    conn.query_row(
+        "SELECT msg_count FROM session_stats WHERE session_id = ?1",
+        [session_id],
+        |r| r.get(0),
+    )
+    .unwrap_or(0)
+}
+
 /// Write one session's stats row and FTS transcript.
 fn upsert_session(
     db: &DbState,
@@ -636,15 +645,16 @@ fn upsert_session(
         .count() as i64;
 
     let conn = db.0.lock().unwrap();
-    // A re-parse that comes back empty (no messages, no tokens) while the
-    // cache already holds real data for this session is almost always a
-    // parse failure — an agent upgrade changed its on-disk format and the
-    // parser now returns nothing — not the session genuinely emptying out.
-    // Keep the good row instead of overwriting history with zeros; the next
-    // warm pass retries.
+    // A re-parse with no messages while the cache already holds real data
+    // for this session is almost always a parse failure — an agent upgrade
+    // changed its on-disk format and the parser now returns nothing — not
+    // the session genuinely emptying out. Keep the good row instead of
+    // overwriting history with zeros; the next warm pass retries. Token
+    // totals alone don't prove the parse worked: OpenCode reads them from
+    // its session table, so they survive a broken message parse.
     if detail.messages.is_empty()
-        && is_zero_usage(t)
-        && cached_row_has_data(&conn, &entry.session_id)
+        && (cached_msg_count(&conn, &entry.session_id) > 0
+            || (is_zero_usage(t) && cached_row_has_data(&conn, &entry.session_id)))
     {
         return;
     }
@@ -1301,6 +1311,39 @@ mod tests {
         upsert_session(&db, &entry, &sample_detail("s1", vec![], 5_000), 1, 1);
         upsert_session(&db, &entry, &sample_detail("s1", vec![], 9_000), 2, 2);
         assert_eq!(stored_input_tokens(&db, "s1"), 9_000);
+    }
+
+    fn stored_msg_count(db: &crate::db::DbState, session_id: &str) -> i64 {
+        db.0.lock()
+            .unwrap()
+            .query_row(
+                "SELECT msg_count FROM session_stats WHERE session_id = ?1",
+                [session_id],
+                |r| r.get(0),
+            )
+            .unwrap()
+    }
+
+    #[test]
+    fn broken_message_parse_keeps_history_even_when_tokens_survive() {
+        // OpenCode's totals come from its session table, so a message-format
+        // change yields 0 messages but non-zero tokens.
+        let db = test_db();
+        let entry = sample_entry("s3");
+        let msg = Message {
+            role: "assistant".into(),
+            content: vec![],
+            timestamp: Some(1_000),
+            model: Some("deepseek".into()),
+            usage: None,
+            reasoning_chars: 0,
+        };
+        upsert_session(&db, &entry, &sample_detail("s3", vec![msg], 5_000), 1, 1);
+        assert_eq!(stored_msg_count(&db, "s3"), 1);
+
+        upsert_session(&db, &entry, &sample_detail("s3", vec![], 7_000), 2, 2);
+        assert_eq!(stored_msg_count(&db, "s3"), 1);
+        assert_eq!(stored_input_tokens(&db, "s3"), 5_000);
     }
 
     #[test]
