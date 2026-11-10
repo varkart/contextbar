@@ -213,3 +213,4 @@ not that doc, for the actual shape.
 1. Rust changes: `cargo check` must pass before committing
 2. Commits: small + incremental, feature branch per feature
 3. No direct pushes to `main`
+4. Default to a plain branch (`git checkout -b feature/...`) for changes, not a worktree. Only create a worktree when it's actually needed — e.g. another session/agent is already working in parallel on this repo and a second checkout avoids stepping on it — and ask the user before creating one.

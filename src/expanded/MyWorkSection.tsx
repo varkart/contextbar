@@ -289,6 +289,10 @@ function groupByProject(sessions: SessionEntry[]): ProjectAgg[] {
 interface MyWorkSectionProps {
   sessions: SessionEntry[]
   repos: RepoWorktrees[]
+  /** Repo scanning is opt-in — it reads project folders macOS guards behind a privacy prompt. */
+  repoScanEnabled: boolean
+  onEnableRepoScan: () => void
+  reposLoading: boolean
   loading: boolean
   goTo: (s: Section) => void
   onRefresh: () => void | Promise<unknown>
@@ -299,7 +303,7 @@ interface MyWorkSectionProps {
   showToast: (type: 'success' | 'error', message: string) => void
 }
 
-export default function MyWorkSection({ sessions, repos, loading, goTo, onRefresh, onOpenSession, onOpenSessionById, onOpenSessionsForProject, onFocusWorktree, showToast }: MyWorkSectionProps) {
+export default function MyWorkSection({ sessions, repos, repoScanEnabled, onEnableRepoScan, reposLoading, loading, goTo, onRefresh, onOpenSession, onOpenSessionById, onOpenSessionsForProject, onFocusWorktree, showToast }: MyWorkSectionProps) {
   // Unused directly — agentColor() reads the active palette internally, this
   // just forces a re-render (and thus a fresh agentColor() call) when the
   // user changes it in Settings while this view is mounted.
@@ -392,13 +396,14 @@ export default function MyWorkSection({ sessions, repos, loading, goTo, onRefres
   // "previous month" doesn't end at the current moment, so `sinceDays`
   // relative to now would silently fetch the wrong days.
   useEffect(() => {
+    if (!repoScanEnabled) return
     let live = true
     invoke<CommitEntry[]>('get_commit_activity', {
       sinceMs: start,
       untilMs: end === Infinity ? undefined : end,
     }).then(d => { if (live) setCommits(d) }).catch(() => {})
     return () => { live = false }
-  }, [start, end])
+  }, [start, end, repoScanEnabled])
   const windowCommitEntries = useMemo(
     () => commits.filter(c => c.ts * 1000 >= start && c.ts * 1000 < end),
     [commits, start, end]
@@ -856,6 +861,25 @@ export default function MyWorkSection({ sessions, repos, loading, goTo, onRefres
 
         {!loading && sessions.length > 0 && (
           <>
+            {!repoScanEnabled && (
+              <div className="rounded-xl border border-[var(--c-border)] p-3 mb-3 flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-[13px] font-semibold">Find unfinished work in your repos</p>
+                  <p className="text-[12px] text-[var(--c-text-2)] mt-0.5">
+                    Uncommitted edits, unmerged branches and commit activity. macOS may ask once for access to the folders your repos live in.
+                  </p>
+                </div>
+                <button
+                  onClick={onEnableRepoScan}
+                  className="shrink-0 text-[12px] px-2.5 py-1 rounded-md bg-[var(--c-accent)]/15 text-[var(--c-accent)] font-medium hover:bg-[var(--c-accent)]/25"
+                >
+                  Scan repos
+                </button>
+              </div>
+            )}
+            {repoScanEnabled && reposLoading && repos.length === 0 && (
+              <p className="text-[12px] text-[var(--c-text-3)] mb-3">Scanning repos…</p>
+            )}
             {/* Attention — full-width band, always first, any window.
                 Collapsed pills truncate their reasoning behind a hover
                 tooltip; "Show more details" switches to a list where every

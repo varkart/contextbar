@@ -29,6 +29,8 @@ interface Props {
   usedNames?: Set<string>
   /** Sessions analyzed for the usage window; 0 means "no data" — the unused review is hidden. */
   usageAnalyzed?: number
+  /** Opened from an agent's page: pre-select that agent and the Active status filter. */
+  initialAgentId?: string
 }
 
 interface SkillVariant extends Skill {
@@ -76,9 +78,11 @@ function computeBulkChanges(groups: SkillGroup[], mode: BulkMode) {
   return { changed, changedAgentIds, untouchedAgentIds }
 }
 
-export default function AllSkillsView({ agents, onSelectSkill, onAddSkill, onInstalled, compact, usedNames, usageAnalyzed = 0 }: Props) {
+export default function AllSkillsView({ agents, onSelectSkill, onAddSkill, onInstalled, compact, usedNames, usageAnalyzed = 0, initialAgentId }: Props) {
   const [query, setQuery] = useState('')
-  const [statusFilter, setStatusFilter] = useState<StatusFilterValue>('all')
+  const [statusFilter, setStatusFilter] = useState<StatusFilterValue>(() =>
+    agents.find(a => a.id === initialAgentId)?.skills.some(s => s.active) ? 'active' : 'all'
+  )
   const [togglingKey, setTogglingKey] = useState<{ name: string; toolId: string } | null>(null)
   const [pendingRemoveGroup, setPendingRemoveGroup] = useState<string | null>(null)
   const [removingGroup, setRemovingGroup] = useState<string | null>(null)
@@ -87,7 +91,7 @@ export default function AllSkillsView({ agents, onSelectSkill, onAddSkill, onIns
   const [reviewSel, setReviewSel] = useState<Set<string>>(new Set())
   const [bulkDeleteConfirm, setBulkDeleteConfirm] = useState(false)
   const [bulkBusy, setBulkBusy] = useState(false)
-  const { installedAgents, selectedTools, toggleTool, toggleToolCheckbox, selectAll, allSelected } = useAgentFilter(agents)
+  const { installedAgents, selectedTools, toggleTool, toggleToolCheckbox, selectAll, allSelected } = useAgentFilter(agents, initialAgentId)
   const groups = useMemo(() => buildGroups(agents), [agents])
   const agentSkillCounts = useMemo(() => {
     const counts: Record<string, number> = {}
@@ -174,7 +178,11 @@ export default function AllSkillsView({ agents, onSelectSkill, onAddSkill, onIns
     }
     if (statusFilter !== 'all') {
       const wantActive = statusFilter === 'active'
-      result = result.filter(g => g.variants.some(v => v.active) === wantActive)
+      // Judge status on the selected agents' copies only — a skill inactive
+      // on Claude but active on Cursor isn't "Active" in Claude's view.
+      result = result.filter(g =>
+        g.variants.some(v => (allSelected || selectedTools.has(v.toolId)) && v.active) === wantActive
+      )
     }
     return result
   }, [groups, query, selectedTools, allSelected, statusFilter])

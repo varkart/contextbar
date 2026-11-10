@@ -1,0 +1,113 @@
+{
+  "_comment": "Baselines for the daily agent-version watch (scripts/check-agent-versions.py). `verified` is the version whose on-disk session/config format was last checked against our parsers; null means never verified. `sources` lists every channel the CLI ships through (npm, Homebrew, release feeds) \u2014 a major/minor bump on ANY channel counts as drift, because users install from different ones (e.g. OpenCode 2.x ships only via Homebrew core).",
+  "opencode": {
+    "verified": "1.18.27",
+    "verified_date": "2026-09-05",
+    "parser": "src-tauri/src/engine/sessions/opencode.rs",
+    "notes": "SQLite opencode.db; session_message moved to message+part once already",
+    "sources": [
+      {
+        "label": "npm",
+        "type": "npm",
+        "package": "opencode-ai"
+      },
+      {
+        "label": "brew core",
+        "type": "brew",
+        "kind": "formula",
+        "name": "opencode"
+      },
+      {
+        "label": "GitHub release (brew tap)",
+        "type": "github_release",
+        "repo": "anomalyco/opencode"
+      }
+    ]
+  },
+  "kiro": {
+    "verified": null,
+    "verified_date": null,
+    "parser": "src-tauri/src/engine/sessions/kiro.rs",
+    "notes": "Flat files ~/.kiro/sessions/cli/{id}.json + .jsonl; transcripts carry no token counts",
+    "sources": [
+      {
+        "label": "release manifest",
+        "type": "json",
+        "url": "https://prod.download.cli.kiro.dev/stable/latest/manifest.json",
+        "field": "version"
+      },
+      {
+        "label": "brew cask",
+        "type": "brew",
+        "kind": "cask",
+        "name": "kiro-cli"
+      }
+    ]
+  },
+  "codex": {
+    "verified": null,
+    "verified_date": null,
+    "parser": "src-tauri/src/engine/sessions/codex.rs",
+    "notes": "JSONL rollouts; parser tolerates unknown event types",
+    "sources": [
+      {
+        "label": "npm",
+        "type": "npm",
+        "package": "@openai/codex"
+      },
+      {
+        "label": "brew cask",
+        "type": "brew",
+        "kind": "cask",
+        "name": "codex"
+      }
+    ]
+  },
+  "gemini": {
+    "verified": null,
+    "verified_date": null,
+    "parser": "src-tauri/src/engine/sessions/gemini.rs",
+    "notes": "Two on-disk formats coexist (.json snapshot, .jsonl stream)",
+    "sources": [
+      {
+        "label": "npm",
+        "type": "npm",
+        "package": "@google/gemini-cli"
+      },
+      {
+        "label": "brew formula",
+        "type": "brew",
+        "kind": "formula",
+        "name": "gemini-cli"
+      }
+    ]
+  },
+  "agy": {
+    "verified": null,
+    "verified_date": null,
+    "parser": "src-tauri/src/engine/sessions/agy.rs",
+    "notes": "No public version feed; check by hand. Binary conversations/<id>.db is not parsed",
+    "sources": [
+      {
+        "label": "brew cask (Antigravity app \u2014 may not track the agy CLI)",
+        "type": "brew",
+        "kind": "cask",
+        "name": "antigravity"
+      }
+    ]
+  },
+  "claude": {
+    "sources": [
+      {
+        "label": "brew cask",
+        "type": "brew",
+        "kind": "cask",
+        "name": "claude-code"
+      }
+    ],
+    "verified": null,
+    "verified_date": null,
+    "parser": "src-tauri/src/engine/history/parser.rs",
+    "notes": "First-party format read by our own native parser"
+  }
+}

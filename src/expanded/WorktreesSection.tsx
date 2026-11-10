@@ -674,6 +674,7 @@ export default function WorktreesSection({ repos, loading, sessions, onRemoved, 
                 <button
                   onClick={() => togglePrs(repo)}
                   aria-expanded={!!prsOpen[repo.repoPath]}
+                  title="Open pull requests, with CI checks, review and conflict status"
                   className={`flex items-center gap-1 text-[12px] px-2.5 py-1 rounded-md border transition-colors ${prsOpen[repo.repoPath] ? 'border-[var(--c-accent)]/50 bg-[var(--c-accent)]/10 text-[var(--c-accent)]' : 'border-[var(--c-border)] text-[var(--c-text-3)] hover:text-[var(--c-text-2)] hover:border-[var(--c-text-3)]/50'}`}
                 >
                   <span className={`text-[8.5px] transition-transform ${prsOpen[repo.repoPath] ? 'rotate-90' : ''}`} aria-hidden="true">▶</span>
@@ -685,11 +686,11 @@ export default function WorktreesSection({ repos, loading, sessions, onRemoved, 
                 <button
                   onClick={() => setRemoteOpen(prev => ({ ...prev, [repo.repoPath]: !prev[repo.repoPath] }))}
                   aria-expanded={!!remoteOpen[repo.repoPath]}
-                  title="Remote branches with no local copy checked out or pulled down"
+                  title="Branches that exist on the remote (e.g. GitHub) but have no local copy on this Mac"
                   className={`flex items-center gap-1 text-[12px] px-2.5 py-1 rounded-md border transition-colors ${remoteOpen[repo.repoPath] ? 'border-[var(--c-accent)]/50 bg-[var(--c-accent)]/10 text-[var(--c-accent)]' : 'border-[var(--c-border)] text-[var(--c-text-3)] hover:text-[var(--c-text-2)] hover:border-[var(--c-text-3)]/50'}`}
                 >
                   <span className={`text-[8.5px] transition-transform ${remoteOpen[repo.repoPath] ? 'rotate-90' : ''}`} aria-hidden="true">▶</span>
-                  Remote
+                  Remote only
                   {repo.remoteBranches.length > 0 && (
                     <span className="text-[var(--c-text-3)]">{repo.remoteBranches.length}</span>
                   )}
@@ -1085,6 +1086,13 @@ function RepoPrs({ data }: { data: PullRequestInfo[] | 'loading' | undefined }) 
           <span className="font-mono text-[12px] text-[var(--c-text-3)] flex-shrink-0">#{pr.number}</span>
           <span className="flex-1 min-w-0 text-[13.5px] truncate">{pr.title}</span>
           {pr.isDraft && <Badge tone="muted">Draft</Badge>}
+          {pr.hasConflicts && <Badge tone="bad" title="Merge conflicts with the base branch">Conflicts</Badge>}
+          {pr.checks === 'failing' && <Badge tone="bad" title="At least one CI check failed">Checks failing</Badge>}
+          {pr.checks === 'pending' && <Badge tone="warn" title="CI checks are still running">Checks running</Badge>}
+          {pr.checks === 'passing' && <Badge tone="ok" title="All CI checks passed">Checks passing</Badge>}
+          {pr.review === 'approved' && <Badge tone="ok" title="Approved by a reviewer">Approved</Badge>}
+          {pr.review === 'changes_requested' && <Badge tone="warn" title="A reviewer asked for changes">Changes requested</Badge>}
+          {pr.review === 'review_required' && <Badge tone="muted" title="Waiting for a required review">Needs review</Badge>}
           <span className="text-[12px] text-[var(--c-text-3)] flex-shrink-0">{pr.author}</span>
         </button>
       ))}
@@ -1145,13 +1153,14 @@ function RemoteBranches({ data }: { data: RemoteBranchInfo[] }) {
   )
 }
 
-function Badge({ tone, children }: { tone: 'ok' | 'warn' | 'accent' | 'muted'; children: React.ReactNode }) {
+function Badge({ tone, title, children }: { tone: 'ok' | 'warn' | 'bad' | 'accent' | 'muted'; title?: string; children: React.ReactNode }) {
   const cls =
     tone === 'ok' ? 'bg-emerald-500/15 text-emerald-400' :
+    tone === 'bad' ? 'bg-red-500/15 text-red-400' :
     tone === 'warn' ? 'bg-amber-500/15 text-amber-400' :
     tone === 'accent' ? 'bg-[var(--c-accent)]/15 text-[var(--c-accent)]' :
     'bg-[var(--c-surface-2)] text-[var(--c-text-3)]'
-  return <span className={`text-[12px] font-mono px-2 py-0.5 rounded-full whitespace-nowrap ${cls}`}>{children}</span>
+  return <span title={title} className={`text-[12px] font-mono px-2 py-0.5 rounded-full whitespace-nowrap ${cls}`}>{children}</span>
 }
 
 function DetailCell({ k, v }: { k: string; v: string }) {

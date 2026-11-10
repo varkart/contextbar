@@ -157,6 +157,52 @@ pub struct PullRequestInfo {
     pub url: String,
     pub author: String,
     pub is_draft: bool,
+    /// "passing" | "failing" | "pending"; None when the PR has no checks
+    /// or the host doesn't report them.
+    pub checks: Option<String>,
+    /// "approved" | "changes_requested" | "review_required"; None when no
+    /// review is required or the host doesn't report it.
+    pub review: Option<String>,
+    pub has_conflicts: bool,
+}
+
+/// One entry of `gh`'s statusCheckRollup: a CheckRun (status/conclusion)
+/// or a legacy commit StatusContext (state).
+#[derive(Deserialize, Default)]
+#[serde(default)]
+struct RawCheck {
+    status: Option<String>,
+    conclusion: Option<String>,
+    state: Option<String>,
+}
+
+fn rollup_checks(checks: &[RawCheck]) -> Option<String> {
+    if checks.is_empty() {
+        return None;
+    }
+    let mut pending = false;
+    for c in checks {
+        let verdict = c.conclusion.as_deref().or(c.state.as_deref()).unwrap_or("");
+        match verdict {
+            "FAILURE" | "ERROR" | "TIMED_OUT" | "CANCELLED" | "ACTION_REQUIRED"
+            | "STARTUP_FAILURE" => return Some("failing".into()),
+            "PENDING" | "EXPECTED" => pending = true,
+            _ => {}
+        }
+        if c.state.is_none() && c.status.as_deref().is_some_and(|s| s != "COMPLETED") {
+            pending = true;
+        }
+    }
+    Some(if pending { "pending" } else { "passing" }.into())
+}
+
+fn review_state(decision: &str) -> Option<String> {
+    match decision {
+        "APPROVED" => Some("approved".into()),
+        "CHANGES_REQUESTED" => Some("changes_requested".into()),
+        "REVIEW_REQUIRED" => Some("review_required".into()),
+        _ => None,
+    }
 }
 
 /// A self-hosted GitHub Enterprise or GitLab self-managed instance the user
@@ -202,7 +248,7 @@ fn github_prs(slug: &str, host: Option<&str>) -> Vec<PullRequestInfo> {
         "--state",
         "open",
         "--json",
-        "number,title,url,author,isDraft",
+        "number,title,url,author,isDraft,reviewDecision,mergeable,statusCheckRollup",
         "--limit",
         "30",
     ]);
@@ -228,6 +274,12 @@ fn github_prs(slug: &str, host: Option<&str>) -> Vec<PullRequestInfo> {
         author: RawAuthor,
         #[serde(rename = "isDraft")]
         is_draft: bool,
+        #[serde(default, rename = "reviewDecision")]
+        review_decision: String,
+        #[serde(default)]
+        mergeable: String,
+        #[serde(default, rename = "statusCheckRollup")]
+        status_check_rollup: Vec<RawCheck>,
     }
     let Ok(raw) = serde_json::from_slice::<Vec<RawPr>>(&out.stdout) else {
         return Vec::new();
@@ -239,6 +291,9 @@ fn github_prs(slug: &str, host: Option<&str>) -> Vec<PullRequestInfo> {
             url: p.url,
             author: p.author.login,
             is_draft: p.is_draft,
+            checks: rollup_checks(&p.status_check_rollup),
+            review: review_state(&p.review_decision),
+            has_conflicts: p.mergeable == "CONFLICTING",
         })
         .collect()
 }
@@ -278,6 +333,8 @@ fn gitlab_mrs(slug: &str, host: Option<&str>) -> Vec<PullRequestInfo> {
         author: RawAuthor,
         #[serde(default, alias = "work_in_progress")]
         draft: bool,
+        #[serde(default)]
+        has_conflicts: bool,
     }
     let Ok(raw) = serde_json::from_slice::<Vec<RawMr>>(&out.stdout) else {
         return Vec::new();
@@ -289,6 +346,9 @@ fn gitlab_mrs(slug: &str, host: Option<&str>) -> Vec<PullRequestInfo> {
             url: m.url,
             author: m.author.username,
             is_draft: m.draft,
+            checks: None,
+            review: None,
+            has_conflicts: m.has_conflicts,
         })
         .collect()
 }
@@ -899,9 +959,61 @@ pub fn delete_branch(repo_path: &str, branch_name: &str) -> Result<(), String> {
 mod tests {
     use super::{
         is_internal_agent_worktree, parse_github_slug, parse_gitlab_slug, parse_slug_for_host,
-        parse_worktree_list, scan_agent_files, scan_repo_skills, GitCliInfo, GitCliStatus,
+        parse_worktree_list, review_state, rollup_checks, scan_agent_files, scan_repo_skills,
+        GitCliInfo, GitCliStatus, RawCheck,
     };
     use std::path::Path;
+
+    fn run(status: &str, conclusion: &str) -> RawCheck {
+        RawCheck {
+            status: Some(status.into()),
+            conclusion: (!conclusion.is_empty()).then(|| conclusion.into()),
+            state: None,
+        }
+    }
+
+    fn ctx(state: &str) -> RawCheck {
+        RawCheck {
+            state: Some(state.into()),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn rollup_checks_prefers_failing_then_pending() {
+        assert_eq!(rollup_checks(&[]), None);
+        assert_eq!(
+            rollup_checks(&[run("COMPLETED", "SUCCESS"), run("COMPLETED", "SKIPPED")]).as_deref(),
+            Some("passing")
+        );
+        assert_eq!(
+            rollup_checks(&[run("COMPLETED", "SUCCESS"), run("IN_PROGRESS", "")]).as_deref(),
+            Some("pending")
+        );
+        assert_eq!(
+            rollup_checks(&[run("IN_PROGRESS", ""), run("COMPLETED", "FAILURE")]).as_deref(),
+            Some("failing")
+        );
+        assert_eq!(
+            rollup_checks(&[ctx("SUCCESS"), ctx("PENDING")]).as_deref(),
+            Some("pending")
+        );
+        assert_eq!(rollup_checks(&[ctx("ERROR")]).as_deref(), Some("failing"));
+    }
+
+    #[test]
+    fn review_state_maps_known_decisions_only() {
+        assert_eq!(review_state("APPROVED").as_deref(), Some("approved"));
+        assert_eq!(
+            review_state("CHANGES_REQUESTED").as_deref(),
+            Some("changes_requested")
+        );
+        assert_eq!(
+            review_state("REVIEW_REQUIRED").as_deref(),
+            Some("review_required")
+        );
+        assert_eq!(review_state(""), None);
+    }
 
     #[test]
     fn scans_agent_files_and_repo_skills() {

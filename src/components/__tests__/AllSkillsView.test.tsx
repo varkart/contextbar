@@ -293,3 +293,32 @@ describe('AllSkillsView — remove everywhere from the list row', () => {
     expect((removeCalls[0][1] as { agentId: string }).agentId).toBe('claude')
   })
 })
+
+describe('AllSkillsView — opened from an agent page (initialAgentId)', () => {
+  const claude = makeTool('claude', 'Claude Code', [
+    makeSkill({ name: 'claude-on', active: true }),
+    makeSkill({ name: 'claude-off', active: false }),
+  ])
+  const cursor = makeTool('cursor', 'Cursor', [makeSkill({ name: 'cursor-only', active: true })])
+
+  it('preselects that agent and the Active status', () => {
+    render(<AllSkillsView agents={[claude, cursor]} onBack={vi.fn()} onSelectSkill={vi.fn()} initialAgentId="claude" />)
+    expect(screen.getByText('claude-on')).toBeInTheDocument()
+    expect(screen.queryByText('claude-off')).not.toBeInTheDocument()
+    expect(screen.queryByText('cursor-only')).not.toBeInTheDocument()
+  })
+
+  it('treats an item as Active only if it is active on the selected agent', () => {
+    const c = makeTool('claude', 'Claude Code', [makeSkill({ name: 'shared', active: false }), makeSkill({ name: 'claude-on', active: true })])
+    const cur = makeTool('cursor', 'Cursor', [makeSkill({ name: 'shared', active: true })])
+    render(<AllSkillsView agents={[c, cur]} onBack={vi.fn()} onSelectSkill={vi.fn()} initialAgentId="claude" />)
+    expect(screen.getByText('claude-on')).toBeInTheDocument()
+    expect(screen.queryByText('shared')).not.toBeInTheDocument()
+  })
+
+  it('falls back to All status when nothing is active on that agent', () => {
+    const c = makeTool('claude', 'Claude Code', [makeSkill({ name: 'claude-off', active: false })])
+    render(<AllSkillsView agents={[c]} onBack={vi.fn()} onSelectSkill={vi.fn()} initialAgentId="claude" />)
+    expect(screen.getByText('claude-off')).toBeInTheDocument()
+  })
+})

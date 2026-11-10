@@ -1,13 +1,13 @@
 import { useState, useMemo } from 'react'
 import type { Agent } from '../types'
 
-export function useAgentFilter(tools: Agent[]) {
+export function useAgentFilter(tools: Agent[], initialAgentId?: string) {
   const installedAgents = useMemo(() => tools.filter(t => t.installed), [tools])
   // null = no explicit narrowing yet → always "all selected", however many
   // agents have loaded so far. Agents arrive async from the backend, so a
   // Set captured at mount (before they load) would otherwise lock in as
   // empty forever and silently filter out everything.
-  const [selectedTools, setSelectedTools] = useState<Set<string> | null>(null)
+  const [selectedTools, setSelectedTools] = useState<Set<string> | null>(initialAgentId ? new Set([initialAgentId]) : null)
 
   // Clicking a bubble while everything is selected solos that agent (a
   // narrowing gesture — "just this one"). From there, clicking a different

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow'
@@ -124,6 +124,11 @@ function sectionFromHash(hash: string): Section {
 }
 
 const SECTION_STORAGE_KEY = 'contextbar:expanded:section'
+// Repo scanning reads project folders, which usually live under ~/Documents
+// and trigger a macOS privacy prompt — so it's opt-in, started by the user
+// from My Work or by opening Repos, then remembered.
+const REPO_SCAN_STORAGE_KEY = 'contextbar:expanded:repo-scan-enabled'
+const REPO_FOCUS_REFRESH_MS = 5 * 60_000
 
 /** Deep-link hash wins; otherwise restore the last visited section. */
 function initialSection(): Section {
@@ -146,7 +151,9 @@ export default function ExpandedApp() {
   const [sessionsLoading, setSessionsLoading] = useState(true)
   const [selectedSession, setSelectedSession] = useState<SessionEntry | null>(null)
   const [repos, setRepos] = useState<RepoWorktrees[]>([])
-  const [reposLoading, setReposLoading] = useState(true)
+  const [repoScanEnabled, setRepoScanEnabled] = useState(() => !!localStorage.getItem(REPO_SCAN_STORAGE_KEY))
+  const [reposLoading, setReposLoading] = useState(repoScanEnabled)
+  const reposFetchedAt = useRef(0)
 
   // The static #splash overlay in index.html renders in every window;
   // this window has no SplashScreen flow, so clear it immediately.
@@ -174,30 +181,46 @@ export default function ExpandedApp() {
   }, [fetchSessions])
 
   const fetchWorktrees = useCallback(() => {
+    reposFetchedAt.current = Date.now()
     return invoke<RepoWorktrees[]>('list_worktrees')
       .then(r => { setRepos(r); setReposLoading(false); return true })
       .catch(() => { setReposLoading(false); return false })
   }, [])
 
-  useEffect(() => { fetchWorktrees() }, [fetchWorktrees])
+  const enableRepoScan = useCallback(() => {
+    localStorage.setItem(REPO_SCAN_STORAGE_KEY, '1')
+    setReposLoading(true)
+    setRepoScanEnabled(true)
+  }, [])
+
+  useEffect(() => { if (repoScanEnabled) fetchWorktrees() }, [repoScanEnabled, fetchWorktrees])
+
+  // Opening Repos is itself the request to scan.
+  useEffect(() => { if (section === 'worktrees' && !repoScanEnabled) enableRepoScan() }, [section, repoScanEnabled, enableRepoScan])
 
   const refreshAll = useCallback(async () => {
     const [sessionsOk, worktreesOk] = await Promise.all([
       fetchSessions(sessionLimit),
-      fetchWorktrees(),
+      repoScanEnabled ? fetchWorktrees() : Promise.resolve(true),
     ])
     invoke('warm_session_stats').catch(() => {})
     if (!sessionsOk || !worktreesOk) showToast('error', 'Refresh failed — check your connection')
-  }, [fetchSessions, fetchWorktrees, sessionLimit, showToast])
+  }, [fetchSessions, fetchWorktrees, repoScanEnabled, sessionLimit, showToast])
 
   // Freshness, three layers:
   // 1. FSEvents push — the backend watcher emits sessions-changed the moment
   //    any agent writes a session file.
   // 2. Focus refetch — catch anything missed while the window was backgrounded.
+  //    Repos are rescanned at most every few minutes: each scan walks every
+  //    project folder, and focus fires on every click back into the window.
   // 3. Slow 60s tick — only to EXPIRE live dots (a session going quiet emits
   //    no fs event, so nothing else would ever flip isLive off).
   useEffect(() => {
-    const onFocus = () => refreshAll()
+    const onFocus = () => {
+      fetchSessions(sessionLimit)
+      invoke('warm_session_stats').catch(() => {})
+      if (repoScanEnabled && Date.now() - reposFetchedAt.current > REPO_FOCUS_REFRESH_MS) fetchWorktrees()
+    }
     window.addEventListener('focus', onFocus)
     const unlisten = listen('sessions-changed', () => fetchSessions(sessionLimit))
     const interval = setInterval(() => {
@@ -208,7 +231,7 @@ export default function ExpandedApp() {
       unlisten.then(fn => fn())
       clearInterval(interval)
     }
-  }, [refreshAll, fetchSessions, sessionLimit])
+  }, [fetchSessions, fetchWorktrees, repoScanEnabled, sessionLimit])
 
   // Keep hash in sync both ways — Rust deep-links by setting the hash.
   useEffect(() => {
@@ -326,8 +349,8 @@ export default function ExpandedApp() {
     skills: installedAgents.reduce((n, a) => n + a.skills.length, 0),
     mcps: installedAgents.reduce((n, a) => n + a.mcps.length, 0),
     sessions: sessions.length,
-    worktrees: repos.reduce((n, r) => n + r.worktrees.length, 0),
-  }), [installedAgents, sessions, repos])
+    worktrees: repoScanEnabled ? repos.reduce((n, r) => n + r.worktrees.length, 0) : null,
+  }), [installedAgents, sessions, repos, repoScanEnabled])
 
   return (
     <div className="w-screen h-screen bg-[var(--c-bg)] text-[var(--c-text)] flex overflow-hidden">
@@ -346,7 +369,10 @@ export default function ExpandedApp() {
           <MyWorkSection
             sessions={sessions}
             repos={repos}
-            loading={sessionsLoading || reposLoading}
+            repoScanEnabled={repoScanEnabled}
+            onEnableRepoScan={enableRepoScan}
+            reposLoading={reposLoading}
+            loading={sessionsLoading}
             goTo={goTo}
             onRefresh={refreshAll}
             onOpenSession={openSession}
@@ -411,7 +437,7 @@ interface SectionCounts {
   skills: number
   mcps: number
   sessions: number
-  worktrees: number
+  worktrees: number | null
 }
 
 function countFor(id: Section, counts: SectionCounts): number | null {

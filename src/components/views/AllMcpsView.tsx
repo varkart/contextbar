@@ -29,6 +29,8 @@ interface Props {
   usedNames?: Set<string>
   /** Sessions analyzed for the usage window; 0 means "no data" — the unused review is hidden. */
   usageAnalyzed?: number
+  /** Opened from an agent's page: pre-select that agent and the Active status filter. */
+  initialAgentId?: string
 }
 
 interface McpVariant extends McpServer {
@@ -76,9 +78,11 @@ function computeBulkChanges(groups: McpGroup[], mode: BulkMode) {
   return { changed, changedAgentIds, untouchedAgentIds }
 }
 
-export default function AllMcpsView({ agents, onSelectMcp, onAddMcp, onInstalled, compact, usedNames, usageAnalyzed = 0 }: Props) {
+export default function AllMcpsView({ agents, onSelectMcp, onAddMcp, onInstalled, compact, usedNames, usageAnalyzed = 0, initialAgentId }: Props) {
   const [query, setQuery] = useState('')
-  const [statusFilter, setStatusFilter] = useState<StatusFilterValue>('all')
+  const [statusFilter, setStatusFilter] = useState<StatusFilterValue>(() =>
+    agents.find(a => a.id === initialAgentId)?.mcps.some(m => m.active) ? 'active' : 'all'
+  )
   const [togglingKey, setTogglingKey] = useState<{ name: string; toolId: string } | null>(null)
   const [pendingRemoveGroup, setPendingRemoveGroup] = useState<string | null>(null)
   const [removingGroup, setRemovingGroup] = useState<string | null>(null)
@@ -87,7 +91,7 @@ export default function AllMcpsView({ agents, onSelectMcp, onAddMcp, onInstalled
   const [reviewSel, setReviewSel] = useState<Set<string>>(new Set())
   const [bulkDeleteConfirm, setBulkDeleteConfirm] = useState(false)
   const [bulkBusy, setBulkBusy] = useState(false)
-  const { installedAgents, selectedTools, toggleTool, toggleToolCheckbox, selectAll, allSelected } = useAgentFilter(agents)
+  const { installedAgents, selectedTools, toggleTool, toggleToolCheckbox, selectAll, allSelected } = useAgentFilter(agents, initialAgentId)
   const groups = useMemo(() => buildMcpGroups(agents), [agents])
   const agentMcpCounts = useMemo(() => {
     const counts: Record<string, number> = {}
@@ -178,7 +182,11 @@ export default function AllMcpsView({ agents, onSelectMcp, onAddMcp, onInstalled
     }
     if (statusFilter !== 'all') {
       const wantActive = statusFilter === 'active'
-      result = result.filter(g => g.variants.some(v => v.active) === wantActive)
+      // Judge status on the selected agents' copies only — an MCP inactive
+      // on Claude but active on Cursor isn't "Active" in Claude's view.
+      result = result.filter(g =>
+        g.variants.some(v => (allSelected || selectedTools.has(v.toolId)) && v.active) === wantActive
+      )
     }
     return result
   }, [groups, query, selectedTools, allSelected, statusFilter])

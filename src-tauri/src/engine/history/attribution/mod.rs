@@ -867,7 +867,7 @@ mod tests {
         // A long, heavily-cached session can report cache-read tokens in the
         // hundreds of millions (real content is small; the growing prefix is
         // just resent every turn). Summed raw, that swamps every other
-        // driver in a window. Reread must be down-weighted (same ~10% ratio
+        // driver in a window. Reread must be down-weighted (same ratio
         // used for cost), not counted 1:1 like fresh context.
         let session = CachedSessionDrivers {
             input_tokens: 1_001_000,
@@ -888,9 +888,12 @@ mod tests {
         };
         let window = aggregate_drivers([&session]);
         let growth = window.drivers.iter().find(|d| d.kind == "growth").unwrap();
-        // 1_000 created + 1_000_000 * 0.1 reread = 101_000, not 1_001_000.
-        assert_eq!(growth.tokens, 101_000);
-        assert_eq!(window.input_tokens, 101_000);
+        // 1_000 created + 1_000_000 * cache-read multiplier, not 1_001_000.
+        let expected =
+            1_000 + (1_000_000.0 * super::super::stats::cache_read_multiplier()).round() as u64;
+        assert!(expected < 1_001_000 / 5);
+        assert_eq!(growth.tokens, expected);
+        assert_eq!(window.input_tokens, expected);
     }
 
     #[test]

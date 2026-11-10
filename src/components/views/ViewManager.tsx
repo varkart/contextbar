@@ -54,6 +54,8 @@ export default function ViewManager({
   usedSkillNames,
   usedMcpNames,
   usageAnalyzed,
+  allSkillsBackView,
+  allMcpsBackView,
 }: any) {
   if (view === 'doctor') {
     return <DoctorView onBack={() => goTo('settings')} />
@@ -130,6 +132,8 @@ export default function ViewManager({
         compact={compact}
         usedNames={usedSkillNames}
         usageAnalyzed={usageAnalyzed}
+        // Empty agent → "Browse skills" is for discovering other agents' skills, so don't narrow.
+        initialAgentId={allSkillsBackView === 'agent-detail' && selectedAgent?.skills.length ? selectedAgent.id : undefined}
       />
     )
   }
@@ -144,6 +148,7 @@ export default function ViewManager({
         compact={compact}
         usedNames={usedMcpNames}
         usageAnalyzed={usageAnalyzed}
+        initialAgentId={allMcpsBackView === 'agent-detail' && selectedAgent?.mcps.length ? selectedAgent.id : undefined}
       />
     )
   }

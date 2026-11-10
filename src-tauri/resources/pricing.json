@@ -1,12 +1,63 @@
 {
   "$comment": "Approximate public API list prices in USD per MTok. Auto-refreshed weekly from LiteLLM's model_prices_and_context_window.json by .github/workflows/update-pricing.yml (opens a PR). Cache multipliers apply to the input rate.",
-  "updated": "2026-07-15",
-  "source": "defaults",
-  "cacheReadMultiplier": 0.1,
+  "updated": "2026-11-09",
+  "source": "litellm",
+  "cacheReadMultiplier": 0.0667,
   "cacheWriteMultiplier": 1.25,
   "models": [
-    { "match": "opus",   "inputPerMtok": 15.0, "outputPerMtok": 75.0 },
-    { "match": "sonnet", "inputPerMtok": 3.0,  "outputPerMtok": 15.0 },
-    { "match": "haiku",  "inputPerMtok": 1.0,  "outputPerMtok": 5.0 }
+    {
+      "match": "opus",
+      "inputPerMtok": 4.0,
+      "outputPerMtok": 20.0,
+      "$from": "claude-opus-5-5"
+    },
+    {
+      "match": "sonnet",
+      "inputPerMtok": 2.0,
+      "outputPerMtok": 10.0,
+      "$from": "claude-sonnet-5-5"
+    },
+    {
+      "match": "haiku",
+      "inputPerMtok": 0.1,
+      "outputPerMtok": 0.5,
+      "$from": "claude-haiku-5-5"
+    },
+    {
+      "match": "glm-5.2:free",
+      "inputPerMtok": 0.0,
+      "outputPerMtok": 0.0,
+      "$from": "fixed"
+    },
+    {
+      "match": "glm-5.2-free",
+      "inputPerMtok": 0.0,
+      "outputPerMtok": 0.0,
+      "$from": "fixed"
+    },
+    {
+      "match": "deepseek-v4-flash",
+      "inputPerMtok": 0.3,
+      "outputPerMtok": 1.2,
+      "$from": "deepseek/deepseek-v4-flash"
+    },
+    {
+      "match": "kimi-k3",
+      "inputPerMtok": 3.0,
+      "outputPerMtok": 15.0,
+      "$from": "moonshot/kimi-k3"
+    },
+    {
+      "match": "glm-5.2",
+      "inputPerMtok": 1.4,
+      "outputPerMtok": 4.4,
+      "$from": "zai/glm-5.2"
+    },
+    {
+      "match": "gemini-3.8-flash",
+      "inputPerMtok": 0.75,
+      "outputPerMtok": 3.75,
+      "$from": "gemini-3.8-flash"
+    }
   ]
 }

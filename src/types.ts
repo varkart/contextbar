@@ -490,6 +490,11 @@ export interface PullRequestInfo {
   url: string
   author: string
   isDraft: boolean
+  /** null when the PR has no checks or the host doesn't report them (GitLab). */
+  checks: 'passing' | 'failing' | 'pending' | null
+  /** null when no review is required or the host doesn't report it (GitLab). */
+  review: 'approved' | 'changes_requested' | 'review_required' | null
+  hasConflicts: boolean
 }
 
 export interface CustomGitHost {

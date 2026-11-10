@@ -546,6 +546,35 @@ pub fn warm(db: &DbState) -> usize {
     parsed
 }
 
+fn is_zero_usage(t: &TokenUsage) -> bool {
+    t.input_tokens == 0
+        && t.output_tokens == 0
+        && t.cache_read_tokens == 0
+        && t.cache_creation_tokens == 0
+}
+
+/// True when `session_stats` already has a row for `session_id` carrying
+/// messages or tokens — i.e. there is real history a bad re-parse could erase.
+fn cached_row_has_data(conn: &rusqlite::Connection, session_id: &str) -> bool {
+    conn.query_row(
+        "SELECT msg_count > 0 OR input_tokens > 0 OR output_tokens > 0
+                OR cache_read > 0 OR cache_creation > 0
+         FROM session_stats WHERE session_id = ?1",
+        [session_id],
+        |r| r.get::<_, bool>(0),
+    )
+    .unwrap_or(false)
+}
+
+fn cached_msg_count(conn: &rusqlite::Connection, session_id: &str) -> i64 {
+    conn.query_row(
+        "SELECT msg_count FROM session_stats WHERE session_id = ?1",
+        [session_id],
+        |r| r.get(0),
+    )
+    .unwrap_or(0)
+}
+
 /// Write one session's stats row and FTS transcript.
 fn upsert_session(
     db: &DbState,
@@ -616,6 +645,22 @@ fn upsert_session(
         .count() as i64;
 
     let conn = db.0.lock().unwrap();
+    // A re-parse with no messages while the cache already holds real data
+    // for this session is almost always a parse failure — an agent upgrade
+    // changed its on-disk format and the parser now returns nothing — not
+    // the session genuinely emptying out. Keep the good row instead of
+    // overwriting history with zeros. The session is re-parsed once its
+    // source changes again (per-file sources keep re-trying, since their
+    // mtime isn't recorded here; whole-DB sources wait for the DB to
+    // change). Token totals alone don't prove the parse worked: OpenCode
+    // reads them from its session table, so they survive a broken message
+    // parse.
+    if detail.messages.is_empty()
+        && (cached_msg_count(&conn, &entry.session_id) > 0
+            || (is_zero_usage(t) && cached_row_has_data(&conn, &entry.session_id)))
+    {
+        return;
+    }
     let _ = conn.execute(
         "INSERT INTO session_stats
                (session_id, agent, project, project_name, display, title, ts, model,
@@ -1117,8 +1162,10 @@ pub fn context_efficiency(
 mod tests {
     use super::{
         bulk_file_unchanged, codex_skill_from_read, context_efficiency, est_cost, kiro_slash_skill,
-        rates, skill_name_from_input, warm_reparse_decision, CachedDriver, CachedSessionDrivers,
+        rates, skill_name_from_input, upsert_session, warm_reparse_decision, CachedDriver,
+        CachedSessionDrivers,
     };
+    use crate::engine::history::types::{Message, TokenUsage};
 
     #[test]
     fn warm_reparse_decision_skips_when_cached_and_unchanged() {
@@ -1196,6 +1243,125 @@ mod tests {
         .unwrap();
     }
 
+    fn sample_entry(session_id: &str) -> crate::engine::history::SessionEntry {
+        crate::engine::history::SessionEntry {
+            agent: "opencode".into(),
+            session_id: session_id.into(),
+            display: "d".into(),
+            timestamp: 1_000,
+            project: "/p".into(),
+            project_name: "p".into(),
+            total_tokens: 0,
+            model: None,
+            duration_minutes: None,
+            is_live: false,
+            error_count: 0,
+            prompt_count: 0,
+            title: None,
+        }
+    }
+
+    fn sample_detail(
+        session_id: &str,
+        messages: Vec<Message>,
+        input: u64,
+    ) -> crate::engine::history::SessionDetail {
+        crate::engine::history::SessionDetail {
+            agent: "opencode".into(),
+            session_id: session_id.into(),
+            messages,
+            title: None,
+            total_tokens: TokenUsage {
+                input_tokens: input,
+                ..Default::default()
+            },
+            model: Some("deepseek".into()),
+            duration_ms: None,
+            project: "/p".into(),
+            project_name: "p".into(),
+            timestamp: 1_000,
+        }
+    }
+
+    fn stored_input_tokens(db: &crate::db::DbState, session_id: &str) -> i64 {
+        db.0.lock()
+            .unwrap()
+            .query_row(
+                "SELECT input_tokens FROM session_stats WHERE session_id = ?1",
+                [session_id],
+                |r| r.get(0),
+            )
+            .unwrap()
+    }
+
+    #[test]
+    fn empty_reparse_does_not_erase_cached_history() {
+        let db = test_db();
+        let entry = sample_entry("s1");
+        upsert_session(&db, &entry, &sample_detail("s1", vec![], 5_000), 1, 1);
+        assert_eq!(stored_input_tokens(&db, "s1"), 5_000);
+
+        // A later parse that returns nothing (format changed under the
+        // parser) must not zero out the row.
+        upsert_session(&db, &entry, &sample_detail("s1", vec![], 0), 2, 2);
+        assert_eq!(stored_input_tokens(&db, "s1"), 5_000);
+    }
+
+    #[test]
+    fn genuine_update_still_overwrites_cached_row() {
+        let db = test_db();
+        let entry = sample_entry("s1");
+        upsert_session(&db, &entry, &sample_detail("s1", vec![], 5_000), 1, 1);
+        upsert_session(&db, &entry, &sample_detail("s1", vec![], 9_000), 2, 2);
+        assert_eq!(stored_input_tokens(&db, "s1"), 9_000);
+    }
+
+    fn stored_msg_count(db: &crate::db::DbState, session_id: &str) -> i64 {
+        db.0.lock()
+            .unwrap()
+            .query_row(
+                "SELECT msg_count FROM session_stats WHERE session_id = ?1",
+                [session_id],
+                |r| r.get(0),
+            )
+            .unwrap()
+    }
+
+    #[test]
+    fn broken_message_parse_keeps_history_even_when_tokens_survive() {
+        // OpenCode's totals come from its session table, so a message-format
+        // change yields 0 messages but non-zero tokens.
+        let db = test_db();
+        let entry = sample_entry("s3");
+        let msg = Message {
+            role: "assistant".into(),
+            content: vec![],
+            timestamp: Some(1_000),
+            model: Some("deepseek".into()),
+            usage: None,
+            reasoning_chars: 0,
+        };
+        upsert_session(&db, &entry, &sample_detail("s3", vec![msg], 5_000), 1, 1);
+        assert_eq!(stored_msg_count(&db, "s3"), 1);
+
+        upsert_session(&db, &entry, &sample_detail("s3", vec![], 7_000), 2, 2);
+        assert_eq!(stored_msg_count(&db, "s3"), 1);
+        assert_eq!(stored_input_tokens(&db, "s3"), 5_000);
+    }
+
+    #[test]
+    fn first_empty_parse_of_a_new_session_is_still_recorded() {
+        let db = test_db();
+        upsert_session(
+            &db,
+            &sample_entry("s2"),
+            &sample_detail("s2", vec![], 0),
+            1,
+            1,
+        );
+        assert_eq!(stored_input_tokens(&db, "s2"), 0);
+    }
+
     fn growth_drivers(tokens: u64) -> CachedSessionDrivers {
         CachedSessionDrivers {
             input_tokens: tokens,
@@ -1233,6 +1399,19 @@ mod tests {
         let (rin, rout) = rates("claude-opus-4-1").unwrap();
         assert!(rin > 0.0 && rout > rin);
         assert!(rates("gpt-5-codex").is_none());
+        // Models OpenCode records (provider-prefixed ids) must price too —
+        // they used to fall through to None and show as $0.
+        for id in [
+            "deepseek-ai/deepseek-v4-flash-0731",
+            "moonshotai/kimi-k3",
+            "z-ai/glm-5.2",
+            "gemini-3.8-flash",
+        ] {
+            assert!(rates(id).is_some(), "{id} should have a price");
+        }
+        // The free tier shares a name with the paid model; it must win.
+        assert_eq!(rates("z-ai/glm-5.2:free"), Some((0.0, 0.0)));
+        assert_eq!(rates("z-ai/glm-5.2"), Some((1.4, 4.4)));
         // 1M input + 1M output on sonnet ≈ input+output rates
         let cost = est_cost(1_000_000, 1_000_000, 0, 0, "claude-sonnet-4-5").unwrap();
         let (sin, sout) = rates("sonnet").unwrap();
