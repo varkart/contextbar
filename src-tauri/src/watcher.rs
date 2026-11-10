@@ -144,6 +144,38 @@ impl Armed {
     }
 }
 
+/// Hash of the MCP sections of ~/.claude.json. Claude Code rewrites that
+/// file constantly (tips, per-project counters), so a rescan is only worth
+/// it when the parts Context Bar reads actually changed.
+fn claude_json_mcp_fingerprint(path: &Path) -> Option<u64> {
+    use std::hash::{Hash, Hasher};
+    let text = std::fs::read_to_string(path).ok()?;
+    let json: serde_json::Value = serde_json::from_str(&text).ok()?;
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    json.get("mcpServers").map(|v| v.to_string()).hash(&mut h);
+    if let Some(projects) = json.get("projects").and_then(|v| v.as_object()) {
+        for (name, proj) in projects {
+            for key in ["mcpServers", "disabledMcpServers"] {
+                if let Some(v) = proj.get(key) {
+                    (name, key, v.to_string()).hash(&mut h);
+                }
+            }
+        }
+    }
+    Some(h.finish())
+}
+
+/// FSEvents reports real paths, so an event under a symlinked target (e.g.
+/// ~/.claude → ~/dotfiles/claude) is mapped back to the target's own path.
+fn alias_event_path(path: &Path, aliases: &[(PathBuf, PathBuf)]) -> PathBuf {
+    for (real, target) in aliases {
+        if let Ok(rest) = path.strip_prefix(real) {
+            return target.join(rest);
+        }
+    }
+    path.to_path_buf()
+}
+
 pub fn start(app: AppHandle) {
     std::thread::spawn(move || {
         let (tx, rx) = std::sync::mpsc::channel();
@@ -189,6 +221,9 @@ pub fn start(app: AppHandle) {
             armed.arm(debouncer.watcher(), target);
         }
 
+        let claude_json = home.join(".claude.json");
+        let mut last_claude_json_fp = claude_json_mcp_fingerprint(&claude_json);
+
         // Take initial snapshot; derive display names from it (manifest name field).
         let (initial_agents, mut last_skills, mut last_mcps) = take_snapshot(&app);
         let agent_names: HashMap<String, String> = initial_agents
@@ -211,19 +246,43 @@ pub fn start(app: AppHandle) {
                 newly_watched |= armed.arm(debouncer.watcher(), target);
             }
 
+            let aliases: Vec<(PathBuf, PathBuf)> = watch_targets
+                .iter()
+                .filter_map(|t| {
+                    let real = t.canonicalize().ok()?;
+                    (real != *t).then(|| (real, t.clone()))
+                })
+                .collect();
+            let paths: Vec<PathBuf> = events
+                .iter()
+                .map(|e| alias_event_path(&e.path, &aliases))
+                .collect();
+
             // Ancestor watches (e.g. ~ itself) also see unrelated churn like
             // shell history writes — only rescan for events inside a tool dir.
-            let in_target = events
+            let in_target = paths
                 .iter()
-                .any(|e| watch_targets.iter().any(|t| e.path.starts_with(t)));
+                .any(|p| watch_targets.iter().any(|t| p.starts_with(t)));
             if !in_target && !newly_watched {
                 continue;
+            }
+            // Only ~/.claude.json changed: rescan only if its MCP parts did.
+            let only_claude_json = paths
+                .iter()
+                .filter(|p| watch_targets.iter().any(|t| p.starts_with(t)))
+                .all(|p| *p == claude_json);
+            if !newly_watched && only_claude_json {
+                let fp = claude_json_mcp_fingerprint(&claude_json);
+                if fp == last_claude_json_fp {
+                    continue;
+                }
+                last_claude_json_fp = fp;
             }
 
             // Session stores changed? Tell the UI to refresh its session list
             // (FSEvents push replaces most of the old 30s polling).
-            let sessions_touched = events.iter().any(|e| {
-                let p = e.path.to_string_lossy();
+            let sessions_touched = paths.iter().any(|p| {
+                let p = p.to_string_lossy();
                 p.contains("/.claude/projects/")
                     || p.ends_with("/.claude/history.jsonl")
                     || p.contains("/.codex/sessions/")
@@ -284,6 +343,45 @@ mod tests {
         fn kind() -> WatcherKind {
             WatcherKind::NullWatcher
         }
+    }
+
+    #[test]
+    fn alias_event_path_maps_real_paths_back_to_symlinked_targets() {
+        let aliases = vec![(
+            PathBuf::from("/u/dotfiles/claude"),
+            PathBuf::from("/u/.claude"),
+        )];
+        assert_eq!(
+            alias_event_path(Path::new("/u/dotfiles/claude/skills/x/SKILL.md"), &aliases),
+            PathBuf::from("/u/.claude/skills/x/SKILL.md")
+        );
+        assert_eq!(
+            alias_event_path(Path::new("/u/.codex/config.toml"), &aliases),
+            PathBuf::from("/u/.codex/config.toml")
+        );
+    }
+
+    #[test]
+    fn claude_json_fingerprint_ignores_non_mcp_churn() {
+        let dir = tempfile::tempdir().unwrap();
+        let f = dir.path().join(".claude.json");
+        let write = |tips: u32, cmd: &str| {
+            let v = serde_json::json!({
+                "numStartups": tips,
+                "projects": { "/p": { "lastCost": tips, "mcpServers": { "a": { "command": cmd } } } }
+            });
+            std::fs::write(&f, v.to_string()).unwrap();
+        };
+        write(1, "npx");
+        let a = claude_json_mcp_fingerprint(&f);
+        write(2, "npx");
+        assert_eq!(
+            claude_json_mcp_fingerprint(&f),
+            a,
+            "counter churn must not trigger a rescan"
+        );
+        write(3, "uvx");
+        assert_ne!(claude_json_mcp_fingerprint(&f), a, "an MCP change must");
     }
 
     #[test]
