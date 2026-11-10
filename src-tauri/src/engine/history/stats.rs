@@ -649,9 +649,12 @@ fn upsert_session(
     // for this session is almost always a parse failure — an agent upgrade
     // changed its on-disk format and the parser now returns nothing — not
     // the session genuinely emptying out. Keep the good row instead of
-    // overwriting history with zeros; the next warm pass retries. Token
-    // totals alone don't prove the parse worked: OpenCode reads them from
-    // its session table, so they survive a broken message parse.
+    // overwriting history with zeros. The session is re-parsed once its
+    // source changes again (per-file sources keep re-trying, since their
+    // mtime isn't recorded here; whole-DB sources wait for the DB to
+    // change). Token totals alone don't prove the parse worked: OpenCode
+    // reads them from its session table, so they survive a broken message
+    // parse.
     if detail.messages.is_empty()
         && (cached_msg_count(&conn, &entry.session_id) > 0
             || (is_zero_usage(t) && cached_row_has_data(&conn, &entry.session_id)))

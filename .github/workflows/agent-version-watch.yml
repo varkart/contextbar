@@ -28,6 +28,7 @@ jobs:
         run: python3 -I scripts/check-agent-versions.py
 
       - name: Open or update tracking issue
+        id: issue
         if: steps.check.outputs.drift == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
@@ -44,6 +45,13 @@ jobs:
           )
           existing=$(gh issue list --state open --search "\"$title\" in:title" --json number -q '.[0].number')
           if [ -n "$existing" ]; then
+            # Same drift as last time: don't re-comment or re-notify daily.
+            last=$(gh issue view "$existing" --json body,comments -q '(.comments | last | .body) // .body')
+            if [ "$last" = "$body" ]; then
+              echo "Report unchanged since the last update; skipping."
+              echo "changed=false" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
             gh issue comment "$existing" --body "$body"
           else
             gh issue create --title "$title" --label maintenance --body "$body" \
@@ -51,7 +59,7 @@ jobs:
           fi
 
       - name: Push notification
-        if: steps.check.outputs.drift == 'true'
+        if: steps.check.outputs.drift == 'true' && steps.issue.outputs.changed != 'false'
         env:
           NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
         run: |
