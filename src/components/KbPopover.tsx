@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import AutoTextarea from './AutoTextarea'
 import {
-  ago, doneTodos, kbApi, noteTitle, notePreview, notes as notesOf, openKbInWindow, openTodos, useKb,
+  KB_GUIDE_DISMISSED_KEY, KB_POPOVER_TIP_KEY, ago, doneTodos, kbApi, noteTitle, notePreview, notes as notesOf, openKbInWindow, openTodos, useKb,
   type KbItem, type KbKind,
 } from '../kb'
 
@@ -31,7 +31,12 @@ export function KbTile({ items, loading, onClick }: { items: KbItem[]; loading: 
           <CheckIcon />
         </div>
         <div className="flex-1 min-w-0 flex flex-col gap-0.5">
-          <span className="text-[19px] font-bold leading-none tracking-[-0.02em] text-amber-400">Todos &amp; Notes</span>
+          <span className="flex items-center gap-1.5">
+            <span className="text-[19px] font-bold leading-none tracking-[-0.02em] text-amber-400">Todos &amp; Notes</span>
+            {!localStorage.getItem(KB_POPOVER_TIP_KEY) && (
+              <span className="text-[9px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-400">New</span>
+            )}
+          </span>
           <span className="text-[10.5px] text-[var(--c-text-3)] leading-[1.3] truncate">{sub}</span>
         </div>
         <div className="flex flex-col items-end gap-0.5 flex-shrink-0">
@@ -99,6 +104,8 @@ export default function KbPopoverView() {
   const { items, loading, upsert } = useKb()
   const [seg, setSeg] = useState<'todos' | 'notes'>('todos')
   const [text, setText] = useState('')
+  const [tip, setTip] = useState(() => !localStorage.getItem(KB_POPOVER_TIP_KEY))
+  const dismissTip = () => { localStorage.setItem(KB_POPOVER_TIP_KEY, '1'); setTip(false) }
   const open = openTodos(items)
   const done = doneTodos(items)
   const noteList = notesOf(items)
@@ -123,6 +130,23 @@ export default function KbPopoverView() {
   return (
     <div className="flex flex-col h-full">
       <div className="flex-1 overflow-y-auto p-3 flex flex-col gap-1">
+        {tip && (
+          <div role="note" className="mb-2 rounded-lg border border-[var(--c-accent)]/30 bg-[var(--c-accent)]/[0.07] p-2.5 text-[11.5px]">
+            <div className="flex items-start gap-2">
+              <span className="flex-1 text-[var(--c-text-2)] leading-snug">
+                <b className="text-[var(--c-text)] font-semibold">Share notes with all your agents.</b>{' '}
+                Click Share on a note or todo and every agent reads it through the context-bar skill.
+              </span>
+              <button onClick={dismissTip} aria-label="Dismiss tip" className="text-[var(--c-text-3)] hover:text-[var(--c-text)]">✕</button>
+            </div>
+            <button
+              onClick={() => { localStorage.removeItem(KB_GUIDE_DISMISSED_KEY); dismissTip(); openKbInWindow('notes') }}
+              className="mt-1.5 text-[var(--c-accent)] font-medium hover:underline"
+            >
+              Learn how ⤢
+            </button>
+          </div>
+        )}
         <div className="flex rounded-md border border-[var(--c-border)] overflow-hidden self-start mb-2">
           {segBtn('todos', `Todos ${open.length}`)}
           {segBtn('notes', `Notes ${noteList.length}`)}
