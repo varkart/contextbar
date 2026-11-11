@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import AutoTextarea from './AutoTextarea'
 import {
   ago, doneTodos, kbApi, noteTitle, notePreview, notes as notesOf, openKbInWindow, openTodos, useKb,
   type KbItem, type KbKind,
@@ -52,7 +53,7 @@ export function QuickAdd({ onAdded }: { onAdded: (item: KbItem) => void }) {
   const submit = () => {
     const v = text.trim()
     if (!v) return
-    const op = kind === 'todo' ? kbApi.create('todo', v) : kbApi.create('note', '', v)
+    const op = kind === 'todo' ? kbApi.createTodo(v) : kbApi.create('note', '', v)
     op.then(item => { onAdded(item); setText(''); setError(null) }).catch(e => setError(String(e)))
   }
 
@@ -69,21 +70,23 @@ export function QuickAdd({ onAdded }: { onAdded: (item: KbItem) => void }) {
 
   return (
     <div className="border-t border-[var(--c-border)] px-3 py-2 flex-shrink-0">
-      <div className="flex items-center gap-2">
+      <div className="flex items-start gap-2">
         <div className="flex rounded-md border border-[var(--c-border)] overflow-hidden flex-shrink-0">
           {segBtn('todo', 'Todo')}
           {segBtn('note', 'Note')}
         </div>
-        <input
+        <AutoTextarea
           value={text}
           onChange={e => setText(e.target.value)}
+          onSubmit={submit}
+          maxRows={4}
           onKeyDown={e => {
-            if (e.key === 'Enter') submit()
             if (e.key === 'Tab') { e.preventDefault(); setKind(k => (k === 'todo' ? 'note' : 'todo')) }
           }}
+          title="Enter saves · Shift+Enter adds a line · Tab switches Todo/Note"
           placeholder={kind === 'todo' ? 'Add a todo… (Enter)' : 'Jot a note… (Enter)'}
           aria-label={kind === 'todo' ? 'Add a todo' : 'Jot a note'}
-          className="flex-1 min-w-0 bg-transparent text-[12.5px] outline-none placeholder:text-[var(--c-text-3)]"
+          className="flex-1 min-w-0 bg-transparent text-[12.5px] leading-[18px] py-0.5 outline-none placeholder:text-[var(--c-text-3)]"
         />
       </div>
       {error && <p className="text-[11px] text-rose-400 mt-1">{error}</p>}
@@ -103,7 +106,7 @@ export default function KbPopoverView() {
   const add = () => {
     const v = text.trim()
     if (!v) return
-    const op = seg === 'todos' ? kbApi.create('todo', v) : kbApi.create('note', '', v)
+    const op = seg === 'todos' ? kbApi.createTodo(v) : kbApi.create('note', '', v)
     op.then(item => { upsert(item); setText('') }).catch(() => {})
   }
 
@@ -124,13 +127,14 @@ export default function KbPopoverView() {
           {segBtn('todos', `Todos ${open.length}`)}
           {segBtn('notes', `Notes ${noteList.length}`)}
         </div>
-        <input
+        <AutoTextarea
           value={text}
           onChange={e => setText(e.target.value)}
-          onKeyDown={e => { if (e.key === 'Enter') add() }}
+          onSubmit={add}
+          title="Enter saves · Shift+Enter adds a line"
           placeholder={seg === 'todos' ? 'Add a todo… (Enter)' : 'Jot a note… (Enter)'}
           aria-label={seg === 'todos' ? 'Add a todo' : 'Jot a note'}
-          className="mb-1.5 px-2.5 py-1.5 rounded-md border border-[var(--c-border)] bg-[var(--c-surface)] text-[12.5px] outline-none focus:border-[var(--c-accent)]"
+          className="mb-1.5 px-2.5 py-1.5 rounded-md border border-[var(--c-border)] bg-[var(--c-surface)] text-[12.5px] leading-[18px] outline-none focus:border-[var(--c-accent)]"
         />
         {seg === 'todos' ? (
           <>
@@ -142,7 +146,7 @@ export default function KbPopoverView() {
                   aria-label={`Mark done: ${t.title}`}
                   className="w-3.5 h-3.5 shrink-0 rounded border border-[var(--c-text-3)] hover:border-emerald-400 hover:bg-emerald-500/10"
                 />
-                <span className="flex-1 min-w-0 truncate text-[13px]">{t.title}</span>
+                <span className="flex-1 min-w-0 truncate text-[13px]" title={t.body || undefined}>{t.title}</span>
                 {t.shared && <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" title="Shared with agents" />}
                 <span className="text-[10.5px] text-[var(--c-text-3)] tabular-nums shrink-0">{ago(t.created)}</span>
               </div>

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { Agent } from '../types'
+import AutoTextarea from '../components/AutoTextarea'
 import {
   KB_NOTE_KEY, KB_TAB_KEY, ago, agentsWithKbSkill, dayLabel, doneTodos, duration, kbApi, noteTitle, notePreview, notes as notesOf,
   openTodos, timeLabel, useKb, type KbHistoryEvent, type KbItem, type KbKind,
@@ -105,7 +106,7 @@ export default function KbSection({ agents, repoNames, showToast }: {
         {tab === 'todos' && (
           <TodosTab
             open={open} done={done} loading={loading} tagSuggestions={tagSuggestions}
-            onAdd={(title, tags) => kbApi.create('todo', title, '', tags).then(upsert).catch(fail)}
+            onAdd={(text, tags) => kbApi.createTodo(text, tags).then(upsert).catch(fail)}
             onComplete={complete} onRemove={remove} onPatch={patch}
           />
         )}
@@ -259,11 +260,11 @@ function TodosTab({ open, done, loading, tagSuggestions, onAdd, onComplete, onRe
   }
   return (
     <div className="flex-1 overflow-y-auto px-6 py-4">
-      <input
-        autoFocus value={text} onChange={e => setText(e.target.value)}
-        onKeyDown={e => { if (e.key === 'Enter') add() }}
+      <AutoTextarea
+        autoFocus value={text} onChange={e => setText(e.target.value)} onSubmit={add}
         placeholder="Add a todo and press Enter"
-        className="w-full mb-3 px-3 py-2 rounded-lg border border-[var(--c-border)] bg-[var(--c-surface)] text-[14px] outline-none focus:border-[var(--c-accent)]"
+        title="Enter saves · Shift+Enter adds a line (extra lines become details)"
+        className="w-full mb-3 px-3 py-2 rounded-lg border border-[var(--c-border)] bg-[var(--c-surface)] text-[14px] leading-5 outline-none focus:border-[var(--c-accent)]"
       />
       {!loading && open.length === 0 && <p className="text-[13px] text-[var(--c-text-3)] py-3">All done. Nothing open.</p>}
       {open.map(t => (

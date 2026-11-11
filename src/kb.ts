@@ -47,12 +47,22 @@ export function openKbInWindow(tab: 'todos' | 'notes' | 'history', noteId?: stri
   return invoke('open_expanded_window', { section: 'kb' }).catch(() => {})
 }
 
+/** Multi-line todo text: first line is the title, the rest its details. */
+export function splitTodoText(text: string): { title: string; body: string } {
+  const [first, ...rest] = text.trim().split('\n')
+  return { title: first.trim(), body: rest.join('\n').trim() }
+}
+
 export const kbApi = {
   list: () => invoke<KbItem[]>('kb_list'),
   history: (limit?: number) => invoke<KbHistoryEvent[]>('kb_history', { limit }),
   create: (kind: KbKind, title: string, body = '', tags: string[] = []) =>
     invoke<KbItem>('kb_create', { kind, title, body, tags }),
   update: (kind: KbKind, id: string, patch: KbPatch) => invoke<KbItem>('kb_update', { kind, id, patch }),
+  createTodo: (text: string, tags: string[] = []) => {
+    const { title, body } = splitTodoText(text)
+    return invoke<KbItem>('kb_create', { kind: 'todo', title, body, tags })
+  },
   setDone: (id: string, done: boolean) => invoke<KbItem>('kb_set_done', { id, done }),
   remove: (kind: KbKind, id: string) => invoke<void>('kb_delete', { kind, id }),
   undelete: (kind: KbKind, id: string) => invoke<KbItem>('kb_undelete', { kind, id }),

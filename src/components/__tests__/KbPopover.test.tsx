@@ -82,3 +82,29 @@ describe('KbPopoverView notes', () => {
     expect(await screen.findByText('idea')).toBeInTheDocument()
   })
 })
+
+describe('multi-line input', () => {
+  beforeEach(() => { mockInvoke.mockReset(); mockInvoke.mockResolvedValue(item({ id: 'n' })) })
+
+  it('Shift+Enter does not submit; Enter saves first line as title, rest as details', async () => {
+    render(<QuickAdd onAdded={vi.fn()} />)
+    const input = screen.getByLabelText('Add a todo')
+    expect(input.tagName).toBe('TEXTAREA')
+    fireEvent.change(input, { target: { value: 'Fix flaky test\nonly on CI\nsee run 42' } })
+    fireEvent.keyDown(input, { key: 'Enter', shiftKey: true })
+    expect(mockInvoke).not.toHaveBeenCalled()
+    fireEvent.keyDown(input, { key: 'Enter' })
+    await waitFor(() => expect(mockInvoke).toHaveBeenCalledWith('kb_create', {
+      kind: 'todo', title: 'Fix flaky test', body: 'only on CI\nsee run 42', tags: [],
+    }))
+  })
+
+  it('keeps every line of a note in the body', async () => {
+    render(<QuickAdd onAdded={vi.fn()} />)
+    fireEvent.click(screen.getByText('Note'))
+    const input = screen.getByLabelText('Jot a note')
+    fireEvent.change(input, { target: { value: 'line one\nline two' } })
+    fireEvent.keyDown(input, { key: 'Enter' })
+    await waitFor(() => expect(mockInvoke).toHaveBeenCalledWith('kb_create', { kind: 'note', title: '', body: 'line one\nline two', tags: [] }))
+  })
+})
