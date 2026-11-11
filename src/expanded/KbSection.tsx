@@ -1,8 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { invoke } from '@tauri-apps/api/core'
 import type { Agent } from '../types'
 import AutoTextarea from '../components/AutoTextarea'
+import Markdown from '../components/Markdown'
+import AgentDot from '../components/AgentDot'
+import { NOTE_SHORTCUTS, NOTE_SYNTAX, continueList, insertLink, toggleWrap, type Edit } from '../noteEditing'
 import {
-  KB_NOTE_KEY, KB_TAB_KEY, ago, agentsWithKbSkill, dayLabel, doneTodos, duration, kbApi, noteTitle, notePreview, notes as notesOf,
+  KB_GUIDE_DISMISSED_KEY, KB_NOTE_KEY, KB_TAB_KEY, ago, agentsWithKbSkill, dayLabel, doneTodos, duration, kbApi, noteTitle, notePreview, notes as notesOf,
   openTodos, timeLabel, useKb, type KbHistoryEvent, type KbItem, type KbKind,
 } from '../kb'
 
@@ -95,7 +99,7 @@ export default function KbSection({ agents, repoNames, showToast }: {
           Saved as markdown in ~/.context-bar/kb. Share an item to let your agents read it.
         </p>
       </div>
-      <SkillBanner agents={agents} sharedCount={shared} showToast={showToast} />
+      <AgentSharing agents={agents} sharedCount={shared} showToast={showToast} />
       <div className="px-6 flex gap-1 border-b border-[var(--c-border)] flex-shrink-0">
         {tabBtn('todos', 'Todos', open.length)}
         {tabBtn('notes', 'Notes', noteList.length)}
@@ -134,14 +138,28 @@ export default function KbSection({ agents, repoNames, showToast }: {
   )
 }
 
-// ── Agent skill banner ───────────────────────────────────────────────────────
+// ── Agent sharing: teaching card + compact banner ───────────────────────────
 
-function SkillBanner({ agents, sharedCount, showToast }: {
+const GUIDE_KEY = KB_GUIDE_DISMISSED_KEY
+
+/**
+ * First visit: a card explaining how notes reach agents (write → share →
+ * the context-bar skill reads them), with per-agent install status. Once
+ * dismissed it shrinks to a one-line banner; "How sharing works" reopens it.
+ */
+function AgentSharing({ agents, sharedCount, showToast }: {
   agents: Agent[]
   sharedCount: number
   showToast: (type: 'success' | 'error', message: string) => void
 }) {
   const [busy, setBusy] = useState(false)
+  const [guideOpen, setGuideOpen] = useState(() => !localStorage.getItem(GUIDE_KEY))
+  // "Learn how" in the menu bar clears the key to reopen the card here.
+  useEffect(() => {
+    const onStorage = (e: StorageEvent) => { if (e.key === GUIDE_KEY && e.newValue === null) setGuideOpen(true) }
+    window.addEventListener('storage', onStorage)
+    return () => window.removeEventListener('storage', onStorage)
+  }, [])
   const withSkill = agentsWithKbSkill(agents)
   const candidates = agents.filter(a => a.installed && a.supportsSkills)
   const missing = candidates.filter(a => !withSkill.some(w => w.id === a.id))
@@ -154,7 +172,67 @@ function SkillBanner({ agents, sharedCount, showToast }: {
       .finally(() => setBusy(false))
   }
 
-  if (sharedCount === 0 && withSkill.length === 0) return null
+  const installButton = missing.length > 0 && (
+    <button
+      onClick={install}
+      disabled={busy}
+      title={`Adds a context-bar skill to: ${missing.map(a => a.name).join(', ')}`}
+      className="shrink-0 px-2.5 py-1 rounded-md bg-[var(--c-accent)]/15 text-[var(--c-accent)] font-medium hover:bg-[var(--c-accent)]/25 disabled:opacity-50"
+    >
+      {busy ? 'Installing…' : withSkill.length === 0 ? `Install for ${missing.length} agent${missing.length === 1 ? '' : 's'}` : `Add to ${missing.length} more`}
+    </button>
+  )
+
+  if (guideOpen) {
+    const dismiss = () => { localStorage.setItem(GUIDE_KEY, '1'); setGuideOpen(false) }
+    const steps: [string, string][] = [
+      ['Write it once', 'Preferences, conventions, reminders: "Use pnpm, not npm", "Never push to main".'],
+      ['Click Share', 'Items stay private until you do. Tag global, repo:<name> or agent:<id> to scope who uses it.'],
+      ['Agents read it', 'The context-bar skill points every agent to your shared items, so you stop repeating yourself.'],
+    ]
+    return (
+      <section aria-label="How sharing with agents works" className="mx-6 mb-3 rounded-xl border border-[var(--c-accent)]/30 bg-[var(--c-accent)]/[0.06] p-4">
+        <div className="flex items-start gap-3 mb-3">
+          <div className="flex-1">
+            <div className="text-[10.5px] font-mono uppercase tracking-wider text-[var(--c-accent)] mb-0.5">New · context-bar skill</div>
+            <h3 className="text-[15px] font-semibold">One set of notes for all your agents</h3>
+          </div>
+          <button onClick={dismiss} aria-label="Dismiss" className="text-[var(--c-text-3)] hover:text-[var(--c-text)]">✕</button>
+        </div>
+        <ol className="grid grid-cols-3 gap-3 mb-3">
+          {steps.map(([title, body], i) => (
+            <li key={title} className="rounded-lg bg-[var(--c-surface)] border border-[var(--c-border)] p-3">
+              <div className="flex items-center gap-2 mb-1">
+                <span className="w-5 h-5 rounded-full bg-[var(--c-accent)]/20 text-[var(--c-accent)] text-[11px] font-semibold flex items-center justify-center">{i + 1}</span>
+                <span className="text-[13px] font-medium">{title}</span>
+              </div>
+              <p className="text-[12px] text-[var(--c-text-3)] leading-snug">{body}</p>
+            </li>
+          ))}
+        </ol>
+        <div className="flex items-center gap-3 flex-wrap text-[12px]">
+          {candidates.length === 0 ? (
+            <span className="text-[var(--c-text-3)]">No agents with skill support detected yet.</span>
+          ) : (
+            <span className="flex items-center gap-2 flex-wrap flex-1">
+              {candidates.map(a => {
+                const has = withSkill.some(w => w.id === a.id)
+                return (
+                  <span key={a.id} className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full border ${has ? 'border-emerald-500/40 text-emerald-400' : 'border-[var(--c-border)] text-[var(--c-text-3)]'}`}>
+                    <AgentDot toolId={a.id} toolName={a.name} />
+                    {a.name}{has ? ' ✓' : ''}
+                  </span>
+                )
+              })}
+            </span>
+          )}
+          {installButton}
+          <button onClick={dismiss} className="text-[var(--c-text-3)] hover:text-[var(--c-text-2)]">Got it</button>
+        </div>
+      </section>
+    )
+  }
+
   return (
     <div className="mx-6 mb-3 flex items-center gap-3 rounded-lg border border-[var(--c-border)] bg-[var(--c-surface-2)]/40 px-3.5 py-2 text-[12.5px]">
       <span className="flex-1 text-[var(--c-text-2)]">
@@ -163,16 +241,10 @@ function SkillBanner({ agents, sharedCount, showToast }: {
           ? 'Agents need the context-bar skill to read them.'
           : `Readable by ${withSkill.map(a => a.name).join(', ')} via the context-bar skill.`}
       </span>
-      {missing.length > 0 && (
-        <button
-          onClick={install}
-          disabled={busy}
-          title={`Adds a context-bar skill to: ${missing.map(a => a.name).join(', ')}`}
-          className="shrink-0 px-2.5 py-1 rounded-md bg-[var(--c-accent)]/15 text-[var(--c-accent)] font-medium hover:bg-[var(--c-accent)]/25 disabled:opacity-50"
-        >
-          {busy ? 'Installing…' : withSkill.length === 0 ? 'Install skill' : `Add to ${missing.length} more`}
-        </button>
-      )}
+      <button onClick={() => setGuideOpen(true)} className="shrink-0 text-[var(--c-text-3)] hover:text-[var(--c-text-2)] underline-offset-2 hover:underline">
+        How sharing works
+      </button>
+      {installButton}
     </div>
   )
 }
@@ -434,6 +506,44 @@ function NoteEditor({ note, tagSuggestions, onRemove, onPatch }: {
     timer.current = setTimeout(flush, AUTOSAVE_MS)
   }
 
+  const [mode, setMode] = useNoteMode()
+  const textarea = useRef<HTMLTextAreaElement>(null)
+
+  // ⌘⇧P flips between edit and preview while a note is open.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.metaKey && e.shiftKey && e.key.toLowerCase() === 'p') {
+        e.preventDefault()
+        setMode(mode === 'edit' ? 'preview' : 'edit')
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [mode, setMode])
+
+  const apply = (r: Edit) => {
+    edit({ title, body: r.value })
+    requestAnimationFrame(() => textarea.current?.setSelectionRange(r.start, r.end))
+  }
+
+  const onBodyKey = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    const { selectionStart: a, selectionEnd: b } = e.currentTarget
+    if (e.metaKey && !e.shiftKey && !e.altKey && !e.ctrlKey) {
+      const k = e.key.toLowerCase()
+      const r = k === 'b' ? toggleWrap(body, a, b, '**')
+        : k === 'i' ? toggleWrap(body, a, b, '*')
+        : k === 'e' ? toggleWrap(body, a, b, '`', 'code')
+        : k === 'k' ? insertLink(body, a, b)
+        : null
+      if (r) { e.preventDefault(); apply(r) }
+      return
+    }
+    if (e.key === 'Enter' && !e.shiftKey && !e.metaKey && !e.nativeEvent.isComposing && a === b) {
+      const r = continueList(body, a)
+      if (r) { e.preventDefault(); apply(r) }
+    }
+  }
+
   return (
     <div className="flex-1 min-w-0 flex flex-col overflow-hidden px-6 py-4">
       <input
@@ -451,12 +561,98 @@ function NoteEditor({ note, tagSuggestions, onRemove, onPatch }: {
           <button onClick={() => { pending.current = null; onRemove(note) }} className="text-rose-400/80 hover:text-rose-400">Delete</button>
         </span>
       </div>
-      <textarea
-        value={body} onChange={e => edit({ title, body: e.target.value })} onBlur={flush}
-        placeholder="Write something… Markdown is fine; agents read it as-is."
-        className="flex-1 resize-none bg-transparent outline-none text-[14px] leading-relaxed font-mono"
-      />
+      <div className="flex items-center gap-2 mb-2">
+        <div className="flex rounded-md border border-[var(--c-border)] overflow-hidden text-[11.5px]">
+          {(['edit', 'preview'] as const).map(m => (
+            <button
+              key={m}
+              onClick={() => setMode(m)}
+              aria-pressed={mode === m}
+              title="⌘⇧P toggles"
+              className={`px-2.5 py-0.5 capitalize ${mode === m ? 'bg-[var(--c-accent)]/20 text-[var(--c-accent)]' : 'text-[var(--c-text-3)] hover:text-[var(--c-text-2)]'}`}
+            >
+              {m}
+            </button>
+          ))}
+        </div>
+        <FormatHelp />
+      </div>
+      {mode === 'edit' ? (
+        <textarea
+          ref={textarea}
+          autoFocus={!note.body}
+          value={body} onChange={e => edit({ title, body: e.target.value })} onBlur={flush}
+          onKeyDown={onBodyKey}
+          placeholder="Write something… Markdown works: ⌘B bold, ⌘I italic, --- for a line."
+          className="flex-1 resize-none bg-transparent outline-none text-[14px] leading-relaxed font-mono"
+        />
+      ) : (
+        <div
+          className="flex-1 overflow-y-auto"
+          onDoubleClick={() => setMode('edit')}
+          onClick={e => {
+            // Links must open in the browser, never navigate this window.
+            const a = (e.target as HTMLElement).closest('a')
+            if (!a) return
+            e.preventDefault()
+            const href = a.getAttribute('href') ?? ''
+            if (/^https?:\/\//i.test(href)) invoke('open_url', { url: href }).catch(() => {})
+          }}
+          title="Double-click to edit"
+        >
+          {body.trim()
+            ? <div className="kb-note-preview"><Markdown>{body}</Markdown></div>
+            : <p className="text-[13px] text-[var(--c-text-3)]">Empty note.</p>}
+        </div>
+      )}
     </div>
+  )
+}
+
+const NOTE_MODE_KEY = 'contextbar:kb:note-mode'
+
+function useNoteMode() {
+  const [mode, setModeState] = useState<'edit' | 'preview'>(
+    () => (localStorage.getItem(NOTE_MODE_KEY) === 'preview' ? 'preview' : 'edit')
+  )
+  const setMode = useCallback((m: 'edit' | 'preview') => {
+    localStorage.setItem(NOTE_MODE_KEY, m)
+    setModeState(m)
+  }, [])
+  return [mode, setMode] as const
+}
+
+/** Hover/focus card listing the editor's shortcuts and markdown syntax. */
+function FormatHelp() {
+  return (
+    <span className="relative group">
+      <button
+        aria-label="Formatting help"
+        className="w-6 h-6 rounded-md border border-[var(--c-border)] text-[11px] font-semibold text-[var(--c-text-3)] hover:text-[var(--c-text-2)]"
+      >
+        Aa
+      </button>
+      <div
+        role="tooltip"
+        className="invisible opacity-0 group-hover:visible group-hover:opacity-100 group-focus-within:visible group-focus-within:opacity-100 transition-opacity absolute left-0 top-8 z-20 w-72 rounded-lg border border-[var(--c-border)] bg-[var(--c-surface)] shadow-xl p-3 text-[12px]"
+      >
+        <div className="text-[10.5px] font-mono uppercase tracking-wider text-[var(--c-text-3)] mb-1.5">Shortcuts</div>
+        {NOTE_SHORTCUTS.map(([k, v]) => (
+          <div key={k} className="flex justify-between py-0.5">
+            <span className="font-mono text-[var(--c-text-2)]">{v}</span>
+            <kbd className="font-mono text-[var(--c-text-3)]">{k}</kbd>
+          </div>
+        ))}
+        <div className="text-[10.5px] font-mono uppercase tracking-wider text-[var(--c-text-3)] mt-2.5 mb-1.5">Type</div>
+        {NOTE_SYNTAX.map(([k, v]) => (
+          <div key={k} className="flex justify-between gap-3 py-0.5">
+            <span className="font-mono text-[var(--c-text-2)]">{k}</span>
+            <span className="text-[var(--c-text-3)] text-right">{v}</span>
+          </div>
+        ))}
+        <p className="mt-2.5 text-[11px] text-[var(--c-text-3)]">Saved as plain markdown, so agents read it exactly as written.</p>
+      </div>
+    </span>
   )
 }
 

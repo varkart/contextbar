@@ -40,6 +40,10 @@ export const KB_SKILL_NAME = 'context-bar'
  *  opening the window, and the window listens for the storage event. */
 export const KB_TAB_KEY = 'contextbar:kb:tab'
 export const KB_NOTE_KEY = 'contextbar:kb:note'
+/** Window teaching card about sharing; cleared to show it again. */
+export const KB_GUIDE_DISMISSED_KEY = 'contextbar:kb:sharing-guide-dismissed'
+/** Menu bar tip (and the tile's "New" pill). */
+export const KB_POPOVER_TIP_KEY = 'contextbar:kb:popover-tip-dismissed'
 
 export function openKbInWindow(tab: 'todos' | 'notes' | 'history', noteId?: string) {
   localStorage.setItem(KB_TAB_KEY, tab)

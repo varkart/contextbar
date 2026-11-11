@@ -312,3 +312,17 @@ body {
   background-color: rgba(250, 204, 21, 0.85);
   color: #1a1a1a;
 }
+
+/* Notes preview: roomier than the skill viewer, with real list markers */
+.kb-note-preview .skill-md { font-size: 14px; color: var(--c-text); }
+.kb-note-preview .skill-md h1 { font-size: 19px; }
+.kb-note-preview .skill-md h2 { font-size: 16.5px; }
+.kb-note-preview .skill-md h3 { font-size: 14.5px; }
+.kb-note-preview .skill-md ul { list-style: disc; }
+.kb-note-preview .skill-md ol { list-style: decimal; }
+.kb-note-preview .skill-md li:has(> input[type="checkbox"]) { list-style: none; margin-left: -1.2em; }
+.kb-note-preview .skill-md input[type="checkbox"] { margin-right: 6px; vertical-align: -1px; }
+.kb-note-preview .skill-md strong { font-weight: 600; color: var(--c-text); }
+.kb-note-preview .skill-md em { font-style: italic; }
+.kb-note-preview .skill-md code { font-size: 12.5px; }
+.kb-note-preview .skill-md hr { margin: 1em 0; }
