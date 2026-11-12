@@ -74,7 +74,36 @@ describe('KbSection', () => {
     fireEvent.change(input, { target: { value: '  Write tests ' } })
     fireEvent.keyDown(input, { key: 'Enter' })
     await waitFor(() =>
-      expect(mockInvoke).toHaveBeenCalledWith('kb_create', { kind: 'todo', title: 'Write tests', body: '', tags: [] }))
+      expect(mockInvoke).toHaveBeenCalledWith('kb_create', { kind: 'todo', title: 'Write tests', body: '', tags: [], tzOffset: expect.any(Number) }))
+  })
+
+  it('note editor keeps a trailing space after autosave returns trimmed text', async () => {
+    localStorage.setItem('contextbar:kb:tab', 'notes')
+    localStorage.setItem('contextbar:kb:note-mode', 'edit')
+    const note = item({ id: 'n', kind: 'note', title: 'Shop', body: 'Buy' })
+    setup([note])
+    mockInvoke.mockImplementation(async (cmd: string, args?: unknown) => {
+      if (cmd === 'kb_list') return [note]
+      if (cmd === 'kb_history') return []
+      if (cmd === 'kb_update') {
+        const { patch } = args as { patch: { body: string } }
+        return { ...note, body: patch.body.trimEnd() }
+      }
+      return null
+    })
+    fireEvent.click(await screen.findByText('Shop'))
+    const area = await screen.findByDisplayValue('Buy')
+    fireEvent.change(area, { target: { value: 'Buy milk ' } })
+    await waitFor(() => expect(mockInvoke).toHaveBeenCalledWith('kb_update', expect.anything()), { timeout: 2000 })
+    await waitFor(() => expect(screen.getByText('Saved')).toBeInTheDocument())
+    expect((area as HTMLTextAreaElement).value).toBe('Buy milk ')
+  })
+
+  it('Escape in the todo editor is handled there, and editing starts from the current title', async () => {
+    setup([item({ id: 'a', title: 'Old' })])
+    fireEvent.doubleClick(await screen.findByText('Old'))
+    const input = screen.getByDisplayValue('Old')
+    expect(fireEvent.keyDown(input, { key: 'Escape' })).toBe(false)
   })
 
   it('compact banner offers to install the skill for agents missing it', async () => {
@@ -117,6 +146,14 @@ describe('note editing helpers', () => {
     const w = toggleWrap('make this bold', 5, 9, '**')
     expect(w).toEqual({ value: 'make **this** bold', start: 7, end: 11 })
     expect(toggleWrap(w.value, w.start, w.end, '**')).toEqual({ value: 'make this bold', start: 5, end: 9 })
+  })
+
+  it('italic inside bold nests instead of unwrapping', () => {
+    const w = toggleWrap('**word**', 2, 6, '*')
+    expect(w).toEqual({ value: '***word***', start: 3, end: 7 })
+    expect(toggleWrap(w.value, w.start, w.end, '*')).toEqual({ value: '**word**', start: 2, end: 6 })
+    expect(toggleWrap(w.value, w.start, w.end, '**')).toEqual({ value: '*word*', start: 1, end: 5 })
+    expect(toggleWrap('*word*', 1, 5, '**').value).toBe('***word***')
   })
 
   it('inserts a placeholder when nothing is selected', () => {

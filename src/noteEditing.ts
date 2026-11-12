@@ -2,12 +2,32 @@
 
 export interface Edit { value: string; start: number; end: number }
 
+/** Length of the run of `c` ending at `end` (backwards) or starting at `start`. */
+function runBefore(s: string, end: number, c: string): number {
+  let n = 0
+  while (end - n - 1 >= 0 && s[end - n - 1] === c) n++
+  return n
+}
+function runAfter(s: string, start: number, c: string): number {
+  let n = 0
+  while (start + n < s.length && s[start + n] === c) n++
+  return n
+}
+
+/** Is a `marker` (one char repeated) present in a run of `run` marker chars?
+ *  For `*`, odd runs carry italic and runs of 2+ carry bold, so `*` inside
+ *  `**bold**` is not italic. */
+function hasMarker(marker: string, run: number): boolean {
+  if (marker[0] === '*') return marker.length === 1 ? run % 2 === 1 : run >= 2
+  return run >= marker.length
+}
+
 /** Wraps the selection in `marker` (e.g. `**`), or unwraps it if already wrapped. */
 export function toggleWrap(value: string, start: number, end: number, marker: string, placeholder = 'text'): Edit {
   const m = marker.length
-  const before = value.slice(start - m, start)
-  const after = value.slice(end, end + m)
-  if (before === marker && after === marker) {
+  const c = marker[0]
+  const outer = Math.min(runBefore(value, start, c), runAfter(value, end, c))
+  if (hasMarker(marker, outer)) {
     return {
       value: value.slice(0, start - m) + value.slice(start, end) + value.slice(end + m),
       start: start - m,
@@ -15,15 +35,16 @@ export function toggleWrap(value: string, start: number, end: number, marker: st
     }
   }
   const selected = value.slice(start, end)
-  if (selected.length > 2 * m && selected.startsWith(marker) && selected.endsWith(marker)) {
-    const inner = selected.slice(m, -m)
-    return { value: value.slice(0, start) + inner + value.slice(end), start, end: start + inner.length }
+  const inner = Math.min(runAfter(selected, 0, c), runBefore(selected, selected.length, c))
+  if (selected.length > 2 * m && hasMarker(marker, inner)) {
+    const stripped = selected.slice(m, -m)
+    return { value: value.slice(0, start) + stripped + value.slice(end), start, end: start + stripped.length }
   }
-  const inner = selected || placeholder
+  const text = selected || placeholder
   return {
-    value: value.slice(0, start) + marker + inner + marker + value.slice(end),
+    value: value.slice(0, start) + marker + text + marker + value.slice(end),
     start: start + m,
-    end: start + m + inner.length,
+    end: start + m + text.length,
   }
 }
 

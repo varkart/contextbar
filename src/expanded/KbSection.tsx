@@ -292,7 +292,7 @@ function TagEditor({ tags, suggestions, onChange, compact }: {
           <input
             autoFocus list={listId} value={value} onChange={e => setValue(e.target.value)}
             onBlur={commit}
-            onKeyDown={e => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') { setValue(''); setAdding(false) } }}
+            onKeyDown={e => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') { e.preventDefault(); setValue(''); setAdding(false) } }}
             placeholder="global, repo:name, agent:id"
             className="text-[11px] w-40 px-1.5 py-0.5 rounded border border-[var(--c-border)] bg-transparent outline-none focus:border-[var(--c-accent)]"
           />
@@ -392,11 +392,11 @@ function TodoRow({ todo, tagSuggestions, onComplete, onRemove, onPatch }: {
       {editing ? (
         <input
           autoFocus value={draft} onChange={e => setDraft(e.target.value)} onBlur={save}
-          onKeyDown={e => { if (e.key === 'Enter') save(); if (e.key === 'Escape') { setDraft(todo.title); setEditing(false) } }}
+          onKeyDown={e => { if (e.key === 'Enter') save(); if (e.key === 'Escape') { e.preventDefault(); setDraft(todo.title); setEditing(false) } }}
           className="flex-1 min-w-0 text-[14px] bg-transparent outline-none border-b border-[var(--c-accent)]"
         />
       ) : (
-        <span onDoubleClick={() => setEditing(true)} className="flex-1 min-w-0 truncate text-[14px]" title={todo.body || 'Double-click to edit'}>
+        <span onDoubleClick={() => { setDraft(todo.title); setEditing(true) }} className="flex-1 min-w-0 truncate text-[14px]" title={todo.body || 'Double-click to edit'}>
           {todo.title}
         </span>
       )}
@@ -479,10 +479,12 @@ function NoteEditor({ note, tagSuggestions, onRemove, onPatch }: {
   noteRef.current = note
 
   // Pick up outside edits (another window, an editor) while not typing.
+  // The file keeps no trailing whitespace, so ignore differences in it;
+  // otherwise a refresh after autosave would eat the space just typed.
   useEffect(() => {
     if (status !== 'saved') return
-    setTitle(note.title)
-    setBody(note.body)
+    setTitle(t => (t.trim() === note.title ? t : note.title))
+    setBody(b => (b.replace(/^[\r\n]+/, '').trimEnd() === note.body ? b : note.body))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [note.title, note.body])
 
@@ -527,6 +529,7 @@ function NoteEditor({ note, tagSuggestions, onRemove, onPatch }: {
   }
 
   const onBodyKey = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Escape') { e.preventDefault(); e.currentTarget.blur(); return }
     const { selectionStart: a, selectionEnd: b } = e.currentTarget
     if (e.metaKey && !e.shiftKey && !e.altKey && !e.ctrlKey) {
       const k = e.key.toLowerCase()
@@ -548,6 +551,7 @@ function NoteEditor({ note, tagSuggestions, onRemove, onPatch }: {
     <div className="flex-1 min-w-0 flex flex-col overflow-hidden px-6 py-4">
       <input
         value={title} onChange={e => edit({ title: e.target.value, body })} onBlur={flush}
+        onKeyDown={e => { if (e.key === 'Escape' || e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur() } }}
         placeholder="Title"
         className="text-[18px] font-semibold bg-transparent outline-none mb-1"
       />

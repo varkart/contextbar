@@ -297,7 +297,7 @@ export default function ExpandedApp() {
   useEffect(() => {
     const order: Section[] = ['work', 'sessions', 'worktrees', 'kb', 'agents', 'skills', 'mcps']
     const handler = (e: KeyboardEvent) => {
-      if (!e.metaKey || e.shiftKey || e.altKey || e.ctrlKey) return
+      if (e.defaultPrevented || !e.metaKey || e.shiftKey || e.altKey || e.ctrlKey) return
       const n = Number(e.key)
       if (n >= 1 && n <= order.length) {
         e.preventDefault()
@@ -312,7 +312,7 @@ export default function ExpandedApp() {
   const [paletteOpen, setPaletteOpen] = useState(false)
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if (!e.metaKey || e.shiftKey || e.altKey || e.ctrlKey) return
+      if (e.defaultPrevented || !e.metaKey || e.shiftKey || e.altKey || e.ctrlKey) return
       if (e.key.toLowerCase() !== 'k') return
       e.preventDefault()
       setPaletteOpen(o => !o)
@@ -340,7 +340,10 @@ export default function ExpandedApp() {
   useEffect(() => {
     if (isToolsSection(section)) return
     const handler = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape' || paletteOpen) return
+      if (e.key !== 'Escape' || paletteOpen || e.defaultPrevented) return
+      // Escape in a text field cancels or leaves the field, not the section.
+      const t = e.target as HTMLElement | null
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return
       if (section === 'work') {
         getCurrentWebviewWindow().close().catch(() => {})
       } else {
