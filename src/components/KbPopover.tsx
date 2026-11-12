@@ -170,7 +170,10 @@ export default function KbPopoverView() {
                   aria-label={`Mark done: ${t.title}`}
                   className="w-3.5 h-3.5 shrink-0 rounded border border-[var(--c-text-3)] hover:border-emerald-400 hover:bg-emerald-500/10"
                 />
-                <span className="flex-1 min-w-0 truncate text-[13px]" title={t.body || undefined}>{t.title}</span>
+                <span className="flex-1 min-w-0 flex items-center gap-1" title={t.body || undefined}>
+                  <span className="truncate text-[13px]">{t.title}</span>
+                  {t.body.trim() && <span className="shrink-0 text-[11px] text-[var(--c-text-3)]" aria-label="Has details">≡</span>}
+                </span>
                 {t.shared && <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" title="Shared with agents" />}
                 <span className="text-[10.5px] text-[var(--c-text-3)] tabular-nums shrink-0">{ago(t.created)}</span>
               </div>

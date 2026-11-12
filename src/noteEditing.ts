@@ -76,6 +76,32 @@ export function continueList(value: string, pos: number): Edit | null {
   return { value: value.slice(0, pos) + insert + value.slice(pos), start: pos + insert.length, end: pos + insert.length }
 }
 
+/** Markdown key handling shared by note bodies and todo details:
+ *  ⌘B/⌘I/⌘E/⌘K formatting and Enter continuing a list. */
+export function markdownKey(
+  e: { key: string; metaKey: boolean; shiftKey: boolean; altKey: boolean; ctrlKey: boolean; isComposing?: boolean },
+  value: string, start: number, end: number,
+): Edit | null {
+  if (e.metaKey && !e.shiftKey && !e.altKey && !e.ctrlKey) {
+    const k = e.key.toLowerCase()
+    return k === 'b' ? toggleWrap(value, start, end, '**')
+      : k === 'i' ? toggleWrap(value, start, end, '*')
+      : k === 'e' ? toggleWrap(value, start, end, '`', 'code')
+      : k === 'k' ? insertLink(value, start, end)
+      : null
+  }
+  if (e.key === 'Enter' && !e.shiftKey && !e.metaKey && !e.ctrlKey && !e.altKey && !e.isComposing && start === end) {
+    return continueList(value, start)
+  }
+  return null
+}
+
+/** True when the editor's text matches the saved text up to the whitespace
+ *  the file format drops, so a refresh after autosave can be ignored. */
+export function sameSaved(local: string, saved: string): boolean {
+  return local.replace(/^[\r\n]+/, '').trimEnd() === saved
+}
+
 export const NOTE_SHORTCUTS: [string, string][] = [
   ['⌘B', '**bold**'],
   ['⌘I', '*italic*'],

@@ -4,7 +4,7 @@ import type { Agent } from '../types'
 import AutoTextarea from '../components/AutoTextarea'
 import Markdown from '../components/Markdown'
 import AgentDot from '../components/AgentDot'
-import { NOTE_SHORTCUTS, NOTE_SYNTAX, continueList, insertLink, toggleWrap, type Edit } from '../noteEditing'
+import { NOTE_SHORTCUTS, NOTE_SYNTAX, markdownKey, sameSaved, type Edit } from '../noteEditing'
 import {
   KB_GUIDE_DISMISSED_KEY, KB_NOTE_KEY, KB_TAB_KEY, ago, agentsWithKbSkill, dayLabel, doneTodos, duration, kbApi, noteTitle, notePreview, notes as notesOf,
   openTodos, timeLabel, useKb, type KbHistoryEvent, type KbItem, type KbKind,
@@ -375,7 +375,9 @@ function TodoRow({ todo, tagSuggestions, onComplete, onRemove, onPatch }: {
   onPatch: (t: KbItem, p: Parameters<typeof kbApi.update>[2]) => unknown
 }) {
   const [editing, setEditing] = useState(false)
+  const [expanded, setExpanded] = useState(false)
   const [draft, setDraft] = useState(todo.title)
+  const hasDetails = !!todo.body.trim()
   const save = () => {
     setEditing(false)
     const t = draft.trim()
@@ -383,7 +385,8 @@ function TodoRow({ todo, tagSuggestions, onComplete, onRemove, onPatch }: {
     else setDraft(todo.title)
   }
   return (
-    <div className="group flex items-center gap-3 py-2 border-b border-[var(--c-border)]/50">
+    <div className="border-b border-[var(--c-border)]/50">
+    <div className="group flex items-center gap-3 py-2">
       <button
         onClick={() => onComplete(todo, true)}
         aria-label="Mark done"
@@ -396,8 +399,24 @@ function TodoRow({ todo, tagSuggestions, onComplete, onRemove, onPatch }: {
           className="flex-1 min-w-0 text-[14px] bg-transparent outline-none border-b border-[var(--c-accent)]"
         />
       ) : (
-        <span onDoubleClick={() => { setDraft(todo.title); setEditing(true) }} className="flex-1 min-w-0 truncate text-[14px]" title={todo.body || 'Double-click to edit'}>
-          {todo.title}
+        <span className="flex-1 min-w-0 flex items-center gap-1.5">
+          <span
+            onClick={e => { if (e.detail === 1) setExpanded(x => !x) }}
+            onDoubleClick={() => { setDraft(todo.title); setEditing(true) }}
+            className="min-w-0 truncate text-[14px] cursor-default"
+            title="Click for details · double-click to rename"
+          >
+            {todo.title}
+          </span>
+          <button
+            onClick={() => setExpanded(x => !x)}
+            aria-expanded={expanded}
+            aria-label={expanded ? 'Hide details' : hasDetails ? 'Show details' : 'Add details'}
+            title={hasDetails ? 'Has details' : 'Add details'}
+            className={`shrink-0 text-[12px] leading-none px-1 rounded hover:text-[var(--c-text)] ${hasDetails ? 'text-[var(--c-text-3)]' : 'text-[var(--c-text-3)] opacity-0 group-hover:opacity-100 focus:opacity-100'}`}
+          >
+            {hasDetails ? '≡' : '+'}
+          </button>
         </span>
       )}
       {todo.source && <span className="text-[11px] px-1.5 py-0.5 rounded bg-sky-500/10 text-sky-400" title="Added by an agent">{todo.source.replace(/^agent:/, '')}</span>}
@@ -405,6 +424,107 @@ function TodoRow({ todo, tagSuggestions, onComplete, onRemove, onPatch }: {
       <ShareToggle item={todo} onPatch={onPatch} />
       <span className="text-[11.5px] text-[var(--c-text-3)] tabular-nums shrink-0" title={`Created ${new Date(todo.created).toLocaleString()}`}>{ago(todo.created)}</span>
       <button onClick={() => onRemove(todo)} aria-label="Delete" className="text-[12px] text-[var(--c-text-3)] hover:text-rose-400 opacity-0 group-hover:opacity-100 focus:opacity-100">✕</button>
+    </div>
+    {expanded && <TodoDetails todo={todo} onPatch={onPatch} />}
+    </div>
+  )
+}
+
+/** Markdown details under a todo: rendered, double-click (or Add details)
+ *  to edit with the note shortcuts; autosaves like notes. */
+function TodoDetails({ todo, onPatch }: {
+  todo: KbItem
+  onPatch: (t: KbItem, p: Parameters<typeof kbApi.update>[2]) => unknown
+}) {
+  const [editing, setEditing] = useState(false)
+  const [body, setBody] = useState(todo.body)
+  const [dirty, setDirty] = useState(false)
+  const pending = useRef<string | null>(null)
+  const timer = useRef<ReturnType<typeof setTimeout>>(undefined)
+  const area = useRef<HTMLTextAreaElement>(null)
+  const todoRef = useRef(todo)
+  todoRef.current = todo
+
+  useEffect(() => {
+    if (dirty) return
+    setBody(b => (sameSaved(b, todo.body) ? b : todo.body))
+  }, [todo.body, dirty])
+
+  const flush = useCallback(() => {
+    clearTimeout(timer.current)
+    const p = pending.current
+    if (p === null) return
+    pending.current = null
+    Promise.resolve(onPatch(todoRef.current, { body: p })).finally(() => setDirty(false))
+  }, [onPatch])
+
+  useEffect(() => () => flush(), [flush])
+
+  const change = (v: string) => {
+    setBody(v)
+    pending.current = v
+    setDirty(true)
+    clearTimeout(timer.current)
+    timer.current = setTimeout(flush, AUTOSAVE_MS)
+  }
+
+  const onKey = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Escape') { e.preventDefault(); e.currentTarget.blur(); return }
+    const { selectionStart: a, selectionEnd: b } = e.currentTarget
+    const r = markdownKey({ ...e, isComposing: e.nativeEvent.isComposing }, body, a, b)
+    if (!r) return
+    e.preventDefault()
+    change(r.value)
+    requestAnimationFrame(() => area.current?.setSelectionRange(r.start, r.end))
+  }
+
+  if (editing) {
+    return (
+      <div className="pl-7 pb-3">
+        <textarea
+          ref={area} autoFocus value={body}
+          onChange={e => change(e.target.value)}
+          onKeyDown={onKey}
+          onBlur={() => { flush(); setEditing(false) }}
+          rows={Math.min(14, Math.max(4, body.split('\n').length + 1))}
+          placeholder="Details in markdown: ⌘B bold, ⌘I italic, - [ ] checklist, --- line"
+          aria-label="Todo details"
+          className="w-full resize-y px-3 py-2 rounded-lg border border-[var(--c-accent)]/60 bg-[var(--c-surface)] text-[13px] leading-relaxed font-mono outline-none"
+        />
+        <div className="flex items-center gap-2 mt-1 text-[11px] text-[var(--c-text-3)]">
+          <span>{dirty ? 'Saving…' : 'Saved'} · Esc to finish</span>
+          <span className="ml-auto"><FormatHelp align="right" /></span>
+        </div>
+      </div>
+    )
+  }
+  return (
+    <div className="pl-7 pb-3">
+      {body.trim() ? (
+        <div
+          onDoubleClick={() => setEditing(true)}
+          onClick={e => {
+            const a = (e.target as HTMLElement).closest('a')
+            if (!a) return
+            e.preventDefault()
+            const href = a.getAttribute('href') ?? ''
+            if (/^https?:\/\//i.test(href)) invoke('open_url', { url: href }).catch(() => {})
+          }}
+          title="Double-click to edit"
+          className="kb-note-preview rounded-lg px-3 py-2 bg-[var(--c-surface)] border border-[var(--c-border-sub)]"
+        >
+          <Markdown>{body}</Markdown>
+        </div>
+      ) : (
+        <button onClick={() => setEditing(true)} className="text-[12.5px] text-[var(--c-accent)] hover:underline">
+          + Add details
+        </button>
+      )}
+      {body.trim() && (
+        <button onClick={() => setEditing(true)} className="mt-1 text-[11.5px] text-[var(--c-text-3)] hover:text-[var(--c-text-2)]">
+          Edit details
+        </button>
+      )}
     </div>
   )
 }
@@ -484,7 +604,7 @@ function NoteEditor({ note, tagSuggestions, onRemove, onPatch }: {
   useEffect(() => {
     if (status !== 'saved') return
     setTitle(t => (t.trim() === note.title ? t : note.title))
-    setBody(b => (b.replace(/^[\r\n]+/, '').trimEnd() === note.body ? b : note.body))
+    setBody(b => (sameSaved(b, note.body) ? b : note.body))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [note.title, note.body])
 
@@ -531,20 +651,8 @@ function NoteEditor({ note, tagSuggestions, onRemove, onPatch }: {
   const onBodyKey = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Escape') { e.preventDefault(); e.currentTarget.blur(); return }
     const { selectionStart: a, selectionEnd: b } = e.currentTarget
-    if (e.metaKey && !e.shiftKey && !e.altKey && !e.ctrlKey) {
-      const k = e.key.toLowerCase()
-      const r = k === 'b' ? toggleWrap(body, a, b, '**')
-        : k === 'i' ? toggleWrap(body, a, b, '*')
-        : k === 'e' ? toggleWrap(body, a, b, '`', 'code')
-        : k === 'k' ? insertLink(body, a, b)
-        : null
-      if (r) { e.preventDefault(); apply(r) }
-      return
-    }
-    if (e.key === 'Enter' && !e.shiftKey && !e.metaKey && !e.nativeEvent.isComposing && a === b) {
-      const r = continueList(body, a)
-      if (r) { e.preventDefault(); apply(r) }
-    }
+    const r = markdownKey({ ...e, isComposing: e.nativeEvent.isComposing }, body, a, b)
+    if (r) { e.preventDefault(); apply(r) }
   }
 
   return (
@@ -627,10 +735,13 @@ function useNoteMode() {
 }
 
 /** Hover/focus card listing the editor's shortcuts and markdown syntax. */
-function FormatHelp() {
+function FormatHelp({ align = 'left' }: { align?: 'left' | 'right' }) {
   return (
     <span className="relative group">
       <button
+        type="button"
+        // Keep focus in the editor so hovering/clicking doesn't end editing.
+        onMouseDown={e => e.preventDefault()}
         aria-label="Formatting help"
         className="w-6 h-6 rounded-md border border-[var(--c-border)] text-[11px] font-semibold text-[var(--c-text-3)] hover:text-[var(--c-text-2)]"
       >
@@ -638,7 +749,7 @@ function FormatHelp() {
       </button>
       <div
         role="tooltip"
-        className="invisible opacity-0 group-hover:visible group-hover:opacity-100 group-focus-within:visible group-focus-within:opacity-100 transition-opacity absolute left-0 top-8 z-20 w-72 rounded-lg border border-[var(--c-border)] bg-[var(--c-surface)] shadow-xl p-3 text-[12px]"
+        className={`invisible opacity-0 group-hover:visible group-hover:opacity-100 group-focus-within:visible group-focus-within:opacity-100 transition-opacity absolute ${align === 'right' ? 'right-0' : 'left-0'} top-8 z-20 w-72 rounded-lg border border-[var(--c-border)] bg-[var(--c-surface)] shadow-xl p-3 text-[12px]`}
       >
         <div className="text-[10.5px] font-mono uppercase tracking-wider text-[var(--c-text-3)] mb-1.5">Shortcuts</div>
         {NOTE_SHORTCUTS.map(([k, v]) => (

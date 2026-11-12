@@ -318,6 +318,11 @@ body {
 .kb-note-preview .skill-md h1 { font-size: 19px; }
 .kb-note-preview .skill-md h2 { font-size: 16.5px; }
 .kb-note-preview .skill-md h3 { font-size: 14.5px; }
+.kb-note-preview .skill-md h4,
+.kb-note-preview .skill-md h5,
+.kb-note-preview .skill-md h6 { font-size: 13.5px; font-weight: 600; color: var(--c-text); margin: 0.8em 0 0.3em; }
+.kb-note-preview .skill-md h6 { color: var(--c-text-2); }
+.kb-note-preview .skill-md del { text-decoration: line-through; opacity: .7; }
 .kb-note-preview .skill-md ul { list-style: disc; }
 .kb-note-preview .skill-md ol { list-style: decimal; }
 .kb-note-preview .skill-md li:has(> input[type="checkbox"]) { list-style: none; margin-left: -1.2em; }

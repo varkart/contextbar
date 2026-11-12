@@ -7,7 +7,7 @@ vi.mock('@tauri-apps/api/event', () => ({ listen: vi.fn(() => Promise.resolve(()
 import { invoke } from '@tauri-apps/api/core'
 import KbSection from '../KbSection'
 import { noteTitle, notePreview, duration, splitTodoText, type KbItem } from '../../kb'
-import { toggleWrap, insertLink, continueList } from '../../noteEditing'
+import { toggleWrap, insertLink, continueList, markdownKey, sameSaved } from '../../noteEditing'
 import type { Agent } from '../../types'
 
 const mockInvoke = vi.mocked(invoke)
@@ -106,6 +106,34 @@ describe('KbSection', () => {
     expect(fireEvent.keyDown(input, { key: 'Escape' })).toBe(false)
   })
 
+  it('todo details render markdown and save edits made with shortcuts', async () => {
+    const todo = item({ id: 'a', title: 'Deploy', body: '- [ ] run **migrations**' })
+    setup([todo])
+    mockInvoke.mockImplementation(async (cmd: string, args?: unknown) => {
+      if (cmd === 'kb_list') return [todo]
+      if (cmd === 'kb_history') return []
+      if (cmd === 'kb_update') return { ...todo, ...(args as { patch: object }).patch }
+      return null
+    })
+    fireEvent.click(await screen.findByLabelText('Show details'))
+    expect(screen.getByText('migrations').tagName).toBe('STRONG')
+    fireEvent.click(screen.getByText('Edit details'))
+    const area = screen.getByLabelText('Todo details') as HTMLTextAreaElement
+    area.setSelectionRange(0, area.value.length)
+    fireEvent.keyDown(area, { key: 'i', metaKey: true })
+    await waitFor(() =>
+      expect(mockInvoke).toHaveBeenCalledWith('kb_update', { kind: 'todo', id: 'a', patch: { body: '*- [ ] run **migrations***' } }),
+    { timeout: 2000 })
+  })
+
+  it('todos without details offer to add them', async () => {
+    setup([item({ id: 'a', title: 'Plain' })])
+    fireEvent.click(await screen.findByText('Plain'), { detail: 1 })
+    expect(screen.getByText('+ Add details')).toBeInTheDocument()
+    fireEvent.click(screen.getByText('+ Add details'))
+    expect(screen.getByLabelText('Todo details')).toHaveFocus()
+  })
+
   it('compact banner offers to install the skill for agents missing it', async () => {
     localStorage.setItem('contextbar:kb:sharing-guide-dismissed', '1')
     setup([item({ id: 'a', title: 'Shared', shared: true })], [agent('claude', ['context-bar']), agent('codex')])
@@ -172,6 +200,15 @@ describe('note editing helpers', () => {
     expect(continueList('- [x] done', 10)?.value).toBe('- [x] done\n- [ ] ')
     expect(continueList('- a\n- ', 6)).toEqual({ value: '- a\n', start: 4, end: 4 })
     expect(continueList('plain', 5)).toBeNull()
+  })
+
+  it('maps keys to markdown edits', () => {
+    const k = (key: string, meta = true) => ({ key, metaKey: meta, shiftKey: false, altKey: false, ctrlKey: false })
+    expect(markdownKey(k('b'), 'hi', 0, 2)?.value).toBe('**hi**')
+    expect(markdownKey(k('Enter', false), '- a', 3, 3)?.value).toBe('- a\n- ')
+    expect(markdownKey(k('x'), 'hi', 0, 2)).toBeNull()
+    expect(sameSaved('milk \n', 'milk')).toBe(true)
+    expect(sameSaved('milk', 'milk!')).toBe(false)
   })
 
   it('splits multi-line todo text', () => {
