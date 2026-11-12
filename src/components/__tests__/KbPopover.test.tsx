@@ -24,7 +24,7 @@ describe('QuickAdd', () => {
     const input = screen.getByLabelText('Add a todo')
     fireEvent.change(input, { target: { value: 'Call back' } })
     fireEvent.keyDown(input, { key: 'Enter' })
-    await waitFor(() => expect(mockInvoke).toHaveBeenCalledWith('kb_create', { kind: 'todo', title: 'Call back', body: '', tags: [] }))
+    await waitFor(() => expect(mockInvoke).toHaveBeenCalledWith('kb_create', { kind: 'todo', title: 'Call back', body: '', tags: [], tzOffset: expect.any(Number) }))
     expect(onAdded).toHaveBeenCalled()
   })
 
@@ -34,7 +34,7 @@ describe('QuickAdd', () => {
     const input = screen.getByLabelText('Jot a note')
     fireEvent.change(input, { target: { value: 'idea' } })
     fireEvent.keyDown(input, { key: 'Enter' })
-    await waitFor(() => expect(mockInvoke).toHaveBeenCalledWith('kb_create', { kind: 'note', title: '', body: 'idea', tags: [] }))
+    await waitFor(() => expect(mockInvoke).toHaveBeenCalledWith('kb_create', { kind: 'note', title: '', body: 'idea', tags: [], tzOffset: expect.any(Number) }))
   })
 })
 
@@ -78,7 +78,7 @@ describe('KbPopoverView notes', () => {
     const input = screen.getByLabelText('Jot a note')
     fireEvent.change(input, { target: { value: 'idea' } })
     fireEvent.keyDown(input, { key: 'Enter' })
-    await waitFor(() => expect(mockInvoke).toHaveBeenCalledWith('kb_create', { kind: 'note', title: '', body: 'idea', tags: [] }))
+    await waitFor(() => expect(mockInvoke).toHaveBeenCalledWith('kb_create', { kind: 'note', title: '', body: 'idea', tags: [], tzOffset: expect.any(Number) }))
     expect(await screen.findByText('idea')).toBeInTheDocument()
   })
 })
@@ -95,7 +95,7 @@ describe('multi-line input', () => {
     expect(mockInvoke).not.toHaveBeenCalled()
     fireEvent.keyDown(input, { key: 'Enter' })
     await waitFor(() => expect(mockInvoke).toHaveBeenCalledWith('kb_create', {
-      kind: 'todo', title: 'Fix flaky test', body: 'only on CI\nsee run 42', tags: [],
+      kind: 'todo', title: 'Fix flaky test', body: 'only on CI\nsee run 42', tags: [], tzOffset: expect.any(Number),
     }))
   })
 
@@ -105,6 +105,6 @@ describe('multi-line input', () => {
     const input = screen.getByLabelText('Jot a note')
     fireEvent.change(input, { target: { value: 'line one\nline two' } })
     fireEvent.keyDown(input, { key: 'Enter' })
-    await waitFor(() => expect(mockInvoke).toHaveBeenCalledWith('kb_create', { kind: 'note', title: '', body: 'line one\nline two', tags: [] }))
+    await waitFor(() => expect(mockInvoke).toHaveBeenCalledWith('kb_create', { kind: 'note', title: '', body: 'line one\nline two', tags: [], tzOffset: expect.any(Number) }))
   })
 })

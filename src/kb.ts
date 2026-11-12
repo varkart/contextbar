@@ -57,15 +57,18 @@ export function splitTodoText(text: string): { title: string; body: string } {
   return { title: first.trim(), body: rest.join('\n').trim() }
 }
 
+/** Minutes east of UTC, so new ids carry the local date. */
+const tzOffset = () => -new Date().getTimezoneOffset()
+
 export const kbApi = {
   list: () => invoke<KbItem[]>('kb_list'),
   history: (limit?: number) => invoke<KbHistoryEvent[]>('kb_history', { limit }),
   create: (kind: KbKind, title: string, body = '', tags: string[] = []) =>
-    invoke<KbItem>('kb_create', { kind, title, body, tags }),
+    invoke<KbItem>('kb_create', { kind, title, body, tags, tzOffset: tzOffset() }),
   update: (kind: KbKind, id: string, patch: KbPatch) => invoke<KbItem>('kb_update', { kind, id, patch }),
   createTodo: (text: string, tags: string[] = []) => {
     const { title, body } = splitTodoText(text)
-    return invoke<KbItem>('kb_create', { kind: 'todo', title, body, tags })
+    return invoke<KbItem>('kb_create', { kind: 'todo', title, body, tags, tzOffset: tzOffset() })
   },
   setDone: (id: string, done: boolean) => invoke<KbItem>('kb_set_done', { id, done }),
   remove: (kind: KbKind, id: string) => invoke<void>('kb_delete', { kind, id }),

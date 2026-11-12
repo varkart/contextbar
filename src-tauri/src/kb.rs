@@ -188,6 +188,42 @@ fn split_front(text: &str) -> (Option<&str>, &str) {
     (None, t)
 }
 
+/// Fallback for hand- or agent-written headers that aren't valid YAML,
+/// e.g. `title: Fix: crash`. Reads simple `key: value` lines.
+fn lenient_front(fm: &str) -> Front {
+    let mut f = Front::default();
+    for line in fm.lines() {
+        let Some((k, v)) = line.split_once(':') else {
+            continue;
+        };
+        let v = v.trim();
+        let unquoted = v
+            .strip_prefix('"')
+            .and_then(|x| x.strip_suffix('"'))
+            .or_else(|| v.strip_prefix('\'').and_then(|x| x.strip_suffix('\'')))
+            .unwrap_or(v)
+            .to_string();
+        match k.trim() {
+            "title" => f.title = unquoted,
+            "source" if !unquoted.is_empty() => f.source = Some(unquoted),
+            "shared" => f.shared = unquoted == "true",
+            "created" if !unquoted.is_empty() => f.created = Some(unquoted),
+            "updated" if !unquoted.is_empty() => f.updated = Some(unquoted),
+            "done" if !unquoted.is_empty() => f.done = Some(unquoted),
+            "tags" => {
+                f.tags = unquoted
+                    .trim_matches(['[', ']'])
+                    .split(',')
+                    .map(|t| t.trim().trim_matches(['"', '\'']).to_string())
+                    .filter(|t| !t.is_empty())
+                    .collect()
+            }
+            _ => {}
+        }
+    }
+    f
+}
+
 fn file_mtime_ms(path: &Path) -> i64 {
     std::fs::metadata(path)
         .and_then(|m| m.modified())
@@ -203,7 +239,7 @@ fn parse_item(path: &Path, kind: Kind, text: &str) -> Option<KbItem> {
     // Files written by hand or by an agent may have no (or broken)
     // frontmatter — keep them, using the first line as the title.
     let front: Front = fm
-        .and_then(|f| serde_yaml::from_str(f).ok())
+        .map(|f| serde_yaml::from_str(f).unwrap_or_else(|_| lenient_front(f)))
         .unwrap_or_default();
     let body = body.trim_start_matches(['\n', '\r']).trim_end().to_string();
     let (title, body) = if front.title.trim().is_empty() {
@@ -330,7 +366,12 @@ fn new_id(root: &Path, kind: Kind, title: &str, ms: i64) -> String {
     };
     let mut id = base.clone();
     let mut n = 2;
-    while root.join(kind.dir()).join(format!("{id}.md")).exists() {
+    let taken = |id: &str| {
+        let f = format!("{id}.md");
+        root.join(kind.dir()).join(&f).exists()
+            || root.join(".trash").join(kind.dir()).join(&f).exists()
+    };
+    while taken(&id) {
         id = format!("{base}-{n}");
         n += 1;
     }
@@ -368,6 +409,7 @@ fn display_title(item: &KbItem) -> String {
     item.body
         .lines()
         .map(str::trim)
+        .map(|l| l.trim_start_matches('#').trim())
         .find(|l| !l.is_empty())
         .unwrap_or("Untitled note")
         .chars()
@@ -436,6 +478,7 @@ fn save(root: &Path, item: &KbItem) -> Result<(), String> {
     write_atomic(&item_path(root, item.kind, &item.id)?, &render_item(item))
 }
 
+#[cfg(test)]
 pub fn create(
     root: &Path,
     kind: Kind,
@@ -443,17 +486,35 @@ pub fn create(
     body: &str,
     tags: Vec<String>,
 ) -> Result<KbItem, String> {
+    create_at(root, kind, title, body, tags, 0)
+}
+
+/// `tz_offset_min` (minutes east of UTC) dates the id by the user's local day.
+pub fn create_at(
+    root: &Path,
+    kind: Kind,
+    title: &str,
+    body: &str,
+    tags: Vec<String>,
+    tz_offset_min: i64,
+) -> Result<KbItem, String> {
     let title = title.trim();
     if title.is_empty() && body.trim().is_empty() && kind == Kind::Todo {
         return Err("todo text is empty".into());
     }
     let now = now_ms();
-    let id = new_id(root, kind, if title.is_empty() { body } else { title }, now);
+    let tz = tz_offset_min.clamp(-14 * 60, 14 * 60) * 60_000;
+    let id = new_id(
+        root,
+        kind,
+        if title.is_empty() { body } else { title },
+        now + tz,
+    );
     let mut item = KbItem {
         id,
         kind,
         title: title.to_string(),
-        body: body.to_string(),
+        body: body.trim_end().to_string(),
         tags: clean_tags(tags),
         shared: false,
         created: now,
@@ -484,17 +545,17 @@ fn clean_tags(tags: Vec<String>) -> Vec<String> {
 
 pub fn update(root: &Path, kind: Kind, id: &str, patch: Patch) -> Result<KbItem, String> {
     let mut item = get(root, kind, id)?;
-    let content_changed = patch.title.as_ref().is_some_and(|t| *t != item.title)
+    let content_changed = patch.title.as_ref().is_some_and(|t| t.trim() != item.title)
         || patch
             .body
             .as_ref()
             .is_some_and(|b| b.trim_end() != item.body);
     let share_changed = patch.shared.is_some_and(|s| s != item.shared);
     if let Some(t) = patch.title {
-        item.title = t;
+        item.title = t.trim().to_string();
     }
     if let Some(b) = patch.body {
-        item.body = b;
+        item.body = b.trim_start_matches(['\n', '\r']).trim_end().to_string();
     }
     if let Some(tags) = patch.tags {
         item.tags = clean_tags(tags);
@@ -657,7 +718,7 @@ user, create a new file `{root}/todos/<yyyymmdd>-<short-slug>.md`:
 
 ```markdown
 ---
-title: <one line>
+title: "<one line, in double quotes>"
 source: agent:<your id>
 ---
 
@@ -675,6 +736,66 @@ mod tests {
 
     fn tmp() -> tempfile::TempDir {
         tempfile::tempdir().unwrap()
+    }
+
+    #[test]
+    fn update_returns_what_a_reread_gives() {
+        let d = tmp();
+        let n = create(d.path(), Kind::Note, "", "x", vec![]).unwrap();
+        let p = Patch {
+            title: Some(" T ".into()),
+            body: Some("milk \n\n".into()),
+            ..Default::default()
+        };
+        let u = update(d.path(), Kind::Note, &n.id, p).unwrap();
+        let again = get(d.path(), Kind::Note, &n.id).unwrap();
+        assert_eq!((u.title.as_str(), u.body.as_str()), ("T", "milk"));
+        assert_eq!((again.title, again.body), (u.title, u.body));
+    }
+
+    #[test]
+    fn invalid_yaml_header_keeps_title_and_source() {
+        let d = tmp();
+        let dir = d.path().join("todos");
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(
+            dir.join("20260101-fix.md"),
+            "---\ntitle: Fix: crash on [start]\nsource: agent:codex\n---\n\ndetails\n",
+        )
+        .unwrap();
+        let t = get(d.path(), Kind::Todo, "20260101-fix").unwrap();
+        assert_eq!(t.title, "Fix: crash on [start]");
+        assert_eq!(t.source.as_deref(), Some("agent:codex"));
+        assert_eq!(t.body, "details");
+    }
+
+    #[test]
+    fn display_title_drops_heading_marks() {
+        let d = tmp();
+        let n = create(d.path(), Kind::Note, "", "## Setup\nuse pnpm", vec![]).unwrap();
+        assert_eq!(display_title(&n), "Setup");
+    }
+
+    #[test]
+    fn new_ids_skip_names_in_trash() {
+        let d = tmp();
+        let a = create(d.path(), Kind::Todo, "Same", "", vec![]).unwrap();
+        delete(d.path(), Kind::Todo, &a.id).unwrap();
+        let b = create(d.path(), Kind::Todo, "Same", "", vec![]).unwrap();
+        assert_ne!(a.id, b.id);
+    }
+
+    #[test]
+    fn ids_use_the_local_day() {
+        let d = tmp();
+        let local = now_ms() + 14 * 3_600_000;
+        let (y, m, dd) = civil_from_days(local.div_euclid(86_400_000));
+        let t = create_at(d.path(), Kind::Todo, "Late", "", vec![], 14 * 60).unwrap();
+        assert!(
+            t.id.starts_with(&format!("{y:04}{m:02}{dd:02}-")),
+            "{}",
+            t.id
+        );
     }
 
     #[test]
@@ -930,13 +1051,15 @@ pub mod commands {
         title: String,
         body: Option<String>,
         tags: Option<Vec<String>>,
+        tz_offset: Option<i64>,
     ) -> Result<KbItem, String> {
-        let item = create(
+        let item = create_at(
             &kb_root()?,
             kind,
             &title,
             body.as_deref().unwrap_or(""),
             tags.unwrap_or_default(),
+            tz_offset.unwrap_or(0),
         )?;
         changed(&app);
         Ok(item)
