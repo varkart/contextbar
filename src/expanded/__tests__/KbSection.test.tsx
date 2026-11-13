@@ -170,6 +170,14 @@ describe('kb helpers', () => {
     expect(noteTitle(item({ kind: 'note' }))).toBe('Untitled note')
   })
 
+  it('previews skip rules and fences and turn block markers into symbols', () => {
+    const n = item({ kind: 'note', body: '## **Big** plan\n---\n```\n- [ ] ship *it*' })
+    expect(noteTitle(n)).toBe('Big plan')
+    expect(notePreview(n)).toBe('☐ ship *it*')
+    expect(notePreview(item({ kind: 'note', title: 'T', body: '1. first' }))).toBe('1\\. first')
+    expect(notePreview(item({ kind: 'note', title: 'T', body: '> quoted [link](http://x)' }))).toBe('quoted [link](http://x)')
+  })
+
   it('formats durations', () => {
     expect(duration(30_000)).toBe('1m')
     expect(duration(3 * 3_600_000)).toBe('3h')

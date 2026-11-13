@@ -129,16 +129,44 @@ export function notes(items: KbItem[]): KbItem[] {
   return items.filter(i => i.kind === 'note').sort((a, b) => b.updated - a.updated)
 }
 
-export function noteTitle(n: KbItem): string {
-  if (n.title.trim()) return n.title.trim()
-  const first = n.body.split('\n').map(l => l.trim()).find(Boolean)
-  return first ? first.replace(/^#+\s*/, '').slice(0, 80) : 'Untitled note'
+/** Body lines worth showing in a one-line preview: no blanks, rules or code fences. */
+function contentLines(body: string): string[] {
+  return body.split('\n').map(l => l.trim())
+    .filter(l => l && !/^([-*_])(\s*\1){2,}$/.test(l) && !/^(```|~~~)/.test(l))
 }
 
+/** One markdown line as inline markdown: block markers become symbols
+ *  (heading/quote dropped, bullets •, checklists ☐/☑, numbers escaped). */
+export function inlineLine(line: string): string {
+  return line
+    .replace(/^#{1,6}\s+/, '')
+    .replace(/^>\s?/, '')
+    .replace(/^[-*+]\s+\[[xX]\]\s+/, '☑ ')
+    .replace(/^[-*+]\s+\[ \]\s+/, '☐ ')
+    .replace(/^[-*+]\s+/, '• ')
+    .replace(/^(\d+)\.\s+/, '$1\\. ')
+}
+
+/** Inline markdown reduced to plain text (for titles and toasts). */
+export function plainInline(s: string): string {
+  return s
+    .replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1')
+    .replace(/(\*\*|__|~~|`)(.+?)\1/g, '$2')
+    .replace(/(\*|_)(.+?)\1/g, '$2')
+    .replace(/\\([\\`*_{}[\]()#+\-.!~>|])/g, '$1')
+}
+
+export function noteTitle(n: KbItem): string {
+  if (n.title.trim()) return n.title.trim()
+  const first = contentLines(n.body)[0]
+  return first ? plainInline(inlineLine(first)).slice(0, 80) : 'Untitled note'
+}
+
+/** Second content line (first when titled), as inline markdown to render. */
 export function notePreview(n: KbItem): string {
-  const lines = n.body.split('\n').map(l => l.trim()).filter(Boolean)
+  const lines = contentLines(n.body)
   const rest = n.title.trim() ? lines : lines.slice(1)
-  return rest[0] ?? 'Empty'
+  return rest[0] ? inlineLine(rest[0]) : 'Empty'
 }
 
 /** Agents that have the context-bar skill installed. */

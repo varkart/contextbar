@@ -3,6 +3,7 @@ import { invoke } from '@tauri-apps/api/core'
 import type { Agent } from '../types'
 import AutoTextarea from '../components/AutoTextarea'
 import Markdown from '../components/Markdown'
+import InlineMarkdown from '../components/InlineMarkdown'
 import AgentDot from '../components/AgentDot'
 import { NOTE_SHORTCUTS, NOTE_SYNTAX, markdownKey, sameSaved, type Edit } from '../noteEditing'
 import {
@@ -587,7 +588,7 @@ function NotesTab({ notes, tagSuggestions, onCreate, onRemove, onPatch }: {
                 <span className="flex-1 truncate text-[13.5px] font-medium">{noteTitle(n)}</span>
                 {n.shared && <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" title="Shared with agents" />}
               </div>
-              <div className="truncate text-[12px] text-[var(--c-text-3)]">{ago(n.updated)} · {notePreview(n)}</div>
+              <div className="truncate text-[12px] text-[var(--c-text-3)]">{ago(n.updated)} · <InlineMarkdown>{notePreview(n)}</InlineMarkdown></div>
             </button>
           ))}
         </div>

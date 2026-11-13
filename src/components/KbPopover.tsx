@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import AutoTextarea from './AutoTextarea'
+import InlineMarkdown from './InlineMarkdown'
 import {
   KB_GUIDE_DISMISSED_KEY, KB_POPOVER_TIP_KEY, ago, doneTodos, kbApi, noteTitle, notePreview, notes as notesOf, openKbInWindow, openTodos, useKb,
   type KbItem, type KbKind,
@@ -199,7 +200,7 @@ export default function KbPopoverView() {
                 className="text-left py-1.5 border-b border-[var(--c-border)]/50 hover:bg-[var(--c-surface-2)] rounded px-1"
               >
                 <div className="truncate text-[13px] font-medium">{noteTitle(n)}</div>
-                <div className="truncate text-[11px] text-[var(--c-text-3)]">Edited {ago(n.updated)} · {notePreview(n)}</div>
+                <div className="truncate text-[11px] text-[var(--c-text-3)]">Edited {ago(n.updated)} · <InlineMarkdown>{notePreview(n)}</InlineMarkdown></div>
               </button>
             ))}
           </>

@@ -81,6 +81,16 @@ describe('KbPopoverView notes', () => {
     await waitFor(() => expect(mockInvoke).toHaveBeenCalledWith('kb_create', { kind: 'note', title: '', body: 'idea', tags: [], tzOffset: expect.any(Number) }))
     expect(await screen.findByText('idea')).toBeInTheDocument()
   })
+  it('renders note previews instead of raw markdown', async () => {
+    mockInvoke.mockImplementation(async (cmd: string) =>
+      cmd === 'kb_list' ? [item({ id: 'n', kind: 'note', title: 'Plan', body: '- [ ] ship **today**' })] : null)
+    render(<KbPopoverView />)
+    fireEvent.click(screen.getByText(/^Notes/))
+    const strong = await screen.findByText('today')
+    expect(strong.tagName).toBe('STRONG')
+    expect(strong.parentElement?.textContent).toContain('☐ ship today')
+    expect(screen.queryByText(/\*\*/)).not.toBeInTheDocument()
+  })
 })
 
 describe('multi-line input', () => {
