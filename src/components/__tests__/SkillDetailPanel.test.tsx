@@ -85,6 +85,34 @@ describe('SkillDetailPanel', () => {
     expect(mockInvoke).not.toHaveBeenCalledWith('open_path', expect.anything())
   })
 
+  it('shows name, description and other fields from SKILL.md frontmatter in the file view', async () => {
+    mockInvoke.mockResolvedValueOnce(fileTree)
+    mockInvoke.mockResolvedValue('---\nname: impeccable\ndescription: >\n  Polish UI until\n  it shines.\nlicense: MIT\n---\n\n# Usage\n')
+    render(<SkillDetailPanel skill={skill} onBack={vi.fn()} />)
+    await waitFor(() => expect(screen.getByText('SKILL.md')).toBeInTheDocument())
+    fireEvent.click(screen.getByText('SKILL.md'))
+    const header = await screen.findByRole('region', { name: 'Skill details' })
+    expect(header).toHaveTextContent('impeccable')
+    expect(header).toHaveTextContent('Polish UI until it shines.')
+    expect(header).toHaveTextContent('licenseMIT')
+    expect(screen.getByRole('heading', { name: 'Usage' })).toBeInTheDocument()
+    expect(screen.queryByText(/^name:/)).not.toBeInTheDocument()
+  })
+
+  it('full description shows the frontmatter, or the detected name and description without it', async () => {
+    const withFull = { ...skill, hasFullDescription: true }
+    mockInvoke.mockImplementation((cmd: string) => {
+      if (cmd === 'read_skill_dir') return Promise.resolve(fileTree)
+      if (cmd === 'get_skill_full_description') return Promise.resolve('# Full\nSome detail.')
+      return Promise.resolve(null)
+    })
+    render(<SkillDetailPanel skill={withFull} onBack={vi.fn()} />)
+    fireEvent.click(await screen.findByText('Show full description →'))
+    const header = await screen.findByRole('region', { name: 'Skill details' })
+    expect(header).toHaveTextContent('impeccable')
+    expect(header).toHaveTextContent('Polish frontend UI')
+  })
+
   it('non-markdown files are listed but cannot be opened', async () => {
     const treeWithScript: FileEntry = {
       ...fileTree,
