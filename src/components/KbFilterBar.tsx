@@ -1,10 +1,11 @@
-import { KB_SORT_LABELS, type KbItem, type KbQuery, type KbShareFilter, type KbSort } from '../kb'
+import type { Agent } from '../types'
+import { KB_SORT_LABELS, agentsWithKbSkill, names, type KbItem, type KbQuery, type KbShareFilter, type KbSort } from '../kb'
 
 /**
  * Search + share/tag filter + sort for a todo or note list, with a bulk
  * share action over everything the filter matches (not just the page shown).
  */
-export default function KbFilterBar({ query, setQuery, tags, sorts, matched, total, onBulkShare, compact }: {
+export default function KbFilterBar({ query, setQuery, tags, sorts, matched, total, onBulkShare, compact, agents = [] }: {
   query: KbQuery
   setQuery: (p: Partial<KbQuery>) => void
   tags: string[]
@@ -14,7 +15,10 @@ export default function KbFilterBar({ query, setQuery, tags, sorts, matched, tot
   total: number
   onBulkShare: (items: KbItem[], shared: boolean) => void
   compact?: boolean
+  agents?: Agent[]
 }) {
+  const readers = agentsWithKbSkill(agents)
+  const who = readers.length ? names(readers) : 'your agents (after installing the context-bar skill)'
   const text = compact ? 'text-[11px]' : 'text-[12px]'
   const select = `${text} bg-[var(--c-surface)] border border-[var(--c-border)] rounded-md px-1.5 py-0.5 outline-none focus:border-[var(--c-accent)] text-[var(--c-text-2)]`
   const unshared = matched.filter(i => !i.shared)
@@ -40,7 +44,7 @@ export default function KbFilterBar({ query, setQuery, tags, sorts, matched, tot
         </span>
         <select aria-label="Filter by sharing" value={query.share} onChange={e => setQuery({ share: e.target.value as KbShareFilter })} className={select}>
           <option value="all">All</option>
-          <option value="shared">Shared</option>
+          <option value="shared">Shared with agents</option>
           <option value="private">Private</option>
         </select>
         {tags.length > 0 && (
@@ -63,19 +67,25 @@ export default function KbFilterBar({ query, setQuery, tags, sorts, matched, tot
             {unshared.length > 0 ? (
               <button
                 onClick={() => onBulkShare(unshared, true)}
-                title="Agents read shared items through the context-bar skill"
+                title={`${who} will read ${unshared.length === 1 ? 'it' : 'these'} at the start of each session, so you don't repeat yourself.`}
                 className="text-emerald-400 hover:underline"
               >
-                Share all{scope && ` ${scope}`} ({unshared.length})
+                Share {unshared.length}{scope && ` ${scope}`} with agents
               </button>
             ) : (
-              <button onClick={() => onBulkShare(matched, false)} className="hover:text-[var(--c-text-2)] hover:underline">
-                Make all{scope && ` ${scope}`} private ({matched.length})
+              <button onClick={() => onBulkShare(matched, false)} title="Agents stop seeing these. Only you will." className="hover:text-[var(--c-text-2)] hover:underline">
+                Make {matched.length}{scope && ` ${scope}`} private
               </button>
             )}
           </span>
         )}
       </div>
+      <p className={`${compact ? 'text-[10.5px]' : 'text-[11.5px]'} text-[var(--c-text-3)] leading-snug`}>
+        <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-400 mr-1.5 align-middle" />
+        {readers.length
+          ? <>Shared items are read by <b className="font-medium text-[var(--c-text-2)]">{names(readers)}</b> at the start of each session, so you don't repeat yourself.</>
+          : <>Shared items are for your agents, but none has the context-bar skill yet. Install it from Notes &amp; Todos in the window.</>}
+      </p>
     </div>
   )
 }

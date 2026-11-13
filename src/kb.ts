@@ -267,6 +267,35 @@ export function agentsWithKbSkill(agents: Agent[]): Agent[] {
   return agents.filter(a => a.installed && a.skills.some(s => s.name === KB_SKILL_NAME))
 }
 
+/** Who reads a shared item and where, from its tags and the agents that
+ *  have the context-bar skill. */
+export function shareAudience(item: KbItem, agents: Agent[]): { readers: Agent[]; where: string } {
+  const withSkill = agentsWithKbSkill(agents)
+  const agentTags = item.tags.filter(t => t.startsWith('agent:')).map(t => t.slice(6))
+  const readers = agentTags.length ? withSkill.filter(a => agentTags.includes(a.id)) : withSkill
+  const repos = item.tags.filter(t => t.startsWith('repo:')).map(t => t.slice(5))
+  const where = repos.length ? `only in ${repos.join(', ')}` : 'in every repo'
+  return { readers, where }
+}
+
+export function names(list: Agent[]): string {
+  const n = list.map(a => a.name)
+  return n.length <= 2 ? n.join(' and ') : `${n.slice(0, -1).join(', ')} and ${n[n.length - 1]}`
+}
+
+/** Plain-language explanation of what Share does for this item. */
+export function shareExplain(item: KbItem, agents: Agent[]): string {
+  const { readers, where } = shareAudience(item, agents)
+  const who = readers.length ? names(readers) : 'your agents'
+  if (item.shared && readers.length === 0) {
+    return 'Shared, but no agent can read it yet: install the context-bar skill (Notes & Todos in the window). Click to make private.'
+  }
+  if (item.shared) {
+    return `${who} read this when a session starts, ${where}, through the context-bar skill. You don't have to repeat it. Click to make private.`
+  }
+  return `Private: only you see it. Share it so ${who} read it when a session starts, ${where}, without you repeating it.`
+}
+
 export function ago(ts: number, now = Date.now()): string {
   const s = Math.max(0, Math.round((now - ts) / 1000))
   if (s < 60) return 'just now'

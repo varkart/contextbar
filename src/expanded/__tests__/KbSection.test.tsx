@@ -157,7 +157,7 @@ describe('KbSection', () => {
     await screen.findByText('Alpha')
     fireEvent.change(screen.getByLabelText('Filter by tag'), { target: { value: 'repo:app' } })
     expect(screen.queryByText('Beta')).not.toBeInTheDocument()
-    fireEvent.click(screen.getByText('Share all shown (1)'))
+    fireEvent.click(screen.getByText('Share 1 shown with agents'))
     await waitFor(() => expect(mockInvoke).toHaveBeenCalledWith('kb_set_shared', { items: [{ kind: 'todo', id: 'a' }], shared: true }))
     fireEvent.click(await screen.findByText('Undo'))
     await waitFor(() => expect(mockInvoke).toHaveBeenCalledWith('kb_set_shared', { items: [{ kind: 'todo', id: 'a' }], shared: false }))

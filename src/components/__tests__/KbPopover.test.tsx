@@ -158,7 +158,7 @@ describe('KbPopoverView list tools', () => {
     await screen.findByText('One')
     fireEvent.click(screen.getAllByText('Share')[0])
     await waitFor(() => expect(mockInvoke).toHaveBeenCalledWith('kb_update', expect.objectContaining({ patch: { shared: true } })))
-    fireEvent.click(screen.getByText(/Share all \(/))
+    fireEvent.click(screen.getByText(/^Share \d+ with agents$/))
     await waitFor(() => expect(mockInvoke).toHaveBeenCalledWith('kb_set_shared', expect.objectContaining({ shared: true })))
   })
 
@@ -176,5 +176,31 @@ describe('KbPopoverView list tools', () => {
     fireEvent.change(screen.getByLabelText('Search'), { target: { value: '' } })
     fireEvent.change(screen.getByLabelText('Filter by sharing'), { target: { value: 'shared' } })
     expect(screen.getByText('1 of 26')).toBeInTheDocument()
+  })
+})
+
+describe('share wording', () => {
+  beforeEach(() => { mockInvoke.mockReset(); localStorage.clear() })
+  const agent = (id: string, skill: boolean) => ({
+    id, name: id[0].toUpperCase() + id.slice(1), installed: true, supportsSkills: true, supportsMcps: true, mcps: [],
+    skills: skill ? [{ name: 'context-bar', path: '/s', hasFullDescription: true, active: true, sourceId: 'x' }] : [],
+  })
+
+  it('names the agents that read shared items, and where', async () => {
+    mockInvoke.mockImplementation(async (cmd: string) => cmd === 'kb_list'
+      ? [item({ id: 'a', title: 'Use pnpm', shared: true, tags: ['repo:app'] }), item({ id: 'b', title: 'Private one' })]
+      : null)
+    render(<KbPopoverView agents={[agent('claude', true), agent('codex', true), agent('gemini', false)]} />)
+    const pill = await screen.findByText('For Claude +1')
+    expect(pill.getAttribute('title')).toMatch(/Claude and Codex read this when a session starts, only in app/)
+    expect(screen.getByText('Share').getAttribute('title')).toMatch(/^Private: only you see it\. Share it so Claude and Codex read it.*in every repo/)
+    expect(screen.getByText('Claude and Codex')).toBeInTheDocument()
+  })
+
+  it('warns when shared but no agent has the skill', async () => {
+    mockInvoke.mockImplementation(async (cmd: string) => cmd === 'kb_list' ? [item({ id: 'a', title: 'X', shared: true })] : null)
+    render(<KbPopoverView agents={[agent('codex', false)]} />)
+    expect(await screen.findByText('Shared · no agent yet')).toBeInTheDocument()
+    expect(screen.getByText(/none has the context-bar skill yet/)).toBeInTheDocument()
   })
 })

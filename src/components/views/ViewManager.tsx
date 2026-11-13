@@ -62,7 +62,7 @@ export default function ViewManager({
     return <DoctorView onBack={() => goTo('settings')} />
   }
   if (view === 'kb') {
-    return <KbPopoverView />
+    return <KbPopoverView agents={agents} />
   }
   if (view === 'logs') {
     return <LogsPanel onBack={() => goTo('main')} />

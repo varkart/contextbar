@@ -3,6 +3,8 @@ import AutoTextarea from './AutoTextarea'
 import InlineMarkdown from './InlineMarkdown'
 import KbFilterBar from './KbFilterBar'
 import Markdown from './Markdown'
+import KbSharePill from './KbSharePill'
+import type { Agent } from '../types'
 import {
   KB_GUIDE_DISMISSED_KEY, KB_POPOVER_TIP_KEY, ago, allTags, openLinkFromClick, queryKb, useKbQuery, usePaged, doneTodos, kbApi, noteTitle, notePreview, notes as notesOf, openKbInWindow, openTodos, useKb,
   type KbItem, type KbKind,
@@ -104,20 +106,8 @@ export function QuickAdd({ onAdded }: { onAdded: (item: KbItem) => void }) {
 
 const POPOVER_PAGE = 20
 
-function SharePill({ item, onChange }: { item: KbItem; onChange: (i: KbItem) => void }) {
-  return (
-    <button
-      onClick={() => kbApi.update(item.kind, item.id, { shared: !item.shared }).then(onChange).catch(() => {})}
-      aria-pressed={item.shared}
-      title={item.shared ? 'Shared with agents. Click to make private.' : 'Private. Click to share with agents.'}
-      className={`shrink-0 text-[10px] px-1.5 py-px rounded-full border ${item.shared
-        ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-400'
-        : 'border-[var(--c-border)] text-[var(--c-text-3)] opacity-0 group-hover:opacity-100 focus:opacity-100 hover:text-[var(--c-text-2)]'}`}
-    >
-      {item.shared ? 'Shared' : 'Share'}
-    </button>
-  )
-}
+const toggle = (onChange: (i: KbItem) => void) => (item: KbItem) =>
+  kbApi.update(item.kind, item.id, { shared: !item.shared }).then(onChange).catch(() => {})
 
 /** Expanded body: rendered markdown, tags, and a way to edit in the window. */
 function Expanded({ item, onEdit }: { item: KbItem; onEdit: () => void }) {
@@ -138,7 +128,7 @@ function Expanded({ item, onEdit }: { item: KbItem; onEdit: () => void }) {
   )
 }
 
-function TodoItem({ t, onChange }: { t: KbItem; onChange: (i: KbItem) => void }) {
+function TodoItem({ t, agents, onChange }: { t: KbItem; agents: Agent[]; onChange: (i: KbItem) => void }) {
   const [open, setOpen] = useState(false)
   return (
     <div className="border-b border-[var(--c-border)]/50">
@@ -157,7 +147,7 @@ function TodoItem({ t, onChange }: { t: KbItem; onChange: (i: KbItem) => void })
           <span className="truncate text-[13px]">{t.title}</span>
           {t.body.trim() && <span className="shrink-0 text-[11px] text-[var(--c-text-3)]" aria-label="Has details">≡</span>}
         </button>
-        <SharePill item={t} onChange={onChange} />
+        <KbSharePill compact item={t} agents={agents} onToggle={toggle(onChange)} />
         <span className="text-[10.5px] text-[var(--c-text-3)] tabular-nums shrink-0">{ago(t.created)}</span>
       </div>
       {open && <Expanded item={t} onEdit={() => openKbInWindow('todos')} />}
@@ -165,7 +155,7 @@ function TodoItem({ t, onChange }: { t: KbItem; onChange: (i: KbItem) => void })
   )
 }
 
-function NoteItem({ n, onChange }: { n: KbItem; onChange: (i: KbItem) => void }) {
+function NoteItem({ n, agents, onChange }: { n: KbItem; agents: Agent[]; onChange: (i: KbItem) => void }) {
   const [open, setOpen] = useState(false)
   return (
     <div className="border-b border-[var(--c-border)]/50">
@@ -178,7 +168,7 @@ function NoteItem({ n, onChange }: { n: KbItem; onChange: (i: KbItem) => void })
             </div>
           )}
         </button>
-        <span className="pt-0.5"><SharePill item={n} onChange={onChange} /></span>
+        <span className="pt-0.5"><KbSharePill compact item={n} agents={agents} onToggle={toggle(onChange)} /></span>
       </div>
       {open && <Expanded item={n} onEdit={() => openKbInWindow('notes', n.id)} />}
     </div>
@@ -187,7 +177,7 @@ function NoteItem({ n, onChange }: { n: KbItem; onChange: (i: KbItem) => void })
 
 /** Popover view: todos and notes with search, filters, sort, paging,
  *  expandable rows and sharing. */
-export default function KbPopoverView() {
+export default function KbPopoverView({ agents = [] }: { agents?: Agent[] }) {
   const { items, loading, upsert } = useKb()
   const [seg, setSeg] = useState<'todos' | 'notes'>('todos')
   const [text, setText] = useState('')
@@ -266,7 +256,7 @@ export default function KbPopoverView() {
           <KbFilterBar
             compact query={query} setQuery={setQuery} tags={tags}
             sorts={seg === 'todos' ? ['newest', 'oldest', 'edited', 'az'] : ['edited', 'newest', 'oldest', 'az']}
-            matched={matched} total={base.length} onBulkShare={bulkShare}
+            matched={matched} total={base.length} onBulkShare={bulkShare} agents={agents}
           />
         )}
         {!loading && base.length === 0 && (
@@ -274,8 +264,8 @@ export default function KbPopoverView() {
         )}
         {base.length > 0 && matched.length === 0 && <p className="text-[12px] text-[var(--c-text-3)] py-2">Nothing matches.</p>}
         {seg === 'todos'
-          ? page.shown.map(t => <TodoItem key={t.id} t={t} onChange={upsert} />)
-          : page.shown.map(n => <NoteItem key={n.id} n={n} onChange={upsert} />)}
+          ? page.shown.map(t => <TodoItem key={t.id} t={t} agents={agents} onChange={upsert} />)
+          : page.shown.map(n => <NoteItem key={n.id} n={n} agents={agents} onChange={upsert} />)}
         {page.remaining > 0 && (
           <button onClick={page.more} className="mt-1.5 self-start text-[11px] text-[var(--c-accent)] hover:underline">
             Show {Math.min(page.remaining, POPOVER_PAGE)} more ({page.remaining} hidden)

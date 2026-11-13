@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import type { Agent } from '../types'
 import AutoTextarea from '../components/AutoTextarea'
 import Markdown from '../components/Markdown'
 import InlineMarkdown from '../components/InlineMarkdown'
 import KbFilterBar from '../components/KbFilterBar'
+import KbSharePill from '../components/KbSharePill'
 import AgentDot from '../components/AgentDot'
 import { NOTE_SHORTCUTS, NOTE_SYNTAX, markdownKey, sameSaved, type Edit } from '../noteEditing'
 import {
@@ -12,6 +13,9 @@ import {
 } from '../kb'
 
 export type KbTab = 'todos' | 'notes' | 'history'
+
+/** Detected agents, for share labels deep in the lists. */
+const KbAgents = createContext<Agent[]>([])
 
 
 function readTab(): KbTab {
@@ -104,6 +108,7 @@ export default function KbSection({ agents, repoNames, showToast }: {
   )
 
   return (
+    <KbAgents.Provider value={agents}>
     <div className="flex-1 flex flex-col overflow-hidden relative">
       <div className="px-6 pt-5 pb-2 flex-shrink-0">
         <h2 className="text-[17px] font-semibold tracking-tight">Notes &amp; Todos</h2>
@@ -147,6 +152,7 @@ export default function KbSection({ agents, repoNames, showToast }: {
         </div>
       )}
     </div>
+    </KbAgents.Provider>
   )
 }
 
@@ -264,16 +270,8 @@ function AgentSharing({ agents, sharedCount, showToast }: {
 // ── Shared bits ──────────────────────────────────────────────────────────────
 
 function ShareToggle({ item, onPatch }: { item: KbItem; onPatch: (i: KbItem, p: { shared: boolean }) => unknown }) {
-  return (
-    <button
-      onClick={() => onPatch(item, { shared: !item.shared })}
-      aria-pressed={item.shared}
-      title={item.shared ? 'Shared with agents. Click to make private.' : 'Private. Click to share with agents.'}
-      className={`shrink-0 text-[11px] px-2 py-0.5 rounded-full border transition-colors ${item.shared ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-400' : 'border-[var(--c-border)] text-[var(--c-text-3)] opacity-0 group-hover:opacity-100 focus:opacity-100 hover:text-[var(--c-text-2)]'}`}
-    >
-      {item.shared ? 'Shared' : 'Share'}
-    </button>
-  )
+  const agents = useContext(KbAgents)
+  return <KbSharePill item={item} agents={agents} onToggle={i => onPatch(i, { shared: !i.shared })} />
 }
 
 function TagEditor({ tags, suggestions, onChange, compact }: {
@@ -355,6 +353,7 @@ function TodosTab({ open, done, loading, tagSuggestions, onAdd, onComplete, onRe
 }) {
   const [text, setText] = useState('')
   const [archOpen, setArchOpen] = useState(false)
+  const agents = useContext(KbAgents)
   const [query, setQuery] = useKbQuery('window:todos', 'newest')
   const qKey = JSON.stringify(query)
   const openShown = useMemo(() => queryKb(open, query), [open, query])
@@ -379,7 +378,7 @@ function TodosTab({ open, done, loading, tagSuggestions, onAdd, onComplete, onRe
       {open.length > 0 && (
         <KbFilterBar
           query={query} setQuery={setQuery} tags={tags} sorts={['newest', 'oldest', 'edited', 'az']}
-          matched={openShown} total={open.length} onBulkShare={onBulkShare}
+          matched={openShown} total={open.length} onBulkShare={onBulkShare} agents={agents}
         />
       )}
       {!loading && open.length === 0 && <p className="text-[13px] text-[var(--c-text-3)] py-3">All done. Nothing open.</p>}
@@ -586,6 +585,7 @@ function NotesTab({ notes, tagSuggestions, onCreate, onRemove, onPatch, onBulkSh
   onPatch: (n: KbItem, p: Parameters<typeof kbApi.update>[2]) => Promise<unknown>
   onBulkShare: (items: KbItem[], shared: boolean) => void
 }) {
+  const agents = useContext(KbAgents)
   const [query, setQuery] = useKbQuery('window:notes', 'edited')
   const shownNotes = useMemo(() => queryKb(notes, query), [notes, query])
   const tags = useMemo(() => allTags(notes), [notes])
@@ -619,7 +619,7 @@ function NotesTab({ notes, tagSuggestions, onCreate, onRemove, onPatch, onBulkSh
           <div className="px-3 shrink-0">
             <KbFilterBar
               compact query={query} setQuery={setQuery} tags={tags} sorts={['edited', 'newest', 'oldest', 'az']}
-              matched={shownNotes} total={notes.length} onBulkShare={onBulkShare}
+              matched={shownNotes} total={notes.length} onBulkShare={onBulkShare} agents={agents}
             />
           </div>
         )}
