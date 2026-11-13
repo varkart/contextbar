@@ -134,6 +134,14 @@ describe('KbSection', () => {
     expect(screen.getByLabelText('Todo details')).toHaveFocus()
   })
 
+  it('New note reuses an existing blank note', async () => {
+    localStorage.setItem('contextbar:kb:tab', 'notes')
+    setup([item({ id: 'blank', kind: 'note' }), item({ id: 'n2', kind: 'note', title: 'Real' })])
+    fireEvent.click(await screen.findByText('+ New note'))
+    expect(mockInvoke).not.toHaveBeenCalledWith('kb_create', expect.anything())
+    expect(localStorage.getItem('contextbar:kb:note')).toBe('blank')
+  })
+
   it('compact banner offers to install the skill for agents missing it', async () => {
     localStorage.setItem('contextbar:kb:sharing-guide-dismissed', '1')
     setup([item({ id: 'a', title: 'Shared', shared: true })], [agent('claude', ['context-bar']), agent('codex')])

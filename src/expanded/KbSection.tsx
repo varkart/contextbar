@@ -273,7 +273,13 @@ function TagEditor({ tags, suggestions, onChange, compact }: {
   const [adding, setAdding] = useState(false)
   const [value, setValue] = useState('')
   const listId = useMemo(() => `kb-tags-${Math.random().toString(36).slice(2)}`, [])
+  // Enter/Escape close the input; a blur fired as it unmounts must not
+  // commit again (or commit a cancelled tag).
+  const closed = useRef(false)
+  const open = () => { closed.current = false; setAdding(true) }
   const commit = () => {
+    if (closed.current) return
+    closed.current = true
     const t = value.trim().toLowerCase()
     if (t && !tags.includes(t)) onChange([...tags, t])
     setValue('')
@@ -292,7 +298,7 @@ function TagEditor({ tags, suggestions, onChange, compact }: {
           <input
             autoFocus list={listId} value={value} onChange={e => setValue(e.target.value)}
             onBlur={commit}
-            onKeyDown={e => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') { e.preventDefault(); setValue(''); setAdding(false) } }}
+            onKeyDown={e => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') { e.preventDefault(); closed.current = true; setValue(''); setAdding(false) } }}
             placeholder="global, repo:name, agent:id"
             className="text-[11px] w-40 px-1.5 py-0.5 rounded border border-[var(--c-border)] bg-transparent outline-none focus:border-[var(--c-accent)]"
           />
@@ -300,7 +306,7 @@ function TagEditor({ tags, suggestions, onChange, compact }: {
         </>
       ) : (
         <button
-          onClick={() => setAdding(true)}
+          onClick={open}
           className={`text-[11px] px-1.5 py-0.5 rounded text-[var(--c-text-3)] hover:text-[var(--c-text-2)] ${compact ? 'opacity-0 group-hover:opacity-100 focus:opacity-100' : ''}`}
         >
           + tag
@@ -378,7 +384,11 @@ function TodoRow({ todo, tagSuggestions, onComplete, onRemove, onPatch }: {
   const [expanded, setExpanded] = useState(false)
   const [draft, setDraft] = useState(todo.title)
   const hasDetails = !!todo.body.trim()
+  const closed = useRef(false)
+  const startEdit = () => { closed.current = false; setDraft(todo.title); setEditing(true) }
   const save = () => {
+    if (closed.current) return
+    closed.current = true
     setEditing(false)
     const t = draft.trim()
     if (t && t !== todo.title) onPatch(todo, { title: t })
@@ -395,14 +405,14 @@ function TodoRow({ todo, tagSuggestions, onComplete, onRemove, onPatch }: {
       {editing ? (
         <input
           autoFocus value={draft} onChange={e => setDraft(e.target.value)} onBlur={save}
-          onKeyDown={e => { if (e.key === 'Enter') save(); if (e.key === 'Escape') { e.preventDefault(); setDraft(todo.title); setEditing(false) } }}
+          onKeyDown={e => { if (e.key === 'Enter') save(); if (e.key === 'Escape') { e.preventDefault(); closed.current = true; setDraft(todo.title); setEditing(false) } }}
           className="flex-1 min-w-0 text-[14px] bg-transparent outline-none border-b border-[var(--c-accent)]"
         />
       ) : (
         <span className="flex-1 min-w-0 flex items-center gap-1.5">
           <span
             onClick={e => { if (e.detail === 1) setExpanded(x => !x) }}
-            onDoubleClick={() => { setDraft(todo.title); setEditing(true) }}
+            onDoubleClick={startEdit}
             className="min-w-0 truncate text-[14px] cursor-default"
             title="Click for details · double-click to rename"
           >
@@ -555,7 +565,12 @@ function NotesTab({ notes, tagSuggestions, onCreate, onRemove, onPatch }: {
     <div className="flex-1 flex overflow-hidden">
       <div className="w-64 shrink-0 border-r border-[var(--c-border)] flex flex-col overflow-hidden">
         <button
-          onClick={() => onCreate().then(n => { if (n) select(n.id) })}
+          onClick={() => {
+            // Reuse an untouched empty note instead of piling up blanks.
+            const blank = notes.find(n => !n.title.trim() && !n.body.trim())
+            if (blank) select(blank.id)
+            else onCreate().then(n => { if (n) select(n.id) })
+          }}
           className="m-3 px-3 py-1.5 rounded-lg border border-dashed border-[var(--c-border)] text-[13px] text-[var(--c-text-2)] hover:border-[var(--c-accent)] hover:text-[var(--c-accent)]"
         >
           + New note
@@ -629,6 +644,11 @@ function NoteEditor({ note, tagSuggestions, onRemove, onPatch }: {
   }
 
   const [mode, setMode] = useNoteMode()
+  // A blank note opens ready to type, even if Preview was last used.
+  useEffect(() => {
+    if (!note.title.trim() && !note.body.trim()) setMode('edit')
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
   const textarea = useRef<HTMLTextAreaElement>(null)
 
   // ⌘⇧P flips between edit and preview while a note is open.

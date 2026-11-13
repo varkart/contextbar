@@ -104,6 +104,7 @@ export default function KbPopoverView() {
   const { items, loading, upsert } = useKb()
   const [seg, setSeg] = useState<'todos' | 'notes'>('todos')
   const [text, setText] = useState('')
+  const [addError, setAddError] = useState<string | null>(null)
   const [tip, setTip] = useState(() => !localStorage.getItem(KB_POPOVER_TIP_KEY))
   const dismissTip = () => { localStorage.setItem(KB_POPOVER_TIP_KEY, '1'); setTip(false) }
   const open = openTodos(items)
@@ -114,7 +115,7 @@ export default function KbPopoverView() {
     const v = text.trim()
     if (!v) return
     const op = seg === 'todos' ? kbApi.createTodo(v) : kbApi.create('note', '', v)
-    op.then(item => { upsert(item); setText('') }).catch(() => {})
+    op.then(item => { upsert(item); setText(''); setAddError(null) }).catch(e => setAddError(String(e)))
   }
 
   const segBtn = (id: 'todos' | 'notes', label: string) => (
@@ -160,6 +161,7 @@ export default function KbPopoverView() {
           aria-label={seg === 'todos' ? 'Add a todo' : 'Jot a note'}
           className="mb-1.5 px-2.5 py-1.5 rounded-md border border-[var(--c-border)] bg-[var(--c-surface)] text-[12.5px] leading-[18px] outline-none focus:border-[var(--c-accent)]"
         />
+        {addError && <p className="text-[11px] text-rose-400 mb-1">{addError}</p>}
         {seg === 'todos' ? (
           <>
             {!loading && open.length === 0 && <p className="text-[12px] text-[var(--c-text-3)] py-2">All done. Nothing open.</p>}
