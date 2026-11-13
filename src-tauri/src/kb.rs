@@ -391,6 +391,7 @@ fn log_event(root: &Path, item: &KbItem, action: &str) {
         title: display_title(item),
     };
     let _ = std::fs::create_dir_all(root);
+    trim_history(root);
     if let Ok(mut f) = std::fs::OpenOptions::new()
         .create(true)
         .append(true)
@@ -400,6 +401,23 @@ fn log_event(root: &Path, item: &KbItem, action: &str) {
             let _ = writeln!(f, "{line}");
         }
     }
+}
+
+/// history.jsonl is read on every save; keep it bounded by dropping the
+/// oldest half once it passes HISTORY_MAX_BYTES.
+const HISTORY_MAX_BYTES: u64 = 2 * 1024 * 1024;
+
+fn trim_history(root: &Path) {
+    let path = root.join("history.jsonl");
+    if std::fs::metadata(&path).map_or(true, |m| m.len() <= HISTORY_MAX_BYTES) {
+        return;
+    }
+    let Ok(text) = std::fs::read_to_string(&path) else {
+        return;
+    };
+    let lines: Vec<&str> = text.lines().collect();
+    let keep = lines[lines.len() / 2..].join("\n") + "\n";
+    let _ = write_atomic(&path, &keep);
 }
 
 fn display_title(item: &KbItem) -> String {
@@ -714,7 +732,8 @@ Do not read other files in `{root}`. Items not in the index are private.
 ## Writing
 
 Never edit, rename or delete existing files. To suggest a new todo for the
-user, create a new file `{root}/todos/<yyyymmdd>-<short-slug>.md`:
+user, create a new file `{root}/todos/<yyyymmdd>-<short-slug>.md`. Use only
+lowercase letters, digits and dashes in the name; other files are ignored.
 
 ```markdown
 ---
@@ -767,6 +786,18 @@ mod tests {
         assert_eq!(t.title, "Fix: crash on [start]");
         assert_eq!(t.source.as_deref(), Some("agent:codex"));
         assert_eq!(t.body, "details");
+    }
+
+    #[test]
+    fn history_is_trimmed_when_large() {
+        let d = tmp();
+        let line = format!("{}\n", "x".repeat(1023));
+        let big = line.repeat((HISTORY_MAX_BYTES / 1024 + 10) as usize);
+        std::fs::write(d.path().join("history.jsonl"), big).unwrap();
+        create(d.path(), Kind::Todo, "After", "", vec![]).unwrap();
+        let len = std::fs::metadata(d.path().join("history.jsonl")).unwrap().len();
+        assert!(len < HISTORY_MAX_BYTES, "{len}");
+        assert_eq!(history(d.path(), 1)[0].title, "After");
     }
 
     #[test]
@@ -1164,7 +1195,10 @@ pub mod commands {
                 return;
             }
             let real_root = root.canonicalize().unwrap_or_else(|_| root.clone());
-            while let Ok(Ok(events)) = rx.recv() {
+            // A watcher error (e.g. a burst of events overflowing) is
+            // transient; keep listening rather than going deaf.
+            while let Ok(res) = rx.recv() {
+                let Ok(events) = res else { continue };
                 let relevant = events.iter().any(|e| {
                     let rel = e
                         .path
