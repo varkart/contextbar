@@ -2942,6 +2942,7 @@ pub fn run() {
             kb::commands::kb_list,
             kb::commands::kb_history,
             kb::commands::kb_create,
+            kb::commands::kb_set_shared,
             kb::commands::kb_update,
             kb::commands::kb_set_done,
             kb::commands::kb_delete,

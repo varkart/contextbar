@@ -594,6 +594,35 @@ pub fn update(root: &Path, kind: Kind, id: &str, patch: Patch) -> Result<KbItem,
     Ok(item)
 }
 
+#[derive(Debug, Clone, Deserialize)]
+pub struct ItemRef {
+    pub kind: Kind,
+    pub id: String,
+}
+
+/// Shares (or unshares) many items at once, rewriting the index once.
+/// Items that are missing or already in that state are skipped.
+pub fn set_shared_many(root: &Path, refs: &[ItemRef], shared: bool) -> Vec<KbItem> {
+    let now = now_ms();
+    let mut out = Vec::new();
+    for r in refs {
+        let Ok(mut item) = get(root, r.kind, &r.id) else {
+            continue;
+        };
+        if item.shared != shared {
+            item.shared = shared;
+            item.updated = now;
+            if save(root, &item).is_err() {
+                continue;
+            }
+            log_event(root, &item, if shared { "shared" } else { "unshared" });
+        }
+        out.push(item);
+    }
+    write_index(root);
+    out
+}
+
 pub fn set_done(root: &Path, id: &str, done: bool) -> Result<KbItem, String> {
     let mut item = get(root, Kind::Todo, id)?;
     if item.done.is_some() == done {
@@ -795,9 +824,48 @@ mod tests {
         let big = line.repeat((HISTORY_MAX_BYTES / 1024 + 10) as usize);
         std::fs::write(d.path().join("history.jsonl"), big).unwrap();
         create(d.path(), Kind::Todo, "After", "", vec![]).unwrap();
-        let len = std::fs::metadata(d.path().join("history.jsonl")).unwrap().len();
+        let len = std::fs::metadata(d.path().join("history.jsonl"))
+            .unwrap()
+            .len();
         assert!(len < HISTORY_MAX_BYTES, "{len}");
         assert_eq!(history(d.path(), 1)[0].title, "After");
+    }
+
+    #[test]
+    fn shares_many_and_indexes_once() {
+        let d = tmp();
+        let a = create(d.path(), Kind::Todo, "A", "", vec![]).unwrap();
+        let n = create(d.path(), Kind::Note, "N", "x", vec![]).unwrap();
+        let refs = vec![
+            ItemRef {
+                kind: Kind::Todo,
+                id: a.id.clone(),
+            },
+            ItemRef {
+                kind: Kind::Note,
+                id: n.id.clone(),
+            },
+            ItemRef {
+                kind: Kind::Note,
+                id: "missing".into(),
+            },
+        ];
+        let out = set_shared_many(d.path(), &refs, true);
+        assert_eq!(out.len(), 2);
+        assert!(out.iter().all(|i| i.shared));
+        let index = std::fs::read_to_string(d.path().join("index.md")).unwrap();
+        assert!(index.contains("[A]") && index.contains("[N]"));
+        let shared = history(d.path(), 10)
+            .iter()
+            .filter(|e| e.action == "shared")
+            .count();
+        assert_eq!(shared, 2);
+        set_shared_many(d.path(), &refs, true);
+        let again = history(d.path(), 10)
+            .iter()
+            .filter(|e| e.action == "shared")
+            .count();
+        assert_eq!(again, 2, "already shared items are not logged again");
     }
 
     #[test]
@@ -1113,6 +1181,17 @@ pub mod commands {
         let item = set_done(&kb_root()?, &id, done)?;
         changed(&app);
         Ok(item)
+    }
+
+    #[tauri::command]
+    pub fn kb_set_shared(
+        app: AppHandle,
+        items: Vec<ItemRef>,
+        shared: bool,
+    ) -> Result<Vec<KbItem>, String> {
+        let out = set_shared_many(&kb_root()?, &items, shared);
+        changed(&app);
+        Ok(out)
     }
 
     #[tauri::command]
