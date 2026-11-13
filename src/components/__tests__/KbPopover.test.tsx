@@ -118,3 +118,63 @@ describe('multi-line input', () => {
     await waitFor(() => expect(mockInvoke).toHaveBeenCalledWith('kb_create', { kind: 'note', title: '', body: 'line one\nline two', tags: [], tzOffset: expect.any(Number) }))
   })
 })
+
+describe('KbPopoverView list tools', () => {
+  beforeEach(() => { mockInvoke.mockReset(); localStorage.clear() })
+
+  const serve = (list: KbItem[]) => mockInvoke.mockImplementation(async (cmd: string, args?: unknown) => {
+    if (cmd === 'kb_list') return list
+    if (cmd === 'kb_update') {
+      const { id, patch } = args as { id: string; patch: object }
+      return { ...list.find(i => i.id === id)!, ...patch }
+    }
+    if (cmd === 'kb_set_shared') {
+      const { items, shared } = args as { items: { id: string }[]; shared: boolean }
+      return items.map(r => ({ ...list.find(i => i.id === r.id)!, shared }))
+    }
+    return null
+  })
+
+  it('expands a todo to show rendered details', async () => {
+    serve([item({ id: 'a', title: 'Deploy', body: 'run **migrations**' })])
+    render(<KbPopoverView />)
+    fireEvent.click(await screen.findByText('Deploy'))
+    expect(screen.getByText('migrations').tagName).toBe('STRONG')
+    expect(screen.getByText('Edit in window ⤢')).toBeInTheDocument()
+  })
+
+  it('expands a note in place', async () => {
+    serve([item({ id: 'n', kind: 'note', title: 'Style', body: '# Rules\n- use pnpm' })])
+    render(<KbPopoverView />)
+    fireEvent.click(screen.getByText(/^Notes/))
+    fireEvent.click(await screen.findByText('Style'))
+    expect(screen.getByRole('heading', { name: 'Rules' })).toBeInTheDocument()
+    expect(screen.getByText('use pnpm').tagName).toBe('LI')
+  })
+
+  it('shares one item, and all matching items at once', async () => {
+    serve([item({ id: 'a', title: 'One' }), item({ id: 'b', title: 'Two' })])
+    render(<KbPopoverView />)
+    await screen.findByText('One')
+    fireEvent.click(screen.getAllByText('Share')[0])
+    await waitFor(() => expect(mockInvoke).toHaveBeenCalledWith('kb_update', expect.objectContaining({ patch: { shared: true } })))
+    fireEvent.click(screen.getByText(/Share all \(/))
+    await waitFor(() => expect(mockInvoke).toHaveBeenCalledWith('kb_set_shared', expect.objectContaining({ shared: true })))
+  })
+
+  it('searches, filters by sharing and pages', async () => {
+    const many = Array.from({ length: 25 }, (_, i) => item({ id: `t${i}`, title: `Task ${i}`, created: 1000 + i }))
+    serve([...many, item({ id: 's', title: 'Secret plan', shared: true, created: 1 })])
+    render(<KbPopoverView />)
+    await screen.findByText('Task 24')
+    expect(screen.queryByText('Task 4')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByText(/Show 6 more/))
+    expect(screen.getByText('Task 4')).toBeInTheDocument()
+    fireEvent.change(screen.getByLabelText('Search'), { target: { value: 'secret' } })
+    expect(screen.getByText('Secret plan')).toBeInTheDocument()
+    expect(screen.queryByText('Task 24')).not.toBeInTheDocument()
+    fireEvent.change(screen.getByLabelText('Search'), { target: { value: '' } })
+    fireEvent.change(screen.getByLabelText('Filter by sharing'), { target: { value: 'shared' } })
+    expect(screen.getByText('1 of 26')).toBeInTheDocument()
+  })
+})

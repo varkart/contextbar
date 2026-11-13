@@ -1,8 +1,10 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import AutoTextarea from './AutoTextarea'
 import InlineMarkdown from './InlineMarkdown'
+import KbFilterBar from './KbFilterBar'
+import Markdown from './Markdown'
 import {
-  KB_GUIDE_DISMISSED_KEY, KB_POPOVER_TIP_KEY, ago, doneTodos, kbApi, noteTitle, notePreview, notes as notesOf, openKbInWindow, openTodos, useKb,
+  KB_GUIDE_DISMISSED_KEY, KB_POPOVER_TIP_KEY, ago, allTags, openLinkFromClick, queryKb, useKbQuery, usePaged, doneTodos, kbApi, noteTitle, notePreview, notes as notesOf, openKbInWindow, openTodos, useKb,
   type KbItem, type KbKind,
 } from '../kb'
 
@@ -100,7 +102,91 @@ export function QuickAdd({ onAdded }: { onAdded: (item: KbItem) => void }) {
   )
 }
 
-/** Popover view: open todos (add, complete) and notes (open in window). */
+const POPOVER_PAGE = 20
+
+function SharePill({ item, onChange }: { item: KbItem; onChange: (i: KbItem) => void }) {
+  return (
+    <button
+      onClick={() => kbApi.update(item.kind, item.id, { shared: !item.shared }).then(onChange).catch(() => {})}
+      aria-pressed={item.shared}
+      title={item.shared ? 'Shared with agents. Click to make private.' : 'Private. Click to share with agents.'}
+      className={`shrink-0 text-[10px] px-1.5 py-px rounded-full border ${item.shared
+        ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-400'
+        : 'border-[var(--c-border)] text-[var(--c-text-3)] opacity-0 group-hover:opacity-100 focus:opacity-100 hover:text-[var(--c-text-2)]'}`}
+    >
+      {item.shared ? 'Shared' : 'Share'}
+    </button>
+  )
+}
+
+/** Expanded body: rendered markdown, tags, and a way to edit in the window. */
+function Expanded({ item, onEdit }: { item: KbItem; onEdit: () => void }) {
+  return (
+    <div className="pl-6 pr-1 pb-2">
+      {item.body.trim() ? (
+        <div onClick={openLinkFromClick} className="kb-note-preview kb-pop-md max-h-56 overflow-y-auto rounded-md bg-[var(--c-surface)] border border-[var(--c-border-sub)] px-2.5 py-1.5">
+          <Markdown>{item.body}</Markdown>
+        </div>
+      ) : (
+        <p className="text-[11.5px] text-[var(--c-text-3)]">{item.kind === 'todo' ? 'No details.' : 'Empty note.'}</p>
+      )}
+      <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+        {item.tags.map(t => <span key={t} className="text-[10px] px-1.5 py-px rounded bg-[var(--c-surface-2)] text-[var(--c-text-3)]">{t}</span>)}
+        <button onClick={onEdit} className="ml-auto text-[11px] text-[var(--c-accent)] hover:underline">Edit in window ⤢</button>
+      </div>
+    </div>
+  )
+}
+
+function TodoItem({ t, onChange }: { t: KbItem; onChange: (i: KbItem) => void }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <div className="border-b border-[var(--c-border)]/50">
+      <div className="group flex items-center gap-2.5 py-1.5">
+        <button
+          onClick={() => kbApi.setDone(t.id, true).then(onChange).catch(() => {})}
+          aria-label={`Mark done: ${t.title}`}
+          className="w-3.5 h-3.5 shrink-0 rounded border border-[var(--c-text-3)] hover:border-emerald-400 hover:bg-emerald-500/10"
+        />
+        <button
+          onClick={() => setOpen(o => !o)}
+          aria-expanded={open}
+          className="flex-1 min-w-0 flex items-center gap-1 text-left"
+          title={open ? 'Collapse' : 'Expand'}
+        >
+          <span className="truncate text-[13px]">{t.title}</span>
+          {t.body.trim() && <span className="shrink-0 text-[11px] text-[var(--c-text-3)]" aria-label="Has details">≡</span>}
+        </button>
+        <SharePill item={t} onChange={onChange} />
+        <span className="text-[10.5px] text-[var(--c-text-3)] tabular-nums shrink-0">{ago(t.created)}</span>
+      </div>
+      {open && <Expanded item={t} onEdit={() => openKbInWindow('todos')} />}
+    </div>
+  )
+}
+
+function NoteItem({ n, onChange }: { n: KbItem; onChange: (i: KbItem) => void }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <div className="border-b border-[var(--c-border)]/50">
+      <div className="group flex items-start gap-2 py-1.5">
+        <button onClick={() => setOpen(o => !o)} aria-expanded={open} className="flex-1 min-w-0 text-left px-1 rounded hover:bg-[var(--c-surface-2)]">
+          <div className="truncate text-[13px] font-medium">{noteTitle(n)}</div>
+          {!open && (
+            <div className="truncate text-[11px] text-[var(--c-text-3)]">
+              Edited {ago(n.updated)} · <InlineMarkdown>{notePreview(n)}</InlineMarkdown>
+            </div>
+          )}
+        </button>
+        <span className="pt-0.5"><SharePill item={n} onChange={onChange} /></span>
+      </div>
+      {open && <Expanded item={n} onEdit={() => openKbInWindow('notes', n.id)} />}
+    </div>
+  )
+}
+
+/** Popover view: todos and notes with search, filters, sort, paging,
+ *  expandable rows and sharing. */
 export default function KbPopoverView() {
   const { items, loading, upsert } = useKb()
   const [seg, setSeg] = useState<'todos' | 'notes'>('todos')
@@ -112,11 +198,24 @@ export default function KbPopoverView() {
   const done = doneTodos(items)
   const noteList = notesOf(items)
 
+  const [todoQuery, setTodoQuery] = useKbQuery('popover:todos', 'newest')
+  const [noteQuery, setNoteQuery] = useKbQuery('popover:notes', 'edited')
+  const query = seg === 'todos' ? todoQuery : noteQuery
+  const setQuery = seg === 'todos' ? setTodoQuery : setNoteQuery
+  const base = seg === 'todos' ? open : noteList
+  const matched = useMemo(() => queryKb(base, query), [base, query])
+  const tags = useMemo(() => allTags(base), [base])
+  const page = usePaged(matched, POPOVER_PAGE, `${seg}:${JSON.stringify(query)}`)
+
   const add = () => {
     const v = text.trim()
     if (!v) return
     const op = seg === 'todos' ? kbApi.createTodo(v) : kbApi.create('note', '', v)
     op.then(item => { upsert(item); setText(''); setAddError(null) }).catch(e => setAddError(String(e)))
+  }
+
+  const bulkShare = (list: KbItem[], shared: boolean) => {
+    kbApi.setShared(list, shared).then(out => out.forEach(upsert)).catch(e => setAddError(String(e)))
   }
 
   const segBtn = (id: 'todos' | 'notes', label: string) => (
@@ -163,47 +262,32 @@ export default function KbPopoverView() {
           className="mb-1.5 px-2.5 py-1.5 rounded-md border border-[var(--c-border)] bg-[var(--c-surface)] text-[12.5px] leading-[18px] outline-none focus:border-[var(--c-accent)]"
         />
         {addError && <p className="text-[11px] text-rose-400 mb-1">{addError}</p>}
-        {seg === 'todos' ? (
-          <>
-            {!loading && open.length === 0 && <p className="text-[12px] text-[var(--c-text-3)] py-2">All done. Nothing open.</p>}
-            {open.map(t => (
-              <div key={t.id} className="flex items-center gap-2.5 py-1.5 border-b border-[var(--c-border)]/50">
-                <button
-                  onClick={() => kbApi.setDone(t.id, true).then(upsert).catch(() => {})}
-                  aria-label={`Mark done: ${t.title}`}
-                  className="w-3.5 h-3.5 shrink-0 rounded border border-[var(--c-text-3)] hover:border-emerald-400 hover:bg-emerald-500/10"
-                />
-                <span className="flex-1 min-w-0 flex items-center gap-1" title={t.body || undefined}>
-                  <span className="truncate text-[13px]">{t.title}</span>
-                  {t.body.trim() && <span className="shrink-0 text-[11px] text-[var(--c-text-3)]" aria-label="Has details">≡</span>}
-                </span>
-                {t.shared && <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" title="Shared with agents" />}
-                <span className="text-[10.5px] text-[var(--c-text-3)] tabular-nums shrink-0">{ago(t.created)}</span>
-              </div>
-            ))}
-            {done.length > 0 && (
-              <button
-                onClick={() => openKbInWindow('todos')}
-                className="mt-2 self-start text-[10.5px] font-mono uppercase tracking-wider text-[var(--c-text-3)] hover:text-[var(--c-text-2)]"
-              >
-                ▶ Archived ({done.length}) · last {ago(done[0].done!)}
-              </button>
-            )}
-          </>
-        ) : (
-          <>
-            {!loading && noteList.length === 0 && <p className="text-[12px] text-[var(--c-text-3)] py-2">No notes yet.</p>}
-            {noteList.map(n => (
-              <button
-                key={n.id}
-                onClick={() => openKbInWindow('notes', n.id)}
-                className="text-left py-1.5 border-b border-[var(--c-border)]/50 hover:bg-[var(--c-surface-2)] rounded px-1"
-              >
-                <div className="truncate text-[13px] font-medium">{noteTitle(n)}</div>
-                <div className="truncate text-[11px] text-[var(--c-text-3)]">Edited {ago(n.updated)} · <InlineMarkdown>{notePreview(n)}</InlineMarkdown></div>
-              </button>
-            ))}
-          </>
+        {base.length > 0 && (
+          <KbFilterBar
+            compact query={query} setQuery={setQuery} tags={tags}
+            sorts={seg === 'todos' ? ['newest', 'oldest', 'edited', 'az'] : ['edited', 'newest', 'oldest', 'az']}
+            matched={matched} total={base.length} onBulkShare={bulkShare}
+          />
+        )}
+        {!loading && base.length === 0 && (
+          <p className="text-[12px] text-[var(--c-text-3)] py-2">{seg === 'todos' ? 'All done. Nothing open.' : 'No notes yet.'}</p>
+        )}
+        {base.length > 0 && matched.length === 0 && <p className="text-[12px] text-[var(--c-text-3)] py-2">Nothing matches.</p>}
+        {seg === 'todos'
+          ? page.shown.map(t => <TodoItem key={t.id} t={t} onChange={upsert} />)
+          : page.shown.map(n => <NoteItem key={n.id} n={n} onChange={upsert} />)}
+        {page.remaining > 0 && (
+          <button onClick={page.more} className="mt-1.5 self-start text-[11px] text-[var(--c-accent)] hover:underline">
+            Show {Math.min(page.remaining, POPOVER_PAGE)} more ({page.remaining} hidden)
+          </button>
+        )}
+        {seg === 'todos' && done.length > 0 && (
+          <button
+            onClick={() => openKbInWindow('todos')}
+            className="mt-2 self-start text-[10.5px] font-mono uppercase tracking-wider text-[var(--c-text-3)] hover:text-[var(--c-text-2)]"
+          >
+            ▶ Archived ({done.length}) · last {ago(done[0].done!)}
+          </button>
         )}
       </div>
       <div className="border-t border-[var(--c-border)] px-3 py-2 flex items-center justify-between text-[11px] text-[var(--c-text-3)] flex-shrink-0">

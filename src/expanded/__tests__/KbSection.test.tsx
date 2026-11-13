@@ -6,7 +6,7 @@ vi.mock('@tauri-apps/api/event', () => ({ listen: vi.fn(() => Promise.resolve(()
 
 import { invoke } from '@tauri-apps/api/core'
 import KbSection from '../KbSection'
-import { noteTitle, notePreview, duration, splitTodoText, type KbItem } from '../../kb'
+import { noteTitle, notePreview, duration, splitTodoText, queryKb, type KbItem, type KbQuery } from '../../kb'
 import { toggleWrap, insertLink, continueList, markdownKey, sameSaved } from '../../noteEditing'
 import type { Agent } from '../../types'
 
@@ -142,6 +142,27 @@ describe('KbSection', () => {
     expect(localStorage.getItem('contextbar:kb:note')).toBe('blank')
   })
 
+  it('bulk shares the filtered todos with undo', async () => {
+    const list = [item({ id: 'a', title: 'Alpha', tags: ['repo:app'] }), item({ id: 'b', title: 'Beta' })]
+    setup(list)
+    mockInvoke.mockImplementation(async (cmd: string, args?: unknown) => {
+      if (cmd === 'kb_list') return list
+      if (cmd === 'kb_history') return []
+      if (cmd === 'kb_set_shared') {
+        const { items, shared } = args as { items: { id: string }[]; shared: boolean }
+        return items.map(r => ({ ...list.find(i => i.id === r.id)!, shared }))
+      }
+      return null
+    })
+    await screen.findByText('Alpha')
+    fireEvent.change(screen.getByLabelText('Filter by tag'), { target: { value: 'repo:app' } })
+    expect(screen.queryByText('Beta')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByText('Share all shown (1)'))
+    await waitFor(() => expect(mockInvoke).toHaveBeenCalledWith('kb_set_shared', { items: [{ kind: 'todo', id: 'a' }], shared: true }))
+    fireEvent.click(await screen.findByText('Undo'))
+    await waitFor(() => expect(mockInvoke).toHaveBeenCalledWith('kb_set_shared', { items: [{ kind: 'todo', id: 'a' }], shared: false }))
+  })
+
   it('compact banner offers to install the skill for agents missing it', async () => {
     localStorage.setItem('contextbar:kb:sharing-guide-dismissed', '1')
     setup([item({ id: 'a', title: 'Shared', shared: true })], [agent('claude', ['context-bar']), agent('codex')])
@@ -176,6 +197,23 @@ describe('kb helpers', () => {
     expect(notePreview(n)).toBe('☐ ship *it*')
     expect(notePreview(item({ kind: 'note', title: 'T', body: '1. first' }))).toBe('1\\. first')
     expect(notePreview(item({ kind: 'note', title: 'T', body: '> quoted [link](http://x)' }))).toBe('quoted [link](http://x)')
+  })
+
+  it('queries by text, sharing, tag and sort', () => {
+    const list = [
+      item({ id: 'a', title: 'banana', created: 3, updated: 1, shared: true, tags: ['global'] }),
+      item({ id: 'b', title: 'Apple', created: 1, updated: 3, body: 'see pnpm' }),
+      item({ id: 'c', title: 'cherry', created: 2, updated: 2 }),
+    ]
+    const q = (p: Partial<KbQuery>) => queryKb(list, { q: '', share: 'all', tag: '', sort: 'newest', ...p }).map(i => i.id)
+    expect(q({})).toEqual(['a', 'c', 'b'])
+    expect(q({ sort: 'oldest' })).toEqual(['b', 'c', 'a'])
+    expect(q({ sort: 'edited' })).toEqual(['b', 'c', 'a'])
+    expect(q({ sort: 'az' })).toEqual(['b', 'a', 'c'])
+    expect(q({ q: 'PNPM' })).toEqual(['b'])
+    expect(q({ share: 'shared' })).toEqual(['a'])
+    expect(q({ share: 'private' })).toEqual(['c', 'b'])
+    expect(q({ tag: 'global' })).toEqual(['a'])
   })
 
   it('formats durations', () => {

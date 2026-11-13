@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { invoke } from '@tauri-apps/api/core'
 import type { Agent } from '../types'
 import AutoTextarea from '../components/AutoTextarea'
 import Markdown from '../components/Markdown'
 import InlineMarkdown from '../components/InlineMarkdown'
+import KbFilterBar from '../components/KbFilterBar'
 import AgentDot from '../components/AgentDot'
 import { NOTE_SHORTCUTS, NOTE_SYNTAX, markdownKey, sameSaved, type Edit } from '../noteEditing'
 import {
-  KB_GUIDE_DISMISSED_KEY, KB_NOTE_KEY, KB_TAB_KEY, ago, agentsWithKbSkill, dayLabel, doneTodos, duration, kbApi, noteTitle, notePreview, notes as notesOf,
+  KB_GUIDE_DISMISSED_KEY, KB_NOTE_KEY, KB_TAB_KEY, ago, allTags, openLinkFromClick, queryKb, useKbQuery, usePaged, agentsWithKbSkill, dayLabel, doneTodos, duration, kbApi, noteTitle, notePreview, notes as notesOf,
   openTodos, timeLabel, useKb, type KbHistoryEvent, type KbItem, type KbKind,
 } from '../kb'
 
@@ -82,6 +82,17 @@ export default function KbSection({ agents, repoNames, showToast }: {
     return kbApi.update(item.kind, item.id, p).then(upsert).catch(fail)
   }, [upsert, fail])
 
+  const bulkShare = useCallback((list: KbItem[], isShared: boolean) => {
+    kbApi.setShared(list, isShared).then(out => {
+      out.forEach(upsert)
+      const n = out.length
+      offerUndo({
+        message: `${isShared ? 'Shared' : 'Made private'} ${n} item${n === 1 ? '' : 's'}`,
+        run: () => kbApi.setShared(out, !isShared).then(r => r.forEach(upsert)),
+      })
+    }).catch(fail)
+  }, [upsert, offerUndo, fail])
+
   const tabBtn = (id: KbTab, label: string, count?: number) => (
     <button
       key={id}
@@ -112,14 +123,14 @@ export default function KbSection({ agents, repoNames, showToast }: {
           <TodosTab
             open={open} done={done} loading={loading} tagSuggestions={tagSuggestions}
             onAdd={(text, tags) => kbApi.createTodo(text, tags).then(upsert).catch(fail)}
-            onComplete={complete} onRemove={remove} onPatch={patch}
+            onComplete={complete} onRemove={remove} onPatch={patch} onBulkShare={bulkShare}
           />
         )}
         {tab === 'notes' && (
           <NotesTab
             notes={noteList} tagSuggestions={tagSuggestions}
             onCreate={() => kbApi.create('note', '', '').then(n => { upsert(n); return n }).catch(e => { fail(e); return null })}
-            onRemove={remove} onPatch={patch}
+            onRemove={remove} onPatch={patch} onBulkShare={bulkShare}
           />
         )}
         {tab === 'history' && <HistoryTab refreshKey={items} />}
@@ -319,7 +330,19 @@ function TagEditor({ tags, suggestions, onChange, compact }: {
 
 // ── Todos ────────────────────────────────────────────────────────────────────
 
-function TodosTab({ open, done, loading, tagSuggestions, onAdd, onComplete, onRemove, onPatch }: {
+const WINDOW_PAGE = 50
+
+function ShowMore({ remaining, onMore, compact }: { remaining: number; onMore: () => void; compact?: boolean }) {
+  if (remaining <= 0) return null
+  return (
+    <button onClick={onMore}
+      className={`mt-2 block ${compact ? 'text-[11px]' : 'text-[12px]'} text-[var(--c-accent)] hover:underline`}>
+      Show {remaining > (compact ? 20 : WINDOW_PAGE) ? 'more' : `${remaining} more`} ({remaining} hidden)
+    </button>
+  )
+}
+
+function TodosTab({ open, done, loading, tagSuggestions, onAdd, onComplete, onRemove, onPatch, onBulkShare }: {
   open: KbItem[]
   done: KbItem[]
   loading: boolean
@@ -328,9 +351,17 @@ function TodosTab({ open, done, loading, tagSuggestions, onAdd, onComplete, onRe
   onComplete: (t: KbItem, done: boolean) => void
   onRemove: (t: KbItem) => void
   onPatch: (t: KbItem, p: Parameters<typeof kbApi.update>[2]) => unknown
+  onBulkShare: (items: KbItem[], shared: boolean) => void
 }) {
   const [text, setText] = useState('')
   const [archOpen, setArchOpen] = useState(false)
+  const [query, setQuery] = useKbQuery('window:todos', 'newest')
+  const qKey = JSON.stringify(query)
+  const openShown = useMemo(() => queryKb(open, query), [open, query])
+  const doneShown = useMemo(() => queryKb(done, query), [done, query])
+  const tags = useMemo(() => allTags([...open, ...done]), [open, done])
+  const openPage = usePaged(openShown, WINDOW_PAGE, qKey)
+  const donePage = usePaged(doneShown, WINDOW_PAGE, qKey)
   const add = () => {
     const t = text.trim()
     if (!t) return
@@ -345,21 +376,29 @@ function TodosTab({ open, done, loading, tagSuggestions, onAdd, onComplete, onRe
         title="Enter saves · Shift+Enter adds a line (extra lines become details)"
         className="w-full mb-3 px-3 py-2 rounded-lg border border-[var(--c-border)] bg-[var(--c-surface)] text-[14px] leading-5 outline-none focus:border-[var(--c-accent)]"
       />
+      {open.length > 0 && (
+        <KbFilterBar
+          query={query} setQuery={setQuery} tags={tags} sorts={['newest', 'oldest', 'edited', 'az']}
+          matched={openShown} total={open.length} onBulkShare={onBulkShare}
+        />
+      )}
       {!loading && open.length === 0 && <p className="text-[13px] text-[var(--c-text-3)] py-3">All done. Nothing open.</p>}
-      {open.map(t => (
+      {open.length > 0 && openShown.length === 0 && <p className="text-[13px] text-[var(--c-text-3)] py-3">No todos match.</p>}
+      {openPage.shown.map(t => (
         <TodoRow key={t.id} todo={t} tagSuggestions={tagSuggestions} onComplete={onComplete} onRemove={onRemove} onPatch={onPatch} />
       ))}
+      <ShowMore remaining={openPage.remaining} onMore={openPage.more} />
       <button
         onClick={() => setArchOpen(o => !o)}
         className="mt-4 flex items-center gap-1.5 text-[12px] font-mono uppercase tracking-wider text-[var(--c-text-3)] hover:text-[var(--c-text-2)]"
         aria-expanded={archOpen}
       >
         <span className={`inline-block transition-transform ${archOpen ? 'rotate-90' : ''}`}>▶</span>
-        Archived ({done.length})
+        Archived ({doneShown.length === done.length ? done.length : `${doneShown.length} of ${done.length}`})
       </button>
       {archOpen && (done.length === 0
         ? <p className="text-[13px] text-[var(--c-text-3)] py-2">Nothing archived yet.</p>
-        : done.map(t => (
+        : donePage.shown.map(t => (
           <div key={t.id} className="group flex items-center gap-3 py-2 border-b border-[var(--c-border)]/50">
             <span className="w-4 h-4 rounded border border-emerald-500/50 bg-emerald-500/15 text-emerald-400 text-[10px] flex items-center justify-center">✓</span>
             <span className="flex-1 min-w-0 truncate text-[13.5px] text-[var(--c-text-3)] line-through">{t.title}</span>
@@ -370,6 +409,7 @@ function TodosTab({ open, done, loading, tagSuggestions, onAdd, onComplete, onRe
             <button onClick={() => onRemove(t)} aria-label="Delete" className="text-[12px] text-[var(--c-text-3)] hover:text-rose-400 opacity-0 group-hover:opacity-100">Delete</button>
           </div>
         )))}
+      {archOpen && <ShowMore remaining={donePage.remaining} onMore={donePage.more} />}
     </div>
   )
 }
@@ -514,13 +554,7 @@ function TodoDetails({ todo, onPatch }: {
       {body.trim() ? (
         <div
           onDoubleClick={() => setEditing(true)}
-          onClick={e => {
-            const a = (e.target as HTMLElement).closest('a')
-            if (!a) return
-            e.preventDefault()
-            const href = a.getAttribute('href') ?? ''
-            if (/^https?:\/\//i.test(href)) invoke('open_url', { url: href }).catch(() => {})
-          }}
+          onClick={openLinkFromClick}
           title="Double-click to edit"
           className="kb-note-preview rounded-lg px-3 py-2 bg-[var(--c-surface)] border border-[var(--c-border-sub)]"
         >
@@ -544,13 +578,18 @@ function TodoDetails({ todo, onPatch }: {
 
 const AUTOSAVE_MS = 600
 
-function NotesTab({ notes, tagSuggestions, onCreate, onRemove, onPatch }: {
+function NotesTab({ notes, tagSuggestions, onCreate, onRemove, onPatch, onBulkShare }: {
   notes: KbItem[]
   tagSuggestions: string[]
   onCreate: () => Promise<KbItem | null>
   onRemove: (n: KbItem) => void
   onPatch: (n: KbItem, p: Parameters<typeof kbApi.update>[2]) => Promise<unknown>
+  onBulkShare: (items: KbItem[], shared: boolean) => void
 }) {
+  const [query, setQuery] = useKbQuery('window:notes', 'edited')
+  const shownNotes = useMemo(() => queryKb(notes, query), [notes, query])
+  const tags = useMemo(() => allTags(notes), [notes])
+  const page = usePaged(shownNotes, WINDOW_PAGE, JSON.stringify(query))
   const [activeId, setActiveId] = useState<string | null>(() => localStorage.getItem(KB_NOTE_KEY))
   const active = notes.find(n => n.id === activeId) ?? notes[0] ?? null
 
@@ -576,9 +615,18 @@ function NotesTab({ notes, tagSuggestions, onCreate, onRemove, onPatch }: {
         >
           + New note
         </button>
+        {notes.length > 0 && (
+          <div className="px-3">
+            <KbFilterBar
+              compact query={query} setQuery={setQuery} tags={tags} sorts={['edited', 'newest', 'oldest', 'az']}
+              matched={shownNotes} total={notes.length} onBulkShare={onBulkShare}
+            />
+          </div>
+        )}
         <div className="flex-1 overflow-y-auto">
           {notes.length === 0 && <p className="px-4 text-[13px] text-[var(--c-text-3)]">No notes yet.</p>}
-          {notes.map(n => (
+          {notes.length > 0 && shownNotes.length === 0 && <p className="px-4 text-[13px] text-[var(--c-text-3)]">No notes match.</p>}
+          {page.shown.map(n => (
             <button
               key={n.id}
               onClick={() => select(n.id)}
@@ -591,6 +639,7 @@ function NotesTab({ notes, tagSuggestions, onCreate, onRemove, onPatch }: {
               <div className="truncate text-[12px] text-[var(--c-text-3)]">{ago(n.updated)} · <InlineMarkdown>{notePreview(n)}</InlineMarkdown></div>
             </button>
           ))}
+          <div className="px-4 pb-3"><ShowMore compact remaining={page.remaining} onMore={page.more} /></div>
         </div>
       </div>
       {active
@@ -723,14 +772,7 @@ function NoteEditor({ note, tagSuggestions, onRemove, onPatch }: {
         <div
           className="flex-1 overflow-y-auto"
           onDoubleClick={() => setMode('edit')}
-          onClick={e => {
-            // Links must open in the browser, never navigate this window.
-            const a = (e.target as HTMLElement).closest('a')
-            if (!a) return
-            e.preventDefault()
-            const href = a.getAttribute('href') ?? ''
-            if (/^https?:\/\//i.test(href)) invoke('open_url', { url: href }).catch(() => {})
-          }}
+          onClick={openLinkFromClick}
           title="Double-click to edit"
         >
           {body.trim()

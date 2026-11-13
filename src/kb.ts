@@ -74,6 +74,99 @@ export const kbApi = {
   remove: (kind: KbKind, id: string) => invoke<void>('kb_delete', { kind, id }),
   undelete: (kind: KbKind, id: string) => invoke<KbItem>('kb_undelete', { kind, id }),
   installSkill: (agentIds: string[]) => invoke<string[]>('kb_install_skill', { agentIds }),
+  /** Share or unshare many items at once (one index rewrite). */
+  setShared: (items: KbItem[], shared: boolean) =>
+    invoke<KbItem[]>('kb_set_shared', { items: items.map(i => ({ kind: i.kind, id: i.id })), shared }),
+}
+
+// ── Filtering, sorting, paging ──────────────────────────────────────────────
+
+export type KbSort = 'newest' | 'oldest' | 'edited' | 'az'
+export type KbShareFilter = 'all' | 'shared' | 'private'
+
+export interface KbQuery {
+  q: string
+  share: KbShareFilter
+  /** '' = any tag. */
+  tag: string
+  sort: KbSort
+}
+
+export const KB_SORT_LABELS: Record<KbSort, string> = {
+  newest: 'Newest',
+  oldest: 'Oldest',
+  edited: 'Recently edited',
+  az: 'A–Z',
+}
+
+function sortTitle(i: KbItem): string {
+  return (i.kind === 'note' ? noteTitle(i) : i.title).toLowerCase()
+}
+
+/** Search (title, body, tags), share state, tag, then sort. */
+export function queryKb(items: KbItem[], query: KbQuery): KbItem[] {
+  const q = query.q.trim().toLowerCase()
+  const out = items.filter(i =>
+    (query.share === 'all' || (query.share === 'shared') === i.shared)
+    && (!query.tag || i.tags.includes(query.tag))
+    && (!q || i.title.toLowerCase().includes(q) || i.body.toLowerCase().includes(q) || i.tags.some(t => t.includes(q))))
+  const by: Record<KbSort, (a: KbItem, b: KbItem) => number> = {
+    newest: (a, b) => b.created - a.created,
+    oldest: (a, b) => a.created - b.created,
+    edited: (a, b) => b.updated - a.updated,
+    az: (a, b) => sortTitle(a).localeCompare(sortTitle(b)),
+  }
+  return out.sort(by[query.sort])
+}
+
+/** Tags in use, for the filter menu. */
+export function allTags(items: KbItem[]): string[] {
+  return [...new Set(items.flatMap(i => i.tags))].sort()
+}
+
+/** Filter/sort state per list ('popover:todos', 'window:notes', ...).
+ *  Share, tag and sort persist; the search text does not. */
+export function useKbQuery(key: string, defaultSort: KbSort) {
+  const storageKey = `contextbar:kb:query:${key}`
+  const [query, setQueryState] = useState<KbQuery>(() => {
+    const base: KbQuery = { q: '', share: 'all', tag: '', sort: defaultSort }
+    try {
+      const saved = JSON.parse(localStorage.getItem(storageKey) ?? '{}')
+      return {
+        ...base,
+        ...(saved.share in { all: 1, shared: 1, private: 1 } ? { share: saved.share } : {}),
+        ...(typeof saved.tag === 'string' ? { tag: saved.tag } : {}),
+        ...(saved.sort in KB_SORT_LABELS ? { sort: saved.sort } : {}),
+      }
+    } catch { return base }
+  })
+  const setQuery = useCallback((patch: Partial<KbQuery>) => {
+    setQueryState(prev => {
+      const next = { ...prev, ...patch }
+      localStorage.setItem(storageKey, JSON.stringify({ share: next.share, tag: next.tag, sort: next.sort }))
+      return next
+    })
+  }, [storageKey])
+  return [query, setQuery] as const
+}
+
+/** First `pageSize * pages` items, with "show more" that resets when the
+ *  list's query changes. */
+export function usePaged<T>(list: T[], pageSize: number, resetKey: unknown) {
+  const [pages, setPages] = useState(1)
+  const [lastKey, setLastKey] = useState(resetKey)
+  if (lastKey !== resetKey) { setLastKey(resetKey); setPages(1) }
+  const shown = list.slice(0, pageSize * pages)
+  return { shown, remaining: list.length - shown.length, more: () => setPages(p => p + 1) }
+}
+
+/** Markdown previews must open links in the browser, never navigate the webview. */
+export function openLinkFromClick(e: { target: EventTarget; preventDefault: () => void }) {
+  const a = (e.target as HTMLElement).closest?.('a')
+  if (!a) return
+  e.preventDefault()
+  const href = a.getAttribute('href') ?? ''
+  if (/^https?:\/\//i.test(href)) invoke('open_url', { url: href }).catch(() => {})
 }
 
 /** Items from ~/.context-bar/kb, refreshed whenever the folder changes. */
