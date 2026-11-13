@@ -203,7 +203,7 @@ function AgentSharing({ agents, sharedCount, showToast }: {
       ['Agents read it', 'The context-bar skill points every agent to your shared items, so you stop repeating yourself.'],
     ]
     return (
-      <section aria-label="How sharing with agents works" className="mx-6 mb-3 rounded-xl border border-[var(--c-accent)]/30 bg-[var(--c-accent)]/[0.06] p-4">
+      <section aria-label="How sharing with agents works" className="shrink-0 mx-6 mb-3 rounded-xl border border-[var(--c-accent)]/30 bg-[var(--c-accent)]/[0.06] p-4">
         <div className="flex items-start gap-3 mb-3">
           <div className="flex-1">
             <div className="text-[10.5px] font-mono uppercase tracking-wider text-[var(--c-accent)] mb-0.5">New · context-bar skill</div>
@@ -246,7 +246,7 @@ function AgentSharing({ agents, sharedCount, showToast }: {
   }
 
   return (
-    <div className="mx-6 mb-3 flex items-center gap-3 rounded-lg border border-[var(--c-border)] bg-[var(--c-surface-2)]/40 px-3.5 py-2 text-[12.5px]">
+    <div className="shrink-0 mx-6 mb-3 flex items-center gap-3 rounded-lg border border-[var(--c-border)] bg-[var(--c-surface-2)]/40 px-3.5 py-2 text-[12.5px]">
       <span className="flex-1 text-[var(--c-text-2)]">
         {sharedCount} item{sharedCount === 1 ? '' : 's'} shared.{' '}
         {withSkill.length === 0
@@ -611,12 +611,12 @@ function NotesTab({ notes, tagSuggestions, onCreate, onRemove, onPatch, onBulkSh
             if (blank) select(blank.id)
             else onCreate().then(n => { if (n) select(n.id) })
           }}
-          className="m-3 px-3 py-1.5 rounded-lg border border-dashed border-[var(--c-border)] text-[13px] text-[var(--c-text-2)] hover:border-[var(--c-accent)] hover:text-[var(--c-accent)]"
+          className="m-3 shrink-0 px-3 py-1.5 rounded-lg border border-dashed border-[var(--c-border)] text-[13px] text-[var(--c-text-2)] hover:border-[var(--c-accent)] hover:text-[var(--c-accent)]"
         >
           + New note
         </button>
         {notes.length > 0 && (
-          <div className="px-3">
+          <div className="px-3 shrink-0">
             <KbFilterBar
               compact query={query} setQuery={setQuery} tags={tags} sorts={['edited', 'newest', 'oldest', 'az']}
               matched={shownNotes} total={notes.length} onBulkShare={onBulkShare}

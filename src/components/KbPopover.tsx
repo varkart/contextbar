@@ -230,7 +230,7 @@ export default function KbPopoverView() {
 
   return (
     <div className="flex flex-col h-full">
-      <div className="flex-1 overflow-y-auto p-3 flex flex-col gap-1">
+      <div className="flex-1 min-h-0 overflow-y-auto p-3 flex flex-col gap-1 *:shrink-0">
         {tip && (
           <div role="note" className="mb-2 rounded-lg border border-[var(--c-accent)]/30 bg-[var(--c-accent)]/[0.07] p-2.5 text-[11.5px]">
             <div className="flex items-start gap-2">
