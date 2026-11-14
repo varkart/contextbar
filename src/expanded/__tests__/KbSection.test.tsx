@@ -6,7 +6,7 @@ vi.mock('@tauri-apps/api/event', () => ({ listen: vi.fn(() => Promise.resolve(()
 
 import { invoke } from '@tauri-apps/api/core'
 import KbSection from '../KbSection'
-import { noteTitle, notePreview, duration, splitTodoText, queryKb, type KbItem, type KbQuery } from '../../kb'
+import { noteTitle, notePreview, duration, splitTodoText, queryKb, liveQuery, type KbItem, type KbQuery } from '../../kb'
 import { toggleWrap, insertLink, continueList, markdownKey, sameSaved } from '../../noteEditing'
 import type { Agent } from '../../types'
 
@@ -126,6 +126,35 @@ describe('KbSection', () => {
     { timeout: 2000 })
   })
 
+  it('typing during a details save keeps the newer text', async () => {
+    const todo = item({ id: 'a', title: 'Deploy', body: '' })
+    let release: () => void = () => {}
+    mockInvoke.mockImplementation(async (cmd: string, args?: unknown) => {
+      if (cmd === 'kb_list') return [todo]
+      if (cmd === 'kb_history') return []
+      if (cmd === 'kb_update') {
+        await new Promise<void>(r => { release = r })
+        return { ...todo, ...(args as { patch: object }).patch }
+      }
+      return null
+    })
+    render(<KbSection agents={[]} repoNames={['app']} showToast={vi.fn()} />)
+    fireEvent.click(await screen.findByText('Deploy'), { detail: 1 })
+    fireEvent.click(screen.getByText('+ Add details'))
+    const area = screen.getByLabelText('Todo details') as HTMLTextAreaElement
+    fireEvent.change(area, { target: { value: 'abc' } })
+    await waitFor(() => expect(mockInvoke).toHaveBeenCalledWith('kb_update', expect.anything()), { timeout: 2000 })
+    fireEvent.change(area, { target: { value: 'abcd' } })
+    release()
+    await new Promise(r => setTimeout(r, 50))
+    expect(area.value).toBe('abcd')
+  })
+
+  it('archived todos keep the filter bar when nothing is open', async () => {
+    setup([item({ id: 'd', title: 'Old', done: Date.now() })])
+    expect(await screen.findByLabelText('Filter by sharing')).toBeInTheDocument()
+  })
+
   it('todos without details offer to add them', async () => {
     setup([item({ id: 'a', title: 'Plain' })])
     fireEvent.click(await screen.findByText('Plain'), { detail: 1 })
@@ -185,6 +214,13 @@ describe('KbSection', () => {
 })
 
 describe('kb helpers', () => {
+  it('search matches tags regardless of case, and a vanished tag stops filtering', () => {
+    const q: KbQuery = { q: 'repo', share: 'all', tag: '', sort: 'newest' }
+    expect(queryKb([item({ id: 'a', tags: ['Repo:App'] })], q)).toHaveLength(1)
+    const gone: KbQuery = { ...q, q: '', tag: 'old' }
+    expect(liveQuery(gone, ['new']).tag).toBe('')
+    expect(liveQuery(gone, ['old'])).toBe(gone)
+  })
   it('derives a note title from the first body line when untitled', () => {
     expect(noteTitle(item({ kind: 'note', body: '\n# Setup\nuse pnpm' }))).toBe('Setup')
     expect(notePreview(item({ kind: 'note', body: '# Setup\nuse pnpm' }))).toBe('use pnpm')
@@ -224,6 +260,10 @@ describe('kb helpers', () => {
 })
 
 describe('note editing helpers', () => {
+  it('does not unwrap a selection spanning two bold spans', () => {
+    const v = '**Note**: see **this**'
+    expect(toggleWrap(v, 0, v.length, '**').value).toBe('****Note**: see **this****')
+  })
   it('wraps and unwraps bold', () => {
     const w = toggleWrap('make this bold', 5, 9, '**')
     expect(w).toEqual({ value: 'make **this** bold', start: 7, end: 11 })

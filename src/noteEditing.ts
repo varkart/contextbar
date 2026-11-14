@@ -22,6 +22,11 @@ function hasMarker(marker: string, run: number): boolean {
   return run >= marker.length
 }
 
+function containsMarker(s: string, marker: string): boolean {
+  const runs = s.match(new RegExp(`\\${marker[0]}+`, 'g')) ?? []
+  return runs.some(r => hasMarker(marker, r.length))
+}
+
 /** Wraps the selection in `marker` (e.g. `**`), or unwraps it if already wrapped. */
 export function toggleWrap(value: string, start: number, end: number, marker: string, placeholder = 'text'): Edit {
   const m = marker.length
@@ -36,8 +41,10 @@ export function toggleWrap(value: string, start: number, end: number, marker: st
   }
   const selected = value.slice(start, end)
   const inner = Math.min(runAfter(selected, 0, c), runBefore(selected, selected.length, c))
-  if (selected.length > 2 * m && hasMarker(marker, inner)) {
-    const stripped = selected.slice(m, -m)
+  const stripped = selected.slice(m, -m)
+  // `**a** and **b**` starts and ends with markers from two spans; unwrapping
+  // it would invert the formatting, so only unwrap one span.
+  if (selected.length > 2 * m && hasMarker(marker, inner) && !containsMarker(stripped, marker)) {
     return { value: value.slice(0, start) + stripped + value.slice(end), start, end: start + stripped.length }
   }
   const text = selected || placeholder

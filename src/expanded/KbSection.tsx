@@ -8,7 +8,7 @@ import KbSharePill from '../components/KbSharePill'
 import AgentDot from '../components/AgentDot'
 import { NOTE_SHORTCUTS, NOTE_SYNTAX, markdownKey, sameSaved, type Edit } from '../noteEditing'
 import {
-  KB_GUIDE_DISMISSED_KEY, KB_NOTE_KEY, KB_TAB_KEY, ago, allTags, openLinkFromClick, queryKb, useKbQuery, usePaged, agentsWithKbSkill, dayLabel, doneTodos, duration, kbApi, noteTitle, notePreview, notes as notesOf,
+  KB_GUIDE_DISMISSED_KEY, KB_NOTE_KEY, KB_TAB_KEY, ago, allTags, openLinkFromClick, liveQuery, queryKb, useKbQuery, usePaged, agentsWithKbSkill, dayLabel, doneTodos, duration, kbApi, noteTitle, notePreview, notes as notesOf,
   openTodos, timeLabel, useKb, type KbHistoryEvent, type KbItem, type KbKind,
 } from '../kb'
 
@@ -127,7 +127,7 @@ export default function KbSection({ agents, repoNames, showToast }: {
         {tab === 'todos' && (
           <TodosTab
             open={open} done={done} loading={loading} tagSuggestions={tagSuggestions}
-            onAdd={(text, tags) => kbApi.createTodo(text, tags).then(upsert).catch(fail)}
+            onAdd={(text, tags) => kbApi.createTodo(text, tags).then(upsert).catch(e => { fail(e); return false })}
             onComplete={complete} onRemove={remove} onPatch={patch} onBulkShare={bulkShare}
           />
         )}
@@ -354,18 +354,19 @@ function TodosTab({ open, done, loading, tagSuggestions, onAdd, onComplete, onRe
   const [text, setText] = useState('')
   const [archOpen, setArchOpen] = useState(false)
   const agents = useContext(KbAgents)
-  const [query, setQuery] = useKbQuery('window:todos', 'newest')
+  const [savedQuery, setQuery] = useKbQuery('window:todos', 'newest')
+  const tags = useMemo(() => allTags([...open, ...done]), [open, done])
+  const query = useMemo(() => liveQuery(savedQuery, tags), [savedQuery, tags])
   const qKey = JSON.stringify(query)
   const openShown = useMemo(() => queryKb(open, query), [open, query])
   const doneShown = useMemo(() => queryKb(done, query), [done, query])
-  const tags = useMemo(() => allTags([...open, ...done]), [open, done])
   const openPage = usePaged(openShown, WINDOW_PAGE, qKey)
   const donePage = usePaged(doneShown, WINDOW_PAGE, qKey)
   const add = () => {
     const t = text.trim()
     if (!t) return
-    onAdd(t, [])
     setText('')
+    Promise.resolve(onAdd(t, [])).then(ok => { if (ok === false) setText(cur => cur || t) })
   }
   return (
     <div className="flex-1 overflow-y-auto px-6 py-4">
@@ -375,7 +376,7 @@ function TodosTab({ open, done, loading, tagSuggestions, onAdd, onComplete, onRe
         title="Enter saves · Shift+Enter adds a line (extra lines become details)"
         className="w-full mb-3 px-3 py-2 rounded-lg border border-[var(--c-border)] bg-[var(--c-surface)] text-[14px] leading-5 outline-none focus:border-[var(--c-accent)]"
       />
-      {open.length > 0 && (
+      {open.length + done.length > 0 && (
         <KbFilterBar
           query={query} setQuery={setQuery} tags={tags} sorts={['newest', 'oldest', 'edited', 'az']}
           matched={openShown} total={open.length} onBulkShare={onBulkShare} agents={agents}
@@ -405,7 +406,7 @@ function TodosTab({ open, done, loading, tagSuggestions, onAdd, onComplete, onRe
               Done {dayLabel(t.done!)} {timeLabel(t.done!)} · open {duration(t.done! - t.created)}
             </span>
             <button onClick={() => onComplete(t, false)} className="text-[12px] text-[var(--c-accent)] hover:underline">Restore</button>
-            <button onClick={() => onRemove(t)} aria-label="Delete" className="text-[12px] text-[var(--c-text-3)] hover:text-rose-400 opacity-0 group-hover:opacity-100">Delete</button>
+            <button onClick={() => onRemove(t)} aria-label="Delete" className="text-[12px] text-[var(--c-text-3)] hover:text-rose-400 opacity-0 group-hover:opacity-100 focus:opacity-100">Delete</button>
           </div>
         )))}
       {archOpen && <ShowMore remaining={donePage.remaining} onMore={donePage.more} />}
@@ -505,7 +506,8 @@ function TodoDetails({ todo, onPatch }: {
     const p = pending.current
     if (p === null) return
     pending.current = null
-    Promise.resolve(onPatch(todoRef.current, { body: p })).finally(() => setDirty(false))
+    // Stay dirty while newer text waits to save, so a refresh can't put the older body back.
+    Promise.resolve(onPatch(todoRef.current, { body: p })).finally(() => { if (pending.current === null) setDirty(false) })
   }, [onPatch])
 
   useEffect(() => () => flush(), [flush])
@@ -586,9 +588,10 @@ function NotesTab({ notes, tagSuggestions, onCreate, onRemove, onPatch, onBulkSh
   onBulkShare: (items: KbItem[], shared: boolean) => void
 }) {
   const agents = useContext(KbAgents)
-  const [query, setQuery] = useKbQuery('window:notes', 'edited')
-  const shownNotes = useMemo(() => queryKb(notes, query), [notes, query])
+  const [savedQuery, setQuery] = useKbQuery('window:notes', 'edited')
   const tags = useMemo(() => allTags(notes), [notes])
+  const query = useMemo(() => liveQuery(savedQuery, tags), [savedQuery, tags])
+  const shownNotes = useMemo(() => queryKb(notes, query), [notes, query])
   const page = usePaged(shownNotes, WINDOW_PAGE, JSON.stringify(query))
   const [activeId, setActiveId] = useState<string | null>(() => localStorage.getItem(KB_NOTE_KEY))
   const active = notes.find(n => n.id === activeId) ?? notes[0] ?? null
@@ -659,6 +662,7 @@ function NoteEditor({ note, tagSuggestions, onRemove, onPatch }: {
   const [body, setBody] = useState(note.body)
   const [status, setStatus] = useState<'saved' | 'dirty' | 'saving'>('saved')
   const pending = useRef<{ title: string; body: string } | null>(null)
+  const inFlight = useRef(0)
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined)
   const noteRef = useRef(note)
   noteRef.current = note
@@ -679,7 +683,11 @@ function NoteEditor({ note, tagSuggestions, onRemove, onPatch }: {
     if (!p) return
     pending.current = null
     setStatus('saving')
-    onPatch(noteRef.current, p).finally(() => setStatus(s => (s === 'saving' ? 'saved' : s)))
+    inFlight.current++
+    onPatch(noteRef.current, p).finally(() => {
+      inFlight.current--
+      if (inFlight.current === 0) setStatus(s => (s === 'saving' ? 'saved' : s))
+    })
   }, [onPatch])
 
   useEffect(() => () => flush(), [flush])

@@ -6,7 +6,7 @@ import Markdown from './Markdown'
 import KbSharePill from './KbSharePill'
 import type { Agent } from '../types'
 import {
-  KB_GUIDE_DISMISSED_KEY, KB_POPOVER_TIP_KEY, ago, allTags, openLinkFromClick, queryKb, useKbQuery, usePaged, doneTodos, kbApi, noteTitle, notePreview, notes as notesOf, openKbInWindow, openTodos, useKb,
+  KB_GUIDE_DISMISSED_KEY, KB_POPOVER_TIP_KEY, ago, allTags, openLinkFromClick, liveQuery, queryKb, useKbQuery, usePaged, doneTodos, kbApi, noteTitle, notePreview, notes as notesOf, openKbInWindow, openTodos, useKb,
   type KbItem, type KbKind,
 } from '../kb'
 
@@ -91,9 +91,9 @@ export function QuickAdd({ onAdded }: { onAdded: (item: KbItem) => void }) {
           onSubmit={submit}
           maxRows={4}
           onKeyDown={e => {
-            if (e.key === 'Tab') { e.preventDefault(); setKind(k => (k === 'todo' ? 'note' : 'todo')) }
+            if (e.key === 'Tab' && !e.shiftKey) { e.preventDefault(); setKind(k => (k === 'todo' ? 'note' : 'todo')) }
           }}
-          title="Enter saves · Shift+Enter adds a line · Tab switches Todo/Note"
+          title="Enter saves · Shift+Enter adds a line · Tab switches Todo/Note · Shift+Tab leaves"
           placeholder={kind === 'todo' ? 'Add a todo… (Enter)' : 'Jot a note… (Enter)'}
           aria-label={kind === 'todo' ? 'Add a todo' : 'Jot a note'}
           className="flex-1 min-w-0 bg-transparent text-[12.5px] leading-[18px] py-0.5 outline-none placeholder:text-[var(--c-text-3)]"
@@ -190,11 +190,12 @@ export default function KbPopoverView({ agents = [] }: { agents?: Agent[] }) {
 
   const [todoQuery, setTodoQuery] = useKbQuery('popover:todos', 'newest')
   const [noteQuery, setNoteQuery] = useKbQuery('popover:notes', 'edited')
-  const query = seg === 'todos' ? todoQuery : noteQuery
   const setQuery = seg === 'todos' ? setTodoQuery : setNoteQuery
   const base = seg === 'todos' ? open : noteList
-  const matched = useMemo(() => queryKb(base, query), [base, query])
   const tags = useMemo(() => allTags(base), [base])
+  const savedQuery = seg === 'todos' ? todoQuery : noteQuery
+  const query = useMemo(() => liveQuery(savedQuery, tags), [savedQuery, tags])
+  const matched = useMemo(() => queryKb(base, query), [base, query])
   const page = usePaged(matched, POPOVER_PAGE, `${seg}:${JSON.stringify(query)}`)
 
   const add = () => {

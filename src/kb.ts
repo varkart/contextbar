@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
 import type { Agent } from './types'
@@ -109,7 +109,7 @@ export function queryKb(items: KbItem[], query: KbQuery): KbItem[] {
   const out = items.filter(i =>
     (query.share === 'all' || (query.share === 'shared') === i.shared)
     && (!query.tag || i.tags.includes(query.tag))
-    && (!q || i.title.toLowerCase().includes(q) || i.body.toLowerCase().includes(q) || i.tags.some(t => t.includes(q))))
+    && (!q || i.title.toLowerCase().includes(q) || i.body.toLowerCase().includes(q) || i.tags.some(t => t.toLowerCase().includes(q))))
   const by: Record<KbSort, (a: KbItem, b: KbItem) => number> = {
     newest: (a, b) => b.created - a.created,
     oldest: (a, b) => a.created - b.created,
@@ -117,6 +117,11 @@ export function queryKb(items: KbItem[], query: KbQuery): KbItem[] {
     az: (a, b) => sortTitle(a).localeCompare(sortTitle(b)),
   }
   return out.sort(by[query.sort])
+}
+
+/** The query with its tag filter dropped when no item carries that tag anymore. */
+export function liveQuery(query: KbQuery, tags: string[]): KbQuery {
+  return query.tag && !tags.includes(query.tag) ? { ...query, tag: '' } : query
 }
 
 /** Tags in use, for the filter menu. */
@@ -175,9 +180,17 @@ export function useKb() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
+  // Bumped by every refresh and local change; a list that started before
+  // a newer change is dropped so it can't put older data back.
+  const seq = useRef(0)
+
   const refresh = useCallback(() => {
+    const mine = ++seq.current
     return kbApi.list()
-      .then(list => { setItems(Array.isArray(list) ? list : []); setError(null) })
+      .then(list => {
+        if (mine !== seq.current) return
+        setItems(Array.isArray(list) ? list : []); setError(null)
+      })
       .catch(e => setError(String(e)))
       .finally(() => setLoading(false))
   }, [])
@@ -194,6 +207,7 @@ export function useKb() {
 
   /** Apply a returned item locally so the UI doesn't wait for the watcher. */
   const upsert = useCallback((item: KbItem) => {
+    seq.current++
     setItems(prev => {
       const i = prev.findIndex(x => x.id === item.id && x.kind === item.kind)
       if (i < 0) return [item, ...prev]
@@ -204,6 +218,7 @@ export function useKb() {
   }, [])
 
   const drop = useCallback((kind: KbKind, id: string) => {
+    seq.current++
     setItems(prev => prev.filter(x => !(x.id === id && x.kind === kind)))
   }, [])
 
