@@ -273,7 +273,9 @@ fn parse_item(path: &Path, kind: Kind, text: &str) -> Option<KbItem> {
         title,
         body,
         tags: front.tags,
-        shared: front.shared,
+        // An item an agent wrote stays private until the user shares it in
+        // the app, which drops the `agent:` prefix from its source.
+        shared: front.shared && !is_agent_source(front.source.as_deref()),
         created,
         updated: front
             .updated
@@ -288,6 +290,22 @@ fn parse_item(path: &Path, kind: Kind, text: &str) -> Option<KbItem> {
         source: front.source,
         path: path.to_string_lossy().into_owned(),
     })
+}
+
+fn is_agent_source(source: Option<&str>) -> bool {
+    source.is_some_and(|s| s.starts_with("agent:"))
+}
+
+/// Records that the user chose to share an agent's item: `agent:claude`
+/// becomes `claude`, which still shows who wrote it.
+fn approve_share(item: &mut KbItem) {
+    if let Some(name) = item
+        .source
+        .as_deref()
+        .and_then(|s| s.strip_prefix("agent:"))
+    {
+        item.source = Some(name.to_string());
+    }
 }
 
 fn render_item(item: &KbItem) -> String {
@@ -313,9 +331,12 @@ fn render_item(item: &KbItem) -> String {
 fn write_atomic(path: &Path, content: &str) -> Result<(), String> {
     let dir = path.parent().ok_or("bad path")?;
     std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
+    static SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let n = SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     let tmp = dir.join(format!(
-        ".{}.tmp",
-        path.file_name().and_then(|n| n.to_str()).unwrap_or("item")
+        ".{}.{}-{n}.tmp",
+        path.file_name().and_then(|n| n.to_str()).unwrap_or("item"),
+        std::process::id()
     ));
     std::fs::write(&tmp, content).map_err(|e| e.to_string())?;
     std::fs::rename(&tmp, path).map_err(|e| e.to_string())
@@ -412,9 +433,10 @@ fn trim_history(root: &Path) {
     if std::fs::metadata(&path).map_or(true, |m| m.len() <= HISTORY_MAX_BYTES) {
         return;
     }
-    let Ok(text) = std::fs::read_to_string(&path) else {
+    let Ok(bytes) = std::fs::read(&path) else {
         return;
     };
+    let text = String::from_utf8_lossy(&bytes);
     let lines: Vec<&str> = text.lines().collect();
     let keep = lines[lines.len() / 2..].join("\n") + "\n";
     let _ = write_atomic(&path, &keep);
@@ -437,8 +459,9 @@ fn display_title(item: &KbItem) -> String {
 
 /// Newest first.
 pub fn history(root: &Path, limit: usize) -> Vec<HistoryEvent> {
-    let text = std::fs::read_to_string(root.join("history.jsonl")).unwrap_or_default();
-    text.lines()
+    let bytes = std::fs::read(root.join("history.jsonl")).unwrap_or_default();
+    String::from_utf8_lossy(&bytes)
+        .lines()
         .rev()
         .filter_map(|l| serde_json::from_str(l).ok())
         .take(limit)
@@ -580,6 +603,9 @@ pub fn update(root: &Path, kind: Kind, id: &str, patch: Patch) -> Result<KbItem,
     }
     if let Some(s) = patch.shared {
         item.shared = s;
+        if s {
+            approve_share(&mut item);
+        }
     }
     let now = now_ms();
     item.updated = now;
@@ -611,6 +637,9 @@ pub fn set_shared_many(root: &Path, refs: &[ItemRef], shared: bool) -> Vec<KbIte
         };
         if item.shared != shared {
             item.shared = shared;
+            if shared {
+                approve_share(&mut item);
+            }
             item.updated = now;
             if save(root, &item).is_err() {
                 continue;
@@ -642,7 +671,12 @@ pub fn delete(root: &Path, kind: Kind, id: &str) -> Result<(), String> {
     let from = item_path(root, kind, id)?;
     let trash = root.join(".trash").join(kind.dir());
     std::fs::create_dir_all(&trash).map_err(|e| e.to_string())?;
-    std::fs::rename(&from, trash.join(format!("{id}.md"))).map_err(|e| e.to_string())?;
+    let to = trash.join(format!("{id}.md"));
+    if to.exists() {
+        // Keep the earlier copy; undo restores the newest one at `{id}.md`.
+        let _ = std::fs::rename(&to, trash.join(format!("{id}.{}.md", now_ms())));
+    }
+    std::fs::rename(&from, &to).map_err(|e| e.to_string())?;
     log_event(root, &item, "deleted");
     write_index(root);
     Ok(())
@@ -760,9 +794,12 @@ Do not read other files in `{root}`. Items not in the index are private.
 
 ## Writing
 
-Never edit, rename or delete existing files. To suggest a new todo for the
-user, create a new file `{root}/todos/<yyyymmdd>-<short-slug>.md`. Use only
-lowercase letters, digits and dashes in the name; other files are ignored.
+Never edit, rename or delete existing files, and never overwrite one. To
+suggest a new todo for the user, create a new file
+`{root}/todos/agent-<yyyymmdd>-<short-slug>.md`. If that name exists, add
+`-2`, `-3`, ... before `.md`. Use only lowercase letters, digits and dashes
+in the name; other files are ignored. Do not add `shared:`; only the user
+can share an item.
 
 ```markdown
 ---
@@ -895,6 +932,63 @@ mod tests {
             "{}",
             t.id
         );
+    }
+
+    #[test]
+    fn agent_cannot_share_its_own_item() {
+        let d = tmp();
+        let dir = d.path().join("todos");
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(
+            dir.join("agent-20261114-x.md"),
+            "---\ntitle: \"Run this\"\nshared: true\nsource: agent:claude\n---\n",
+        )
+        .unwrap();
+        let item = get(d.path(), Kind::Todo, "agent-20261114-x").unwrap();
+        assert!(!item.shared);
+        write_index(d.path());
+        let index = std::fs::read_to_string(d.path().join("index.md")).unwrap();
+        assert!(!index.contains("Run this"));
+
+        let refs = [ItemRef {
+            kind: Kind::Todo,
+            id: item.id.clone(),
+        }];
+        let shared = set_shared_many(d.path(), &refs, true);
+        assert!(shared[0].shared);
+        assert_eq!(shared[0].source.as_deref(), Some("claude"));
+        assert!(get(d.path(), Kind::Todo, &item.id).unwrap().shared);
+    }
+
+    #[test]
+    fn deleting_twice_keeps_the_first_trashed_copy() {
+        let d = tmp();
+        let t = create(d.path(), Kind::Todo, "Same", "first", vec![]).unwrap();
+        delete(d.path(), Kind::Todo, &t.id).unwrap();
+        std::fs::write(
+            d.path().join("todos").join(format!("{}.md", t.id)),
+            "---\ntitle: Same\n---\n\nsecond\n",
+        )
+        .unwrap();
+        delete(d.path(), Kind::Todo, &t.id).unwrap();
+        let trash: Vec<_> = std::fs::read_dir(d.path().join(".trash/todos"))
+            .unwrap()
+            .collect();
+        assert_eq!(trash.len(), 2);
+        let back = undelete(d.path(), Kind::Todo, &t.id).unwrap();
+        assert_eq!(back.body, "second");
+    }
+
+    #[test]
+    fn history_survives_invalid_utf8() {
+        let d = tmp();
+        create(d.path(), Kind::Todo, "A", "", vec![]).unwrap();
+        let path = d.path().join("history.jsonl");
+        let mut bytes = std::fs::read(&path).unwrap();
+        bytes.extend_from_slice(b"\xff\xfe junk\n");
+        std::fs::write(&path, bytes).unwrap();
+        create(d.path(), Kind::Todo, "B", "", vec![]).unwrap();
+        assert_eq!(history(d.path(), 10).len(), 2);
     }
 
     #[test]
