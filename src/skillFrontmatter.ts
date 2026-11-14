@@ -11,10 +11,14 @@ export interface Frontmatter {
 
 function unquote(v: string): string {
   const t = v.trim()
-  if (t.length >= 2 && ((t.startsWith('"') && t.endsWith('"')) || (t.startsWith("'") && t.endsWith("'")))) {
-    return t.slice(1, -1)
-  }
+  if (t.length >= 2 && t.startsWith('"') && t.endsWith('"')) return t.slice(1, -1).replace(/\\(["\\])/g, '$1')
+  if (t.length >= 2 && t.startsWith("'") && t.endsWith("'")) return t.slice(1, -1).replace(/''/g, "'")
   return t
+}
+
+/** Splits `a, "b, c"` on commas outside quotes. */
+function splitList(v: string): string[] {
+  return (v.match(/\s*(?:"(?:[^"\\]|\\.)*"|'(?:[^']|'')*')|[^,]+/g) ?? []).map(unquote).filter(Boolean)
 }
 
 export function splitFrontmatter(content: string): Frontmatter {
@@ -32,20 +36,21 @@ export function splitFrontmatter(content: string): Frontmatter {
     const key = m[1]
     const rest = m[2].trim()
     const block: string[] = []
-    while (i + 1 < header.length && (/^\s/.test(header[i + 1]) || header[i + 1].trim() === '')) {
+    // Continuation lines are indented, blank, or (for a bare `key:`) a `- item` list at column 0.
+    while (i + 1 < header.length && (/^\s/.test(header[i + 1]) || header[i + 1].trim() === '' || (rest === '' && /^-(\s|$)/.test(header[i + 1])))) {
       block.push(header[++i].trim())
     }
     const nonEmpty = block.filter(Boolean)
     let value: string
-    if (/^[>|][+-]?$/.test(rest)) {
+    if (/^[>|][0-9]?[+-]?[0-9]?$/.test(rest)) {
       value = rest.startsWith('|') ? block.join('\n').trim() : nonEmpty.join(' ')
     } else if (rest === '') {
       value = nonEmpty.map(l => unquote(l.replace(/^-\s*/, ''))).join(', ')
     } else {
-      value = [unquote(rest), ...nonEmpty].join(' ')
+      value = unquote([rest, ...nonEmpty].join(' '))
     }
     if (value.startsWith('[') && value.endsWith(']')) {
-      value = value.slice(1, -1).split(',').map(unquote).filter(Boolean).join(', ')
+      value = splitList(value.slice(1, -1)).join(', ')
     }
     if (value) fields.push([key, value])
   }
