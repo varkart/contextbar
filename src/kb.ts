@@ -259,8 +259,10 @@ export function inlineLine(line: string): string {
 export function plainInline(s: string): string {
   return s
     .replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1')
-    .replace(/(\*\*|__|~~|`)(.+?)\1/g, '$2')
-    .replace(/(\*|_)(.+?)\1/g, '$2')
+    .replace(/(\*\*|~~|`)(.+?)\1/g, '$2')
+    .replace(/\*(.+?)\*/g, '$1')
+    // Underscores inside a word (snake_case, __init__) are not emphasis.
+    .replace(/(^|[^\w\\])(__|_)(?!\s)(.+?)\2(?!\w)/g, '$1$3')
     .replace(/\\([\\`*_{}[\]()#+\-.!~>|])/g, '$1')
 }
 

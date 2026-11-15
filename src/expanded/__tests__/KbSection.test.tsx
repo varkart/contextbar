@@ -255,6 +255,11 @@ describe('kb helpers', () => {
     expect(noteTitle(item({ kind: 'note' }))).toBe('Untitled note')
   })
 
+  it('keeps underscores inside words in derived titles', () => {
+    expect(noteTitle(item({ kind: 'note', body: 'Rename user_id_field in schema' }))).toBe('Rename user_id_field in schema')
+    expect(noteTitle(item({ kind: 'note', body: '_Draft_ notes' }))).toBe('Draft notes')
+  })
+
   it('previews skip rules and fences and turn block markers into symbols', () => {
     const n = item({ kind: 'note', body: '## **Big** plan\n---\n```\n- [ ] ship *it*' })
     expect(noteTitle(n)).toBe('Big plan')
