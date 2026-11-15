@@ -99,6 +99,34 @@ describe('KbSection', () => {
     expect((area as HTMLTextAreaElement).value).toBe('Buy milk ')
   })
 
+  it('note editor says Not saved and retries when an autosave fails', async () => {
+    localStorage.setItem('contextbar:kb:tab', 'notes')
+    localStorage.setItem('contextbar:kb:note-mode', 'edit')
+    const note = item({ id: 'n', kind: 'note', title: 'Shop', body: 'Buy' })
+    let failNext = true
+    mockInvoke.mockImplementation(async (cmd: string, args?: unknown) => {
+      if (cmd === 'kb_list') return [note]
+      if (cmd === 'kb_history') return []
+      if (cmd === 'kb_update') {
+        if (failNext) { failNext = false; throw 'disk full' }
+        return { ...note, ...(args as { patch: object }).patch }
+      }
+      return null
+    })
+    const showToast = vi.fn()
+    render(<KbSection agents={[]} repoNames={[]} showToast={showToast} />)
+    fireEvent.click(await screen.findByText('Shop'))
+    const area = await screen.findByDisplayValue('Buy')
+    fireEvent.change(area, { target: { value: 'Buy milk' } })
+    await waitFor(() => expect(screen.getByText('Not saved')).toBeInTheDocument(), { timeout: 2000 })
+    expect(showToast).toHaveBeenCalledWith('error', 'disk full')
+    expect((area as HTMLTextAreaElement).value).toBe('Buy milk')
+
+    fireEvent.change(area, { target: { value: 'Buy milk!' } })
+    await waitFor(() => expect(screen.getByText('Saved')).toBeInTheDocument(), { timeout: 2000 })
+    expect(mockInvoke).toHaveBeenLastCalledWith('kb_update', expect.objectContaining({ patch: expect.objectContaining({ body: 'Buy milk!' }) }))
+  })
+
   it('Escape in the todo editor is handled there, and editing starts from the current title', async () => {
     setup([item({ id: 'a', title: 'Old' })])
     fireEvent.doubleClick(await screen.findByText('Old'))

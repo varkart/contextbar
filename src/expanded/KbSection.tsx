@@ -83,7 +83,9 @@ export default function KbSection({ agents, repoNames, showToast }: {
   }, [drop, upsert, offerUndo, fail])
 
   const patch = useCallback((item: KbItem, p: Parameters<typeof kbApi.update>[2]) => {
-    return kbApi.update(item.kind, item.id, p).then(upsert).catch(fail)
+    return kbApi.update(item.kind, item.id, p)
+      .then(i => { upsert(i); return true })
+      .catch(e => { fail(e); return false })
   }, [upsert, fail])
 
   const bulkShare = useCallback((list: KbItem[], isShared: boolean) => {
@@ -483,13 +485,16 @@ function TodoRow({ todo, tagSuggestions, onComplete, onRemove, onPatch }: {
 
 /** Markdown details under a todo: rendered, double-click (or Add details)
  *  to edit with the note shortcuts; autosaves like notes. */
+type SaveState = 'saved' | 'dirty' | 'failed'
+const SAVE_LABEL: Record<SaveState, string> = { saved: 'Saved', dirty: 'Saving…', failed: 'Not saved' }
+
 function TodoDetails({ todo, onPatch }: {
   todo: KbItem
   onPatch: (t: KbItem, p: Parameters<typeof kbApi.update>[2]) => unknown
 }) {
   const [editing, setEditing] = useState(false)
   const [body, setBody] = useState(todo.body)
-  const [dirty, setDirty] = useState(false)
+  const [save, setSave] = useState<SaveState>('saved')
   const pending = useRef<string | null>(null)
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined)
   const area = useRef<HTMLTextAreaElement>(null)
@@ -497,9 +502,9 @@ function TodoDetails({ todo, onPatch }: {
   todoRef.current = todo
 
   useEffect(() => {
-    if (dirty) return
+    if (save !== 'saved') return
     setBody(b => (sameSaved(b, todo.body) ? b : todo.body))
-  }, [todo.body, dirty])
+  }, [todo.body, save])
 
   const flush = useCallback(() => {
     clearTimeout(timer.current)
@@ -507,7 +512,11 @@ function TodoDetails({ todo, onPatch }: {
     if (p === null) return
     pending.current = null
     // Stay dirty while newer text waits to save, so a refresh can't put the older body back.
-    Promise.resolve(onPatch(todoRef.current, { body: p })).finally(() => { if (pending.current === null) setDirty(false) })
+    // A failed save keeps the text pending, so the next edit retries it.
+    Promise.resolve(onPatch(todoRef.current, { body: p })).then(ok => {
+      if (pending.current !== null) return
+      if (ok === false) { pending.current = p; setSave('failed') } else setSave('saved')
+    })
   }, [onPatch])
 
   useEffect(() => () => flush(), [flush])
@@ -515,7 +524,7 @@ function TodoDetails({ todo, onPatch }: {
   const change = (v: string) => {
     setBody(v)
     pending.current = v
-    setDirty(true)
+    setSave('dirty')
     clearTimeout(timer.current)
     timer.current = setTimeout(flush, AUTOSAVE_MS)
   }
@@ -544,7 +553,7 @@ function TodoDetails({ todo, onPatch }: {
           className="w-full resize-y px-3 py-2 rounded-lg border border-[var(--c-accent)]/60 bg-[var(--c-surface)] text-[13px] leading-relaxed font-mono outline-none"
         />
         <div className="flex items-center gap-2 mt-1 text-[11px] text-[var(--c-text-3)]">
-          <span>{dirty ? 'Saving…' : 'Saved'} · Esc to finish</span>
+          <span className={save === 'failed' ? 'text-rose-400' : ''}>{SAVE_LABEL[save]} · Esc to finish</span>
           <span className="ml-auto"><FormatHelp align="right" /></span>
         </div>
       </div>
@@ -660,7 +669,7 @@ function NoteEditor({ note, tagSuggestions, onRemove, onPatch }: {
 }) {
   const [title, setTitle] = useState(note.title)
   const [body, setBody] = useState(note.body)
-  const [status, setStatus] = useState<'saved' | 'dirty' | 'saving'>('saved')
+  const [status, setStatus] = useState<SaveState | 'saving'>('saved')
   const pending = useRef<{ title: string; body: string } | null>(null)
   const inFlight = useRef(0)
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined)
@@ -684,9 +693,11 @@ function NoteEditor({ note, tagSuggestions, onRemove, onPatch }: {
     pending.current = null
     setStatus('saving')
     inFlight.current++
-    onPatch(noteRef.current, p).finally(() => {
+    onPatch(noteRef.current, p).then(ok => {
       inFlight.current--
-      if (inFlight.current === 0) setStatus(s => (s === 'saving' ? 'saved' : s))
+      // A failed save keeps the text pending, so the next edit retries it.
+      if (ok === false && !pending.current) { pending.current = p; setStatus('failed') }
+      else if (inFlight.current === 0) setStatus(s => (s === 'saving' ? 'saved' : s))
     })
   }, [onPatch])
 
@@ -744,7 +755,7 @@ function NoteEditor({ note, tagSuggestions, onRemove, onPatch }: {
       <div className="flex items-center gap-3 flex-wrap text-[11.5px] text-[var(--c-text-3)] mb-3">
         <span>Created {dayLabel(note.created)} {timeLabel(note.created)}</span>
         <span>Edited {ago(note.updated)}</span>
-        <span className={status === 'saved' ? 'text-emerald-400/80' : ''}>{status === 'saved' ? 'Saved' : 'Saving…'}</span>
+        <span className={status === 'saved' ? 'text-emerald-400/80' : status === 'failed' ? 'text-rose-400' : ''}>{status === 'saving' ? SAVE_LABEL.dirty : SAVE_LABEL[status]}</span>
         <TagEditor tags={note.tags} suggestions={tagSuggestions} onChange={tags => onPatch(note, { tags })} />
         <span className="ml-auto flex items-center gap-3">
           <span className="group"><ShareToggle item={note} onPatch={onPatch} /></span>
