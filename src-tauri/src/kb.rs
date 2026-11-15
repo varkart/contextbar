@@ -810,6 +810,14 @@ fn render_index(shared: &[&KbItem]) -> String {
 }
 
 pub const SKILL_NAME: &str = "context-bar";
+const SKILL_HEADING: &str = "# Context Bar notes and todos";
+
+/// True for a skill file this app wrote, so reinstalling may replace it.
+/// Someone else's skill that happens to be named `context-bar` is not.
+fn is_own_skill(text: &str) -> bool {
+    text.contains(&format!("name: {SKILL_NAME}\n"))
+        && text.contains(&format!("\n{SKILL_HEADING}\n"))
+}
 
 /// SKILL.md installed into agents' skill folders.
 pub fn skill_content(root: &Path) -> String {
@@ -820,7 +828,7 @@ name: {SKILL_NAME}
 description: The user's own notes and todos from Context Bar, shared with coding agents. Use when starting work in a repository, when the user mentions their notes, todos, preferences or conventions, or asks what is left to do.
 ---
 
-# Context Bar notes and todos
+{SKILL_HEADING}
 
 The user keeps notes and todos in Context Bar and chooses which ones to share
 with agents. Shared items are listed in `{root}/index.md`.
@@ -1261,6 +1269,14 @@ mod tests {
     }
 
     #[test]
+    fn only_our_own_skill_counts_as_ours() {
+        assert!(is_own_skill(&skill_content(Path::new("/tmp/kb"))));
+        assert!(!is_own_skill(
+            "---\nname: context-bar\ndescription: my notes\n---\n\n# Mine\n"
+        ));
+    }
+
+    #[test]
     fn skill_mentions_index_path() {
         let s = skill_content(Path::new("/Users/x/.context-bar/kb"));
         assert!(s.starts_with("---\nname: context-bar\n"));
@@ -1402,7 +1418,7 @@ pub mod commands {
                 target.dir.join(SKILL_NAME).join("SKILL.md")
             };
             if let Ok(existing) = std::fs::read_to_string(&path) {
-                if !existing.contains(&format!("name: {SKILL_NAME}\n")) {
+                if !is_own_skill(&existing) {
                     errors.push(format!(
                         "{agent_id}: a different '{SKILL_NAME}' skill already exists"
                     ));
