@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import AutoTextarea from './AutoTextarea'
 import InlineMarkdown from './InlineMarkdown'
 import KbFilterBar from './KbFilterBar'
@@ -106,8 +106,10 @@ export function QuickAdd({ onAdded }: { onAdded: (item: KbItem) => void }) {
 
 const POPOVER_PAGE = 20
 
-const toggle = (onChange: (i: KbItem) => void) => (item: KbItem) =>
-  kbApi.update(item.kind, item.id, { shared: !item.shared }).then(onChange).catch(() => {})
+type Handlers = { onChange: (i: KbItem) => void; onError: (e: unknown) => void }
+
+const toggle = ({ onChange, onError }: Handlers) => (item: KbItem) =>
+  kbApi.update(item.kind, item.id, { shared: !item.shared }).then(onChange).catch(onError)
 
 /** Expanded body: rendered markdown, tags, and a way to edit in the window. */
 function Expanded({ item, onEdit }: { item: KbItem; onEdit: () => void }) {
@@ -128,13 +130,13 @@ function Expanded({ item, onEdit }: { item: KbItem; onEdit: () => void }) {
   )
 }
 
-function TodoItem({ t, agents, onChange }: { t: KbItem; agents: Agent[]; onChange: (i: KbItem) => void }) {
+function TodoItem({ t, agents, onChange, onError }: { t: KbItem; agents: Agent[] } & Handlers) {
   const [open, setOpen] = useState(false)
   return (
     <div className="border-b border-[var(--c-border)]/50">
       <div className="group flex items-center gap-2.5 py-1.5">
         <button
-          onClick={() => kbApi.setDone(t.id, true).then(onChange).catch(() => {})}
+          onClick={() => kbApi.setDone(t.id, true).then(onChange).catch(onError)}
           aria-label={`Mark done: ${t.title}`}
           className="w-3.5 h-3.5 shrink-0 rounded border border-[var(--c-text-3)] hover:border-emerald-400 hover:bg-emerald-500/10"
         />
@@ -147,7 +149,7 @@ function TodoItem({ t, agents, onChange }: { t: KbItem; agents: Agent[]; onChang
           <span className="truncate text-[13px]">{t.title}</span>
           {t.body.trim() && <span className="shrink-0 text-[11px] text-[var(--c-text-3)]" aria-label="Has details">≡</span>}
         </button>
-        <KbSharePill compact item={t} agents={agents} onToggle={toggle(onChange)} />
+        <KbSharePill compact item={t} agents={agents} onToggle={toggle({ onChange, onError })} />
         <span className="text-[10.5px] text-[var(--c-text-3)] tabular-nums shrink-0">{ago(t.created)}</span>
       </div>
       {open && <Expanded item={t} onEdit={() => openKbInWindow('todos')} />}
@@ -155,7 +157,7 @@ function TodoItem({ t, agents, onChange }: { t: KbItem; agents: Agent[]; onChang
   )
 }
 
-function NoteItem({ n, agents, onChange }: { n: KbItem; agents: Agent[]; onChange: (i: KbItem) => void }) {
+function NoteItem({ n, agents, onChange, onError }: { n: KbItem; agents: Agent[] } & Handlers) {
   const [open, setOpen] = useState(false)
   return (
     <div className="border-b border-[var(--c-border)]/50">
@@ -168,7 +170,7 @@ function NoteItem({ n, agents, onChange }: { n: KbItem; agents: Agent[]; onChang
             </div>
           )}
         </button>
-        <span className="pt-0.5"><KbSharePill compact item={n} agents={agents} onToggle={toggle(onChange)} /></span>
+        <span className="pt-0.5"><KbSharePill compact item={n} agents={agents} onToggle={toggle({ onChange, onError })} /></span>
       </div>
       {open && <Expanded item={n} onEdit={() => openKbInWindow('notes', n.id)} />}
     </div>
@@ -182,6 +184,7 @@ export default function KbPopoverView({ agents = [] }: { agents?: Agent[] }) {
   const [seg, setSeg] = useState<'todos' | 'notes'>('todos')
   const [text, setText] = useState('')
   const [addError, setAddError] = useState<string | null>(null)
+  const showError = useCallback((e: unknown) => setAddError(String(e)), [])
   const [tip, setTip] = useState(() => !localStorage.getItem(KB_POPOVER_TIP_KEY))
   const dismissTip = () => { localStorage.setItem(KB_POPOVER_TIP_KEY, '1'); setTip(false) }
   const open = openTodos(items)
@@ -265,8 +268,8 @@ export default function KbPopoverView({ agents = [] }: { agents?: Agent[] }) {
         )}
         {base.length > 0 && matched.length === 0 && <p className="text-[12px] text-[var(--c-text-3)] py-2">Nothing matches.</p>}
         {seg === 'todos'
-          ? page.shown.map(t => <TodoItem key={t.id} t={t} agents={agents} onChange={upsert} />)
-          : page.shown.map(n => <NoteItem key={n.id} n={n} agents={agents} onChange={upsert} />)}
+          ? page.shown.map(t => <TodoItem key={t.id} t={t} agents={agents} onChange={upsert} onError={showError} />)
+          : page.shown.map(n => <NoteItem key={n.id} n={n} agents={agents} onChange={upsert} onError={showError} />)}
         {page.remaining > 0 && (
           <button onClick={page.more} className="mt-1.5 self-start text-[11px] text-[var(--c-accent)] hover:underline">
             Show {Math.min(page.remaining, POPOVER_PAGE)} more ({page.remaining} hidden)
