@@ -267,15 +267,16 @@ fn parse_item(path: &Path, kind: Kind, text: &str) -> Option<KbItem> {
         .as_deref()
         .and_then(parse_iso)
         .unwrap_or(mtime);
+    // An item an agent wrote stays private until the user shares it in the
+    // app, which drops the `agent:` prefix from its source.
+    let shared = front.shared && !is_agent_written(&id, front.source.as_deref());
     Some(KbItem {
         id,
         kind,
         title,
         body,
         tags: front.tags,
-        // An item an agent wrote stays private until the user shares it in
-        // the app, which drops the `agent:` prefix from its source.
-        shared: front.shared && !is_agent_source(front.source.as_deref()),
+        shared,
         created,
         updated: front
             .updated
@@ -292,19 +293,27 @@ fn parse_item(path: &Path, kind: Kind, text: &str) -> Option<KbItem> {
     })
 }
 
-fn is_agent_source(source: Option<&str>) -> bool {
-    source.is_some_and(|s| s.starts_with("agent:"))
+/// Agents are told to name their files `agent-*` and set `source: agent:<id>`;
+/// either one marks the item as theirs, so leaving out `source:` can't make
+/// an agent's item shared.
+fn is_agent_written(id: &str, source: Option<&str>) -> bool {
+    match source {
+        Some(s) => s.starts_with("agent:"),
+        None => id.starts_with("agent-"),
+    }
 }
 
 /// Records that the user chose to share an agent's item: `agent:claude`
 /// becomes `claude`, which still shows who wrote it.
 fn approve_share(item: &mut KbItem) {
-    if let Some(name) = item
-        .source
-        .as_deref()
-        .and_then(|s| s.strip_prefix("agent:"))
-    {
-        item.source = Some(name.to_string());
+    match item.source.as_deref() {
+        Some(s) => {
+            if let Some(name) = s.strip_prefix("agent:") {
+                item.source = Some(name.to_string());
+            }
+        }
+        None if item.id.starts_with("agent-") => item.source = Some("agent".to_string()),
+        None => {}
     }
 }
 
@@ -957,6 +966,30 @@ mod tests {
         let shared = set_shared_many(d.path(), &refs, true);
         assert!(shared[0].shared);
         assert_eq!(shared[0].source.as_deref(), Some("claude"));
+        assert!(get(d.path(), Kind::Todo, &item.id).unwrap().shared);
+    }
+
+    #[test]
+    fn agent_file_without_source_stays_private_until_shared() {
+        let d = tmp();
+        let dir = d.path().join("todos");
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(
+            dir.join("agent-20261115-y.md"),
+            "---\ntitle: \"Run that\"\nshared: true\n---\n",
+        )
+        .unwrap();
+        let item = get(d.path(), Kind::Todo, "agent-20261115-y").unwrap();
+        assert!(!item.shared);
+        write_index(d.path());
+        let index = std::fs::read_to_string(d.path().join("index.md")).unwrap();
+        assert!(!index.contains("Run that"));
+
+        let refs = [ItemRef {
+            kind: Kind::Todo,
+            id: item.id.clone(),
+        }];
+        set_shared_many(d.path(), &refs, true);
         assert!(get(d.path(), Kind::Todo, &item.id).unwrap().shared);
     }
 
