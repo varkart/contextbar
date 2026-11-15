@@ -149,21 +149,58 @@ pub fn format_iso(ms: i64) -> String {
     )
 }
 
-/// Accepts `YYYY-MM-DD`, `YYYY-MM-DDTHH:MM[:SS][.fff]Z` (UTC only).
+/// Accepts `YYYY-MM-DD` and `YYYY-MM-DDTHH:MM[:SS][.fff]` followed by `Z`,
+/// a `±HH:MM` offset, or nothing (read as UTC).
 pub fn parse_iso(s: &str) -> Option<i64> {
-    let s = s.trim().trim_end_matches('Z');
+    let s = s.trim();
     let (date, time) = s.split_once(['T', ' ']).unwrap_or((s, "00:00:00"));
     let mut dp = date.split('-').map(|p| p.parse::<i64>().ok());
     let (y, mo, d) = (dp.next()??, dp.next()??, dp.next()??);
-    if !(1..=12).contains(&mo) || !(1..=31).contains(&d) {
+    if dp.next().is_some() || !(1..=9999).contains(&y) || !(1..=12).contains(&mo) {
         return None;
     }
-    let time = time.split('.').next().unwrap_or("");
-    let mut tp = time.split(':').map(|p| p.parse::<i64>().ok());
+    let leap = y % 4 == 0 && (y % 100 != 0 || y % 400 == 0);
+    let month_days = [
+        31,
+        if leap { 29 } else { 28 },
+        31,
+        30,
+        31,
+        30,
+        31,
+        31,
+        30,
+        31,
+        30,
+        31,
+    ];
+    if !(1..=month_days[mo as usize - 1]).contains(&d) {
+        return None;
+    }
+    let (clock, offset_secs) = if let Some(c) = time.strip_suffix('Z') {
+        (c, 0)
+    } else if let Some(i) = time.rfind(['+', '-']) {
+        let sign = if time[i..].starts_with('-') { -1 } else { 1 };
+        let (oh, om) = time[i + 1..]
+            .split_once(':')
+            .unwrap_or((&time[i + 1..], "0"));
+        let (oh, om) = (oh.parse::<i64>().ok()?, om.parse::<i64>().ok()?);
+        if oh > 23 || om > 59 {
+            return None;
+        }
+        (&time[..i], sign * (oh * 3600 + om * 60))
+    } else {
+        (time, 0)
+    };
+    let clock = clock.split('.').next().unwrap_or("");
+    let mut tp = clock.split(':').map(|p| p.parse::<i64>().ok());
     let h = tp.next().flatten().unwrap_or(0);
     let mi = tp.next().flatten().unwrap_or(0);
     let se = tp.next().flatten().unwrap_or(0);
-    Some((days_from_civil(y, mo, d) * 86400 + h * 3600 + mi * 60 + se) * 1000)
+    if h > 23 || mi > 59 || se > 60 {
+        return None;
+    }
+    Some((days_from_civil(y, mo, d) * 86400 + h * 3600 + mi * 60 + se - offset_secs) * 1000)
 }
 
 // ---------------------------------------------------------------------------
@@ -1032,6 +1069,12 @@ mod tests {
         assert_eq!(parse_iso("2026-11-10T13:23:00.123Z"), Some(ms));
         assert_eq!(parse_iso("2026-11-10"), Some(1_794_268_800_000));
         assert_eq!(parse_iso("2026-13-10"), None);
+        assert_eq!(parse_iso("2026-11-10T15:23:00+02:00"), Some(ms));
+        assert_eq!(parse_iso("2026-11-10T08:23:00-05:00"), Some(ms));
+        assert_eq!(parse_iso("2026-11-10T13:23:00"), Some(ms));
+        assert_eq!(parse_iso("2026-02-30"), None);
+        assert_eq!(parse_iso("2026-11-10T99:00:00Z"), None);
+        assert_eq!(parse_iso("99999999999-01-01"), None);
         assert_eq!(parse_iso("nonsense"), None);
     }
 
