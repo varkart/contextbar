@@ -17,11 +17,13 @@ import { RefreshButton } from './InsightWidgets'
 import CommandPalette, { buildPaletteItems } from './CommandPalette'
 import { useToasts, ToastStack } from './Toast'
 import { useCoachmark, Coachmark } from './Coachmark'
+import KbSection from './KbSection'
 
 export type Section =
   | 'work'
   | 'sessions'
   | 'worktrees'
+  | 'kb'
   | 'agents'
   | 'skills'
   | 'mcps'
@@ -38,6 +40,7 @@ const WORK_SECTIONS: { id: Section; label: string }[] = [
   { id: 'work', label: 'My Work' },
   { id: 'sessions', label: 'Sessions' },
   { id: 'worktrees', label: 'Repos' },
+  { id: 'kb', label: 'Notes & Todos' },
 ]
 
 const CONFIGURE_SECTIONS: { id: Section; label: string }[] = [
@@ -64,6 +67,11 @@ function NavIcon({ name }: { name: Section }) {
       <>
         <line x1="6" y1="3" x2="6" y2="15" /><circle cx="18" cy="6" r="3" />
         <circle cx="6" cy="18" r="3" /><path d="M18 9a9 9 0 0 1-9 9" />
+      </>
+    ),
+    kb: (
+      <>
+        <rect x="4" y="4" width="16" height="16" rx="2" /><polyline points="8 12 11 15 16 9" />
       </>
     ),
     agents: (
@@ -285,11 +293,11 @@ export default function ExpandedApp() {
     goTo('sessions')
   }, [sessions, goTo])
 
-  // ⌘1–⌘6 jump directly to a section, from anywhere in the window.
+  // ⌘1–⌘7 jump directly to a section, from anywhere in the window.
   useEffect(() => {
-    const order: Section[] = ['work', 'sessions', 'worktrees', 'agents', 'skills', 'mcps']
+    const order: Section[] = ['work', 'sessions', 'worktrees', 'kb', 'agents', 'skills', 'mcps']
     const handler = (e: KeyboardEvent) => {
-      if (!e.metaKey || e.shiftKey || e.altKey || e.ctrlKey) return
+      if (e.defaultPrevented || !e.metaKey || e.shiftKey || e.altKey || e.ctrlKey) return
       const n = Number(e.key)
       if (n >= 1 && n <= order.length) {
         e.preventDefault()
@@ -304,7 +312,7 @@ export default function ExpandedApp() {
   const [paletteOpen, setPaletteOpen] = useState(false)
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if (!e.metaKey || e.shiftKey || e.altKey || e.ctrlKey) return
+      if (e.defaultPrevented || !e.metaKey || e.shiftKey || e.altKey || e.ctrlKey) return
       if (e.key.toLowerCase() !== 'k') return
       e.preventDefault()
       setPaletteOpen(o => !o)
@@ -332,7 +340,10 @@ export default function ExpandedApp() {
   useEffect(() => {
     if (isToolsSection(section)) return
     const handler = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape' || paletteOpen) return
+      if (e.key !== 'Escape' || paletteOpen || e.defaultPrevented) return
+      // Escape in a text field cancels or leaves the field, not the section.
+      const t = e.target as HTMLElement | null
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return
       if (section === 'work') {
         getCurrentWebviewWindow().close().catch(() => {})
       } else {
@@ -342,6 +353,12 @@ export default function ExpandedApp() {
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
   }, [section, goTo, paletteOpen])
+
+  // Tag suggestions (repo:<name>) from projects that have agent sessions.
+  const repoNames = useMemo(
+    () => [...new Set(sessions.map(s => s.project.split('/').filter(Boolean).pop() ?? '').filter(Boolean))].sort(),
+    [sessions]
+  )
 
   const installedAgents = useMemo(() => agents.filter(a => a.installed), [agents])
   const counts = useMemo(() => ({
@@ -408,6 +425,9 @@ export default function ExpandedApp() {
             focusPath={worktreeFocusPath}
             showToast={showToast}
           />
+        )}
+        {section === 'kb' && (
+          <KbSection agents={agents} repoNames={repoNames} showToast={showToast} />
         )}
         {isToolsSection(section) && (
           <ToolsPanel
@@ -546,7 +566,7 @@ function Sidebar({ section, goTo, counts, onOpenPalette, coachmarkVisible, onDis
       </div>
       <nav className="flex-1 overflow-y-auto pb-2">
         {group('Work', WORK_SECTIONS, 1)}
-        {group('Configure', CONFIGURE_SECTIONS, 4)}
+        {group('Configure', CONFIGURE_SECTIONS, WORK_SECTIONS.length + 1)}
       </nav>
       <div className="border-t border-[var(--c-border)] py-2">
         {navItem('notifications', 'Notifications')}

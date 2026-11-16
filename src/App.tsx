@@ -87,7 +87,13 @@ export default function App() {
   }, [])
 
   useEffect(() => {
-    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') escape() }
+    const handler = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape' || e.defaultPrevented) return
+      // Esc in a field with text must not leave the view and lose the text.
+      const t = e.target as HTMLElement | null
+      if ((t instanceof HTMLInputElement || t instanceof HTMLTextAreaElement) && t.value) return
+      escape()
+    }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
   }, [escape])

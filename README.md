@@ -75,12 +75,14 @@ The Expanded window's command palette searches sessions, repos, and sections; �
 - **MCP detail panel** — see live tools exposed by each MCP server in real time
 - **Permissions & context toggles** — turn Claude Code features and tools off from the agent's Permissions tab (auto memory, hooks, WebFetch, plan mode, and more) to shrink startup context. Writes only the documented `settings.json` keys, with an automatic backup before every change. **Toggles apply to new agent sessions only** — sessions already running keep their loaded settings until restarted; verify in a fresh session with `/context`
 - **Codex permission profiles** — read-only view of `[permissions.<name>]` profiles from Codex's config
+- **Notes & Todos** — quick todos and markdown notes from the menu bar. Mark one, or many at once, as shared and agents with the `context-bar` skill read them at the start of each session, scoped by `global`, `repo:<name>` or `agent:<id>` tags
 - **Notifications panel** — error / warn / info feed, including missing-MCP-binary alerts
 - **Expanded window** — a full-size window (separate from the tray popover) with:
   - **My Work** — recent sessions grouped by project, filterable by today / yesterday / this week / last 7 days
   - **Sessions** — searchable transcript list across every agent, with per-session token usage
   - **Repos** — worktrees per repo with branch, dirty/merged/stale status, safe-to-delete detection, and per-repo agent capability overrides
-  - **Command palette (⌘K)** and section shortcuts (⌘1–⌘6)
+  - **Notes & Todos** — markdown notes and todos stored as plain files in `~/.context-bar/kb`, with search, tag/share filters, sorting and paging
+  - **Command palette (⌘K)** and section shortcuts (⌘1–⌘7)
 - **FSEvents watcher** — auto-refreshes when any config file changes on disk
 - **Light / dark / system theme**
 - **Global shortcut** — configurable, click-to-record UI

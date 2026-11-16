@@ -15,6 +15,7 @@ import AddSkillView from './AddSkillView'
 import AddMcpView from './AddMcpView'
 import DoctorView from './DoctorView'
 import ConfigBackupView from './ConfigBackupView'
+import KbPopoverView from '../KbPopover'
 
 import type { ThemePreference } from '../../useTheme'
 import type { Agent, Skill } from '../../types'
@@ -59,6 +60,9 @@ export default function ViewManager({
 }: any) {
   if (view === 'doctor') {
     return <DoctorView onBack={() => goTo('settings')} />
+  }
+  if (view === 'kb') {
+    return <KbPopoverView agents={agents} />
   }
   if (view === 'logs') {
     return <LogsPanel onBack={() => goTo('main')} />

@@ -2,6 +2,8 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import SkillFrontmatter from './SkillFrontmatter'
+import { splitFrontmatter } from '../skillFrontmatter'
 import type { Skill, FileEntry, Agent, CachedSkill } from '../types'
 import { capture } from '../analytics'
 import { SkillInstalledOn } from './InstalledOnSection'
@@ -132,11 +134,19 @@ function FileTreeNode({ entry, depth, onOpenMarkdown }: {
   )
 }
 
-function stripFrontmatter(content: string): string {
-  if (!content.startsWith('---')) return content
-  const end = content.indexOf('\n---', 4)
-  if (end === -1) return content
-  return content.slice(end + 4).trimStart()
+/** A skill file: its frontmatter (name, description, ...) as a header,
+ *  then the markdown body. `fallback` fills the header for files without
+ *  frontmatter (e.g. the detected name and description). */
+function SkillFileView({ content, fallback = [] }: { content: string; fallback?: [string, string][] }) {
+  const { fields, body } = splitFrontmatter(content)
+  return (
+    <>
+      <SkillFrontmatter fields={fields.length ? fields : fallback} />
+      <div className="text-[13px] text-[var(--c-text-2)] leading-relaxed overflow-x-hidden skill-md">
+        <ReactMarkdown remarkPlugins={[remarkGfm]}>{body}</ReactMarkdown>
+      </div>
+    </>
+  )
 }
 
 const ChevronLeft = () => (
@@ -403,9 +413,7 @@ export default function SkillDetailPanel({ skill: initialSkill, agentId, onToggl
               : <p className="text-[12px] text-rose-400 bg-rose-500/10 rounded-lg px-3 py-2">{mdError}</p>
             )}
             {mdContent && !loadingMd && (
-              <div className="text-[13px] text-[var(--c-text-2)] leading-relaxed overflow-x-hidden skill-md">
-                <ReactMarkdown remarkPlugins={[remarkGfm]}>{stripFrontmatter(mdContent)}</ReactMarkdown>
-              </div>
+              <SkillFileView content={mdContent} />
             )}
           </div>
         </div>
@@ -442,9 +450,10 @@ export default function SkillDetailPanel({ skill: initialSkill, agentId, onToggl
               </div>
             )}
             {fullContent && !loadingContent && (
-              <div className="text-[13px] text-[var(--c-text-2)] leading-relaxed overflow-x-hidden skill-md">
-                <ReactMarkdown remarkPlugins={[remarkGfm]}>{stripFrontmatter(fullContent)}</ReactMarkdown>
-              </div>
+              <SkillFileView
+                content={fullContent}
+                fallback={[['name', skill.name], ...(skill.description ? [['description', skill.description] as [string, string]] : [])]}
+              />
             )}
           </div>
         </div>

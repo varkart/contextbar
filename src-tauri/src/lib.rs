@@ -7,6 +7,7 @@ pub(crate) mod doctor;
 pub(crate) mod engine;
 pub(crate) mod error;
 pub(crate) mod installer;
+pub(crate) mod kb;
 mod mcp_client;
 pub(crate) mod models;
 pub(crate) mod permissions;
@@ -2871,7 +2872,7 @@ pub fn run() {
             let settings = MenuItem::with_id(app, "settings", "Settings…", true, None::<&str>)?;
             let menu = Menu::with_items(app, &[&settings, &quit])?;
 
-            let tray = TrayIconBuilder::new()
+            let tray = TrayIconBuilder::with_id(kb::commands::TRAY_ID)
                 .icon(tauri::include_image!("icons/tray_icon@2x.png"))
                 .icon_as_template(true)
                 .menu(&menu)
@@ -2916,6 +2917,7 @@ pub fn run() {
 
             // Start FSEvents file watcher — emits "agents-changed" to frontend
             watcher::start(app.handle().clone());
+            kb::commands::watch(app.handle().clone());
 
             // Initial Doctor run — detect missing MCP binaries
             {
@@ -2937,6 +2939,15 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             get_agents,
+            kb::commands::kb_list,
+            kb::commands::kb_history,
+            kb::commands::kb_create,
+            kb::commands::kb_set_shared,
+            kb::commands::kb_update,
+            kb::commands::kb_set_done,
+            kb::commands::kb_delete,
+            kb::commands::kb_undelete,
+            kb::commands::kb_install_skill,
             list_sessions,
             get_session,
             get_session_drivers,
