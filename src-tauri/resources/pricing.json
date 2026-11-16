@@ -1,6 +1,6 @@
 {
   "$comment": "Approximate public API list prices in USD per MTok. Auto-refreshed weekly from LiteLLM's model_prices_and_context_window.json by .github/workflows/update-pricing.yml (opens a PR). Cache multipliers apply to the input rate.",
-  "updated": "2026-11-09",
+  "updated": "2026-11-16",
   "source": "litellm",
   "cacheReadMultiplier": 0.0667,
   "cacheWriteMultiplier": 1.25,
